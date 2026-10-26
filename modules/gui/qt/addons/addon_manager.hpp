@@ -56,8 +56,10 @@ public:
     quint64 fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
     void cancelAsset(quint64 job) { m_network.cancel(job); }
     NetworkBroker* networkBroker() { return &m_network; }
+    AddonHostServices* hostServices() { return &m_hostServices; }
 signals:
     void revisionChanged();
+    void packageWithdrawn(const QString& packageId);
     void operationFinished(const QString& invocation, const QString& contribution, const QString& status,
                            const QVariantMap& data, const QString& error);
 private:
@@ -71,6 +73,7 @@ private:
     PackageStore m_store;
     mutable CredentialStore m_secrets;
     NetworkBroker m_network;
+    AddonHostServices m_hostServices;
     QHash<QString, AddonWorker*> m_workers;
     QHash<QString, QString> m_invocationPackages, m_invocationContributions;
     QJsonObject m_providerOrder;

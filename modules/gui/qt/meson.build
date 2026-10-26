@@ -18,6 +18,8 @@ addon_host_sources = files(
     'addons/addon_manager.hpp',
     'addons/addon_network.cpp',
     'addons/addon_network.hpp',
+    'addons/addon_host_services.cpp',
+    'addons/addon_host_services.hpp',
     'addons/addon_worker.cpp',
     'addons/addon_worker.hpp',
     'addons/addon_metadata_coordinator.cpp',
@@ -27,6 +29,7 @@ addon_host_moc_headers = files(
     'addons/addon_manager.hpp',
     'addons/addon_network.hpp',
     'addons/addon_worker.hpp',
+    'addons/addon_host_services.hpp',
     'addons/addon_metadata_coordinator.hpp',
 )
 
@@ -1653,7 +1656,7 @@ if qt6_dep.found()
 
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
-        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker']
+        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'host_services']
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,
                 'sources': files('tests/test_addon_' + addon_test + '.cpp') + addon_host_sources,

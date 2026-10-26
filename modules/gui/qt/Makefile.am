@@ -116,6 +116,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_manager.hpp \
 	addons/addon_network.cpp \
 	addons/addon_network.hpp \
+	addons/addon_host_services.cpp \
+	addons/addon_host_services.hpp \
 	addons/addon_worker.cpp \
 	addons/addon_worker.hpp \
 	addons/addon_metadata_coordinator.cpp \
@@ -124,6 +126,7 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
 	addons/addon_network.moc.cpp \
 	addons/addon_worker.moc.cpp \
+	addons/addon_host_services.moc.cpp \
 	addons/addon_metadata_coordinator.moc.cpp
 ADDON_PLATFORM_LIBS =
 ADDON_PLATFORM_LDFLAGS =
@@ -2065,6 +2068,17 @@ test_qt_addon_broker_LDADD = $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_broker_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_broker
 TESTS += test_qt_addon_broker
+
+test_qt_addon_host_services_SOURCES = tests/test_addon_host_services.cpp $(QT_ADDON_HOST_SOURCES)
+nodist_test_qt_addon_host_services_SOURCES = tests/test_addon_host_services.moc $(QT_ADDON_HOST_MOC)
+BUILT_SOURCES += tests/test_addon_host_services.moc
+CLEANFILES += tests/test_addon_host_services.moc
+test_qt_addon_host_services_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_host_services_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_host_services_LDADD = $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_host_services_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_host_services
+TESTS += test_qt_addon_host_services
 
 
 LIBVLC = ../../../lib/libvlc.la

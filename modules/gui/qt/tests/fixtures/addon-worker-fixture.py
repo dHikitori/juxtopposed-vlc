@@ -26,6 +26,9 @@ for line in sys.stdin:
         elif mode == "denied-capability":
             messages = [{"type":"host-call","id":"call-1","invocation":invocation,
                 "operation":"shell.execute","request":{}}]
+        elif mode == "host-service":
+            messages = [{"type":"host-call","id":"call-1","invocation":invocation,
+                "operation":"playback.observe","request":{"package":"org.attacker.forged"}}]
         else:
             if mode == "late-result":
                 open(sys.argv[1] + ".received", "w").close()
@@ -35,4 +38,4 @@ for line in sys.stdin:
         output({"type":"messages","messages":messages})
     elif request.get("type") == "host-result":
         output({"type":"messages","messages":[{"type":"result","id":request["invocation"],
-            "status":"match","data":{"denied":request.get("status") == "error"}}]})
+            "status":"match","data":{"denied":request.get("status") == "error", "response":request.get("response", {})}}]})

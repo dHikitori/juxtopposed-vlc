@@ -58,7 +58,7 @@ QString AddonWorker::invoke(const QString& contribution, const QString& operatio
         return id;
     }
     auto* deadline = new QTimer(this); deadline->setSingleShot(true);
-    m_invocations.insert(id, {contribution, deadline, {}});
+    m_invocations.insert(id, {contribution, deadline, {}, {}});
     connect(deadline, &QTimer::timeout, this, [this] { fail(tr("The add-on used more time than the execution limit.")); });
     deadline->start(30000);
     send({{QStringLiteral("type"), QStringLiteral("invoke")}, {QStringLiteral("id"), id},
@@ -131,6 +131,20 @@ void AddonWorker::message(const QJsonObject& object)
     if (m_hostCalls.size() >= 4096) { fail(tr("The add-on sent too many requests.")); return; }
     m_hostCalls.insert(id);
     const auto operation = object.value(QStringLiteral("operation")).toString();
+    if (operation != QLatin1String("network.http") && m_services) {
+        if (!object.value(QStringLiteral("request")).isObject()) { fail(tr("The add-on sent a host request that is not correct.")); return; }
+        const auto contribution = QString(m_package.manifest.id + '/' + m_invocations.value(invocation).contribution);
+        const auto weak = QPointer<AddonWorker>(this);
+        const auto job = m_services->dispatch({m_package.manifest.id, contribution, invocation, m_package.grants}, operation,
+            object.value(QStringLiteral("request")).toObject(), [weak, invocation, id](AddonHostServices::Result result) {
+                if (!weak || weak->m_stopping || !weak->m_invocations.contains(invocation)) return;
+                weak->send({{"type", "host-result"}, {"id", id}, {"invocation", invocation},
+                    {"status", result.error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error")}, {"response", result.response}, {"error", result.error}});
+            });
+        if (job) m_invocations[invocation].serviceJobs.insert(job);
+        else send({{"type", "host-result"}, {"id", id}, {"invocation", invocation}, {"status", "error"}, {"error", tr("The add-on sent too many host requests.")}});
+        return;
+    }
     if (operation != QLatin1String("network.http") || !m_package.grants.contains(operation)) {
         send({{QStringLiteral("type"), QStringLiteral("host-result")}, {QStringLiteral("id"), id},
             {QStringLiteral("invocation"), invocation}, {QStringLiteral("status"), QStringLiteral("error")},
@@ -154,6 +168,7 @@ void AddonWorker::finish(const QString& id, const QString& status, const QJsonOb
     const auto invocation = m_invocations.take(id);
     if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
     for (auto job : invocation.jobs) m_network->cancel(job);
+    if (m_services) for (auto job : invocation.serviceJobs) m_services->cancel(job);
     emit completed(id, status, data, error);
 }
 void AddonWorker::cancel(const QString& id)
@@ -162,6 +177,7 @@ void AddonWorker::cancel(const QString& id)
     const auto invocation = m_invocations.take(id);
     if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
     for (auto job : invocation.jobs) m_network->cancel(job);
+    if (m_services) for (auto job : invocation.serviceJobs) m_services->cancel(job);
     QQueue<QJsonObject> retained;
     while (!m_queued.isEmpty()) { const auto message = m_queued.dequeue(); if (message.value(QStringLiteral("id")).toString() != id) retained.enqueue(message); }
     m_queued = retained;

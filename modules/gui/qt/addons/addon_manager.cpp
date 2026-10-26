@@ -62,7 +62,7 @@ QString packagePart(const QString& global) { return global.section('/', 0, 0); }
 }
 
 AddonManager::AddonManager(const QString& directory, QObject* parent)
-    : QObject(parent), m_store(directory), m_network(this)
+    : QObject(parent), m_store(directory), m_network(this), m_hostServices(this)
 {
     m_providerOrder = readObject(QDir(directory).filePath(QStringLiteral("provider-order.json")));
     const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vlc-addon-worker")
@@ -385,6 +385,7 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
 {
     if (m_workers.contains(package.manifest.id)) return m_workers.value(package.manifest.id);
     auto* instance = new AddonWorker(package, &m_network, this); instance->setExecutable(m_workerExecutable);
+    instance->setHostServices(&m_hostServices);
     const auto id = package.manifest.id;
     instance->setConfiguration(QJsonObject::fromVariantMap(settingsValues(id)), QJsonObject::fromVariantMap(settingsSecretStatus(id)),
         [this, id](const QString& field) { return credential(id, field); });
@@ -436,6 +437,8 @@ void AddonManager::withdraw(const QString& id)
 {
     if (auto* instance = m_workers.take(id)) { instance->stop(); instance->deleteLater(); }
     m_network.cancelPackage(id);
+    m_hostServices.cancelPackage(id);
+    emit packageWithdrawn(id);
     const auto requests = m_invocationPackages.keys(id);
     for (const auto& request : requests) {
         const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);

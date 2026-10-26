@@ -61,6 +61,37 @@ class TestAddonBroker : public QObject
 #endif
     }
 private slots:
+    void workerUsesTrustedHostContextAndCancelsPendingServices()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("The process fixture needs the Unix test interpreter.");
+#else
+        QTemporaryDir directory; const auto executable = fixture(directory.path()); QVERIFY(!executable.isEmpty());
+        auto installed = package(directory.path(), QStringLiteral("host-service"));
+        installed.grants.insert("playback.observe", QJsonObject{});
+        NetworkBroker broker; AddonHostServices services; QObject owner;
+        AddonHostServices::Completion late; int calls = 0, aborts = 0; QString packageId, contributionId;
+        QVERIFY(services.registerOperation(QStringLiteral("playback.observe"), &owner,
+            [&](const AddonHostServices::Context& context, const QJsonObject&, auto done) -> AddonHostServices::Cancel {
+                ++calls; packageId = context.package; contributionId = context.contribution; late = done;
+                return [&] { ++aborts; };
+            }));
+        AddonWorker worker(installed, &broker); worker.setExecutable(executable); worker.setHostServices(&services);
+        QSignalSpy completed(&worker, &AddonWorker::completed);
+        auto invocation = worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {});
+        QTRY_COMPARE(calls, 1); QCOMPARE(packageId, installed.manifest.id);
+        QCOMPARE(contributionId, QString(installed.manifest.id + QStringLiteral("/search")));
+        late({{{"positionUs", 123}}, {}}); QTRY_COMPARE(completed.size(), 1);
+        QCOMPARE(completed.first()[0].toString(), invocation);
+        QCOMPARE(completed.first()[2].toJsonObject().value("response").toObject().value("positionUs").toInt(), 123);
+        completed.clear(); worker.stop();
+        // The next process has a new host-call ID namespace.
+        AddonWorker pending(installed, &broker); pending.setExecutable(executable); pending.setHostServices(&services);
+        QSignalSpy canceled(&pending, &AddonWorker::completed);
+        invocation = pending.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {}); QTRY_COMPARE(calls, 2);
+        pending.cancel(invocation); QCOMPARE(aborts, 1); late({{{"positionUs", 999}}, {}}); QTest::qWait(50); QVERIFY(canceled.isEmpty());
+#endif
+    }
     void publicAddressClassification_data()
     {
         QTest::addColumn<QString>("address");
