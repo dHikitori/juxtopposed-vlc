@@ -13,6 +13,29 @@ class TestAddonHostServices : public QObject
             {{"playback.control", QJsonObject{{"operations", QJsonArray{"pause"}}}}, {"playback.observe", QJsonObject{}}}};
     }
 private slots:
+    void configurationGuardCoversDispatchAndDelivery() {
+        AddonHostServices services; QObject owner; bool current = false; int handlers = 0, calls = 0;
+        AddonHostServices::Completion complete;
+        QVERIFY(services.registerOperation(QStringLiteral("playback.observe"), &owner,
+            [&](const auto&, const auto&, auto done) -> AddonHostServices::Cancel { ++handlers; complete = done; return {}; }));
+        auto host = context(); host.current = [&] { return current; };
+        services.dispatch(host, QStringLiteral("playback.observe"), {}, [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); QVERIFY(result.response.isEmpty()); });
+        QTRY_COMPARE(calls, 1); QCOMPARE(handlers, 0);
+        current = true;
+        services.dispatch(host, QStringLiteral("playback.observe"), {}, [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); QVERIFY(result.response.isEmpty()); });
+        QCOMPARE(handlers, 1); current = false; complete({{{"private", "old account"}}, {}});
+        QTRY_COMPARE(calls, 2);
+    }
+    void handlerCanDestroyTheDispatcher() {
+        auto* services = new AddonHostServices; QObject owner; int calls = 0, cancellations = 0;
+        QVERIFY(services->registerOperation(QStringLiteral("playback.observe"), &owner,
+            [&](const auto&, const auto&, auto) -> AddonHostServices::Cancel {
+                delete services; services = nullptr;
+                return [&] { ++cancellations; };
+            }));
+        services->dispatch(context(), QStringLiteral("playback.observe"), {}, [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
+        QVERIFY(!services); QCOMPARE(calls, 1); QCOMPARE(cancellations, 1);
+    }
     void closedOperationMapAndScopesPrecedeHandlers() {
         AddonHostServices services; QObject owner; int calls = 0, completions = 0;
         const auto handler = [&](const auto&, const auto&, auto done) -> AddonHostServices::Cancel { ++calls; done({{{"ok", true}}, {}}); return {}; };

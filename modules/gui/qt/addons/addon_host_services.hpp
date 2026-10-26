@@ -16,7 +16,7 @@ class AddonHostServices : public QObject
 {
     Q_OBJECT
 public:
-    struct Context { QString package, contribution, invocation; QJsonObject grants; };
+    struct Context { QString package, contribution, invocation; QJsonObject grants; std::function<bool()> current; };
     struct Result { QJsonObject response; QString error; };
     using Completion = std::function<void(Result)>;
     using Cancel = std::function<void()>;
@@ -34,7 +34,7 @@ signals:
     void availabilityChanged();
 private:
     struct Registration { QPointer<QObject> lifetime; Handler handler; };
-    struct Job { QString package, operation; QPointer<QObject> lifetime; QPointer<QTimer> deadline; Completion completion; Cancel cancel; };
+    struct Job { QString package, operation; QPointer<QObject> lifetime; QPointer<QTimer> deadline; Completion completion; Cancel cancel; std::function<bool()> current; };
     struct Gate { std::mutex mutex; AddonHostServices* owner = nullptr; };
     void finish(quint64, Result, bool abort = false);
     void unregisterOperation(const QString&);

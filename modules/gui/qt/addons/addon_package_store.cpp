@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_package_store.hpp"
 #include "addon_settings_migrations.hpp"
+#include "addon_storage.hpp"
+#include "addon_storage_data.hpp"
+#include <QCryptographicHash>
+#include <cmath>
 #include "addon_repository_updates.hpp"
 #include <QDir>
 #include <QDirIterator>
@@ -64,22 +68,22 @@ ReleaseIdentity readIdentity(const QJsonObject& value)
 bool writeJson(const QString& path, const QJsonObject& value, QString* error)
 {
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) return fail(error, QStringLiteral("Cannot create add-on state file"));
+    if (!file.open(QIODevice::WriteOnly)) return fail(error, QStringLiteral("The app cannot create the add-on state file."));
     file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
     const auto bytes = QJsonDocument(value).toJson(QJsonDocument::Compact);
     if (file.write(bytes) != bytes.size() || !file.commit())
-        return fail(error, QStringLiteral("Cannot commit add-on state"));
+        return fail(error, QStringLiteral("The app cannot save the add-on state."));
     return true;
 }
 bool readJson(const QString& path, QJsonObject* value, QString* error)
 {
     QFile file(path);
     if (QFileInfo(file).isSymLink() || !file.open(QIODevice::ReadOnly) || file.size() > 4 * 1024 * 1024)
-        return fail(error, QStringLiteral("Cannot read add-on state"));
+        return fail(error, QStringLiteral("The app cannot read the add-on state."));
     QJsonParseError parseError;
     const auto result = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !result.isObject())
-        return fail(error, QStringLiteral("Invalid add-on state"));
+        return fail(error, QStringLiteral("The add-on state is not correct."));
     *value = result.object();
     return true;
 }
@@ -88,8 +92,12 @@ bool subset(const QJsonValue& requested, const QJsonValue& declared)
     if (requested.type() != declared.type()) return false;
     if (requested.isObject()) {
         const auto a = requested.toObject(), b = declared.toObject();
-        for (auto it = a.begin(); it != a.end(); ++it)
-            if (!b.contains(it.key()) || !subset(it.value(), b.value(it.key()))) return false;
+        for (auto it = a.begin(); it != a.end(); ++it) {
+            if (it.key() == QStringLiteral("quotaBytes") && it.value().isDouble() && b.value(it.key()).isDouble()) {
+                const auto value = it.value().toDouble(-1);
+                if (!std::isfinite(value) || value < 0 || std::floor(value) != value || value > b.value(it.key()).toDouble(-1)) return false;
+            } else if (!b.contains(it.key()) || !subset(it.value(), b.value(it.key()))) return false;
+        }
         return true;
     }
     if (requested.isArray()) {
@@ -102,11 +110,36 @@ bool subset(const QJsonValue& requested, const QJsonValue& declared)
 bool validateGrants(const Manifest& manifest, const QJsonObject& grants, QString* error)
 {
     for (auto it = manifest.requiredPermissions.begin(); it != manifest.requiredPermissions.end(); ++it)
-        if (!grants.contains(it.key()) || grants.value(it.key()) != it.value())
-            return fail(error, QStringLiteral("Required permission not approved: ") + it.key());
+        if (!grants.contains(it.key()) || (it.key() == QStringLiteral("storage.private")
+            ? !grants.value(it.key()).toObject().contains("quotaBytes") || !subset(grants.value(it.key()), it.value())
+            : grants.value(it.key()) != it.value()))
+            return fail(error, QStringLiteral("The required permission is not approved: ") + it.key());
     for (auto it = grants.begin(); it != grants.end(); ++it)
         if (!manifest.permissionDeclared(it.key()) || !subset(it.value(), manifest.permissionScope(it.key())))
-            return fail(error, QStringLiteral("Grant exceeds declared permission: ") + it.key());
+            return fail(error, QStringLiteral("The grant is outside the declared permission: ") + it.key());
+    return true;
+}
+qint64 storageQuota(const Manifest& manifest, const QJsonObject& grants)
+{
+    const auto declared = manifest.permissionScope(QStringLiteral("storage.private")).value("quotaBytes");
+    const auto approved = grants.value("storage.private").toObject().value("quotaBytes");
+    if (!manifest.permissionDeclared(QStringLiteral("storage.private")) || !declared.isDouble() || !approved.isDouble()) return -1;
+    const auto a = declared.toDouble(-1), b = approved.toDouble(-1);
+    if (!std::isfinite(a) || !std::isfinite(b) || a < 0 || b < 0 || std::floor(a) != a || std::floor(b) != b) return -1;
+    return qint64(std::min({a, b, double(PrivateStorageLimits::MaximumBytes)}));
+}
+bool storageSnapshot(const QString& directory, const QJsonObject& release, const Manifest& manifest,
+                     QJsonObject* output, QString* error)
+{
+    if (!release.contains("storage")) { *output = emptyPrivateStorage(privateStorageVersion(manifest)); return true; }
+    const auto descriptor = release.value("storage").toObject();
+    const double revision = descriptor.value("revision").toDouble(-1);
+    if (descriptor.size() != 3 || !descriptor.value("version").isDouble() || descriptor.value("version").toInt() < 1
+        || !descriptor.value("revision").isDouble() || revision < 0 || revision > 9007199254740991.0 || std::floor(revision) != revision
+        || !readPrivateStorage(directory, descriptor.value("digest").toString(), output, error)
+        || output->value("schemaVersion") != descriptor.value("version")
+        || (manifest.permissionDeclared(QStringLiteral("storage.private")) && descriptor.value("version").toInt() != privateStorageVersion(manifest)))
+        return fail(error, QStringLiteral("The private storage snapshot does not agree with the release."));
     return true;
 }
 QJsonArray retainSnapshot(QJsonArray snapshots, const QJsonObject& snapshot)
@@ -141,9 +174,9 @@ public:
         m_elapsed.start();
         m_executable = QStandardPaths::findExecutable(QStringLiteral("git"));
         if (m_executable.isEmpty())
-            return fail(error, QStringLiteral("Git transport is unavailable; install the packaged Git tool"));
+            return fail(error, QStringLiteral("The Git tool is not available. Install the packaged Git tool."));
         if (!m_temporary.isValid())
-            return fail(error, QStringLiteral("Cannot create isolated Git transport directory"));
+            return fail(error, QStringLiteral("The app cannot create a private Git directory."));
         m_repo = QDir(m_temporary.path()).filePath(QStringLiteral("objects.git"));
         return run({QStringLiteral("init"), QStringLiteral("--bare"), QStringLiteral("--template="), m_repo},
                    nullptr, error, false);
@@ -152,7 +185,7 @@ public:
              qint64 maximumOutput = Manifest::MaximumPackageBytes)
     {
         if (QThread::currentThread()->isInterruptionRequested())
-            return fail(error, QStringLiteral("Git transport was cancelled"));
+            return fail(error, QStringLiteral("The Git request was canceled."));
         QProcess process;
         QProcessEnvironment environment;
         const auto inherited = QProcessEnvironment::systemEnvironment();
@@ -195,7 +228,7 @@ public:
         fixed.append(arguments);
         process.start(m_executable, fixed, QIODevice::ReadOnly);
         if (!process.waitForStarted(3000))
-            return fail(error, QStringLiteral("Cannot start Git transport"));
+            return fail(error, QStringLiteral("The app cannot start the Git tool."));
         QByteArray data, diagnostic;
         while (process.state() != QProcess::NotRunning) {
             process.waitForFinished(25);
@@ -210,19 +243,19 @@ public:
 #endif
                 process.kill();
                 process.waitForFinished(3000);
-                return fail(error, interrupted ? QStringLiteral("Git transport was cancelled")
-                    : QStringLiteral("Git transport exceeded its time or size budget"));
+                return fail(error, interrupted ? QStringLiteral("The Git request was canceled.")
+                    : QStringLiteral("The Git request reached its time or size limit."));
             }
         }
         data += process.readAllStandardOutput();
         diagnostic += process.readAllStandardError();
         if (QThread::currentThread()->isInterruptionRequested())
-            return fail(error, QStringLiteral("Git transport was cancelled"));
+            return fail(error, QStringLiteral("The Git request was canceled."));
         if (data.size() > maximumOutput || diagnostic.size() > 256 * 1024
             || m_elapsed.elapsed() > m_timeout)
-            return fail(error, QStringLiteral("Git transport exceeded its time or size budget"));
+            return fail(error, QStringLiteral("The Git request reached its time or size limit."));
         if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
-            return fail(error, QStringLiteral("Git transport failed; verify repository access and tag"));
+            return fail(error, QStringLiteral("The Git request failed. Examine the repository access and tag."));
         if (output) *output = data;
         return true;
     }
@@ -240,40 +273,40 @@ bool validateCandidate(const PackageCandidate& candidate, QString* error)
     if (!Manifest::parse(candidate.contents.value(QStringLiteral("addon.json")), &parsed, error)) return false;
     if (parsed.id != candidate.manifest.id || parsed.version != candidate.manifest.version
         || parsed.document != candidate.manifest.document)
-        return fail(error, QStringLiteral("Candidate manifest changed after validation"));
+        return fail(error, QStringLiteral("The candidate manifest changed after its check."));
     if (candidate.contents.size() != parsed.files.size())
-        return fail(error, QStringLiteral("Candidate inventory mismatch"));
+        return fail(error, QStringLiteral("The candidate file list does not agree with its manifest."));
     qint64 total = 0;
     for (const auto& path : parsed.files) {
-        if (!candidate.contents.contains(path)) return fail(error, QStringLiteral("Candidate resource missing"));
+        if (!candidate.contents.contains(path)) return fail(error, QStringLiteral("A candidate resource is missing."));
         total += candidate.contents.value(path).size();
         if (candidate.contents.value(path).size() > Manifest::MaximumFileBytes || total > Manifest::MaximumPackageBytes)
-            return fail(error, QStringLiteral("Candidate exceeds size budget"));
+            return fail(error, QStringLiteral("The candidate is too large."));
     }
     if (candidate.digest != packageDigest(candidate.contents) || !digestId(QString::fromLatin1(candidate.digest)))
-        return fail(error, QStringLiteral("Candidate integrity mismatch"));
+        return fail(error, QStringLiteral("The candidate failed its integrity check."));
     if (!candidate.identity.developerSource && QUrl(candidate.identity.source) != parsed.source)
-        return fail(error, QStringLiteral("Manifest source differs from approved repository"));
+        return fail(error, QStringLiteral("The manifest source does not agree with the approved repository."));
     QString tag = candidate.identity.tag;
     if (tag.startsWith(QLatin1Char('v'))) tag.remove(0, 1);
     if (!SemanticVersion::parse(tag, nullptr) || tag != parsed.version)
-        return fail(error, QStringLiteral("Release tag and manifest version disagree"));
+        return fail(error, QStringLiteral("The release tag and manifest version do not agree."));
     if (candidate.identity.developerSource && candidate.identity.distributionSource)
         return fail(error, QStringLiteral("A distribution package cannot be a developer snapshot."));
     if (candidate.identity.distributionSource && candidate.identity.objectFormat != QStringLiteral("distribution-sha256"))
-        return fail(error, QStringLiteral("The distribution snapshot format is invalid."));
+        return fail(error, QStringLiteral("The distribution snapshot format is not correct."));
     if ((candidate.identity.developerSource && candidate.identity.objectFormat == QStringLiteral("developer-sha256"))
         || (candidate.identity.distributionSource && candidate.identity.objectFormat == QStringLiteral("distribution-sha256"))) {
         if (candidate.identity.commitId != QString::fromLatin1(candidate.digest)
             || candidate.identity.tagObjectId != QString::fromLatin1(candidate.digest))
-            return fail(error, QStringLiteral("The snapshot identity does not match its contents."));
+            return fail(error, QStringLiteral("The snapshot identity does not agree with its contents."));
     } else {
         if (!gitId(candidate.identity.commitId) || !gitId(candidate.identity.tagObjectId)
             || candidate.identity.commitId.size() != candidate.identity.tagObjectId.size())
-            return fail(error, QStringLiteral("Release needs resolved tag and commit IDs"));
+            return fail(error, QStringLiteral("The release needs resolved tag and commit IDs."));
         if (candidate.identity.objectFormat != (candidate.identity.commitId.size() == 40
                 ? QStringLiteral("sha1") : QStringLiteral("sha256")))
-            return fail(error, QStringLiteral("Git object format mismatch"));
+            return fail(error, QStringLiteral("The Git object format does not agree with its identity."));
     }
     return true;
 }
@@ -309,13 +342,13 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
     if (normalized.startsWith(QLatin1Char('v'))) normalized.remove(0, 1);
     if (!SemanticVersion::parse(normalized, nullptr) || tag.contains(QLatin1Char('/'))
         || tag.startsWith(QLatin1Char('-')))
-        return fail(error, QStringLiteral("Select an exact SemVer release tag"));
+        return fail(error, QStringLiteral("Select an exact SemVer release tag."));
     const QUrl url(source, QUrl::StrictMode);
     if (!developerLocalSource && (url.scheme() != QStringLiteral("https") || url.host().isEmpty()
         || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()))
-        return fail(error, QStringLiteral("Only HTTPS Git sources are accepted"));
+        return fail(error, QStringLiteral("Use an HTTPS Git source."));
     if (developerLocalSource && (!QFileInfo(source).isDir() || QFileInfo(source).isSymLink()))
-        return fail(error, QStringLiteral("Developer source must be an existing local repository"));
+        return fail(error, QStringLiteral("The developer source must be an existing local repository."));
     GitObjects git(std::clamp(timeoutMs, 1000, 120000));
     git.developer = developerLocalSource;
     if (!git.initialize(error)) return false;
@@ -337,7 +370,7 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
     candidate.identity.objectFormat = candidate.identity.commitId.size() == 64
         ? QStringLiteral("sha256") : QStringLiteral("sha1");
     if (!gitId(candidate.identity.tagObjectId) || !gitId(candidate.identity.commitId))
-        return fail(error, QStringLiteral("Invalid resolved Git identity"));
+        return fail(error, QStringLiteral("The resolved Git identity is not correct."));
     if (!git.run({QStringLiteral("ls-tree"), QStringLiteral("-rz"), QStringLiteral("--full-tree"),
                   candidate.identity.commitId}, &value, error)) return false;
     QMap<QString, QString> objects;
@@ -345,48 +378,48 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
     int count = 0;
     for (const auto& entry : value.split('\0')) {
         if (entry.isEmpty()) continue;
-        if (++count > 4096) return fail(error, QStringLiteral("Repository tree exceeds entry budget"));
+        if (++count > 4096) return fail(error, QStringLiteral("The repository tree has too many entries."));
         const auto tab = entry.indexOf('\t');
         const auto header = entry.left(tab).split(' ');
         const auto encodedPath = entry.mid(tab + 1);
         const auto path = QString::fromUtf8(encodedPath);
         if (tab < 0 || header.size() != 3 || path.toUtf8() != encodedPath || !portablePackagePath(path)
             || folded.contains(path.toCaseFolded()))
-            return fail(error, QStringLiteral("Unsafe repository tree path"));
+            return fail(error, QStringLiteral("The repository tree path is not permitted."));
         folded.insert(path.toCaseFolded());
         if (header[0] != "100644" && header[0] != "100755")
-            return fail(error, QStringLiteral("Repository contains links or submodules"));
+            return fail(error, QStringLiteral("The repository contains links or submodules."));
         if (header[1] != "blob" || !gitId(QString::fromLatin1(header[2])))
-            return fail(error, QStringLiteral("Invalid Git tree object"));
+            return fail(error, QStringLiteral("The git tree object is not correct."));
         objects.insert(path, QString::fromLatin1(header[2]));
     }
     if (!objects.contains(QStringLiteral("addon.json")))
-        return fail(error, QStringLiteral("Tag does not contain an add-on manifest"));
+        return fail(error, QStringLiteral("The tag does not contain an add-on manifest."));
     if (!git.run({QStringLiteral("cat-file"), QStringLiteral("blob"), objects.value(QStringLiteral("addon.json"))},
                  &value, error) || !Manifest::parse(value, &candidate.manifest, error)) return false;
     qint64 total = 0;
     for (const auto& path : candidate.manifest.files) {
-        if (!objects.contains(path)) return fail(error, QStringLiteral("Declared resource missing from tag"));
+        if (!objects.contains(path)) return fail(error, QStringLiteral("A declared resource is missing from the tag."));
         QByteArray size;
         if (!git.run({QStringLiteral("cat-file"), QStringLiteral("-s"), objects.value(path)}, &size, error)) return false;
         bool ok = false;
         const auto bytes = size.trimmed().toLongLong(&ok);
         if (!ok || bytes < 0 || bytes > Manifest::MaximumFileBytes || (total += bytes) > Manifest::MaximumPackageBytes)
-            return fail(error, QStringLiteral("Git package exceeds resource budget"));
+            return fail(error, QStringLiteral("The Git package is too large."));
         if (!git.run({QStringLiteral("cat-file"), QStringLiteral("blob"), objects.value(path)}, &value, error)
-            || value.size() != bytes) return fail(error, QStringLiteral("Cannot read package Git object"));
+            || value.size() != bytes) return fail(error, QStringLiteral("The app cannot read the package Git object."));
         candidate.contents.insert(path, value);
     }
     candidate.digest = packageDigest(candidate.contents);
     if (!validateCandidate(candidate, error)) return false;
     QTemporaryDir check;
-    if (!check.isValid()) return fail(error, QStringLiteral("Cannot validate staged package"));
+    if (!check.isValid()) return fail(error, QStringLiteral("The app cannot examine the staged package."));
     for (auto it = candidate.contents.begin(); it != candidate.contents.end(); ++it) {
         const auto destination = QDir(check.path()).filePath(it.key());
         QDir().mkpath(QFileInfo(destination).absolutePath());
         QFile file(destination);
         if (!file.open(QIODevice::WriteOnly) || file.write(it.value()) != it.value().size())
-            return fail(error, QStringLiteral("Cannot stage package validation"));
+            return fail(error, QStringLiteral("The app cannot stage the package check."));
     }
     Manifest validated;
     if (!Manifest::loadDirectory(check.path(), &validated, nullptr, error)) return false;
@@ -409,7 +442,7 @@ bool PackageStore::fetchRepositoryUpdate(const QString& id, const QString& range
     const QUrl url(source, QUrl::StrictMode);
     if (!developerLocalSource && (url.scheme() != QStringLiteral("https") || url.host().isEmpty()
         || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()))
-        return fail(error, QStringLiteral("Only HTTPS Git sources are accepted."));
+        return fail(error, QStringLiteral("Use an HTTPS Git source."));
     if (developerLocalSource && (!QFileInfo(source).isDir() || QFileInfo(source).isSymLink()))
         return fail(error, QStringLiteral("The developer repository directory is not available."));
     QElapsedTimer elapsed; elapsed.start();
@@ -423,7 +456,7 @@ bool PackageStore::fetchRepositoryUpdate(const QString& id, const QString& range
         || !selectRepositoryUpdate(tags, active.manifest.version, range, allowPrerelease, &selected, error)) return false;
     if (selected.name.isEmpty()) return true;
     const int remaining = budget - int(elapsed.elapsed());
-    if (remaining < 1000) return fail(error, QStringLiteral("The repository update check exceeded its time limit."));
+    if (remaining < 1000) return fail(error, QStringLiteral("The repository update check reached its time limit."));
     PackageCandidate candidate;
     if (!fetchGitTag(source, selected.name, &candidate, error, developerLocalSource, remaining)) return false;
     if (candidate.identity.tagObjectId != selected.objectId)
@@ -453,7 +486,7 @@ bool PackageStore::fetchRepositoryUpdate(const QString& id, const QString& range
 
 bool PackageStore::loadState(const QString& id, QJsonObject* output, QString* error) const
 {
-    if (!packageId(id)) return fail(error, QStringLiteral("Invalid package ID"));
+    if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
     const auto path = QDir(m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
     QJsonObject state;
     const auto valid = [&id](const QJsonObject& value) {
@@ -470,9 +503,9 @@ bool PackageStore::loadState(const QString& id, QJsonObject* output, QString* er
 }
 bool PackageStore::saveState(const QString& id, const QJsonObject& state, QString* error) const
 {
-    if (!packageId(id)) return fail(error, QStringLiteral("Invalid package ID"));
+    if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
     const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
-    if (!QDir().mkpath(folder)) return fail(error, QStringLiteral("Cannot create package state directory"));
+    if (!QDir().mkpath(folder)) return fail(error, QStringLiteral("The app cannot create the package state directory."));
     if (QJsonDocument(state).toJson(QJsonDocument::Compact).size() > 4 * 1024 * 1024)
         return fail(error, QStringLiteral("The retained package state is too large."));
     const auto path = QDir(folder).filePath(QStringLiteral("state.json"));
@@ -482,12 +515,118 @@ bool PackageStore::saveState(const QString& id, const QJsonObject& state, QStrin
         && !writeJson(path + QStringLiteral(".backup"), previous, error)) return false;
     return writeJson(path, state, error);
 }
+QString PackageStore::privateStorageDirectory(const QString& id) const
+{ return QDir(m_root).filePath(QStringLiteral("private-storage/") + id + QStringLiteral("/objects")); }
+bool PackageStore::collectPrivateStorage(const QString& id, const QJsonObject& state, QString* error) const
+{
+    QSet<QString> keep;
+    const auto snapshot = [&keep](const QJsonObject& value) {
+        const auto hash = value.value("storage").toObject().value("digest").toString();
+        if (!hash.isEmpty()) keep.insert(hash);
+    };
+    const auto document = [&snapshot](const QJsonObject& value) {
+        snapshot(value.value("current").toObject()); snapshot(value.value("previous").toObject());
+        for (const auto& item : value.value("retained").toArray()) snapshot(item.toObject());
+    };
+    document(state);
+    const auto backupPath = QDir(m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json.backup"));
+    QJsonObject backup;
+    if (QFileInfo::exists(backupPath)) { if (!readJson(backupPath, &backup, error)) return false; document(backup); }
+    const auto archivePath = QDir(privateStorageDirectory(id)).filePath(QStringLiteral("../archive.json"));
+    if (QFileInfo::exists(archivePath)) { if (!readJson(archivePath, &backup, error)) return false; snapshot(backup); }
+    if (keep.size() > PrivateStorageLimits::MaximumRetainedSnapshots)
+        return fail(error, QStringLiteral("The retained private storage limit was reached."));
+    for (const auto& hash : keep) if (!digestId(hash)) return fail(error, QStringLiteral("A private storage digest is not correct."));
+    const QDir directory(privateStorageDirectory(id));
+    if (!directory.exists()) return true;
+    if (QFileInfo(directory.path()).isSymLink()) return fail(error, QStringLiteral("The private storage directory is not correct."));
+    QDirIterator files(directory.path(), QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot);
+    const QRegularExpression temporary(QStringLiteral("\\A\\.?[0-9a-f]{64}\\.json\\.[A-Za-z0-9]{6}\\z"));
+    int count = 0; qint64 physicalBytes = 0;
+    while (files.hasNext()) {
+        files.next(); const auto info = files.fileInfo(); const auto name = info.fileName();
+        const bool staged = temporary.match(name).hasMatch();
+        if (++count > PrivateStorageLimits::MaximumPhysicalSnapshots || info.isSymLink() || !info.isFile()
+            || (!staged && (!name.endsWith(QStringLiteral(".json")) || !digestId(name.chopped(5)))))
+            return fail(error, QStringLiteral("The private storage files are not correct."));
+        if (info.size() > PrivateStorageLimits::MaximumBytes + 256)
+            return fail(error, QStringLiteral("A private storage snapshot is too large."));
+        physicalBytes += info.size();
+        if (physicalBytes > PrivateStorageLimits::MaximumPhysicalSnapshots * (PrivateStorageLimits::MaximumBytes + 256))
+            return fail(error, QStringLiteral("The private storage file byte limit was reached."));
+        if (staged || !keep.contains(name.chopped(5))) {
+            if (!QFile::remove(info.absoluteFilePath())) return fail(error, QStringLiteral("The app cannot remove an old private storage snapshot."));
+        }
+    }
+    return true;
+}
+bool PackageStore::privateStorage(const PrivateStorageContext& context, const QString& operation, const QJsonObject& request,
+                                 QJsonObject* response, const std::function<bool()>& pending,
+                                 const std::function<bool()>& beginCommit, QString* error) const
+{
+    if (response) *response = {};
+    const bool get = operation == QStringLiteral("storage.get"), set = operation == QStringLiteral("storage.set");
+    const bool remove = operation == QStringLiteral("storage.remove");
+    const auto key = request.value("key").toString();
+    if ((!get && !set && !remove) || !privateStorageKey(key) || (set && !privateStorageValue(request.value("value"))))
+        return fail(error, QStringLiteral("The private storage operation, key, or value is not correct."));
+    for (auto it = request.begin(); it != request.end(); ++it)
+        if (it.key() != QStringLiteral("key") && !(set && it.key() == QStringLiteral("value"))
+            && !(!get && it.key() == QStringLiteral("expectedRevision")))
+            return fail(error, QStringLiteral("The private storage request contains a field outside the contract."));
+    const auto& package = context.package; const auto id = package.manifest.id;
+    if (!packageId(id) || context.accountReference.isEmpty() || context.accountReference.size() > 512 || !pending || !pending())
+        return fail(error, QStringLiteral("The private storage request is no longer current."));
+    const auto quota = storageQuota(package.manifest, package.grants);
+    if (quota < 0) return fail(error, QStringLiteral("Private storage needs permission and a byte limit."));
+    QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy. Try again."));
+    if (!networkConfigurationMatches(package, context.settings, context.settingsRevision) || !pending())
+        return fail(error, QStringLiteral("The add-on release, settings, or account changed."));
+    QJsonObject state;
+    if (!loadState(id, &state, error) || !collectPrivateStorage(id, state, error)) return false;
+    auto current = state.value("current").toObject(); QJsonObject data;
+    if (!storageSnapshot(privateStorageDirectory(id), current, package.manifest, &data, error)) return false;
+    auto descriptor = current.value("storage").toObject();
+    const double revision = descriptor.value("revision").toDouble(0);
+    if (request.contains("expectedRevision")) {
+        const auto expected = request.value("expectedRevision"); const auto number = expected.toDouble(-1);
+        if (!expected.isDouble() || number < 0 || number > 9007199254740991.0 || std::floor(number) != number || number != revision)
+            return fail(error, QStringLiteral("Private storage changed. Read the value again."));
+    }
+    const auto partition = QString::fromLatin1(QCryptographicHash::hash(context.accountReference.toUtf8(), QCryptographicHash::Sha256).toHex());
+    auto accounts = data.value("namespaces").toObject(), entries = accounts.value(partition).toObject();
+    const bool found = entries.contains(key);
+    QJsonObject result{{"found", found}, {"revision", revision}, {"quotaBytes", double(quota)}};
+    if (get && found) result.insert(QStringLiteral("value"), entries.value(key));
+    qint64 used = 0;
+    if (!validatePrivateStorage(data, quota, &used, error)) return false;
+    if (!get && ((set && (!found || entries.value(key) != request.value("value"))) || (remove && found))) {
+        if (set) entries.insert(key, request.value("value")); else entries.remove(key);
+        if (entries.isEmpty()) accounts.remove(partition); else accounts.insert(partition, entries);
+        data.insert(QStringLiteral("namespaces"), accounts);
+        if (!validatePrivateStorage(data, quota, &used, error)) return false;
+        if (revision >= 9007199254740991.0)
+            return fail(error, QStringLiteral("The private storage revision limit was reached."));
+        QString hash;
+        if (!writePrivateStorage(privateStorageDirectory(id), data, &hash, error)) return false;
+        if (!pending() || !beginCommit || !beginCommit()) return fail(error, QStringLiteral("The private storage request was canceled."));
+        current.insert("storage", QJsonObject{{"version", data.value("schemaVersion")}, {"digest", hash}, {"revision", revision + 1}});
+        state.insert("current", current);
+        if (!saveState(id, state, error)) return false;
+        result.insert(QStringLiteral("revision"), revision + 1);
+    } else if (!pending()) return fail(error, QStringLiteral("The private storage request was canceled."));
+    result.insert(QStringLiteral("usedBytes"), double(used));
+    if (remove) result.insert(QStringLiteral("removed"), found);
+    if (response) *response = result;
+    return true;
+}
 bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject& grants, QString* error)
 {
     if (!validateCandidate(candidate, error) || !validateGrants(candidate.manifest, grants, error)) return false;
-    if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("Cannot create add-on store"));
+    if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The app cannot create the add-on store."));
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
-    if (!lock.tryLock(0)) return fail(error, QStringLiteral("Add-on store is busy"));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     const auto id = candidate.manifest.id;
     QJsonObject state;
     const auto statePath = QDir(m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
@@ -508,13 +647,13 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
         const auto identity = readIdentity(old.value("identity").toObject());
         if (identity.source != candidate.identity.source || identity.developerSource != candidate.identity.developerSource
             || (!identity.distributionSource && candidate.identity.distributionSource))
-            return fail(error, QStringLiteral("Package source changed; explicit source reapproval is required"));
+            return fail(error, QStringLiteral("The package source changed. Approve the new source before an update."));
         const QString historyTag = (candidate.identity.distributionSource ? QStringLiteral("distribution:") : QString{}) + candidate.identity.tag;
         const auto locked = state.value("lockedTags").toObject().value(historyTag).toObject();
         if (!locked.isEmpty() && (locked.value("commitId") != candidate.identity.commitId
             || locked.value("tagObjectId") != candidate.identity.tagObjectId
             || locked.value("digest") != QString::fromLatin1(candidate.digest)))
-            return fail(error, QStringLiteral("Previously locked tag changed"));
+            return fail(error, QStringLiteral("A previously locked tag changed."));
         InstalledPackage verified;
         if (!installed(id, &verified, error)) return false;
         oldManifest = verified.manifest;
@@ -523,33 +662,71 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
     }
     if (!migrateSettings(candidate.manifest, candidate.contents, old.isEmpty() ? nullptr : &oldManifest,
                          old.value("settings").toObject(), grants, &nextSettings, error)) return false;
+    if (!collectPrivateStorage(id, state, error)) return false;
+    QJsonObject priorDataRelease = old;
+    if (old.isEmpty()) {
+        const auto archivePath = QDir(privateStorageDirectory(id)).filePath(QStringLiteral("../archive.json"));
+        if (QFileInfo::exists(archivePath)) {
+            QJsonObject archive;
+            if (!readJson(archivePath, &archive, error) || archive.value("formatVersion") != 1 || archive.value("id") != id)
+                return fail(error, QStringLiteral("The saved private storage archive is not correct."));
+            const auto identity = readIdentity(archive.value("identity").toObject());
+            if (identity.source == candidate.identity.source && identity.developerSource == candidate.identity.developerSource
+                && identity.distributionSource == candidate.identity.distributionSource) priorDataRelease = archive;
+        }
+    }
+    QJsonObject nextStorage;
+    if (candidate.manifest.permissionDeclared(QStringLiteral("storage.private")) || priorDataRelease.contains("storage")) {
+        QJsonObject data;
+        if (priorDataRelease.contains("storage")) {
+            if (!storageSnapshot(privateStorageDirectory(id), priorDataRelease, oldManifest, &data, error)) return false;
+            if (candidate.manifest.permissionDeclared(QStringLiteral("storage.private"))) {
+                auto quota = storageQuota(candidate.manifest, grants);
+                if (quota < 0) quota = PrivateStorageLimits::MaximumBytes;
+                QJsonObject migrated;
+                if (!migratePrivateStorage(candidate.manifest, candidate.contents, data.value("schemaVersion").toInt(), data, quota, &migrated, error)) return false;
+                data = migrated;
+            }
+        } else data = emptyPrivateStorage(privateStorageVersion(candidate.manifest));
+        QString hash;
+        if (!writePrivateStorage(privateStorageDirectory(id), data, &hash, error)) return false;
+        const auto prior = priorDataRelease.value("storage").toObject();
+        auto revision = prior.value("revision").toDouble(0);
+        if (!prior.isEmpty() && prior.value("digest").toString() != hash) {
+            if (revision >= 9007199254740991.0)
+                return fail(error, QStringLiteral("The private storage revision limit was reached."));
+            ++revision;
+        }
+        nextStorage = {{"version", data.value("schemaVersion")}, {"digest", hash},
+            {"revision", revision}};
+    }
     const auto destination = releaseDirectory(id, QString::fromLatin1(candidate.digest));
     if (QFileInfo::exists(destination)) {
         Manifest verified;
         QMap<QString, QByteArray> files;
         if (!Manifest::loadDirectory(destination, &verified, &files, error) || packageDigest(files) != candidate.digest)
-            return fail(error, QStringLiteral("Installed immutable release failed integrity verification"));
+            return fail(error, QStringLiteral("The installed immutable release failed its integrity check."));
     } else {
         const auto releaseParent = QFileInfo(destination).absolutePath();
-        if (!QDir().mkpath(releaseParent)) return fail(error, QStringLiteral("Cannot create release directory"));
+        if (!QDir().mkpath(releaseParent)) return fail(error, QStringLiteral("The app cannot create the release directory."));
         QTemporaryDir staging(QDir(releaseParent).filePath(QStringLiteral(".staging-XXXXXX")));
-        if (!staging.isValid()) return fail(error, QStringLiteral("Cannot stage release"));
+        if (!staging.isValid()) return fail(error, QStringLiteral("The app cannot stage the release."));
         for (auto it = candidate.contents.begin(); it != candidate.contents.end(); ++it) {
             const auto path = QDir(staging.path()).filePath(it.key());
             if (!QDir().mkpath(QFileInfo(path).absolutePath()))
-                return fail(error, QStringLiteral("Cannot stage resource directory"));
+                return fail(error, QStringLiteral("The app cannot stage the resource directory."));
             QFile file(path);
             if (!file.open(QIODevice::WriteOnly) || file.write(it.value()) != it.value().size())
-                return fail(error, QStringLiteral("Cannot stage package resource"));
+                return fail(error, QStringLiteral("The app cannot stage the package resource."));
             file.close();
             file.setPermissions(QFile::ReadOwner);
         }
         Manifest verified;
         QMap<QString, QByteArray> files;
         if (!Manifest::loadDirectory(staging.path(), &verified, &files, error) || packageDigest(files) != candidate.digest)
-            return fail(error, QStringLiteral("Staged release verification failed"));
+            return fail(error, QStringLiteral("The staged release failed its integrity check."));
         if (!QDir().rename(staging.path(), destination))
-            return fail(error, QStringLiteral("Cannot activate immutable release directory"));
+            return fail(error, QStringLiteral("The app cannot activate the immutable release directory."));
         staging.setAutoRemove(false);
     }
     QJsonObject current{
@@ -561,6 +738,7 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
             + (!old.isEmpty() && (nextSettings != old.value("settings").toObject()
                 || old.value("settingsVersion").toInt() != candidate.manifest.settingsVersion) ? 1 : 0)}
     };
+    if (!nextStorage.isEmpty()) current.insert(QStringLiteral("storage"), nextStorage);
     auto history = state.value("lockedTags").toObject();
     const QString historyTag = (candidate.identity.distributionSource ? QStringLiteral("distribution:") : QString{}) + candidate.identity.tag;
     history.insert(historyTag, QJsonObject{{"commitId", candidate.identity.commitId},
@@ -583,13 +761,13 @@ bool PackageStore::installed(const QString& id, InstalledPackage* output, QStrin
     if (!loadState(id, &state, error)) return false;
     const auto current = state.value("current").toObject();
     const auto digest = current.value("digest").toString();
-    if (!digestId(digest)) return fail(error, QStringLiteral("Invalid installed content digest"));
+    if (!digestId(digest)) return fail(error, QStringLiteral("The installed content digest is not correct."));
     InstalledPackage result;
     result.directory = releaseDirectory(id, digest);
     QMap<QString, QByteArray> data;
     if (!Manifest::loadDirectory(result.directory, &result.manifest, &data, error)
         || packageDigest(data) != digest.toLatin1() || result.manifest.id != id)
-        return fail(error, QStringLiteral("Installed package integrity check failed"));
+        return fail(error, QStringLiteral("The installed package failed its integrity check."));
     result.digest = digest.toLatin1();
     result.identity = readIdentity(current.value("identity").toObject());
     result.grants = current.value("grants").toObject();
@@ -614,7 +792,7 @@ QStringList PackageStore::installedIds() const
 bool PackageStore::setEnabled(const QString& id, bool enabled, QString* error)
 {
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
-    if (!lock.tryLock(0)) return fail(error, QStringLiteral("Add-on store is busy"));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     QJsonObject state;
     if (!loadState(id, &state, error)) return false;
     if (enabled) {
@@ -628,14 +806,14 @@ bool PackageStore::setEnabled(const QString& id, bool enabled, QString* error)
 bool PackageStore::rollback(const QString& id, QString* error)
 {
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
-    if (!lock.tryLock(0)) return fail(error, QStringLiteral("Add-on store is busy"));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     QJsonObject state;
     if (!loadState(id, &state, error)) return false;
     const auto previous = state.value("previous").toObject();
     const auto digest = previous.value("digest").toString();
-    if (!digestId(digest)) return fail(error, QStringLiteral("No retained rollback release"));
+    if (!digestId(digest)) return fail(error, QStringLiteral("A retained rollback release is not available."));
     if (!validateSnapshot(id, previous, error))
-        return fail(error, QStringLiteral("Rollback release failed validation"));
+        return fail(error, QStringLiteral("The rollback release failed its check."));
     state.insert("retained", retainSnapshot(state.value("retained").toArray(), state.value("current").toObject()));
     state.insert("previous", state.value("current"));
     state.insert("current", previous);
@@ -645,7 +823,7 @@ bool PackageStore::rollback(const QString& id, QString* error)
 bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
 {
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
-    if (!lock.tryLock(0)) return fail(error, QStringLiteral("Add-on store is busy"));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     QJsonObject state;
     if (!loadState(id, &state, error)) return false;
     const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
@@ -653,14 +831,24 @@ bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
         const auto retained = QDir(m_root).filePath(QStringLiteral("retained-settings"));
         if (!QDir().mkpath(retained) || !writeJson(QDir(retained).filePath(id + QStringLiteral(".json")),
                 state.value("current").toObject().value("settings").toObject(), error)) return false;
+        const auto current = state.value("current").toObject();
+        if (current.contains("storage")) {
+            const auto parent = QFileInfo(privateStorageDirectory(id)).absolutePath();
+            if (!QDir().mkpath(parent) || !writeJson(QDir(parent).filePath(QStringLiteral("archive.json")),
+                {{"formatVersion", 1}, {"id", id}, {"identity", current.value("identity")}, {"storage", current.value("storage")}}, error)) return false;
+        }
     }
     const QString tombstone = folder + QStringLiteral(".removing-") + QUuid::createUuid().toString(QUuid::Id128);
-    if (!QDir().rename(folder, tombstone)) return fail(error, QStringLiteral("Cannot withdraw installed package"));
+    if (!QDir().rename(folder, tombstone)) return fail(error, QStringLiteral("The app cannot withdraw the installed package."));
     // The manager withdraws active registrations and workers before this call.
     if (!QDir(tombstone).removeRecursively())
-        return fail(error, QStringLiteral("Package withdrawn; resource cleanup requires retry"));
-    if (removeData)
+        return fail(error, QStringLiteral("The package was withdrawn. Try the resource cleanup again."));
+    if (removeData) {
         QFile::remove(QDir(m_root).filePath(QStringLiteral("retained-settings/") + id + QStringLiteral(".json")));
+        const auto directory = QFileInfo(privateStorageDirectory(id)).absolutePath();
+        if (QFileInfo(directory).isSymLink() || (QFileInfo::exists(directory) && !QDir(directory).removeRecursively()))
+            return fail(error, QStringLiteral("The package was removed. The app cannot remove its saved private data."));
+    }
     return true;
 }
 bool PackageStore::settings(const QString& id, QJsonObject* output, quint64* revision, QString* error) const
@@ -694,14 +882,14 @@ bool PackageStore::networkConfigurationMatches(const InstalledPackage& package, 
 bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, quint64 revision, QString* error)
 {
     if (QJsonDocument(settings).toJson(QJsonDocument::Compact).size() > 256 * 1024)
-        return fail(error, QStringLiteral("Settings exceed size budget"));
+        return fail(error, QStringLiteral("The settings are too large."));
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
-    if (!lock.tryLock(0)) return fail(error, QStringLiteral("Add-on store is busy"));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     QJsonObject state;
     if (!loadState(id, &state, error)) return false;
     auto current = state.value("current").toObject();
     if (quint64(current.value("settingsRevision").toDouble()) != revision)
-        return fail(error, QStringLiteral("Settings changed; reload before saving"));
+        return fail(error, QStringLiteral("The settings changed. Read the settings again before a save."));
     InstalledPackage package;
     if (!installed(id, &package, error)) return false;
     QSet<QString> secretFields;
@@ -709,20 +897,20 @@ bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, 
         secretFields.insert(binding.toObject().value("field").toString());
     if (!package.manifest.settingsSchema.isEmpty()) {
         QFile schema(QDir(package.directory).filePath(package.manifest.settingsSchema));
-        if (!schema.open(QIODevice::ReadOnly)) return fail(error, QStringLiteral("Cannot validate protected settings fields"));
+        if (!schema.open(QIODevice::ReadOnly)) return fail(error, QStringLiteral("The app cannot examine the protected settings fields."));
         const auto properties = QJsonDocument::fromJson(schema.readAll()).object().value("properties").toObject();
         for (auto it = properties.begin(); it != properties.end(); ++it)
             if (it.value().toObject().value("x-vlc-secret").toBool()) secretFields.insert(it.key());
     }
     if (settings.contains("_credentials")) {
         if (!settings.value("_credentials").isObject())
-            return fail(error, QStringLiteral("Invalid host credential reference envelope"));
+            return fail(error, QStringLiteral("The host credential reference object is not correct."));
         const auto references = settings.value("_credentials").toObject();
         static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
         for (auto it = references.begin(); it != references.end(); ++it)
             if (!secretFields.contains(it.key()) || !it.value().isString()
                 || !uuid.match(it.value().toString()).hasMatch())
-                return fail(error, QStringLiteral("Invalid protected credential reference"));
+                return fail(error, QStringLiteral("The protected credential reference is not correct."));
     }
     std::function<bool(const QJsonValue&)> containsSecret = [&](const QJsonValue& value) {
         if (value.isObject()) {
@@ -737,7 +925,7 @@ bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, 
     auto ordinary = settings;
     ordinary.remove("_credentials");
     if (containsSecret(ordinary))
-        return fail(error, QStringLiteral("Secrets cannot be persisted in ordinary add-on settings"));
+        return fail(error, QStringLiteral("Do not save credentials in ordinary add-on settings."));
     current.insert("settings", settings);
     current.insert("settingsRevision", double(revision) + 1);
     state.insert("current", current);
@@ -765,7 +953,11 @@ bool PackageStore::validateSnapshot(const QString& id, const QJsonObject& snapsh
         return fail(error, QStringLiteral("The recovery release does not agree with its saved state."));
     candidate.identity = readIdentity(snapshot.value("identity").toObject());
     candidate.digest = digest.toLatin1();
-    QJsonObject checked;
+    QJsonObject checked, privateData;
+    if (!storageSnapshot(privateStorageDirectory(id), snapshot, candidate.manifest, &privateData, error)) return false;
+    auto quota = storageQuota(candidate.manifest, snapshot.value("grants").toObject());
+    if (quota < 0) quota = PrivateStorageLimits::MaximumBytes;
+    if (!validatePrivateStorage(privateData, quota, nullptr, error)) return false;
     return validateCandidate(candidate, error)
         && validateGrants(candidate.manifest, snapshot.value("grants").toObject(), error)
         && migrateSettings(candidate.manifest, candidate.contents, &candidate.manifest,
@@ -805,7 +997,7 @@ bool PackageStore::recover(const QString& id, QString* error)
         state.insert("generation", state.value("generation").toDouble() + 1);
         return saveState(id, state, error);
     }
-    return fail(error, QStringLiteral("No valid retained release is available. Keep safe mode active and restore a verified package."));
+    return fail(error, QStringLiteral("A correct retained release is not available. Keep safe mode active and restore a verified package."));
 }
 
 bool PackageStore::safeMode() const

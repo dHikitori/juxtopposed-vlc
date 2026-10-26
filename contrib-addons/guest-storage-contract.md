@@ -1,6 +1,6 @@
 # Guest private storage
 
-The working-tree implementation passes 18 focused cases. Its code is not staged because scope approval is pending. This page records the tested contract for review.
+The implementation passes 18 focused cases. The user approved its code, builds, and commits on 27 October 2026. This page records the tested contract.
 
 The host implements `storage@1` with three operations. Each operation needs the
 `storage.private` permission. The host grants no file path or secret-store access.

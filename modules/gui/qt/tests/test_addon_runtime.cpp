@@ -111,8 +111,8 @@ private slots:
     void capabilitiesOnlyExposeRegisteredApisAndBoundedMediaState() {
         QTemporaryDir storage; AddonManager manager(storage.path()); manager.setWorkerExecutable({});
         auto view = manager.capabilities(); QVERIFY(!view.value("workerAvailable").toBool());
-        QVERIFY(!view.value("privateStorageAvailable").toBool()); QVERIFY(!view.value("webSocketAvailable").toBool());
-        QVERIFY(view.value("coreOperations").toStringList().isEmpty());
+        QVERIFY(view.value("privateStorageAvailable").toBool()); QVERIFY(!view.value("webSocketAvailable").toBool());
+        QCOMPARE(view.value("coreOperations").toStringList(), (QStringList{QStringLiteral("storage.get"), QStringLiteral("storage.remove"), QStringLiteral("storage.set")}));
         QVERIFY(!view.value("media").toMap().value("known").toBool());
         auto media = std::make_unique<RuntimeMediaCapabilities>();
         media->setProperty("url", QStringLiteral("file:///private/test-media.mkv"));
@@ -124,12 +124,15 @@ private slots:
         QVERIFY(!manager.capabilities().value("media").toMap().value("loaded").toBool());
         auto lifetime = std::make_unique<QObject>();
         const auto handler = [](const auto&, const auto&, auto) -> AddonHostServices::Cancel { return {}; };
-        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("storage.get"), lifetime.get(), handler));
-        QVERIFY(!manager.capabilities().value("privateStorageAvailable").toBool());
-        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("storage.set"), lifetime.get(), handler));
-        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("storage.remove"), lifetime.get(), handler));
+        QVERIFY(!manager.hostServices()->registerOperation(QStringLiteral("storage.get"), lifetime.get(), handler));
+        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("network.websocket.open"), lifetime.get(), handler));
+        QVERIFY(!manager.capabilities().value("webSocketAvailable").toBool());
+        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("network.websocket.send"), lifetime.get(), handler));
+        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("network.websocket.close"), lifetime.get(), handler));
         QVERIFY(manager.capabilities().value("privateStorageAvailable").toBool());
-        lifetime.reset(); QVERIFY(!manager.capabilities().value("privateStorageAvailable").toBool());
+        QVERIFY(manager.capabilities().value("webSocketAvailable").toBool());
+        lifetime.reset(); QVERIFY(!manager.capabilities().value("webSocketAvailable").toBool());
+        QVERIFY(manager.capabilities().value("privateStorageAvailable").toBool());
         media.reset(); QVERIFY(!manager.capabilities().value("media").toMap().value("known").toBool());
     }
 

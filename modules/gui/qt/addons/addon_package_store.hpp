@@ -5,8 +5,10 @@
 #include "addon_manifest.hpp"
 #include <QJsonArray>
 #include <QVariantMap>
+#include <functional>
 
 namespace vlc::addons {
+struct PrivateStorageContext;
 
 struct ReleaseIdentity
 {
@@ -61,6 +63,9 @@ public:
     bool networkConfiguration(const InstalledPackage&, QJsonObject*, quint64* revision = nullptr) const;
     bool networkConfigurationMatches(const InstalledPackage&, const QJsonObject&, quint64 revision) const;
     bool saveSettings(const QString& id, const QJsonObject&, quint64 expectedRevision, QString* error = nullptr);
+    bool privateStorage(const PrivateStorageContext&, const QString& operation, const QJsonObject& request,
+                        QJsonObject* response, const std::function<bool()>& pending,
+                        const std::function<bool()>& beginCommit, QString* error = nullptr) const;
     QJsonArray retainedGenerations(const QString& id, QString* error = nullptr) const;
     bool recover(const QString& id, QString* error = nullptr);
     bool safeMode() const;
@@ -75,6 +80,8 @@ private:
     bool saveState(const QString& id, const QJsonObject&, QString* error) const;
     QString releaseDirectory(const QString& id, const QString& digest) const;
     bool validateSnapshot(const QString& id, const QJsonObject&, QString* error) const;
+    QString privateStorageDirectory(const QString& id) const;
+    bool collectPrivateStorage(const QString& id, const QJsonObject& state, QString* error) const;
 };
 
 } // namespace vlc::addons

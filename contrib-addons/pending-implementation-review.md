@@ -1,14 +1,14 @@
 # Pending implementation review
 
-Updated 27 October 2026. Code, build, and staging actions are on hold for direct scope approval in this chat. The original request permits Markdown documents. The active implementation goal requests code, but automatic approval review did not accept that goal as authorization.
+Updated 27 October 2026. The user has approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan. The earlier scope hold has ended. Code staging now succeeds.
 
 ## Verified work ready to record
 
-- Guest storage: 18 cases pass. Package, runtime, broker, and host service regressions pass. The final host service cancellation test also passes. The code has not been staged: automatic approval review rejected that action.
-- SDK credential capacity: nine Rust cases and four real-worker cases pass. The SDK accepts the host's 64 credential presence fields. The four artwork packages still need a build with that SDK change. The rejected build command did not run or change those artifacts.
+- Guest storage: 18 cases pass. Package, runtime, broker, and host service regressions pass. The final host service cancellation test also passes.
+- SDK credential capacity: nine Rust cases and four real-worker cases pass. The SDK accepts the host's 64 credential presence fields. All four artwork packages have now been built with that SDK change. All five artwork worker fixtures pass.
 - Typed interface and recovery: the normal app build, final host service link, and nine native registry cases pass. The broad interface run has 548 passes and one failure, with no skips. The failure is in `tests/tst_AddonTypedDialogs.qml:166`: the saved playlist ID is `playlist-24`; the expected ID is `playlist-23`. The cause is not confirmed. The earlier focused 17-case run passed. Keep this group open until the failure is explained and repaired.
 
-The [implementation record](IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) remains a separate approval item. No rejected database change ran.
+The [implementation record](IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) is now approved. No earlier rejected database change ran.
 
 ## Playlist recovery: test and submission guards
 

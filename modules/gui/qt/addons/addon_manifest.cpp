@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manifest.hpp"
 #include "addon_settings_migrations.hpp"
+#include "addon_storage_data.hpp"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -22,7 +23,7 @@ bool fail(QString* error, const QString& message)
 bool keys(const QJsonObject& object, const QSet<QString>& allowed, QString* error, const QString& context)
 {
     for (auto it = object.begin(); it != object.end(); ++it)
-        if (!allowed.contains(it.key())) return fail(error, context + QStringLiteral(": unknown field ") + it.key());
+        if (!allowed.contains(it.key())) return fail(error, context + QStringLiteral(": The following field is not supported: ") + it.key());
     return true;
 }
 bool text(const QJsonObject& object, const QString& key, QString* output, QString* error, bool required = true)
@@ -30,18 +31,18 @@ bool text(const QJsonObject& object, const QString& key, QString* output, QStrin
     const auto value = object.value(key);
     if (!required && value.isUndefined()) return true;
     if (!value.isString() || value.toString().isEmpty() || value.toString().size() > 4096 || value.toString().contains(QChar::Null))
-        return fail(error, QStringLiteral("Invalid text field: ") + key);
+        return fail(error, QStringLiteral("The text field is not correct: ") + key);
     *output = value.toString();
     return true;
 }
 bool strings(const QJsonValue& value, QStringList* output, QString* error, const QString& context, bool required = false)
 {
     if (value.isUndefined() && !required) return true;
-    if (!value.isArray() || value.toArray().size() > 256) return fail(error, context + QStringLiteral(": expected bounded array"));
+    if (!value.isArray() || value.toArray().size() > 256) return fail(error, context + QStringLiteral(": Use an array within the host limit."));
     QSet<QString> seen;
     for (const auto& item : value.toArray()) {
         if (!item.isString() || item.toString().isEmpty() || item.toString().size() > 4096 || seen.contains(item.toString()))
-            return fail(error, context + QStringLiteral(": invalid or duplicate value"));
+            return fail(error, context + QStringLiteral(": A value is not correct or occurs more than once."));
         seen.insert(item.toString()); output->append(item.toString());
     }
     return true;
@@ -77,9 +78,11 @@ bool permissions(const QJsonObject& value, QString* error)
         {"ui.contribute", {"hooks"}}, {"session.background", {}}
     };
     for (auto it = value.begin(); it != value.end(); ++it) {
-        if (!fields.contains(it.key()) || !it.value().isObject()) return fail(error, QStringLiteral("Unsupported permission: ") + it.key());
+        if (!fields.contains(it.key()) || !it.value().isObject()) return fail(error, QStringLiteral("The permission is not supported: ") + it.key());
         const auto scope = it.value().toObject();
         if (!keys(scope, fields.value(it.key()), error, it.key())) return false;
+        if (it.key() == QStringLiteral("storage.private") && !scope.contains("quotaBytes"))
+            return fail(error, QStringLiteral("Private storage needs a byte limit."));
         for (auto item = scope.begin(); item != scope.end(); ++item) {
             if (item.key() == QStringLiteral("minimumIntervalMs")) {
                 const auto interval = item.value().toDouble(-1);
@@ -87,7 +90,7 @@ bool permissions(const QJsonObject& value, QString* error)
                     return fail(error, QStringLiteral("The network minimum interval is not correct."));
             } else if (item.key() == QStringLiteral("quotaBytes")) {
                 const auto n = item.value().toDouble(-1);
-                if (n < 0 || n > 100 * 1024 * 1024 || std::floor(n) != n) return fail(error, QStringLiteral("Invalid storage quota"));
+                if (n < 0 || n > 100 * 1024 * 1024 || std::floor(n) != n) return fail(error, QStringLiteral("The storage quota is not correct."));
             } else if (item.key() != QStringLiteral("bindings")) {
                 QStringList list;
                 if (!strings(item.value(), &list, error, it.key() + QLatin1Char('.') + item.key(), true)) return false;
@@ -95,28 +98,28 @@ bool permissions(const QJsonObject& value, QString* error)
                     for (const auto& profile : list) if (profile != QStringLiteral("internet-archive-images@1"))
                         return fail(error, QStringLiteral("The image redirect profile is not supported."));
                 } else if (item.key() == QStringLiteral("origins")) {
-                    if (list.isEmpty()) return fail(error, QStringLiteral("Network permission needs explicit origins"));
+                    if (list.isEmpty()) return fail(error, QStringLiteral("The network permission needs a list of origins."));
                     for (const auto& origin : list) {
                         if (it.key() == QStringLiteral("network.websocket")) {
                             QUrl url(origin); const auto scheme = url.scheme(); url.setScheme(QStringLiteral("https"));
-                            if (scheme != QStringLiteral("wss") || exactHttpsOrigin(url.toString()).isEmpty()) return fail(error, QStringLiteral("Invalid WSS origin"));
-                        } else if (exactHttpsOrigin(origin).isEmpty()) return fail(error, QStringLiteral("Invalid HTTPS origin"));
+                            if (scheme != QStringLiteral("wss") || exactHttpsOrigin(url.toString()).isEmpty()) return fail(error, QStringLiteral("The WSS origin is not correct."));
+                        } else if (exactHttpsOrigin(origin).isEmpty()) return fail(error, QStringLiteral("The HTTPS origin is not correct."));
                     }
                 }
                 if (item.key() == QStringLiteral("methods"))
                     for (const auto& method : list)
                         if (method != QStringLiteral("GET") && method != QStringLiteral("POST"))
-                            return fail(error, QStringLiteral("Unsupported HTTP method"));
+                            return fail(error, QStringLiteral("The HTTP method is not supported."));
             }
         }
         if ((it.key().startsWith(QStringLiteral("network."))) && !scope.contains(QStringLiteral("origins")))
-            return fail(error, QStringLiteral("Network permission needs explicit origins"));
+            return fail(error, QStringLiteral("The network permission needs a list of origins."));
         if (it.key() == QStringLiteral("credentials.use")) {
             if (!scope.value(QStringLiteral("bindings")).isArray() || scope.value(QStringLiteral("bindings")).toArray().size() > 16)
-                return fail(error, QStringLiteral("Invalid credential bindings"));
+                return fail(error, QStringLiteral("The credential bindings are not correct."));
             QSet<QString> names;
             for (const auto& item : scope.value(QStringLiteral("bindings")).toArray()) {
-                if (!item.isObject()) return fail(error, QStringLiteral("Invalid credential binding"));
+                if (!item.isObject()) return fail(error, QStringLiteral("The credential binding is not correct."));
                 const auto binding = item.toObject(); QString field, origin, header;
                 if (!keys(binding, {"field", "origin", "header", "prefix"}, error, QStringLiteral("credential binding"))
                     || !text(binding, "field", &field, error) || !text(binding, "origin", &origin, error)
@@ -125,14 +128,14 @@ bool permissions(const QJsonObject& value, QString* error)
                     || exactHttpsOrigin(origin).isEmpty()
                     || !QRegularExpression(QStringLiteral("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$")).match(header).hasMatch()
                     || names.contains(field + QLatin1Char('/') + origin + QLatin1Char('/') + header.toLower()))
-                    return fail(error, QStringLiteral("Invalid or duplicate credential binding"));
+                    return fail(error, QStringLiteral("A credential binding is not correct or occurs more than once."));
                 const auto protectedHeaders = QSet<QString>{"host", "connection", "content-length", "transfer-encoding", "proxy-authorization"};
-                if (protectedHeaders.contains(header.toLower())) return fail(error, QStringLiteral("Forbidden credential header"));
+                if (protectedHeaders.contains(header.toLower())) return fail(error, QStringLiteral("The credential header is not permitted."));
                 if (binding.contains("prefix")) {
                     const auto prefix = binding.value("prefix");
                     if (!prefix.isString() || prefix.toString().size() > 32
                         || prefix.toString().contains(QRegularExpression(QStringLiteral("[^\\x20-\\x7e]"))))
-                        return fail(error, QStringLiteral("Invalid credential prefix"));
+                        return fail(error, QStringLiteral("The credential prefix is not correct."));
                 }
                 names.insert(field + QLatin1Char('/') + origin + QLatin1Char('/') + header.toLower());
             }
@@ -143,7 +146,7 @@ bool permissions(const QJsonObject& value, QString* error)
 bool requiredResource(const QString& value, const QStringList& files, QString* error)
 {
     return value.isEmpty() || (portablePackagePath(value) && files.contains(value))
-        || fail(error, QStringLiteral("Resource not declared in files: ") + value);
+        || fail(error, QStringLiteral("The file list does not declare this resource: ") + value);
 }
 } // namespace
 
@@ -242,78 +245,78 @@ QString exactHttpsOrigin(const QString& value)
 }
 bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
 {
-    if (bytes.isEmpty() || bytes.size() > MaximumManifestBytes) return fail(error, QStringLiteral("Manifest exceeds size limit"));
+    if (bytes.isEmpty() || bytes.size() > MaximumManifestBytes) return fail(error, QStringLiteral("The manifest is empty or too large."));
     QJsonParseError parseError;
     const auto parsed = QJsonDocument::fromJson(bytes, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !parsed.isObject()) return fail(error, QStringLiteral("Invalid manifest JSON"));
+    if (parseError.error != QJsonParseError::NoError || !parsed.isObject()) return fail(error, QStringLiteral("The manifest JSON is not correct."));
     const auto root = parsed.object(); Manifest result; result.document = root;
-    if (!keys(root, {"formatVersion", "id", "name", "version", "publisher", "license", "source", "api", "runtime", "files", "contributions", "permissions", "settings", "locales", "icon", "extensions"}, error, "manifest")) return false;
+    if (!keys(root, {"formatVersion", "id", "name", "version", "publisher", "license", "source", "api", "runtime", "files", "contributions", "permissions", "settings", "storage", "locales", "icon", "extensions"}, error, "manifest")) return false;
     int format = 0;
-    if (!positiveInteger(root.value("formatVersion"), &format) || format != 1) return fail(error, QStringLiteral("Unsupported manifest format"));
+    if (!positiveInteger(root.value("formatVersion"), &format) || format != 1) return fail(error, QStringLiteral("The manifest format is not supported."));
     QString source;
     if (!text(root,"id",&result.id,error) || !text(root,"name",&result.name,error) || !text(root,"version",&result.version,error)
         || !text(root,"publisher",&result.publisher,error) || !text(root,"license",&result.license,error) || !text(root,"source",&source,error)) return false;
     if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$")).match(result.id).hasMatch() || result.id.size() > 128)
-        return fail(error, QStringLiteral("Invalid package ID"));
-    if (!SemanticVersion::parse(result.version, nullptr)) return fail(error, QStringLiteral("Invalid package version"));
+        return fail(error, QStringLiteral("The package ID is not correct."));
+    if (!SemanticVersion::parse(result.version, nullptr)) return fail(error, QStringLiteral("The package version is not correct."));
     result.source = QUrl(source, QUrl::StrictMode);
-    if (!safeSource(result.source)) return fail(error, QStringLiteral("Source must be an HTTPS repository without credentials"));
-    if (!root.value("api").isObject()) return fail(error, QStringLiteral("Missing API requirements"));
+    if (!safeSource(result.source)) return fail(error, QStringLiteral("Use an HTTPS repository without credentials."));
+    if (!root.value("api").isObject()) return fail(error, QStringLiteral("The API requirements are missing."));
     const auto api = root.value("api").toObject();
     if (!keys(api, {"addon", "contracts", "optionalContracts"}, error, "api") || !api.value("addon").isString()
         || !versionSatisfies(QStringLiteral("1.0.0"), api.value("addon").toString()) || !api.value("contracts").isObject())
-        return fail(error, QStringLiteral("Incompatible add-on API"));
-    const auto supported = QSet<QString>{"metadata", "settings", "ui", "theme", "discovery", "visualizer", "session"};
+        return fail(error, QStringLiteral("The add-on API version is not supported."));
+    const auto supported = QSet<QString>{"metadata", "settings", "ui", "theme", "discovery", "visualizer", "session", "storage"};
     const auto contracts = api.value("contracts").toObject();
     for (auto it = contracts.begin(); it != contracts.end(); ++it)
         if (!supported.contains(it.key()) || !it.value().isString() || !versionSatisfies("1.0.0", it.value().toString()))
-            return fail(error, QStringLiteral("Unsupported required contract: ") + it.key());
-    if (api.contains("optionalContracts") && !api.value("optionalContracts").isObject()) return fail(error, QStringLiteral("Invalid optional contracts"));
+            return fail(error, QStringLiteral("The required contract is not supported: ") + it.key());
+    if (api.contains("optionalContracts") && !api.value("optionalContracts").isObject()) return fail(error, QStringLiteral("The optional contracts are not correct."));
     if (!strings(root.value("files"), &result.files, error, "files", true) || result.files.isEmpty() || result.files.size() > MaximumFiles
-        || !result.files.contains("addon.json") || !result.files.contains("LICENSE")) return fail(error, QStringLiteral("Invalid package file inventory"));
+        || !result.files.contains("addon.json") || !result.files.contains("LICENSE")) return fail(error, QStringLiteral("The package file list is not correct."));
     QSet<QString> folded;
     for (const auto& path : result.files) {
         const auto normalized = path.toCaseFolded();
-        if (!portablePackagePath(path) || folded.contains(normalized)) return fail(error, QStringLiteral("Unsafe or colliding package path"));
+        if (!portablePackagePath(path) || folded.contains(normalized)) return fail(error, QStringLiteral("A package path is not permitted or conflicts with another path."));
         folded.insert(normalized);
     }
     if (root.contains("runtime")) {
-        if (!root.value("runtime").isObject()) return fail(error, QStringLiteral("Invalid runtime declaration"));
+        if (!root.value("runtime").isObject()) return fail(error, QStringLiteral("The runtime declaration is not correct."));
         const auto runtime = root.value("runtime").toObject();
         if (!keys(runtime, {"kind", "entry"}, error, "runtime") || !text(runtime,"kind",&result.runtimeKind,error)
             || !text(runtime,"entry",&result.runtimeEntry,error) || result.runtimeKind != QStringLiteral("wasm-message-v1")
-            || !requiredResource(result.runtimeEntry, result.files, error)) return fail(error, QStringLiteral("Unsupported runtime"));
+            || !requiredResource(result.runtimeEntry, result.files, error)) return fail(error, QStringLiteral("The runtime is not supported."));
     }
     if (root.contains("permissions")) {
-        if (!root.value("permissions").isObject()) return fail(error, QStringLiteral("Invalid permissions"));
+        if (!root.value("permissions").isObject()) return fail(error, QStringLiteral("The permissions are not correct."));
         const auto object = root.value("permissions").toObject();
         if (!keys(object, {"required", "optional"}, error, "permissions")) return false;
         for (const auto& key : {QStringLiteral("required"), QStringLiteral("optional")})
-            if (object.contains(key) && !object.value(key).isObject()) return fail(error, QStringLiteral("Invalid permission group"));
+            if (object.contains(key) && !object.value(key).isObject()) return fail(error, QStringLiteral("The permission group is not correct."));
         result.requiredPermissions = object.value("required").toObject(); result.optionalPermissions = object.value("optional").toObject();
         if (!permissions(result.requiredPermissions,error) || !permissions(result.optionalPermissions,error)) return false;
         for (auto it = result.requiredPermissions.begin(); it != result.requiredPermissions.end(); ++it)
-            if (result.optionalPermissions.contains(it.key())) return fail(error, QStringLiteral("Permission cannot be both required and optional"));
+            if (result.optionalPermissions.contains(it.key())) return fail(error, QStringLiteral("A permission cannot be required and optional."));
     }
     if (!root.value("contributions").isArray() || root.value("contributions").toArray().isEmpty() || root.value("contributions").toArray().size() > 64)
-        return fail(error, QStringLiteral("Invalid contribution inventory"));
+        return fail(error, QStringLiteral("The contribution list is not correct."));
     QSet<QString> identifiers;
     const auto types = QSet<QString>{"theme", "metadata.provider", "discovery.source", "ui.command", "ui.route", "ui.modal", "ui.section", "ui.replacement", "visualizer", "session.controller"};
     for (const auto& value : root.value("contributions").toArray()) {
-        if (!value.isObject()) return fail(error, QStringLiteral("Invalid contribution"));
+        if (!value.isObject()) return fail(error, QStringLiteral("The contribution is not correct."));
         Contribution contribution; contribution.document = value.toObject(); const auto item = contribution.document;
         if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "qualityTiers", "analysisChannels", "extensions"}, error, "contribution")
             || !text(item,"id",&contribution.id,error) || !text(item,"type",&contribution.type,error) || !text(item,"contract",&contribution.contract,error)) return false;
         if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9.-]{0,63}$")).match(contribution.id).hasMatch() || identifiers.contains(contribution.id)
-            || !types.contains(contribution.type)) return fail(error, QStringLiteral("Invalid or duplicate contribution ID/type"));
+            || !types.contains(contribution.type)) return fail(error, QStringLiteral("A contribution ID or type is not correct or occurs more than once."));
         identifiers.insert(contribution.id);
         const auto parts = contribution.contract.split(QLatin1Char('@'));
         if (parts.size() != 2 || parts[1] != QStringLiteral("1") || !supported.contains(parts[0]) || !contracts.contains(parts[0]))
-            return fail(error, QStringLiteral("Contribution requires an undeclared contract"));
+            return fail(error, QStringLiteral("The contribution needs a declared contract."));
         if (!strings(item.value("features"), &contribution.features,error,"features") || !strings(item.value("mediaKinds"),&contribution.mediaKinds,error,"mediaKinds")
             || !strings(item.value("operations"),&contribution.operations,error,"operations") || !strings(item.value("requires"),&contribution.requires,error,"requires")) return false;
         for (const auto& capability : contribution.requires)
-            if (!result.permissionDeclared(capability)) return fail(error, QStringLiteral("Contribution requires undeclared permission"));
+            if (!result.permissionDeclared(capability)) return fail(error, QStringLiteral("The contribution needs a declared permission."));
         if (contribution.type.startsWith(QLatin1String("ui."))) {
             for (const auto& key : {QStringLiteral("parameters"), QStringLiteral("stateSchema"), QStringLiteral("resultSchema")})
                 if (item.contains(key) && (!item.value(key).isObject() || !validateUiSchema(item.value(key).toObject())
@@ -325,21 +328,21 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
         for (const auto& key : {QStringLiteral("resource"), QStringLiteral("view"), QStringLiteral("theme"), QStringLiteral("scene"), QStringLiteral("icon")})
             if (item.contains(key) && (!item.value(key).isString() || !requiredResource(item.value(key).toString(),result.files,error))) return false;
         if ((contribution.type == QStringLiteral("metadata.provider") || contribution.type == QStringLiteral("discovery.source") || contribution.type == QStringLiteral("session.controller")) && result.runtimeEntry.isEmpty())
-            return fail(error, QStringLiteral("Executable contribution needs a runtime"));
+            return fail(error, QStringLiteral("The executable contribution needs a runtime."));
         result.contributions.append(contribution);
     }
     if (root.contains("settings")) {
-        if (!root.value("settings").isObject()) return fail(error, QStringLiteral("Invalid settings declaration"));
+        if (!root.value("settings").isObject()) return fail(error, QStringLiteral("The settings declaration is not correct."));
         const auto settings = root.value("settings").toObject();
         if (!keys(settings,{"version","schema","ui","migrations","accountFields"},error,"settings") || !positiveInteger(settings.value("version"),&result.settingsVersion)
             || !text(settings,"schema",&result.settingsSchema,error) || !text(settings,"ui",&result.settingsUi,error,false)
             || !requiredResource(result.settingsSchema,result.files,error) || !requiredResource(result.settingsUi,result.files,error)
-            || !contracts.contains("settings")) return fail(error, QStringLiteral("Invalid settings resources"));
+            || !contracts.contains("settings")) return fail(error, QStringLiteral("The settings resources are not correct."));
         if (settings.contains("accountFields")) {
             const auto fields = settings.value("accountFields");
             static const QRegularExpression fieldName(QStringLiteral("^[A-Za-z][A-Za-z0-9_]{0,63}$"));
             if (!fields.isArray() || fields.toArray().size() > 16)
-                return fail(error, QStringLiteral("The account field list exceeds its limit or is not correct."));
+                return fail(error, QStringLiteral("The account field list is too large or is not correct."));
             for (const auto& field : fields.toArray()) {
                 if (!field.isString() || !fieldName.match(field.toString()).hasMatch() || result.accountFields.contains(field.toString()))
                     return fail(error, QStringLiteral("An account field name is not correct or occurs more than once."));
@@ -348,11 +351,11 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
         }
     }
     if (root.contains("locales")) {
-        if (!root.value("locales").isObject()) return fail(error, QStringLiteral("Invalid locales"));
+        if (!root.value("locales").isObject()) return fail(error, QStringLiteral("The locale resources are not correct."));
         const auto locales = root.value("locales").toObject(); QString fallback;
         if (!keys(locales,{"default","files"},error,"locales") || !text(locales,"default",&fallback,error) || !locales.value("files").isObject()) return false;
         const auto resources = locales.value("files").toObject();
-        if (!resources.contains(fallback)) return fail(error, QStringLiteral("Missing fallback locale"));
+        if (!resources.contains(fallback)) return fail(error, QStringLiteral("The fallback locale is missing."));
         for (auto it = resources.begin(); it != resources.end(); ++it)
             if (!it.value().isString() || !requiredResource(it.value().toString(),result.files,error)) return false;
     }
@@ -367,9 +370,12 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     for (const auto& binding : bindingScope.value("bindings").toArray()) {
         const auto origin = exactHttpsOrigin(binding.toObject().value("origin").toString()); bool allowed = false;
         for (const auto& item : network) allowed |= origin == exactHttpsOrigin(item.toString());
-        if (!allowed || result.settingsSchema.isEmpty()) return fail(error, QStringLiteral("Credential binding needs a settings field and declared HTTP origin"));
+        if (!allowed || result.settingsSchema.isEmpty()) return fail(error, QStringLiteral("The credential binding needs a settings field and a declared HTTP origin."));
     }
     if (!validateSettingsMigrations(result, {}, error)) return false;
+    if ((result.permissionDeclared(QStringLiteral("storage.private")) || root.contains("storage")) && !contracts.contains("storage"))
+        return fail(error, QStringLiteral("Private storage needs the storage contract."));
+    if (!validatePrivateStorageDeclaration(result, {}, false, error)) return false;
     if (output) *output = result;
     if (error) error->clear();
     return true;
@@ -377,10 +383,10 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
 bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QString,QByteArray>* contents, QString* error)
 {
     const QFileInfo root(directory);
-    if (!root.isDir() || root.isSymLink()) return fail(error, QStringLiteral("Invalid package directory"));
+    if (!root.isDir() || root.isSymLink()) return fail(error, QStringLiteral("The package directory is not correct."));
     QFile manifestFile(QDir(directory).filePath(QStringLiteral("addon.json")));
     if (QFileInfo(manifestFile).isSymLink() || !manifestFile.open(QIODevice::ReadOnly) || manifestFile.size() > MaximumManifestBytes)
-        return fail(error, QStringLiteral("Cannot read manifest"));
+        return fail(error, QStringLiteral("The app cannot read the manifest."));
     Manifest manifest;
     if (!parse(manifestFile.readAll(),&manifest,error)) return false;
     QMap<QString,QByteArray> data; qint64 total = 0;
@@ -389,15 +395,15 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
         QString checked = directory;
         for (const auto& component : path.split(QLatin1Char('/'))) {
             checked = QDir(checked).filePath(component);
-            if (QFileInfo(checked).isSymLink()) return fail(error,QStringLiteral("Symbolic links are not package resources"));
+            if (QFileInfo(checked).isSymLink()) return fail(error,QStringLiteral("A package resource cannot be a symbolic link."));
         }
         QFile file(checked); const QFileInfo info(file);
         if (!info.isFile() || !info.canonicalFilePath().startsWith(rootPath) || info.size() > MaximumFileBytes || !file.open(QIODevice::ReadOnly))
-            return fail(error,QStringLiteral("Missing or oversized package resource: ") + path);
+            return fail(error,QStringLiteral("The package resource is missing or too large: ") + path);
         const auto bytes = file.read(MaximumFileBytes + 1);
         total += bytes.size();
         if (bytes.size() > MaximumFileBytes || total > MaximumPackageBytes || bytes.size() != info.size())
-            return fail(error,QStringLiteral("Package resource changed or exceeds limits"));
+            return fail(error,QStringLiteral("A package resource changed or is too large."));
         data.insert(path,bytes);
     }
     // Validate secret-binding declarations against the protected input schema.
@@ -405,7 +411,7 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
         QJsonParseError schemaError;
         const auto schema = QJsonDocument::fromJson(data.value(manifest.settingsSchema),&schemaError);
         if (schemaError.error != QJsonParseError::NoError || !schema.isObject() || schema.object().value("type") != QStringLiteral("object"))
-            return fail(error,QStringLiteral("Invalid settings schema"));
+            return fail(error,QStringLiteral("The settings schema is not correct."));
         const auto properties = schema.object().value("properties").toObject();
         for (const auto& name : manifest.accountFields) {
             const auto property = properties.value(name).toObject();
@@ -418,10 +424,11 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
         for (const auto& binding : manifest.permissionScope("credentials.use").value("bindings").toArray()) {
             const auto property = properties.value(binding.toObject().value("field").toString()).toObject();
             if (!property.value("x-vlc-secret").toBool() || property.value("type") != QStringLiteral("string"))
-                return fail(error,QStringLiteral("Credential binding does not reference a secret field"));
+                return fail(error,QStringLiteral("The credential binding does not refer to a secret field."));
         }
     }
     if (!validateSettingsMigrations(manifest, data, error)) return false;
+    if (!validatePrivateStorageDeclaration(manifest, data, true, error)) return false;
     if (output) *output = manifest;
     if (contents) *contents = data;
     if (error) error->clear();

@@ -149,7 +149,7 @@ void AddonWorker::message(const QJsonObject& object)
         const auto contribution = QString(m_package.manifest.id + '/' + m_invocations.value(invocation).contribution);
         const auto weak = QPointer<AddonWorker>(this);
         const auto services = m_services;
-        const auto job = services->dispatch({m_package.manifest.id, contribution, invocation, m_package.grants}, operation,
+        const auto job = services->dispatch({m_package.manifest.id, contribution, invocation, m_package.grants, m_requestGuard}, operation,
             object.value(QStringLiteral("request")).toObject(), [weak, invocation, id](AddonHostServices::Result result) {
                 if (!weak || weak->m_stopping || !weak->m_invocations.contains(invocation)) return;
                 weak->send({{"type", "host-result"}, {"id", id}, {"invocation", invocation},

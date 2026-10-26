@@ -9,6 +9,7 @@
 #include <QThread>
 
 namespace vlc::addons {
+class AddonStorage;
 class AddonManager : public QObject
 {
     Q_OBJECT
@@ -94,6 +95,7 @@ private:
     mutable CredentialStore m_secrets;
     NetworkBroker m_network;
     AddonHostServices m_hostServices;
+    std::unique_ptr<AddonStorage> m_storage;
     QHash<QString, AddonWorker*> m_workers;
     QHash<QString, QString> m_invocationPackages, m_invocationContributions;
     QJsonObject m_providerOrder;

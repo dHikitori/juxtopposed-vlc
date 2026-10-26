@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
+#include "addon_storage.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -69,6 +70,20 @@ AddonManager::AddonManager(const QString& directory, QObject* parent)
 {
     connect(&m_hostServices, &AddonHostServices::availabilityChanged, this, &AddonManager::capabilitiesChanged);
     connect(this, &AddonManager::revisionChanged, this, &AddonManager::capabilitiesChanged);
+    m_storage = std::make_unique<AddonStorage>(m_store, [this](const AddonHostServices::Context& host, PrivateStorageContext* output, QString* error) {
+        const auto reject = [error] { if (error) *error = QStringLiteral("The private storage invocation is no longer current."); return false; };
+        const auto instance = QPointer<AddonWorker>(m_workers.value(host.package));
+        if (!instance || m_invocationPackages.value(host.invocation) != host.package
+            || m_invocationContributions.value(host.invocation) != host.contribution || !instance->configurationCurrent()) return reject();
+        PrivateStorageContext captured;
+        if (!m_store.installed(host.package, &captured.package) || !captured.package.enabled || !configured(captured.package)
+            || captured.package.grants != host.grants || !captured.package.manifest.contribution(localPart(host.contribution))
+            || !m_store.networkConfiguration(captured.package, &captured.settings, &captured.settingsRevision)) return reject();
+        captured.accountReference = accountReference(captured.package);
+        if (!instance || !instance->configurationCurrent() || !m_store.networkConfigurationMatches(captured.package, captured.settings, captured.settingsRevision)) return reject();
+        *output = std::move(captured); return true;
+    });
+    if (!m_storage->mount(&m_hostServices)) m_storage.reset();
     m_providerOrder = readObject(QDir(directory).filePath(QStringLiteral("provider-order.json")));
     const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vlc-addon-worker")
 #ifdef Q_OS_WIN
@@ -83,6 +98,7 @@ AddonManager::AddonManager(const QString& directory, QObject* parent)
 }
 AddonManager::~AddonManager()
 {
+    if (m_storage) m_storage->close();
     disconnect(&m_hostServices, nullptr, this, nullptr);
     for (const auto& connection : m_mediaCapabilityConnections) disconnect(connection);
     if (m_repositoryThread) {

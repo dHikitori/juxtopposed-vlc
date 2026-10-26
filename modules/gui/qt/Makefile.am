@@ -156,6 +156,10 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_visualizers.hpp \
 	addons/addon_settings_migrations.cpp \
 	addons/addon_settings_migrations.hpp \
+	addons/addon_storage.cpp \
+	addons/addon_storage.hpp \
+	addons/addon_storage_data.cpp \
+	addons/addon_storage_data.hpp \
 	addons/addon_host_services.cpp \
 	addons/addon_host_services.hpp \
 	addons/addon_repository_updates.cpp \
@@ -2317,6 +2321,17 @@ test_qt_addon_source_admissions_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ld
 test_qt_addon_source_admissions_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_source_admissions
 TESTS += test_qt_addon_source_admissions
+
+test_qt_addon_storage_SOURCES = tests/test_addon_storage.cpp
+nodist_test_qt_addon_storage_SOURCES = tests/test_addon_storage.moc
+BUILT_SOURCES += tests/test_addon_storage.moc
+CLEANFILES += tests/test_addon_storage.moc
+test_qt_addon_storage_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_storage_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_storage_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_storage_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_storage
+TESTS += test_qt_addon_storage
 
 test_qt_addon_native_queue_store_SOURCES = tests/test_addon_native_queue_store.cpp
 nodist_test_qt_addon_native_queue_store_SOURCES = tests/test_addon_native_queue_store.moc

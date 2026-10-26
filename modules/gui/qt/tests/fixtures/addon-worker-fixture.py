@@ -28,6 +28,9 @@ for line in sys.stdin:
                 "operation":"shell.execute","request":{}}]
         elif mode == "credential-status":
             messages = [{"type":"result","id":invocation,"status":"match","data":{"credentials":request.get("credentials")}}]
+        elif mode == "storage-host":
+            messages = [{"type":"host-call","id":"call-1","invocation":invocation,
+                "operation":"storage.set","request":{"key":"guest.value","value":{"saved":True}}}]
         elif mode == "cancel-late" and request.get("context", {}).get("fast"):
             messages = [{"type":"result","id":invocation,"status":"match","data":{"ok":True}}]
         elif mode in ("host-service", "cancel-late"):

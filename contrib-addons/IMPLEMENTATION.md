@@ -4,7 +4,7 @@ This file records implementation progress and test evidence. Updated 27 October 
 
 The full scope in this directory remains the objective. SDK v1 still has open completion gates.
 
-Code edits, builds, and staging are now on hold for direct scope approval. Automatic approval review rejected the artwork package builds and storage staging because it treated the first Markdown-only request as the active scope. See [the pending review](pending-implementation-review.md) for concrete files, test results, and required repairs.
+The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 
 ## Verified work
 
@@ -16,7 +16,7 @@ Code edits, builds, and staging are now on hold for direct scope approval. Autom
 | Real subtitle service | The native search and Save path returned four candidates and a 40,610-byte local subtitle through the host broker. The test used the supplied key in temporary session storage. No key entered source, saved settings, worker messages, or logs. |
 | Package host | Strict manifests; repository, tag, and content identity; isolated Git object fetch; immutable release snapshots; permission approval; enable, disable, update, and rollback. Native tests pass. |
 | Credentials and network | OS credential store with an explicit temporary-storage option; exact origin and method scopes; DNS and public-address checks; pinned connections; redirect checks; credential removal on cross-origin redirects. Native tests pass. |
-| Guest private storage | In the working tree: mounted `storage.get`, `storage.set`, and `storage.remove`; shared package quotas; account partitions; pure migrations; matching rollback snapshots. All 18 focused cases pass. Staging waits for scope approval. See [the storage contract](guest-storage-contract.md). |
+| Guest private storage | Mounted `storage.get`, `storage.set`, and `storage.remove`; shared package quotas; account partitions; pure migrations; matching rollback snapshots. All 18 focused cases pass. See [the storage contract](guest-storage-contract.md). |
 | Metadata coordinator | Ordered providers; partial field patches; provenance; strong identity checks; protected fields; bounded cache partitions; independent cancellation. Native tests pass. |
 | Episode consumer | Eleven real consumer parity cases pass. Host results retain their per-field source credit in a separate cache namespace. The old episode cache reader and local readers remain. |
 | Subtitle integration | Native OpenSubtitles and portable providers use one provider order. Host handles resolve through the normal Save path. The latest native suite passes 53 cases. |
@@ -84,7 +84,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Mount typed host result adapters before modal replacements can change core state. Theme and mounted UI regression tests have passed for the current scope.
 - Complete the owned metadata route for player, preparser, library, and artwork requests. Preserve each working provider as an add-on before removal.
 - Complete discovery subscriptions and the native lazy playback route. Enforce stream policy through redirects, nested manifests, segments, and keys before playback.
-- Keep the verified stable queue reference and append path. Implement media-library playlist CAS only after the pending approval of [the prepared database plan](native-playlist-cas.md).
+- Keep the verified stable queue reference and append path. Implement media-library playlist CAS from [the approved database plan](native-playlist-cas.md).
 - Finish visualizer app tests, lifecycle and performance measurements, worker parameter updates, and device-loss fallback.
 - Connect session authority to the native player, host consent UI, and outbound WSS. Exercise two-player drift correction and competing local input.
 - Complete host service adapters, author tooling, schemas, SDK text, and profile conformance tests.

@@ -60,12 +60,13 @@ QStringList AddonHostServices::availableOperations() const
 quint64 AddonHostServices::dispatch(const Context& context, const QString& operation, const QJsonObject& request, Completion completion, int timeoutMs)
 {
     if (m_closing) return 0;
+    const QPointer<AddonHostServices> alive(this);
     int count = 0;
     for (const auto& job : m_jobs) if (job.package == context.package) ++count;
     if (count >= 32 || m_jobs.size() >= 128) return 0;
     const auto id = ++m_next; auto* timer = new QTimer(this); timer->setSingleShot(true);
     const auto registration = m_handlers.value(operation);
-    m_jobs.insert(id, {context.package, operation, registration.lifetime, timer, std::move(completion), {}});
+    m_jobs.insert(id, {context.package, operation, registration.lifetime, timer, std::move(completion), {}, context.current});
     QString error;
     const auto cap = capability(operation); const auto scope = context.grants.value(cap);
     if (cap.isEmpty() || !scope.isObject()) error = tr("This host operation needs permission.");
@@ -75,6 +76,8 @@ quint64 AddonHostServices::dispatch(const Context& context, const QString& opera
     else if (!bounded(request)) error = tr("The host request is too large.");
     else if ((operation == QLatin1String("playback.command") || operation == QLatin1String("queue.apply"))
         && !scope.toObject().value("operations").toArray().contains(request.value("operation"))) error = tr("This operation is outside the permitted scope.");
+    if (error.isEmpty() && context.current && !context.current()) error = tr("The host request configuration changed.");
+    if (!alive || !m_jobs.contains(id)) return id;
     if (!error.isEmpty()) { QTimer::singleShot(0, this, [this, id, error] { finish(id, {{}, error}); }); return id; }
     connect(timer, &QTimer::timeout, this, [this, id] { finish(id, {{}, tr("The host operation time limit was reached.")}, true); });
     timer->start(qBound(1, timeoutMs, 30000));
@@ -83,6 +86,10 @@ quint64 AddonHostServices::dispatch(const Context& context, const QString& opera
         std::lock_guard<std::mutex> lock(gate->mutex);
         if (gate->owner) QMetaObject::invokeMethod(gate->owner, [owner = gate->owner, id, result = std::move(result)]() mutable { owner->finish(id, std::move(result)); }, Qt::QueuedConnection);
     });
+    if (!alive) {
+        if (registration.lifetime && cancel) cancel();
+        return id;
+    }
     if (m_jobs.contains(id)) m_jobs[id].cancel = std::move(cancel);
     else if (registration.lifetime && cancel) cancel();
     return id;
@@ -93,6 +100,9 @@ void AddonHostServices::finish(quint64 id, Result result, bool abort)
     const auto job = m_jobs.take(id);
     if (job.deadline) { job.deadline->stop(); job.deadline->deleteLater(); }
     if (abort && job.lifetime && job.cancel) job.cancel();
+    if (result.error.isEmpty() && job.current && !job.current()) {
+        result.response = {}; result.error = tr("The host request configuration changed.");
+    }
     if (!bounded(result.response)) { result.response = {}; result.error = tr("The host response is too large."); }
     result.error = result.error.left(512);
     if (job.completion) job.completion(std::move(result));
