@@ -129,13 +129,21 @@ Do these tests from a configured native build:
 ```sh
 meson test -C build-linux test_qt_addon_packages test_qt_addon_runtime \
     test_qt_addon_metadata test_qt_addon_broker test_qt_subtitle_sources \
+    test_qt_addon_ui_registry test_qt_addon_metadata_service \
+    test_qt_addon_discovery test_qt_addon_theme test_qt_addon_sessions \
+    test_qt_addon_audio_analysis test_src_misc_metadata_backend \
     --print-errorlogs
 ```
 
 Meson supplies the worker to the runtime test. The QML tests include
 `tst_AddonUi`, `tst_AddonTheme`, `tst_AddonIntegration`, `tst_AddonInstaller` and
-`tst_AddonTrackPreparation`. Also do the full Qt tests and the release checks
+`tst_AddonTrackPreparation`, `tst_AddonThemeSelection` and `tst_AddonThemeHost`.
+Also do the full Qt tests and the release checks
 for each target platform.
+
+The standalone CMake tests accept `-DVLC_BUILD_DIR=<configured native build>`.
+This setting adds the native metadata service tests, C bridge tests and provider probe.
+The C bridge tests use the real core library. Build that library before the CMake tests.
 
 ## Configure and build
 

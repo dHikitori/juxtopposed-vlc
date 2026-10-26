@@ -484,13 +484,18 @@ Item {
                 Text { anchors.verticalCenter: parent.verticalCenter; anchors.verticalCenterOffset: theme.dp(1); text: root.addLabel; color: theme.playerLabel; font.pixelSize: theme.dp(14) }
             }
         }
-        RedesignHomeView {
+        RedesignAddonSurface {
+            hook: "home.content@1"
+            hostContext: ({surface: "home.content@1", search: root.searchText, layout: root.expanded ? "expanded" : "compact"})
+            visible: root.homeSectionsVisible
+            Layout.topMargin: theme.dp(root.expanded ? 25 : 10)
+            Layout.fillWidth: true; Layout.fillHeight: true
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            builtIn: Component { RedesignHomeView {
             singleClickActivate: root.singleClickActivate
             artworkForItem: root.artworkForItem
             objectName: "libraryHomeView"
             visible: root.homeSectionsVisible
-            Layout.topMargin: theme.dp(root.expanded ? 25 : 10)
-            Layout.fillWidth: true; Layout.fillHeight: true
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             expanded: root.expanded
             searchText: root.searchText
@@ -499,6 +504,7 @@ Item {
             onEnqueueRequested: (section, index) => root.homeEnqueueRequested(section, index)
             onSectionRequested: section => root.homeSectionRequested(section)
             onContextRequested: (section, index, anchor, point) => root.openItemMenu(anchor, index, point, section)
+            } }
         }
         GridView {
             id: mediaView

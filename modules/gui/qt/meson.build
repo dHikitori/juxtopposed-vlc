@@ -18,21 +18,43 @@ addon_host_sources = files(
     'addons/addon_manager.hpp',
     'addons/addon_network.cpp',
     'addons/addon_network.hpp',
-    'addons/addon_host_services.cpp',
-    'addons/addon_settings_migrations.cpp',
-    'addons/addon_settings_migrations.hpp',
-    'addons/addon_host_services.hpp',
     'addons/addon_worker.cpp',
     'addons/addon_worker.hpp',
     'addons/addon_metadata_coordinator.cpp',
     'addons/addon_metadata_coordinator.hpp',
+    'addons/addon_ui_registry.cpp',
+    'addons/addon_ui_registry.hpp',
+    'addons/addon_metadata_service.cpp',
+    'addons/addon_metadata_service.hpp',
+    'addons/addon_discovery_coordinator.cpp',
+    'addons/addon_discovery_coordinator.hpp',
+    'addons/addon_theme_service.cpp',
+    'addons/addon_theme_service.hpp',
+    'addons/addon_sessions.cpp',
+    'addons/addon_sessions.hpp',
+    'addons/addon_audio_analysis.cpp',
+    'addons/addon_audio_analysis.hpp',
+    'addons/addon_visual_scene.cpp',
+    'addons/addon_visual_scene.hpp',
+    'addons/addon_visualizers.cpp',
+    'addons/addon_visualizers.hpp',
+    'addons/addon_settings_migrations.cpp',
+    'addons/addon_settings_migrations.hpp',
+    'addons/addon_host_services.cpp',
+    'addons/addon_host_services.hpp',
 )
 addon_host_moc_headers = files(
     'addons/addon_manager.hpp',
     'addons/addon_network.hpp',
     'addons/addon_worker.hpp',
-    'addons/addon_host_services.hpp',
     'addons/addon_metadata_coordinator.hpp',
+    'addons/addon_ui_registry.hpp',
+    'addons/addon_metadata_service.hpp',
+    'addons/addon_discovery_coordinator.hpp',
+    'addons/addon_theme_service.hpp',
+    'addons/addon_sessions.hpp',
+    'addons/addon_visualizers.hpp',
+    'addons/addon_host_services.hpp',
 )
 
 
@@ -78,7 +100,8 @@ if host_machine.system() == 'darwin' and qt6_dep.found()
     qt_link_args += '-lobjc'
 endif
 
-moc_headers = addon_host_moc_headers + files(
+moc_headers = files(
+    'addons/addon_visualizer_surface.hpp',
     'dialogs/bookmarks/bookmarks.hpp',
     'dialogs/dialogs/dialogmodel.hpp',
     'dialogs/dialogs_provider.hpp',
@@ -261,7 +284,11 @@ if have_wayland and cpp.has_header('qpa/qplatformnativeinterface.h', dependencie
     moc_headers += files('maininterface/compositor_wayland.hpp')
 endif
 
-qt_plugin_sources = addon_host_sources + files(
+qt_plugin_sources = files(
+    'addons/addon_visualizer_surface.cpp',
+    'addons/addon_visualizer_surface.hpp',
+    'addons/addon_player_visualizers.cpp',
+    'addons/addon_player_visualizers.hpp',
     'qt.cpp',
     'qt.hpp',
     'plugins.hpp',
@@ -905,7 +932,14 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonSettings.qml',
        'player/qml/redesign/RedesignAddonSettingsDialog.qml',
        'player/qml/redesign/RedesignAddonTheme.qml',
+       'player/qml/redesign/RedesignAddonThemeSelector.qml',
        'player/qml/redesign/RedesignAddonView.qml',
+       'player/qml/redesign/RedesignAddonMount.qml',
+       'player/qml/redesign/RedesignAddonSections.qml',
+       'player/qml/redesign/RedesignAddonSurface.qml',
+       'player/qml/redesign/RedesignAddonReplacements.qml',
+       'player/qml/redesign/RedesignAddonWindow.qml',
+       'player/qml/redesign/RedesignAddonVisualizerSelector.qml',
        'player/qml/redesign/RedesignAddonTrackPreparation.qml',
        'player/qml/redesign/AddonUi.js',
        'player/qml/redesign/AddonTheme.js',
@@ -1194,6 +1228,9 @@ qml_tests = {
     'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),
     'tst_AddonUi': files('tests/tst_AddonUi.qml'),
     'tst_AddonTheme': files('tests/tst_AddonTheme.qml'),
+    'tst_AddonThemeSelection': files('tests/tst_AddonThemeSelection.qml'),
+    'tst_AddonThemeHost': files('tests/tst_AddonThemeHost.qml'),
+    'tst_AddonMounts': files('tests/tst_AddonMounts.qml'),
     'tst_AddonIntegration': files('tests/tst_AddonIntegration.qml'),
     'tst_FSM': files('tests/tst_FSM.qml'),
     'tst_Redesign': files('tests/tst_Redesign.qml'),
@@ -1311,10 +1348,18 @@ if qt6_dep.found()
     endif
     # Install the reference Wasm file without a source build.
     addon_reference_root = meson.project_source_root() / 'contrib-addons/examples/thesubtitledb'
+    addon_distribution_paths = custom_target('addon_distribution_paths',
+        output: 'addon_distribution_paths.hpp',
+        command: [prog_python, files('scripts/addon-distribution-paths.py'),
+            '--root', meson.project_source_root() / 'contrib-addons/examples', '--output', '@OUTPUT@'])
     foreach addon_resource : ['addon.json', 'LICENSE', 'dist/addon.wasm', 'settings/schema.json', 'settings/ui.json', 'locales/en.json']
         addon_resource_directory = fs.parent(addon_resource)
         install_data(addon_reference_root / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/thesubtitledb' / addon_resource_directory)
+    endforeach
+    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm']
+        install_data(meson.project_source_root() / 'contrib-addons/examples/tvmaze' / addon_resource,
+            install_dir: get_option('datadir') / 'vlc/addons/reference/tvmaze' / fs.parent(addon_resource))
     endforeach
     modules_qrc = []
     foreach module : qml_modules
@@ -1615,6 +1660,19 @@ if qt6_dep.found()
         'enabled': xcb_dep.found() and xcb_render_dep.found() and xcb_xfixes_dep.found(),
     }
 
+    addon_host_moc = qt6.preprocess(
+        method: qt_dependency_method,
+        moc_headers: addon_host_moc_headers,
+        moc_extra_arguments: ['-DHAVE_CONFIG_H=1', qt_extra_flags],
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: qt6_dep)
+    addon_host_library = static_library('vlc_addon_host', addon_host_sources, addon_host_moc,
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: [qt6_dep, qt_extra_deps, libvlccore_deps, threads_dep],
+        cpp_args: [qt_extra_flags, qt_cppargs, '-D__PLUGIN__'],
+        pic: true,
+        build_by_default: false)
+
     qt6pre_files = qt6.preprocess(ui_files: ui_sources,
         method: qt_dependency_method,
         moc_headers: moc_headers,
@@ -1628,14 +1686,14 @@ if qt6_dep.found()
 
     vlc_modules += {
         'name' : 'qt',
-        'sources' : [qt6pre_files, qt6pre_qrc, shader_targets, shaders_processed, qt_sources, qt_plugin_sources, subtitle_consumer_key],
+        'sources' : [qt6pre_files, qt6pre_qrc, shader_targets, shaders_processed, qt_sources, qt_plugin_sources, subtitle_consumer_key, addon_distribution_paths],
         'extra_files' : [shader_files],
         'dependencies' : [qt_extra_deps, qt6_dep, corefoundation_dep],
         'include_directories' : qt_include_dir,
         'c_args' : qt_extra_flags,
         'cpp_args' : [qt_extra_flags, qt_cppargs],
         'link_args' : qt_link_args,
-        'link_with' : qmllibs,
+        'link_with' : [qmllibs, addon_host_library],
         'plugin_dir' : 'gui',
     }
 
@@ -1658,12 +1716,12 @@ if qt6_dep.found()
 
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
-        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'host_services']
+        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizers', 'host_services']
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,
-                'sources': files('tests/test_addon_' + addon_test + '.cpp') + addon_host_sources,
+                'sources': files('tests/test_addon_' + addon_test + '.cpp'),
                 'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
-                'moc_headers': addon_host_moc_headers,
+                'link_with': [addon_host_library, libvlccore],
                 'suite': ['qt', 'addons'],
                 'include_directories': qt_include_dir,
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
@@ -1800,9 +1858,10 @@ if qt6_dep.found()
         }
         vlc_tests += {
             'name': 'test_qt_subtitle_sources',
-            'sources': files('tests/test_subtitle_sources.cpp', 'util/subtitle_source_service.cpp') + addon_host_sources,
+            'sources': files('tests/test_subtitle_sources.cpp', 'util/subtitle_source_service.cpp'),
             'moc_sources': files('tests/test_subtitle_sources.cpp'),
-            'moc_headers': files('util/subtitle_source_service.hpp') + addon_host_moc_headers,
+            'moc_headers': files('util/subtitle_source_service.hpp'),
+            'link_with': [addon_host_library, libvlccore],
             'suite': ['qt'],
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],

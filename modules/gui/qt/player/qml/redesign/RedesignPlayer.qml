@@ -17,6 +17,27 @@ FocusScope {
     readonly property ColorContext colorContext: ColorContext { palette: VLCStyle.palette; colorSet: ColorContext.Window }
     readonly property bool resumeAvailable: Player.canRestorePlayback
     property int queueTab: 0
+    property string subtitleReplacementTicket: ""
+    function openTrackDialog(page) {
+        if (page === "audio") { DialogsProvider.loadAudioFile(); return }
+        if (subtitleReplacementTicket.length) return
+        const registry = typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
+        subtitleReplacementTicket = registry ? registry.executeReplacement("actions.subtitles.open@1", {}) : ""
+        if (!subtitleReplacementTicket.length) DialogsProvider.loadSubtitlesFile()
+    }
+    Connections {
+        target: typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
+        function onReplacementFinished(ticket, success) {
+            if (ticket !== rootPlayer.subtitleReplacementTicket) return
+            rootPlayer.subtitleReplacementTicket = ""
+            if (!success) DialogsProvider.loadSubtitlesFile()
+        }
+    }
+    RedesignAddonWindow {
+        id: addonWindow
+        registry: typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
+        scaleFactor: view.scaleFactor; accentColor: view.accentColor; lightTheme: view.lightTheme
+    }
     // The projection retains folder state while its lazy source is unloaded.
     PlaylistTreeModel { id: queueTreeModel; treeEnabled: MainCtx.playlistTree }
     property int requestedLibraryCategory: -1
@@ -274,7 +295,7 @@ FocusScope {
     Binding {
         target: MainCtx
         property: "preferHotkeys"
-        value: MainCtx.useGlobalShortcuts && !view.controlsLocked && !tracksPopup.visible && !mediaMenu.visible && !shortcutEditor.visible
+        value: MainCtx.useGlobalShortcuts && !view.controlsLocked && !tracksPopup.visible && !mediaMenu.visible && !shortcutEditor.visible && !addonWindow.visible
         restoreMode: Binding.RestoreBindingOrValue
     }
     Binding { target: Player; property: "seekPreviewEnabled"; value: MainCtx.redesignPlayerPreferences.seekPreview }
@@ -474,6 +495,16 @@ FocusScope {
             if (library && Player.artist) library.openArtistByName(Player.artist)
         }
         trackPopup: tracksPopup
+        addonVisualizerContent: Component {
+            AddonVisualizerSurface {
+                controller: typeof AddonVisualizers === "undefined" ? null : AddonVisualizers
+                backgroundColor: view.theme.background
+                foregroundColor: view.theme.bright
+                accentColor: view.theme.accent
+                reducedMotion: view.theme.reducedMotion
+            }
+        }
+        addonVisualizerActive: typeof AddonVisualizers !== "undefined" && AddonVisualizers.active
         onMenuRequested: anchor => mediaMenu.toggleFrom(anchor, view)
         onContextMenuRequested: globalPosition => audioContextMenu.popup(globalPosition)
         onResumeRequested: resume => {
@@ -645,8 +676,8 @@ FocusScope {
                 model.setData(model.index(i, 0), false, Qt.CheckStateRole)
         }
         canAddTracks: Player.isStarted
-        onAddTracksRequested: page => page === "audio" ? DialogsProvider.loadAudioFile() : DialogsProvider.loadSubtitlesFile()
-        onEditTracksRequested: page => page === "audio" ? DialogsProvider.loadAudioFile() : DialogsProvider.loadSubtitlesFile()
+        onAddTracksRequested: page => rootPlayer.openTrackDialog(page)
+        onEditTracksRequested: page => rootPlayer.openTrackDialog(page)
         onPreferencesRequested: page => view.settingsPage = page
     }
 

@@ -63,7 +63,7 @@ C.Dialog {
     readonly property bool onlineMode: subtitles && sourceIndex === 1
     readonly property bool linkMode: subtitles && sourceIndex === 2
     readonly property var activeSources: onlineMode ? onlineSources : linkMode ? linkSources : sources
-    readonly property var sourceChoices: subtitles ? [qsTr("From Computer"),qsTr("From OpenSubtitles"),qsTr("From Link")] : [qsTr("From Computer")]
+    readonly property var sourceChoices: subtitles ? [qsTr("From Computer"),qsTr("Online providers"),qsTr("From Link")] : [qsTr("From Computer")]
     onSourceIndexChanged: Qt.callLater(() => sourceChoice.currentIndex = root.sourceIndex)
     property int scopeIndex: 0
     onScopeIndexChanged: Qt.callLater(() => scopeChoice.currentIndex = root.scopeIndex)
@@ -607,6 +607,13 @@ C.Dialog {
             ListView {
                 id: list
                 objectName: "trackAssignmentList"
+                footer: RedesignAddonSections {
+                    width: list.width; height: visible ? implicitHeight : 0
+                    visible: root.onlineMode
+                    hook: "subtitles.results.sections@1"
+                    hostContext: ({surface: "subtitles.results.sections@1", search: root.searchTitle})
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                }
                 model: root.loading ? [] : root.fileMode ? root.visibleSources : root.rows
                 spacing: root.theme.dp(4)
                 delegate: C.ItemDelegate {

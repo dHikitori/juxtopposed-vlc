@@ -58,6 +58,12 @@ C.Dialog {
                 caption: qsTr("Open transcript"); text: caption
                 onClicked: if (/^https?:\/\//i.test(root.episode.transcript)) Qt.openUrlExternally(root.episode.transcript)
             }
+            RedesignAddonSections {
+                Layout.fillWidth: true
+                hook: "media.details.sections@1"
+                hostContext: ({surface: "media.details.sections@1", identity: {title: root.info.name || ""}})
+                scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            }
         }
     }
 }

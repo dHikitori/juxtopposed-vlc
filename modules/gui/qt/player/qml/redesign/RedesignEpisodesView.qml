@@ -258,7 +258,7 @@ FocusScope {
                         visible: !!row.entry.titleSource && String(row.entry.titleSource).length > 0
                         Layout.fillWidth: true
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                        caption: qsTr("Episode details: TVmaze"); text: caption
+                        caption: qsTr("Episode source"); text: caption
                         captionFontSize: 11; leftAligned: true
                         foreground: theme.playerLabel
                         contentLeftMargin: 0

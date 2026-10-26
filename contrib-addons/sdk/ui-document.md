@@ -94,4 +94,24 @@ The renderer does a check of the document and each state projection. An incorrec
 
 These limits apply to this renderer. The package manifest, message transport, route registry, asset service, and command service have separate limits and authority rules.
 
+## View sessions
+
+The host creates a separate session for each mounted view. Route and modal input must agree with the contribution's `parameters` schema. The host supplies this input in `state.parameters`. It supplies the permitted context in `state.context`.
+
+The context can contain `surface`, `search`, and `layout`. Media identity fields need a separate `metadata.context` grant. The host removes private media URLs, file paths, and core objects. A view does not inherit the context of another view.
+
+A command in a view can return a `state` object or a `patch` object in its result data. `state` replaces the package state. `patch` replaces the specified properties at the first level. The contribution must declare `stateSchema` for these updates. The host keeps `parameters` and `context` under its control. Do not declare these two properties in the package state schema.
+
+The host permits only commands from the same package in a view session. A new command cancels the previous pending command in that session. The host also cancels pending work when the view suspends, closes, or loses its contribution. A result from canceled work cannot change a later session.
+
+For a worker command, the contribution's `command` value names the operation. The contribution must also include this name in `operations`. A route command uses `route` with a route identifier in the same package. A modal command can use `command` with a modal identifier in the same package.
+
+The `parameters`, `stateSchema`, and `resultSchema` fields use a fixed schema subset. Permitted types are `object`, `array`, `string`, `number`, `integer`, and `boolean`. Objects need `properties` and `additionalProperties: false`. Optional keywords are `required`, `enum`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, and `maxItems`. Arrays need an `items` schema. Unknown keywords cause package validation to fail. The schema can have a maximum of ten nested levels and 256 schema nodes.
+
+## Modal results
+
+A modal contribution can declare `resultSchema`. The host supplies Confirm and Cancel outside the package view. A package can put a draft result in `state.result`. Confirm returns this result only if it agrees with `resultSchema`. Cancel returns no result. A modal with no result schema can return only an empty object.
+
+A generic modal result does not change a queue, playlist, or track assignment. Each core dialog needs a separate adapter for its accepted result and permitted handles. The built-in subtitle search and playlist selection bodies remain available until those adapters pass their tests.
+
 The implementation is in [AddonUi.js](../../modules/gui/qt/player/qml/redesign/AddonUi.js), [RedesignAddonView.qml](../../modules/gui/qt/player/qml/redesign/RedesignAddonView.qml), and [RedesignAddonNode.qml](../../modules/gui/qt/player/qml/redesign/RedesignAddonNode.qml). The [UI tests](../../modules/gui/qt/tests/tst_AddonUi.qml) cover the contract and the protected settings form.

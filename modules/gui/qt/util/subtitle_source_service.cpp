@@ -3,6 +3,7 @@
 #include "subtitle_matching.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_metadata_coordinator.hpp"
+#include "addons/addon_metadata_service.hpp"
 #include <QDir>
 #include <QCoreApplication>
 #include <QEvent>
@@ -122,6 +123,7 @@ bool SubtitleSourceService::eventFilter(QObject* object, QEvent* event)
 SubtitleSourceService::~SubtitleSourceService()
 {
     cancelSearch(); cancelPreparation();
+    if (m_sharedMetadata) m_sharedMetadata->unregisterBuiltinProvider(builtinSubtitles);
     if (m_addonManager) m_addonManager->unregisterBuiltinProvider(builtinSubtitles);
     if (m_hashJob) m_hashJob->requestInterruption();
     for (auto* reply : m_network.findChildren<QNetworkReply*>()) {
@@ -142,6 +144,7 @@ bool SubtitleSourceService::configured() const
 void SubtitleSourceService::setAddonManager(vlc::addons::AddonManager* manager)
 {
     if (m_addonManager == manager) return;
+    setMetadataService(nullptr);
     cancelSearch(); cancelPreparation();
     if (m_addonManager) {
         disconnect(m_addonManager, nullptr, this, nullptr);
@@ -248,15 +251,73 @@ void SubtitleSourceService::setAddonManager(vlc::addons::AddonManager* manager)
     emit configurationChanged();
 }
 
+void SubtitleSourceService::setMetadataService(AddonMetadataService* service)
+{
+    if (m_sharedMetadata == service) return;
+    cancelSearch(); cancelPreparation();
+    if (m_sharedMetadata) {
+        disconnect(m_sharedMetadata, nullptr, this, nullptr);
+        m_sharedMetadata->unregisterBuiltinProvider(builtinSubtitles);
+    }
+    const auto requests = m_nativeSearches;
+    m_nativeSearches.clear();
+    for (const auto& request : requests) if (request) { request->cancelSearch(); request->deleteLater(); }
+    m_sharedMetadata = service;
+    if (!service) return;
+    m_ownedMetadataProfile = true;
+    delete m_metadata; m_metadata = nullptr;
+    connect(service, &AddonMetadataService::finished, this, &SubtitleSourceService::finishProviderSearch);
+    connect(service, &AddonMetadataService::canceled, this, [this](const QString& consumer) {
+        if (consumer != m_providerSearch) return;
+        m_providerSearch.clear();
+        finishSearch(m_searchGeneration, tr("The metadata request was canceled. Search again."));
+    });
+    refreshBuiltinRegistration();
+}
+
 void SubtitleSourceService::refreshBuiltinRegistration()
 {
     ++m_nativeRevision;
     if (!m_addonManager) return;
-    m_addonManager->registerBuiltinProvider(QStringLiteral("subtitles"), {
+    const QVariantMap descriptor{
         {"id", builtinSubtitles}, {"packageId", "vlc.builtin.opensubtitles"}, {"name", "OpenSubtitles"},
         {"builtin", true}, {"configured", !m_apiKey.isEmpty()}, {"enabled", true},
         {"features", QStringList{"subtitles"}}, {"mediaKinds", QStringList{"movie", "episode", "unknown"}},
-        {"cachePartition", QStringLiteral("native-opensubtitles:%1").arg(m_nativeRevision)}});
+        {"cachePartition", QStringLiteral("native-opensubtitles:%1").arg(m_nativeRevision)}};
+    if (!m_sharedMetadata) { m_addonManager->registerBuiltinProvider(QStringLiteral("subtitles"), descriptor); return; }
+    m_sharedMetadata->registerBuiltinProvider(QStringLiteral("subtitles"), descriptor, this,
+        [this](const QString& invocation, const QString& operation, const QVariantMap& context) {
+            if (!m_sharedMetadata || operation != QLatin1String("searchAssets")) return;
+            auto* request = new SubtitleSourceService(m_options, this);
+            if (!m_storageDirectory.isEmpty()) request->setStorageDirectory(m_storageDirectory);
+            m_nativeSearches.insert(invocation, request);
+            const QPointer<AddonMetadataService> owner(m_sharedMetadata);
+            connect(request, &SubtitleSourceService::searchFinished, this,
+                [this, request, owner, invocation](quint64, const QVariantMap& result) {
+                if (m_nativeSearches.take(invocation) != request) return;
+                QVariantList candidates;
+                for (const auto& value : result.value("sources").toList()) {
+                    auto candidate = value.toMap(); candidate.insert("id", candidate.value("fileId").toString());
+                    if (!m_builtin) continue;
+                    const auto native = sourceUrl(candidate.value("fileId").toLongLong(), candidate.value("name").toString());
+                    if (!m_builtin->m_records.contains(native)
+                        && m_builtin->m_records.size() >= std::clamp(m_options.maxAddonRecords, 1, 8192)) continue;
+                    const auto record = request->m_records.constFind(native);
+                    if (record == request->m_records.cend()) continue;
+                    m_builtin->m_records.insert(native, *record);
+                    candidates.append(candidate);
+                }
+                request->deleteLater();
+                const auto status = !candidates.isEmpty() ? QStringLiteral("match")
+                    : result.value("success").toBool() ? QStringLiteral("no_match") : QStringLiteral("error");
+                if (owner) owner->completeBuiltin(invocation, status, {{"candidates", candidates}}, result.value("error").toString());
+            });
+            request->searchMedia({{"url", m_sharedMetadata->privateUrlForInvocation(invocation)},
+                {"identity", context.value("identity")}, {"skipHash", context.value("manual").toBool()}}, context.value("language").toString());
+        }, [this](const QString& invocation) {
+            const auto request = m_nativeSearches.take(invocation);
+            if (request) { request->cancelSearch(); request->deleteLater(); }
+        });
 }
 
 void SubtitleSourceService::setStorageDirectory(const QString& directory)
@@ -321,9 +382,9 @@ bool SubtitleSourceService::clearApiKey()
 QString SubtitleSourceService::networkError(int status, QNetworkReply::NetworkError error, bool api) const
 {
     if (status == 401 || status == 403) return api ? (m_customKey
-        ? tr("OpenSubtitles refused this request. Check your key and its download settings.")
+        ? tr("OpenSubtitles refused this request. Make sure that the key and download settings are correct.")
         : tr("OpenSubtitles refused this request. Try again later, or add your own key in setup."))
-        : tr("The subtitle server refused this link. Check the link and try again.");
+        : tr("The subtitle server refused this link. Make sure that the link is correct. Try again.");
     if (status == 406 || status == 429) return api ? tr("OpenSubtitles cannot download more files now. Try again later.")
         : tr("The subtitle server cannot download more files now. Try again later.");
     if (status >= 400) return tr("The subtitle server could not complete this request. Try again.");
@@ -367,8 +428,10 @@ QNetworkReply* SubtitleSourceService::request(const QUrl& url, const QByteArray&
 void SubtitleSourceService::cancelSearch()
 {
     ++m_searchGeneration;
-    if (m_metadata && !m_providerSearch.isEmpty()) m_metadata->cancel(m_providerSearch);
+    const auto providerSearch = m_providerSearch;
     m_providerSearch.clear();
+    if (m_sharedMetadata && !providerSearch.isEmpty()) m_sharedMetadata->cancel(providerSearch);
+    if (m_metadata && !providerSearch.isEmpty()) m_metadata->cancel(providerSearch);
     if (m_hashJob) m_hashJob->requestInterruption();
     m_hashJob = nullptr;
     m_searchTargets.clear(); m_searchSources.clear(); m_targetSources.clear(); m_searchIdentities.clear();
@@ -482,7 +545,7 @@ quint64 SubtitleSourceService::searchMedia(const QVariantMap& input, const QStri
         targets = selected != targets.cend() ? QVariantList{*selected} : QVariantList{QVariantMap{{"url", anchor}}};
     }
     QString error;
-    if (!configured()) error = m_addonManager ? tr("No subtitle provider is set up. Configure a provider in Add-on settings.")
+    if (!configured()) error = m_addonManager ? tr("Set up a subtitle provider in Add-on settings.")
         : tr("OpenSubtitles is not set up. Add an API key to use this source.");
     else if (query.size() > 512 || (!language.isEmpty() && !code.match(language).hasMatch())) error = tr("Enter a title and select a subtitle language.");
     else if (!input.value("details").toMap().value("airDate").toString().isEmpty()
@@ -532,7 +595,8 @@ void SubtitleSourceService::beginSearchTarget(quint64 generation)
     if (generation != m_searchGeneration) return;
     if (m_targetIndex >= m_searchTargets.size()) { finishSearch(generation); return; }
     m_targetSources.clear(); m_searchFingerprint = {}; m_searchPhase = 1; m_searchPage = 1;
-    if (m_metadata) { beginProviderSearch(generation); return; }
+    if (m_sharedMetadata || (!m_ownedMetadataProfile && m_metadata)) { beginProviderSearch(generation); return; }
+    if (m_ownedMetadataProfile) { finishSearch(generation, tr("The metadata service is not available.")); return; }
     const auto& target = m_searchTargets[m_targetIndex];
     if (target.useHash && target.url.isLocalFile()) {
         auto* job = new HashJob(target.url); m_hashJob = job;
@@ -549,14 +613,20 @@ void SubtitleSourceService::beginSearchTarget(quint64 generation)
 
 void SubtitleSourceService::beginProviderSearch(quint64 generation)
 {
-    if (!m_addonManager || !m_metadata || generation != m_searchGeneration || m_targetIndex >= m_searchTargets.size()) return;
+    if (!m_addonManager || (!m_metadata && !m_sharedMetadata) || generation != m_searchGeneration || m_targetIndex >= m_searchTargets.size()) return;
     const auto& target = m_searchTargets[m_targetIndex];
-    m_metadata->setProviderOrder(QStringLiteral("subtitles"), m_addonManager->providerOrder(QStringLiteral("subtitles")));
+    if (m_metadata) m_metadata->setProviderOrder(QStringLiteral("subtitles"), m_addonManager->providerOrder(QStringLiteral("subtitles")));
     const auto identity = MediaIdentity::toMap(target.identity);
-    const QVariantMap context{{"identity", identity}, {"language", m_searchLanguage}, {"query", target.identity.title},
+    QVariantMap context{{"identity", identity}, {"language", m_searchLanguage}, {"query", target.identity.title},
         {"manual", !target.useHash}, {"interactive", true}, {"generation", QVariant::fromValue(generation)},
         {"timeoutMs", m_options.timeoutMs}};
-    m_providerSearch = m_metadata->searchAssets(QStringLiteral("subtitles"), context, m_searchAllProviders);
+    if (m_sharedMetadata) {
+        const auto media = m_sharedMetadata->acquireMedia(target.url.isEmpty() ? QUrl(QStringLiteral("metadata-query:/")) : target.url, identity);
+        if (media.isEmpty()) { finishSearch(generation, tr("The metadata request limit has been reached.")); return; }
+        context.insert(QStringLiteral("media"), media);
+        m_providerSearch = m_sharedMetadata->searchAssets(QStringLiteral("subtitles"), context, m_searchAllProviders);
+        m_sharedMetadata->releaseMedia(media);
+    } else m_providerSearch = m_metadata->searchAssets(QStringLiteral("subtitles"), context, m_searchAllProviders);
 }
 
 void SubtitleSourceService::finishProviderSearch(const QString& consumer, const QString& status,
@@ -571,7 +641,7 @@ void SubtitleSourceService::finishProviderSearch(const QString& consumer, const 
         const auto contribution = candidate.value("provider").toString();
         if (contribution.isEmpty() || !providerAvailable(contribution)) continue;
         if (m_addonRecords.size() >= std::clamp(m_options.maxAddonRecords, 1, 8192)) {
-            m_searchWarning = tr("The subtitle results limit was reached. Selected tracks are kept; save them or close and reopen this window before searching again.");
+            m_searchWarning = tr("The subtitle result limit has been reached. Save the selected tracks. Close this window. Open it again before another search.");
             break;
         }
         auto source = candidate;
@@ -598,7 +668,7 @@ void SubtitleSourceService::finishProviderSearch(const QString& consumer, const 
         m_targetSources.append(source);
     }
     if (status != QLatin1String("match") && status != QLatin1String("partial") && status != QLatin1String("no_match")) {
-        const auto failure = error.isEmpty() ? tr("No subtitle provider could complete this search. Check its setup and try again.") : error;
+        const auto failure = error.isEmpty() ? tr("The subtitle search failed. Make sure that the provider settings are correct. Try again.") : error;
         finishSearch(generation, failure); return;
     }
     finishSearchTarget(generation);
@@ -691,7 +761,7 @@ void SubtitleSourceService::finishSearchTarget(quint64 generation)
     ++m_targetIndex;
     emit searchProgressChanged();
     if (m_searchSources.size() >= 4000) {
-        m_searchWarning = tr("Many subtitles were found. Refine the title or language before searching more files.");
+        m_searchWarning = tr("Many subtitles were found. Use a more specific title or language before another search.");
         finishSearch(generation); return;
     }
     QTimer::singleShot(0, this, [this, generation] { beginSearchTarget(generation); });

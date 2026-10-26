@@ -14,6 +14,12 @@ C.Menu {
     property bool recentFilesAvailable: true
     property bool recentFilesEnabled: true
     property var profiles: []
+    property var addonRegistry: typeof redesignAddonUi === "undefined" ? null : redesignAddonUi
+    readonly property var addonCommands: {
+        if (!addonRegistry) return []
+        addonRegistry.revision
+        return addonRegistry.commands.filter(entry => entry.document.hook === "player.actions@1").slice(0, 16)
+    }
     readonly property string profileRows: JSON.stringify(profiles)
     property string selectedProfile: ""
     property Item triggerItem
@@ -93,7 +99,7 @@ C.Menu {
     component MenuSurface: Rectangle {
         id: surface
         property bool shown: false
-        readonly property color fill: root.lightTheme ? root.theme.background : "#191919"
+        readonly property color fill: root.theme.menuPanel
         color: Qt.rgba(fill.r, fill.g, fill.b, root.theme.floatingOpacity)
         radius: root.theme.dp(10)
         Loader {
@@ -134,7 +140,7 @@ C.Menu {
             }
             Text {
                 Layout.fillWidth: true
-                text: row.text; color: root.theme.foreground
+                text: row.text; textFormat: Text.PlainText; color: root.theme.foreground
                 font.pixelSize: root.theme.dp(14)
                 elide: row.textElide
             }
@@ -270,6 +276,17 @@ C.Menu {
         MenuRow { objectName: "profileCreateAction"; text: qsTr("New"); glyph: "add"; onTriggered: root.activate("new-profile") }
     }
     MenuRow { text: qsTr("Keyboard Shortcuts"); glyph: "menu-keyboard"; onTriggered: root.activate("shortcuts") }
+    Instantiator {
+        model: root.addonCommands
+        delegate: MenuRow {
+            required property var modelData
+            objectName: "addonPlayerAction_" + modelData.id
+            text: qsTr("Add-on: %1").arg(modelData.name || modelData.id)
+            onTriggered: { root.dismiss(); root.addonRegistry.triggerCommand(modelData.id, {}) }
+        }
+        onObjectAdded: (index, object) => root.insertItem(Math.max(0, root.count - 3), object)
+        onObjectRemoved: (index, object) => root.removeItem(object)
+    }
     MenuRow { text: qsTr("Customize Player"); glyph: "menu-customize"; onTriggered: root.activate("customize") }
     MenuRow { text: qsTr("Settings"); glyph: "menu-settings"; hint: "Ctrl + P"; onTriggered: root.activate("settings") }
     MenuRow { text: qsTr("About VLC"); glyph: "menu-about"; hint: "Shift + F1"; onTriggered: root.activate("about") }

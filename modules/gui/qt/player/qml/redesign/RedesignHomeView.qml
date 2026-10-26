@@ -182,5 +182,11 @@ Flickable {
                 }
             }
         }
+        RedesignAddonSections {
+            width: parent.width
+            hook: "home.sections@1"
+            hostContext: ({surface: "home.sections@1", search: root.searchText, layout: root.expanded ? "expanded" : "compact"})
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+        }
     }
 }

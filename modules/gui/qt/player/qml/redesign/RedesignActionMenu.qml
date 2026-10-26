@@ -58,7 +58,7 @@ C.Menu {
     popupType: C.Popup.Item
     background: Rectangle {
         id: surface
-        readonly property color fill: root.lightTheme ? root.theme.background : "#191919"
+        readonly property color fill: root.theme.menuPanel
         color: Qt.rgba(fill.r, fill.g, fill.b, root.theme.floatingOpacity)
         radius: root.theme.dp(10)
         Loader {
@@ -105,7 +105,7 @@ C.Menu {
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: row.text
+                    text: row.text; textFormat: Text.PlainText
                     color: root.theme.foreground
                     font.pixelSize: root.theme.dp(14)
                     elide: Text.ElideRight

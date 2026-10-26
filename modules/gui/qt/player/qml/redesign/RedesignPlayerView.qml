@@ -107,6 +107,8 @@ FocusScope {
     property Component videoContent
     property Component videoBackdropContent
     property Component artworkToolbarBackdropContent
+    property Component addonVisualizerContent
+    property bool addonVisualizerActive: false
     readonly property alias backdropSource: backdropScene
     readonly property alias artworkBackdropSource: viewport
     property Component libraryContent
@@ -376,11 +378,18 @@ FocusScope {
             showTitle: !root.libraryExpanded
             visible: root.started && !root.hasVideo
         }
+        Loader {
+            objectName: "addonVisualizerLoader"
+            anchors.fill: parent
+            active: root.started && !root.hasVideo && !!root.addonVisualizerContent
+            visible: active
+            sourceComponent: root.addonVisualizerContent
+        }
         Column {
             anchors.centerIn: parent
             spacing: theme.dp(14)
             objectName: "audioArtworkFallback"
-            visible: root.started && !root.hasVideo && !audioArtwork.ready
+            visible: root.started && !root.hasVideo && !audioArtwork.ready && !root.addonVisualizerActive
             RedesignIcon {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: theme.dp(96); height: width

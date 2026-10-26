@@ -16,6 +16,7 @@
 #include <QEvent>
 #include "util/subtitle_source_service.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_metadata_service.hpp"
 
 #if defined(Q_OS_WIN) && defined(QT_STATIC)
 Q_IMPORT_PLUGIN(QSchannelBackend)
@@ -60,6 +61,51 @@ class TestSubtitleSources : public QObject {
     static QVariantList search(SubtitleSourceService& client) { QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);client.search("The Wand S01E04","en");return result(spy).value("sources").toList(); }
     static QVariantList row(const QStringList& tracks) { return {QVariantMap{{"url","file:///movie.mkv"},{"baseline",QStringList{}},{"initialTracks",QStringList{}},{"tracks",tracks}}}; }
 private slots:
+    void sharedOwnerInvalidationEndsTheUiSearch()
+    {
+        QTemporaryDir directory; Server server;
+        server.respond = [](const HttpRequest&, QTcpSocket*) {};
+        vlc::addons::AddonManager manager(directory.filePath("addons")); AddonMetadataService owner(&manager);
+        SubtitleSourceService client(options(server)); client.setAddonManager(&manager); client.setMetadataService(&owner);
+        client.setStorageDirectory(directory.filePath("subtitles")); QVERIFY(client.setApiKey("unit-only-native-key"));
+        QSignalSpy finished(&client, &SubtitleSourceService::searchFinished);
+        client.search("The Wand S01E04", "en"); QTRY_COMPARE(server.requests.size(), 1);
+        owner.invalidate(); QCOMPARE(finished.size(), 1); QVERIFY(!finished[0][1].toMap().value("success").toBool());
+        QCOMPARE(owner.mediaCount(), 0);
+        client.cancelSearch(); QCoreApplication::processEvents(); QCOMPARE(finished.size(), 1);
+    }
+
+    void sharedMetadataOwnerKeepsNativeSearchAndPreparation()
+    {
+        QTemporaryDir directory; Server server;
+        server.respond = [&](const HttpRequest& request, QTcpSocket* socket) {
+            if (request.url.path().endsWith("/subtitles")) Server::send(socket, results());
+            else if (request.url.path().endsWith("/download"))
+                Server::send(socket, QJsonDocument(QJsonObject{{"link", server.base().resolved(QUrl("file.srt")).toString()}}).toJson());
+            else Server::send(socket, captions());
+        };
+        vlc::addons::AddonManager manager(directory.filePath("addons"));
+        AddonMetadataService owner(&manager);
+        SubtitleSourceService client(options(server)); client.setAddonManager(&manager);
+        client.setMetadataService(&owner); client.setStorageDirectory(directory.filePath("subtitles"));
+        QVERIFY(client.setApiKey("unit-only-native-key"));
+        const auto sources = search(client); QCOMPARE(sources.size(), 2); QCOMPARE(server.requests.size(), 1);
+        QCOMPARE(owner.mediaCount(), 0);
+        const auto selected = sources[0].toMap().value("url").toString();
+        QCOMPARE(QUrl(selected).scheme(), "addon-subtitle");
+        QSignalSpy prepared(&client, &SubtitleSourceService::preparationFinished);
+        client.prepareRows(row({selected})); auto answer = result(prepared);
+        QVERIFY2(answer.value("success").toBool(), qPrintable(answer.value("error").toString()));
+        const auto track = answer.value("rows").toList()[0].toMap().value("tracks").toStringList()[0];
+        QFile file(QUrl(track).toLocalFile()); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), captions());
+        QCOMPARE(server.requests.size(), 3);
+        const auto count = server.requests.size();
+        client.setMetadataService(nullptr);
+        QSignalSpy searched(&client, &SubtitleSourceService::searchFinished);
+        client.search("The Wand S01E04", "en"); answer = result(searched);
+        QVERIFY(!answer.value("success").toBool()); QCOMPARE(server.requests.size(), count);
+    }
+
     void providerCoordinatorNativeAdapterUsesOpaqueSourcesAndNormalPreparation() {
         QTemporaryDir directory;
         Server server;

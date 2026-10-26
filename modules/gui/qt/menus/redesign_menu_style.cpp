@@ -2,6 +2,7 @@
 #include "redesign_menu_style.hpp"
 #include "maininterface/mainctx.hpp"
 #include "util/color_scheme_model.hpp"
+#include "addons/addon_theme_service.hpp"
 
 #include <QApplication>
 #include <QMenu>
@@ -86,16 +87,25 @@ public:
             (scheme == ColorSchemeModel::System && qApp->styleHints()->colorScheme() == Qt::ColorScheme::Light);
         m_scale = ctx->getIntfScaleFactor();
         m_compact = ctx->compactMenus();
-        m_background = QColor(light ? "#acacac" : "#191919");
-        m_background.setAlpha(ctx->backdropBlurRequested() ? 230 : 255);
-        m_foreground = QColor(light ? "#404040" : "#8f8f8f");
-        m_shortcutForeground = QColor(light ? "#404040" : "#6b6b6b");
-        m_disabled = QColor(light ? "#737373" : "#595959");
-        m_hover = QColor(light ? "#d5d5d5" : "#1f1f1f");
-        m_border = QColor(light ? "#969696" : "#222222");
-        m_accent = ctx->redesignAccent();
+        const auto service = vlc::addons::AddonThemeService::instance();
+        const auto snapshot = service ? service->tokens(light, {}, false, !ctx->backdropBlurRequested())
+            : vlc::addons::AddonThemeService::resolve({}, light, ctx->redesignAccent().name(), false, !ctx->backdropBlurRequested());
+        const auto colors = snapshot.value(QStringLiteral("colors")).toMap();
+        const auto color = [&colors](const char* name) { return QColor(colors.value(QString::fromLatin1(name)).toString()); };
+        m_background = color("surface.menu");
+        m_background.setAlphaF(snapshot.value(QStringLiteral("effects")).toMap().value(QStringLiteral("panelOpacity")).toDouble());
+        m_foreground = color("text.secondary");
+        m_shortcutForeground = color("text.muted");
+        m_disabled = color("text.disabled");
+        m_hover = color("surface.menuHover");
+        m_border = color("border.menu");
+        m_accent = color("accent.primary");
+        const auto shape = snapshot.value(QStringLiteral("shape")).toMap();
+        m_menuRadius = shape.value(QStringLiteral("menuRadius")).toDouble();
+        m_controlRadius = shape.value(QStringLiteral("controlRadius")).toDouble();
     }
     int dp(int value) const { return qMax(1, qRound(value * m_scale)); }
+    int menuRadius() const { return qMax(0, qRound(m_menuRadius * m_scale)); }
     QPalette menuPalette(QPalette palette) const
     {
         palette.setColor(QPalette::Window, m_background);
@@ -150,7 +160,7 @@ public:
             painter->setCompositionMode(QPainter::CompositionMode_Source);
             painter->setPen(Qt::NoPen);
             painter->setBrush(m_background);
-            painter->drawRoundedRect(option->rect, dp(10), dp(10));
+            painter->drawRoundedRect(option->rect, menuRadius(), menuRadius());
             painter->restore();
             return;
         }
@@ -177,7 +187,7 @@ public:
         if (item->state & State_Selected) {
             painter->setPen(Qt::NoPen);
             painter->setBrush(m_hover);
-            painter->drawRoundedRect(rect, dp(6), dp(6));
+            painter->drawRoundedRect(rect, m_controlRadius * m_scale, m_controlRadius * m_scale);
         }
         const bool enabled = item->state & State_Enabled;
         const QColor foreground = enabled ? m_foreground : m_disabled;
@@ -241,6 +251,7 @@ private:
     }
     bool m_compact = false;
     qreal m_scale = 1;
+    qreal m_menuRadius = 10, m_controlRadius = 6;
     QColor m_background, m_foreground, m_shortcutForeground, m_disabled, m_hover, m_border, m_accent;
 };
 
@@ -273,7 +284,10 @@ void styleRedesignMenus(QMenu* root, MainCtx* ctx)
         menu->setProperty("redesignCompactMenu", ctx->compactMenus());
         menu->setWindowFlag(Qt::NoDropShadowWindowHint);
         menu->setAttribute(Qt::WA_TranslucentBackground);
-        menu->setProperty("redesignMenuRadius", dp(10));
+        menu->setProperty("redesignMenuRadius", style->menuRadius());
+        QPainterPath outline;
+        outline.addRoundedRect(menu->rect(), style->menuRadius(), style->menuRadius());
+        menu->setMask(QRegion(outline.toFillPolygon().toPolygon()));
         if (!menu->property("redesignMenuMaskInstalled").toBool()) {
             new RedesignMenuMask(menu);
             menu->setProperty("redesignMenuMaskInstalled", true);
@@ -296,6 +310,7 @@ public:
         connect(ctx, &MainCtx::intfScaleFactorChanged, this, [this] { refresh(); });
         connect(ctx, &MainCtx::backdropBlurEnabledChanged, this, [this] { refresh(); });
         connect(ctx, &MainCtx::redesignAccentChanged, this, [this] { refresh(); });
+        connect(vlc::addons::AddonThemeService::notifications(), &vlc::addons::AddonThemeNotifications::changed, this, [this] { refresh(); });
         connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, [this] { refresh(); });
         connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, [this] { refresh(); });
     }

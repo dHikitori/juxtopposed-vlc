@@ -307,6 +307,21 @@ RedesignSettingsDialog {
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     }
                 }
+                Loader {
+                    width: parent.width
+                    active: root.addonsVisited && typeof AddonUiRegistry !== "undefined"
+                    visible: root.category === "extensions" && !root.search.length
+                    sourceComponent: RedesignAddonReplacements {
+                        registry: typeof AddonUiRegistry !== "undefined" ? AddonUiRegistry : null
+                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    }
+                }
+                RedesignAddonSections {
+                    width: parent.width
+                    visible: root.category === "extensions" && !root.search.length
+                    hook: "settings.addons.sections@1"
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                }
                 Column {
                     visible: root.category === "general" && !root.search.length
                     width: parent.width
@@ -315,6 +330,22 @@ RedesignSettingsDialog {
                         text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
                     }
                     RedesignPreferenceRow { width: parent.width; backend: preferenceStore; optionName: "language"; label: qsTr("Interface language"); scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
+                    Loader {
+                        width: parent.width
+                        active: typeof AddonThemes !== "undefined"
+                        sourceComponent: RedesignAddonThemeSelector {
+                            backend: typeof AddonThemes !== "undefined" ? AddonThemes : null
+                            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                        }
+                    }
+                    Loader {
+                        width: parent.width
+                        active: typeof AddonVisualizers !== "undefined"
+                        sourceComponent: RedesignAddonVisualizerSelector {
+                            controller: typeof AddonVisualizers !== "undefined" ? AddonVisualizers : null
+                            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                        }
+                    }
                     Item {
                         width: parent.width; height: theme.dp(46)
                         Text { anchors.verticalCenter: parent.verticalCenter; text: qsTr("Theme"); color: theme.foreground; font.pixelSize: theme.dp(14) }
@@ -355,7 +386,7 @@ RedesignSettingsDialog {
                                     model: ["#d37918", "#e15032", "#c49e23", "#19a234", "#18aad3", "#185dd3", "#8e42ff", "#f052b3", "#afafaf"]
                                     RedesignButton {
                                         required property string modelData
-                                        readonly property bool active: { preferenceStore.revision; return root.accentColor.toString() === modelData }
+                                        readonly property bool active: { preferenceStore.revision; return theme.accent.toString() === modelData }
                                         width: theme.dp(320 / 9); height: theme.dp(36)
                                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                                         text: modelData
@@ -376,6 +407,12 @@ RedesignSettingsDialog {
                                 }
                             }
                         }
+                    }
+                    RedesignButton {
+                        objectName: "settingsThemeAccent"
+                        caption: qsTr("Use theme accent"); text: caption
+                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                        onClicked: preferenceStore.stage("qt-accent-color", "default")
                     }
                     Repeater {
                         model: specification.sections.general.find(section => section.appearance).rows

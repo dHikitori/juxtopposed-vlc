@@ -27,6 +27,7 @@
 #include "audio_waveform_scanner.hpp"
 #include "util/shared_input_item.hpp"
 #include "util/media_identity_vlc.hpp"
+#include "addons/addon_metadata_service.hpp"
 #include "playlist/playlist_controller.hpp"
 #include "playlist/media.hpp"
 #include "util/seek_preview_image_provider.hpp"
@@ -3167,6 +3168,19 @@ void PlayerController::requestArtUpdate( input_item_t *p_item )
 {
     Q_D(PlayerController);
     d->requestMetadata(p_item, false);
+}
+
+void PlayerController::setMetadataService(AddonMetadataService* service)
+{
+    Q_D(PlayerController);
+    if (d->m_metadataService == service) return;
+    d->m_metadataService = service;
+    emit metadataServiceChanged();
+}
+AddonMetadataService* PlayerController::metadataService() const
+{
+    Q_D(const PlayerController);
+    return d->m_metadataService;
 }
 
 void PlayerControllerPrivate::requestMetadata(input_item_t *p_item, bool automatic)

@@ -73,8 +73,17 @@
 #include "util/redesign_folder_model.hpp"
 #include "util/subtitle_source_service.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_metadata_service.hpp"
+#include "addon_distribution_paths.hpp"
+#include "addons/addon_theme_service.hpp"
+#include "addons/addon_ui_registry.hpp"
+#include "addons/addon_player_visualizers.hpp"
+#include "addons/addon_visualizer_surface.hpp"
+#include <QApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QStandardPaths>
+#include <QStyleHints>
 #include <vlc_configuration.h>
 #include <QQmlContext>
 #include "dialogs/dialogs/dialogmodel.hpp"
@@ -184,6 +193,8 @@ bool MainUI::setup(QQmlEngine* engine)
     engine->addImageProvider(QStringLiteral("svgcolor"), new SVGColorImageImageProvider());
     engine->rootContext()->setContextProperty(QStringLiteral("redesignSvgImages"), true);
     engine->rootContext()->setContextProperty(QStringLiteral("redesignAppearance"), m_mainCtx);
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignThemeService"), vlc::addons::AddonThemeService::instance());
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignAddonUi"), findChild<vlc::addons::AddonUiRegistry*>());
     engine->addImageProvider(QStringLiteral("vlcaccess"), new VLCAccessImageProvider());
     engine->addImageProvider(QStringLiteral("seekpreview"), new SeekPreviewImageProvider());
 
@@ -348,12 +359,41 @@ void MainUI::registerQMLTypes()
             : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
         free(userDirectory);
         vlc::addons::AddonManager* addonManager = nullptr;
+        AddonMetadataService* metadataService = nullptr;
         if (!dataDirectory.isEmpty()) {
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
+            char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
+            const auto installedReference = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference/tvmaze")) : QString();
+            free(sharedDirectory);
+            const auto buildReference = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("tvmaze"));
+            addonManager->ensureDistributionPackage(!installedReference.isEmpty() && QFileInfo::exists(installedReference) ? installedReference : buildReference,
+                QStringLiteral("org.videolan.tvmaze"));
+            metadataService = new AddonMetadataService(addonManager, this);
+            metadataService->setAutomaticNetworkAllowed(var_InheritBool(m_intf, "metadata-network-access"));
+            m_intf->p_mainPlayerController->setMetadataService(metadataService);
+            connect(m_intf->p_mainPlayerController, &PlayerController::metadataNetworkAccessChanged,
+                metadataService, &AddonMetadataService::setAutomaticNetworkAllowed);
+            auto* themes = new vlc::addons::AddonThemeService(addonManager, this);
+            const auto updateThemeAccent = [this, themes] {
+                char* option = var_InheritString(m_intf, "qt-accent-color");
+                themes->setUserAccentOverride(option ? qfu(option) : QString());
+                free(option);
+            };
+            updateThemeAccent();
+            themes->observePlatformPreferences(qApp->styleHints());
+            connect(m_mainCtx, &MainCtx::redesignAccentChanged, themes, updateThemeAccent);
+            connect(m_mainCtx, &MainCtx::redesignPlayerPreferencesChanged, themes, updateThemeAccent);
+            qmlRegisterSingletonInstance<vlc::addons::AddonThemeService>(uri, versionMajor, versionMinor, "AddonThemes", themes);
+            auto* addonUi = new vlc::addons::AddonUiRegistry(addonManager, this);
+            qmlRegisterSingletonInstance<vlc::addons::AddonUiRegistry>(uri, versionMajor, versionMinor, "AddonUiRegistry", addonUi);
+            auto* visualizers = vlc::addons::createPlayerVisualizers(addonManager, m_intf->p_mainPlayerController, this);
+            qmlRegisterSingletonInstance<vlc::addons::AddonVisualizers>(uri, versionMajor, versionMinor, "AddonVisualizers", visualizers);
         }
+        qmlRegisterType<vlc::addons::AddonVisualizerSurface>(uri, versionMajor, versionMinor, "AddonVisualizerSurface");
         auto* subtitleSources = new SubtitleSourceService(this);
         subtitleSources->setAddonManager(addonManager);
+        subtitleSources->setMetadataService(metadataService);
         if (!dataDirectory.isEmpty()) subtitleSources->setStorageDirectory(QDir(dataDirectory).filePath(QStringLiteral("subtitles")));
         qmlRegisterSingletonInstance<SubtitleSourceService>(uri, versionMajor, versionMinor, "SubtitleSources", subtitleSources);
         qmlRegisterType<PlayerHighResolutionTimeUpdater>(uri, versionMajor, versionMinor, "HighResolutionTimeUpdater");

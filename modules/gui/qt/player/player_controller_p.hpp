@@ -114,6 +114,7 @@ public:
     qt_intf_t           *p_intf;
     vlc_player_t            *m_player;
     vlc_preparser_t         *m_preparser = nullptr;
+    QPointer<AddonMetadataService> m_metadataService;
     vlc_preparser_t *m_seekPreparser = nullptr;
     vlc_preparser_req *m_seekRequest = nullptr;
     quint64 m_seekGeneration = 0;

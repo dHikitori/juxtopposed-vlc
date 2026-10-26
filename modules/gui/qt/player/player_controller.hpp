@@ -102,6 +102,7 @@ private:
 };
 
 class PlayerControllerPrivate;
+class AddonMetadataService;
 class PlayerController : public QObject
 {
     Q_OBJECT
@@ -316,6 +317,8 @@ public slots:
 public:
     PlayerController( qt_intf_t * );
     ~PlayerController();
+    void setMetadataService(AddonMetadataService*);
+    AddonMetadataService* metadataService() const;
 
 public:
     using VOutThreadList = QVector<SharedVOutThread>;
@@ -574,6 +577,7 @@ signals:
     void playbackStatisticsChanged();
     void infoChanged( input_item_t* );
     void metadataNetworkAccessChanged(bool enabled);
+    void metadataServiceChanged();
     void currentMetaChanged( input_item_t* );
     void currentLyricChanged();
     void hasLyricsChanged( bool );

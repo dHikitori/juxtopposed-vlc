@@ -4,6 +4,7 @@
 #endif
 
 #include "redesign_widget_theme.hpp"
+#include "addons/addon_theme_service.hpp"
 #include "maininterface/mainctx.hpp"
 #include "color_scheme_model.hpp"
 #include "colorizedsvgicon.hpp"
@@ -33,13 +34,16 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
         const auto scheme = ctx->getColorScheme()->currentScheme();
         const bool light = scheme == ColorSchemeModel::Day ||
             (scheme == ColorSchemeModel::System && qApp->styleHints()->colorScheme() == Qt::ColorScheme::Light);
-        const QString background = light ? "#acacac" : "#1b1b1b";
-        const QString field = light ? "#dedede" : "#090909";
-        const QString foreground = light ? "#404040" : "#8f8f8f";
-        const QString bright = light ? "#2e2e2e" : "#e5e5e5";
-        const QString border = light ? "#969696" : "#292929";
-        const QString hover = light ? "#d5d5d5" : "#292929";
-        const auto accent = ctx->redesignAccent().name();
+        const auto service = vlc::addons::AddonThemeService::instance();
+        const auto snapshot = service ? service->tokens(light, {}, false, !ctx->backdropBlurRequested())
+            : vlc::addons::AddonThemeService::resolve({}, light, ctx->redesignAccent().name());
+        const auto semantic = snapshot.value(QStringLiteral("colors")).toMap();
+        const auto color = [&semantic](const char* name) { return semantic.value(QString::fromLatin1(name)).toString(); };
+        const auto background = color("surface.base"), field = color("surface.field");
+        const auto foreground = color("text.secondary"), bright = color("text.primary");
+        const auto border = color("border.default"), hover = color("surface.hover");
+        const auto accent = color("accent.primary"), focus = color("focus.ring");
+        const auto onAccent = snapshot.value(QStringLiteral("customized")).toBool() ? color("text.onAccent") : QStringLiteral("#161616");
         const auto dp = [ctx](int value) { return qRound(value * ctx->getIntfScaleFactor()); };
         // Stylesheet heights exclude padding and the two one-pixel borders.
         const int compactButtonContentHeight = std::max(0, dp(32) - 2 * dp(6) - 2);
@@ -53,8 +57,8 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
         colors.setColor(QPalette::Button, QColor(field));
         colors.setColor(QPalette::ButtonText, QColor(foreground));
         colors.setColor(QPalette::Highlight, QColor(accent));
-        colors.setColor(QPalette::HighlightedText, QColor("#161616"));
-        const QColor linkColor = light ? ctx->redesignAccent().darker(200) : ctx->redesignAccent();
+        colors.setColor(QPalette::HighlightedText, QColor(onAccent));
+        const QColor linkColor = light && !snapshot.value(QStringLiteral("highContrast")).toBool() ? QColor(accent).darker(200) : QColor(accent);
         colors.setColor(QPalette::Link, linkColor);
         colors.setColor(QPalette::LinkVisited, linkColor);
         colors.setColor(QPalette::Light, QColor(border));
@@ -78,7 +82,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
                 message->setIconPixmap(icon.pixmap(QSize(dp(32), dp(32)), widget->devicePixelRatioF()));
             }
         }
-        widget->setStyleSheet(QStringLiteral(
+        auto stylesheet = QStringLiteral(
             "QWidget { font-family: Inter; font-size: %1px; color: %2; }"
             "QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QAbstractSpinBox { placeholder-text-color: %2; }"
             "QToolTip { background: %4; color: %5; border: 1px solid %6; border-radius: 4px; padding: 6px; }"
@@ -205,9 +209,17 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollBar::handle:horizontal { min-width: 24px; }"
             "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }"
             "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }"
-            "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
+            "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }");
+        stylesheet.replace(QStringLiteral("border-radius: %16px"), QStringLiteral("border-radius: %22px"));
+        stylesheet.replace(QStringLiteral("border-radius: 4px"), QStringLiteral("border-radius: %22px"));
+        stylesheet.replace(QStringLiteral(":focus { border-color: %7; }"), QStringLiteral(":focus { border-color: %23; }"));
+        stylesheet.replace(QStringLiteral(":focus { border-color: %2; }"), QStringLiteral(":focus { border-color: %23; }"));
+        stylesheet.replace(QStringLiteral(":focus { border-color: %5; }"), QStringLiteral(":focus { border-color: %23; }"));
+        stylesheet.replace(QStringLiteral("color: #161616"), QStringLiteral("color: %24"));
+        widget->setStyleSheet(stylesheet
             .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
-            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)).arg((dp(14) + 1) / 2).arg(dp(4)));
+            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)).arg((dp(14) + 1) / 2).arg(dp(4))
+            .arg(qRound(snapshot.value(QStringLiteral("shape")).toMap().value(QStringLiteral("controlRadius")).toDouble() * ctx->getIntfScaleFactor())).arg(focus, onAccent));
         // Reapply explicit palette roles after the stylesheet repolishes the window.
         widget->setPalette(colors);
         // Wizard headers and rulers paint with their palette rather than QSS.
@@ -219,6 +231,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
     if (auto *wizard = qobject_cast<QWizard *>(widget))
         QObject::connect(wizard, &QWizard::currentIdChanged, widget, applyTheme);
     if (ctx) {
+        QObject::connect(vlc::addons::AddonThemeService::notifications(), &vlc::addons::AddonThemeNotifications::changed, widget, applyTheme);
         QObject::connect(ctx, &MainCtx::redesignAccentChanged, widget, applyTheme);
         QObject::connect(ctx, &MainCtx::intfScaleFactorChanged, widget, applyTheme);
         QObject::connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, widget, applyTheme);

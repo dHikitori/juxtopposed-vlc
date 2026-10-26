@@ -15,6 +15,7 @@
 
 namespace vlc::addons { class AddonManager; }
 class AddonMetadataCoordinator;
+class AddonMetadataService;
 
 class SubtitleSourceService : public QObject
 {
@@ -39,6 +40,7 @@ public:
     explicit SubtitleSourceService(const Options& options, QObject* parent = nullptr);
     ~SubtitleSourceService() override;
     void setAddonManager(vlc::addons::AddonManager* manager);
+    void setMetadataService(AddonMetadataService* service);
     void setStorageDirectory(const QString& directory);
     bool configured() const;
     bool hasCustomKey() const { return m_customKey; }
@@ -104,6 +106,9 @@ private:
     Options m_options;
     QPointer<vlc::addons::AddonManager> m_addonManager;
     QPointer<AddonMetadataCoordinator> m_metadata;
+    QPointer<AddonMetadataService> m_sharedMetadata;
+    bool m_ownedMetadataProfile = false;
+    QHash<QString, QPointer<SubtitleSourceService>> m_nativeSearches;
     QPointer<SubtitleSourceService> m_builtin;
     QHash<quint64, QString> m_builtinSearches;
     quint64 m_builtinPreparation = 0;
