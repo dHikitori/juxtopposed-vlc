@@ -118,6 +118,27 @@ fn explicit_manual_query_overrides_stale_original_ids() {
 }
 
 #[test]
+fn plain_manual_title_and_all_languages_do_not_guess_a_tv_episode() {
+    let mut provider = Provider::default();
+    let mut request = invoke("lookup", json!({"type":"unknown","title":"Example Movie"}));
+    request["context"]["manual"] = json!(true);
+    request["context"]["query"] = json!("Example Movie");
+    request["context"]["language"] = json!("");
+    let call = provider.handle(&request).remove(0);
+    let url = call["request"]["url"].as_str().unwrap();
+    assert!(url.contains("/by-title?q=Example%20Movie&limit="));
+    assert!(!url.contains("lang="));
+    assert!(!url.contains("type="));
+    let result = provider.handle(&reply(&call, 200, MOVIE)).remove(0);
+    assert_eq!(result["data"]["candidates"][0]["identity"]["kind"], "movie");
+    let call = provider.handle(&request).remove(0);
+    assert_eq!(
+        provider.handle(&reply(&call, 200, EPISODE))[0]["status"],
+        "unsupported"
+    );
+}
+
+#[test]
 fn response_projection_preserves_identity_language_and_uncertain_hash() {
     let mut provider = Provider::default();
     let calls = provider.handle(&invoke("lookup", movie()));

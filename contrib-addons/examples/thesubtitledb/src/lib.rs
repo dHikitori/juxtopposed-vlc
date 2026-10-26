@@ -211,10 +211,10 @@ impl Provider {
 
     fn search(&mut self, id: &str, message: &Value) -> Vec<Value> {
         if self.pending.len() >= MAX_PENDING {
-            return failure(id, "error", "Too many active subtitle searches.");
+            return failure(id, "error", "The subtitle search limit has been reached.");
         }
         if self.pending.values().any(|job| job.invocation == id) {
-            return failure(id, "error", "Duplicate active invocation.");
+            return failure(id, "error", "This invocation ID is already active.");
         }
         let context = &message["context"];
         let mut identity = context
@@ -225,7 +225,13 @@ impl Provider {
             identity["kind"] = json!(text(&identity, "type"));
         }
         let kind = text(&identity, "kind");
-        if kind != "movie" && kind != "episode" {
+        let manual_query = context.get("manual").and_then(Value::as_bool) == Some(true)
+            && context
+                .get("query")
+                .and_then(Value::as_str)
+                .is_some_and(|query| !query.trim().is_empty());
+        let unknown_kind = kind == "unknown" || kind.is_empty();
+        if kind != "movie" && kind != "episode" && !(unknown_kind && manual_query) {
             return failure(
                 id,
                 "unsupported",
@@ -244,8 +250,13 @@ impl Provider {
             .and_then(Value::as_str)
             .or_else(|| message["settings"].get("language").and_then(Value::as_str))
             .unwrap_or("en");
-        let Some(language) = language(requested_language) else {
-            return failure(id, "error", "The subtitle language is invalid.");
+        let language = if requested_language.is_empty() {
+            String::new()
+        } else {
+            let Some(language) = language(requested_language) else {
+                return failure(id, "error", "The subtitle language is invalid.");
+            };
+            language
         };
         let offset = context.get("cursor").and_then(integer).unwrap_or(0) as usize;
         if offset > 10000 {
@@ -270,11 +281,6 @@ impl Provider {
         } else {
             ("seriesImdb", "seriesTmdb", "series")
         };
-        let manual_query = context.get("manual").and_then(Value::as_bool) == Some(true)
-            && context
-                .get("query")
-                .and_then(Value::as_str)
-                .is_some_and(|query| !query.trim().is_empty());
         let imdb = if manual_query {
             None
         } else {
@@ -319,11 +325,14 @@ impl Provider {
                     "Supply a title or a scoped IMDb/TMDB identifier.",
                 );
             }
-            path = format!(
-                "/v1/by-title?q={}&type={}",
-                encoded(query),
-                if kind == "movie" { "movie" } else { "tv" }
-            );
+            path = format!("/v1/by-title?q={}", encoded(query));
+            if !unknown_kind {
+                path.push_str(if kind == "movie" {
+                    "&type=movie"
+                } else {
+                    "&type=tv"
+                });
+            }
             job.title_lookup = true;
             job.episode_followup = kind == "episode";
         }
@@ -333,9 +342,13 @@ impl Provider {
         }
         let separator = if path.contains('?') { '&' } else { '?' };
         let limit = if job.episode_followup { 1 } else { PAGE_SIZE };
+        let lang_query = if job.language.is_empty() {
+            String::new()
+        } else {
+            format!("lang={}&", encoded(&job.language))
+        };
         path.push_str(&format!(
-            "{separator}lang={}&limit={limit}&offset={offset}&response_class=minimal",
-            encoded(&job.language)
+            "{separator}{lang_query}limit={limit}&offset={offset}&response_class=minimal"
         ));
         self.request(job, format!("{API}{path}"))
     }
@@ -424,7 +437,21 @@ impl Provider {
         let title = &document["title"];
         let returned_imdb = imdb_id(&text(title, "imdb"));
         let returned_tmdb = title.get("tmdb_id").and_then(integer);
-        let kind = text(&job.identity, "kind");
+        let mut kind = text(&job.identity, "kind");
+        if kind == "unknown" || kind.is_empty() {
+            if text(title, "media_type") == "tv" {
+                return failure(
+                    &job.invocation,
+                    "unsupported",
+                    "Add a season and episode number to search this TV series.",
+                );
+            }
+            if text(title, "media_type") == "movie" {
+                kind = "movie".to_owned();
+                job.identity["kind"] = json!("movie");
+                job.identity["type"] = json!("movie");
+            }
+        }
         let expected_type = if kind == "movie" { "movie" } else { "tv" };
         if text(title, "media_type") != expected_type
             || returned_imdb.is_none()
@@ -446,8 +473,13 @@ impl Provider {
             let (season, number) = episode(&job.identity).unwrap();
             job.expected_imdb = returned_imdb.clone();
             job.episode_followup = false;
-            let url = format!("{API}/v1/by-imdb/{}/season/{season}/episode/{number}?lang={}&limit={PAGE_SIZE}&offset={}&response_class=minimal",
-                returned_imdb.unwrap(), encoded(&job.language), job.offset);
+            let lang_query = if job.language.is_empty() {
+                String::new()
+            } else {
+                format!("lang={}&", encoded(&job.language))
+            };
+            let url = format!("{API}/v1/by-imdb/{}/season/{season}/episode/{number}?{lang_query}limit={PAGE_SIZE}&offset={}&response_class=minimal",
+                returned_imdb.unwrap(), job.offset);
             return self.request(job, url);
         }
         let Some(items) = document
@@ -577,7 +609,7 @@ impl Provider {
             return failure(
                 invocation,
                 "error",
-                "Search again before downloading this subtitle.",
+                "Search again before the subtitle download.",
             );
         };
         if candidate

@@ -1,35 +1,30 @@
 # TheSubtitleDB portable add-on
 
-This is an executable reference subtitle provider for the new add-on host. The package contains a portable Wasm module; it makes no native Qt calls and imports only `vlc.host_send`. The host owns networking, API-key injection, downloads, candidate matching and attachment. The API-key value never enters the guest.
+This subtitle provider uses a portable Wasm module. It imports only `vlc.host_send`. The host owns HTTP requests, API-key use, downloads, identity rules, and track attachment. The API-key value does not enter the guest.
 
-Install the package with the add-on manager, open its generated settings, and save your own API key from [TheSubtitleDB account](https://thesubtitledb.org/account/keys). A missing key returns `auth_required` without making a network call. The key is required by this integration's setup policy even though TSDB permits anonymous lookup/download routes.
+Install the package with the add-on manager. Open its settings. Save your own key from [TheSubtitleDB account](https://thesubtitledb.org/account/keys). A missing key causes `auth_required` before an HTTP request. This host profile needs a key. The service also has public routes.
 
-The package searches movie subtitles and individually numbered seasonal episodes. It prefers scoped IMDb/TMDB IDs, supports title lookup, normalizes language codes and returns paginated candidates. Absolute/date numbering and combined-episode files return `unsupported` rather than guessing. Title matches remain evidence for the host to validate; the provider does not claim a hash match. It does not claim music, podcast, episode-title or artwork-provider support.
+The package supplies movie subtitles and subtitles for one seasonal episode. It uses scoped IMDb or TMDB IDs when they are available. It also supports title search, language codes, and result pages. Absolute episode numbers, date numbers, and combined episodes cause `unsupported`. The host must validate title evidence. This provider does not claim a file hash match. It does not supply music, podcast, episode-title, or artwork metadata.
 
-Asset resolution accepts only subtitle IDs issued by this worker, ignores server-supplied download URLs and constructs the documented API download path. The manifest permits the API and file origins. Authorization is bound only to the API origin and must be stripped on the file-origin redirect. The provider does not request watermark removal or alter attribution.
+Asset resolution accepts only subtitle IDs that this worker supplied. It does not use download URLs from an API response. It constructs the documented download path. The manifest permits the API and file origins. The host sends Authorization only to the API origin. It must remove Authorization on a redirect to the file origin. The provider does not request watermark removal or change attribution.
 
-## Build and test
+## Build and tests
 
-Requires Rust stable and its `wasm32-unknown-unknown` target. Dependency versions are locked; builds do not execute during package installation.
+Use Rust stable with the `wasm32-unknown-unknown` target. Dependency versions are fixed. The host does not run a build at installation.
 
 ```sh
 rustup target add --toolchain stable wasm32-unknown-unknown
 RUSTUP_TOOLCHAIN=stable cargo test --locked
 sh build.sh
-```
-
-`dist/addon.wasm` is the release artifact. The SDK message ABI is `wasm-message-v1`: `vlc_alloc`, `vlc_dealloc`, `vlc_dispatch` and the single `vlc.host_send` import. Tests use synthetic service fixtures, cover malformed/conflicting replies and cancellation, and never read a developer environment file or make live network requests.
-
-To test that compiled artifact through the actual host worker with synthetic HTTP completions:
-
-```sh
 python3 tests/test_worker.py --worker /absolute/path/to/vlc-addon-worker
 ```
 
-The example lives inside the application repository for development. To distribute it through Git, export its declared package files to a dedicated repository root, set `source` to that repository's approved HTTPS URL, and publish a tag matching `version`. The current source field identifies this example's real development repository; it is not a claim that this nested folder is already a standalone tagged release.
+`dist/addon.wasm` is the package module. The message ABI is `wasm-message-v1`. Its exports are `vlc_alloc`, `vlc_dealloc`, and `vlc_dispatch`. Tests use synthetic data. They cover invalid replies, identity conflicts, cancellation, and asset resolution. They do not read a developer environment file or use a live service.
 
-## API verification
+The package source is in the app development repository. For a separate Git release, put the complete source and build files at its repository root. Set `source` to that repository's approved HTTPS URL. Use a tag that agrees with `version`. The host installs only the declared package files. The current source field does not claim a separate tagged release for this folder.
 
-The [official API reference](https://thesubtitledb.org/developer/api) was checked on 27 October 2026. The provider uses its `/v1/by-imdb`, `/v1/by-tmdb`, `/v1/by-title` lookup routes with language/offset filters and `/get/{id}` asset resolution. Requests use optional bearer authentication. Public movie and scoped episode lookups returned the documented candidate envelope; a public-domain subtitle download redirected from the API to `https://files.thesubtitledb.org`. Statuses and limits remain service-controlled.
+## API evidence
 
-No API keys or subtitle contents are included in this package. The API fixture files are synthetic and contain deliberately hostile URLs to prove that resolution ignores them.
+The [official API reference](https://thesubtitledb.org/developer/api) was examined on 27 October 2026. The provider uses `/v1/by-imdb`, `/v1/by-tmdb`, and `/v1/by-title` with language and offset filters. Asset resolution uses `/get/{id}`. Public movie and episode requests returned the documented result format. A public-domain subtitle download used a redirect from the API origin to `https://files.thesubtitledb.org`. The service controls its limits and response status.
+
+This package contains no API key or subtitle content. All API fixtures are synthetic. Some fixture URLs are invalid by design. Tests prove that the provider does not use those URLs for asset resolution.

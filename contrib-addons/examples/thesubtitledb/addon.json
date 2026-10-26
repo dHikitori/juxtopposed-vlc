@@ -17,7 +17,7 @@
     "type": "metadata.provider",
     "contract": "metadata@1",
     "features": ["subtitles"],
-    "mediaKinds": ["movie", "episode"],
+    "mediaKinds": ["movie", "episode", "unknown"],
     "operations": ["searchAssets", "resolveAsset"],
     "requires": ["metadata.context", "network.http", "credentials.use"]
   }],
