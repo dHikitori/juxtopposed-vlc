@@ -21,10 +21,37 @@ bool populated(const QVariant& value)
         && (value.metaType().id() != QMetaType::QString || !value.toString().isEmpty());
 }
 
+QVariantMap attribution(const QVariant& value)
+{
+    const auto input = value.toMap();
+    const auto name = input.value(QStringLiteral("name")).toString().trimmed();
+    const auto license = input.value(QStringLiteral("license")).toString().trimmed();
+    const auto address = input.value(QStringLiteral("url")).toString();
+    const QUrl url(address, QUrl::StrictMode);
+    if (name.isEmpty() || name.size() > 128 || license.size() > 128 || address.size() > 2048
+        || !url.isValid() || url.scheme() != QStringLiteral("https") || url.host().isEmpty()
+        || !url.userInfo().isEmpty()) return {};
+    return {{QStringLiteral("name"), name}, {QStringLiteral("license"), license},
+        {QStringLiteral("url"), url.toString(QUrl::FullyEncoded)}};
+}
+
+bool isArtwork(const QString& field)
+{ return field == QStringLiteral("artwork") || field == QStringLiteral("artworkUrl"); }
+bool sameArtworkLabel(const QVariantMap& target, const QVariantMap& candidate)
+{
+    const auto title = MediaIdentity::normalize(target.value(QStringLiteral("title")).toString());
+    if (title.isEmpty() || title != MediaIdentity::normalize(candidate.value(QStringLiteral("title")).toString())) return false;
+    for (const auto& field : {QStringLiteral("artist"), QStringLiteral("albumArtist"), QStringLiteral("album")}) {
+        const auto value = MediaIdentity::normalize(target.value(field).toString());
+        if (!value.isEmpty() && value != MediaIdentity::normalize(candidate.value(field).toString())) return false;
+    }
+    return true;
+}
+
 QVariantMap normalizedIdentity(QVariantMap identity)
 {
-    // Keep the transport schema explicit: an accidental nested local URL or
-    // caller-only property must not reach a provider through identity context.
+    // Use only the declared transport fields. Do not send a local URL or
+    // private caller property in the identity context.
     const QSet<QString> allowed{QStringLiteral("kind"), QStringLiteral("type"), QStringLiteral("title"),
         QStringLiteral("titles"), QStringLiteral("aliases"), QStringLiteral("year"), QStringLiteral("season"),
         QStringLiteral("episodes"), QStringLiteral("episode"), QStringLiteral("absoluteEpisode"), QStringLiteral("airDate"),
@@ -163,7 +190,7 @@ QString AddonMetadataCoordinator::start(const QString& feature, const QString& o
         const auto it = m_consumers.find(id);
         if (it == m_consumers.end()) return;
         it->status = QStringLiteral("error");
-        it->error = tr("The metadata lookup timed out.");
+        it->error = tr("The metadata request time limit has ended.");
         finish(id);
     });
     QTimer::singleShot(0, this, [this, id] { advance(id); });
@@ -179,6 +206,7 @@ QStringList AddonMetadataCoordinator::missing(const Consumer& consumer) const
     const auto userFields = consumer.context.value(QStringLiteral("userFields")).toMap();
     for (const auto& field : consumer.required) {
         if (protectedFields.contains(field) || userFields.contains(field) || populated(consumer.fields.value(field))) continue;
+        if (isArtwork(field) && populated(existing.value(field))) continue;
         if (!refresh && populated(existing.value(field))) continue;
         result.append(field);
     }
@@ -191,7 +219,8 @@ QVariantMap AddonMetadataCoordinator::providerContext(const Consumer& consumer) 
     // No target URL, local path, core settings, live-item pointer or protected
     // user data crosses this boundary. The manager applies manifest grants too.
     for (const auto& key : {QStringLiteral("identity"), QStringLiteral("language"), QStringLiteral("locale"),
-            QStringLiteral("query"), QStringLiteral("manual"), QStringLiteral("cursor"), QStringLiteral("fingerprints")})
+            QStringLiteral("query"), QStringLiteral("manual"), QStringLiteral("cursor"), QStringLiteral("fingerprints"),
+            QStringLiteral("media")})
         if (consumer.context.contains(key)) projection.insert(key, consumer.context.value(key));
     projection.insert(QStringLiteral("feature"), consumer.feature);
     if (consumer.operation == QStringLiteral("enrich")) projection.insert(QStringLiteral("fields"), missing(consumer));
@@ -223,8 +252,7 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
     const auto provider = registration.value(QStringLiteral("id")).toString();
     const auto context = providerContext(*it);
     const auto partition = registration.value(QStringLiteral("cachePartition")).toString();
-    // Missing release/account/config identity must disable reuse, not create a
-    // shared anonymous cache partition across account changes.
+    // Do not reuse a result without a release, account, and settings identity.
     const auto key = keyFor(provider, it->operation, context, partition, m_policy)
         + (partition.isEmpty() ? consumerId : QString{});
     ++it->outstanding;
@@ -278,8 +306,8 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
 void AddonMetadataCoordinator::operationFinished(const QString& invocation, const QString& contribution,
                                                 const QString& status, const QVariantMap& data, const QString& error)
 {
-    // Even a synchronous backend rejection is processed only after invoke()
-    // returns its correlation ID and subscribe() records it.
+    // Process a synchronous backend error after invoke() returns its ID
+    // and subscribe() records that ID.
     QTimer::singleShot(0, this, [this, invocation, contribution, status, data, error] {
         complete(invocation, contribution, status, data, error);
     });
@@ -350,7 +378,7 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
             if (candidate.value(QStringLiteral("id")).toString().isEmpty()) continue;
             if (QJsonDocument(QJsonObject::fromVariantMap(candidate)).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) {
                 it->status = QStringLiteral("error");
-                it->error = tr("A subtitle provider returned an oversized candidate.");
+                it->error = tr("A subtitle candidate exceeds the size limit.");
                 continue;
             }
             const auto match = compare(target, candidate.value(QStringLiteral("identity")).toMap());
@@ -374,28 +402,65 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     QVariantList accepted;
     for (const auto& value : records.mid(0, 64)) {
         const auto record = value.toMap();
-        const auto match = compare(target, record.value(QStringLiteral("identity")).toMap());
+        const auto candidate = normalizedIdentity(record.value(QStringLiteral("identity")).toMap());
+        const auto match = compare(target, candidate);
         if (match.conflict) continue;
+        const bool label = record.value(QStringLiteral("evidence")).toMap().value(QStringLiteral("type")) == QStringLiteral("label");
+        if (it->feature == QStringLiteral("artwork") && (!match.strong || label) && sameArtworkLabel(target, candidate)) {
+            const auto fields = record.value(QStringLiteral("fields")).toMap();
+            for (const auto& field : missing(*it)) {
+                if (!isArtwork(field) || !populated(fields.value(field)) || it->labelArtwork.size() >= 64) continue;
+                if (QJsonDocument::fromVariant(QVariantMap{{QStringLiteral("value"), fields.value(field)}})
+                    .toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) continue;
+                auto evidence = provenance;
+                evidence.insert(QStringLiteral("matchEvidence"), QStringLiteral("label"));
+                const auto credit = attribution(record.value(QStringLiteral("attribution")));
+                if (!credit.isEmpty()) evidence.insert(QStringLiteral("attribution"), credit);
+                it->labelArtwork.append(QVariantMap{{QStringLiteral("field"), field}, {QStringLiteral("value"), fields.value(field)},
+                    {QStringLiteral("identity"), candidate}, {QStringLiteral("provenance"), evidence}});
+            }
+            continue;
+        }
+        if (label) continue;
         if (!match.strong) { it->ambiguous = true; continue; }
         accepted.append(record);
     }
-    // Multiple records for one target are ambiguous. Do not let record order
-    // choose an entity or combine unrelated field claims.
+    // More than one record for a target is ambiguous. Do not use record
+    // order to select an entity or combine unrelated field claims.
     if (accepted.size() > 1) { it->ambiguous = true; return; }
     if (accepted.isEmpty()) return;
-    const auto fields = accepted.first().toMap().value(QStringLiteral("fields")).toMap();
+    const auto record = accepted.first().toMap();
+    const auto fields = record.value(QStringLiteral("fields")).toMap();
+    auto fieldProvenance = provenance;
+    const auto credit = attribution(record.value(QStringLiteral("attribution")));
+    if (!credit.isEmpty()) fieldProvenance.insert(QStringLiteral("attribution"), credit);
     for (const auto& field : missing(*it)) {
         const auto value = fields.value(field);
         if (!populated(value)) continue;
         it->fields.insert(field, value);
-        it->provenance.insert(field, provenance);
+        it->provenance.insert(field, fieldProvenance);
     }
 }
 
 void AddonMetadataCoordinator::finish(const QString& consumerId)
 {
-    const auto found = m_consumers.constFind(consumerId);
-    if (found == m_consumers.cend()) return;
+    auto found = m_consumers.find(consumerId);
+    if (found == m_consumers.end()) return;
+    if (found->feature == QStringLiteral("artwork") && !found->labelArtwork.isEmpty()) {
+        const auto needed = missing(*found);
+        QVariantList remaining;
+        for (const auto& value : found->labelArtwork) {
+            const auto record = value.toMap();
+            if (needed.contains(record.value(QStringLiteral("field")).toString())) remaining.append(record);
+        }
+        if (remaining.size() == 1) {
+            const auto record = remaining.first().toMap();
+            const auto field = record.value(QStringLiteral("field")).toString();
+            found->fields.insert(field, record.value(QStringLiteral("value")));
+            found->provenance.insert(field, record.value(QStringLiteral("provenance")));
+        } else if (!remaining.isEmpty()) found->ambiguous = true;
+        found->labelArtwork = remaining;
+    }
     const auto consumer = *found;
     m_consumers.remove(consumerId);
     detach(consumerId, consumer.pending);
@@ -419,6 +484,7 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
         data.insert(QStringLiteral("fields"), consumer.fields);
         data.insert(QStringLiteral("provenance"), consumer.provenance);
         data.insert(QStringLiteral("missingFields"), missing(consumer));
+        if (consumer.ambiguous && !consumer.labelArtwork.isEmpty()) data.insert(QStringLiteral("artworkCandidates"), consumer.labelArtwork);
         if (missing(consumer).isEmpty()) status = QStringLiteral("match");
         else if (!consumer.fields.isEmpty()) status = QStringLiteral("partial");
         else if (consumer.ambiguous) status = QStringLiteral("ambiguous");

@@ -312,6 +312,85 @@ private slots:
         coordinator.searchAssets("subtitles", context()); QTRY_COMPARE(fake.calls.size(), 2);
     }
 
+    void artworkLabelFallbackWaitsForStrongProviders() {
+        FakeBackend fake; fake.providers = {registration("labels/art"), registration("strong/art")};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrich("artwork", context(), {"artwork"}); QTRY_COMPARE(fake.calls.size(), 1);
+        auto record = claims({{"artwork", QVariantMap{{"url", "https://images.invalid/label.jpg"}}}});
+        record["evidence"] = QVariantMap{{"type", "label"}};
+        complete(coordinator, fake.calls[0], "match", record); QTRY_COMPARE(fake.calls.size(), 2); QVERIFY(results.isEmpty());
+        complete(coordinator, fake.calls[1], "match", claims({{"artwork", QVariantMap{{"url", "https://images.invalid/strong.jpg"}}}}));
+        QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(results[0][2].toMap().value("fields").toMap().value("artwork").toMap().value("url").toString(), "https://images.invalid/strong.jpg");
+    }
+
+    void artworkLabelNeedsEveryHostArtistAndAlbumField() {
+        for (const auto& variation : {QStringLiteral("correct"), QStringLiteral("artist"), QStringLiteral("album"), QStringLiteral("missingAlbum")}) {
+            FakeBackend fake; fake.providers = {registration("labels/art")};
+            AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+            const QVariantMap target{{"kind", "movie"}, {"title", "Example Movie"}, {"artist", "Artist A"}, {"album", "Album A"}};
+            auto candidate = target;
+            if (variation == QStringLiteral("artist")) candidate["artist"] = "Artist B";
+            if (variation == QStringLiteral("album")) candidate["album"] = "Album B";
+            if (variation == QStringLiteral("missingAlbum")) candidate.remove("album");
+            coordinator.enrich("artwork", {{"identity", target}}, {"artwork", "description"}); QTRY_COMPARE(fake.calls.size(), 1);
+            auto record = claims({{"artwork", QVariantMap{{"url", "https://images.invalid/label.jpg"}}}, {"description", "Do not apply"}}, candidate);
+            record["evidence"] = QVariantMap{{"type", "label"}};
+            complete(coordinator, fake.calls[0], "match", record); QTRY_COMPARE(results.size(), 1);
+            const auto data = results[0][2].toMap();
+            QCOMPARE(data.value("fields").toMap().contains("artwork"), variation == QStringLiteral("correct"));
+            QVERIFY(!data.value("fields").toMap().contains("description"));
+            if (variation == QStringLiteral("correct")) QCOMPARE(data.value("provenance").toMap().value("artwork").toMap().value("matchEvidence").toString(), "label");
+        }
+    }
+
+    void artworkEnrichmentCannotReplaceExistingOrUserArtwork() {
+        for (const bool user : {false, true}) {
+            FakeBackend fake; fake.providers = {registration("labels/art")};
+            AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+            auto request = context(); request["refresh"] = true;
+            if (user) request["userFields"] = QVariantMap{{"artwork", "User image"}};
+            else request["existingFields"] = QVariantMap{{"artwork", "file:///private/embedded-cover.jpg"}};
+            coordinator.enrich("artwork", request, {"artwork"}); QTRY_COMPARE(results.size(), 1);
+            QVERIFY(fake.calls.isEmpty()); QVERIFY(results[0][2].toMap().value("fields").toMap().isEmpty());
+        }
+    }
+
+    void differentLabelImagesNeedUserSelection() {
+        FakeBackend fake; fake.providers = {registration("a/art"), registration("b/art")};
+        for (auto& provider : fake.providers) {
+            auto descriptor = provider.toMap(); descriptor["mediaKinds"] = QStringList{"unknown"}; provider = descriptor;
+        }
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        const QVariantMap target{{"kind", "unknown"}, {"title", "Channel One"}};
+        coordinator.enrich("artwork", {{"identity", target}}, {"artwork"}); QTRY_COMPARE(fake.calls.size(), 1);
+        for (int i = 0; i < 2; ++i) {
+            auto record = claims({{"artwork", QVariantMap{{"url", QStringLiteral("https://images.invalid/%1.jpg").arg(i)}}}}, target);
+            record["evidence"] = QVariantMap{{"type", "label"}};
+            complete(coordinator, fake.calls[i], "match", record);
+            if (!i) QTRY_COMPARE(fake.calls.size(), 2);
+        }
+        QTRY_COMPARE(results.size(), 1); QCOMPARE(results[0][1].toString(), "ambiguous");
+        QVERIFY(results[0][2].toMap().value("fields").toMap().isEmpty());
+        QCOMPARE(results[0][2].toMap().value("artworkCandidates").toList().size(), 2);
+    }
+
+    void fieldProvenanceRetainsOnlyBoundedHttpsCredit() {
+        for (const auto& url : {QStringLiteral("https://www.tvmaze.com/episodes/1"), QStringLiteral("file:///private/key"),
+                QStringLiteral("https://user:password@example.org/source"), QString(3000, QLatin1Char('x'))}) {
+            FakeBackend fake; fake.providers = {registration("a/details")};
+            AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+            coordinator.enrich("video.details", context(), {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+            auto record = claims({{"description", "Provider text"}});
+            record["attribution"] = QVariantMap{{"name", "TVmaze"}, {"url", url}, {"license", "CC-BY-SA-4.0"}, {"extra", "drop"}};
+            complete(coordinator, fake.calls[0], "match", record); QTRY_COMPARE(results.size(), 1);
+            const auto provenance = results[0][2].toMap().value("provenance").toMap().value("description").toMap();
+            const auto credit = provenance.value("attribution").toMap();
+            QCOMPARE(!credit.isEmpty(), url == QStringLiteral("https://www.tvmaze.com/episodes/1"));
+            QVERIFY(!credit.contains("extra"));
+        }
+    }
+
     void timeoutPreservesPartialSuccessAndCancelsThePendingProvider() {
         FakeBackend fake;
         fake.providers = {registration("a/details"), registration("b/details")};

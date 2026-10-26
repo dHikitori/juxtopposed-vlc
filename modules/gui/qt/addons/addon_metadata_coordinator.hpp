@@ -9,9 +9,9 @@
 #include <QVariantMap>
 #include <functional>
 
-/** Host-owned provider scheduling and validation; never mutates live media.
- * Backend callbacks are invoked on this object's thread. Connect the manager's
- * operationFinished signal to the slot of the same name.
+/** The host controls provider requests and validates results. This class
+ * does not change live media. Backend callbacks run on this object's thread.
+ * Connect the manager's operationFinished signal to the slot of that name.
  */
 class AddonMetadataCoordinator : public QObject
 {
@@ -41,7 +41,7 @@ public slots:
 
 signals:
     /** data carries contextGeneration/targetRevision and expectedFieldRevisions.
-     * A consumer must recheck them before committing an enrichment patch.
+     * A consumer must compare them before it writes an enrichment patch.
      */
     void finished(const QString& consumer, const QString& status,
                   const QVariantMap& data, const QString& error);
@@ -57,6 +57,7 @@ private:
         QVariantList candidates;
         QVariantMap fields;
         QVariantMap provenance;
+        QVariantList labelArtwork;
         QSet<QString> pending;
         QString status = QStringLiteral("no_match");
         QString error;
