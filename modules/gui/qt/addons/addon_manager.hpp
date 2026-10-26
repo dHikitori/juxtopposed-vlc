@@ -18,6 +18,7 @@ class AddonManager : public QObject
     Q_PROPERTY(bool credentialPersistenceAvailable READ credentialPersistenceAvailable CONSTANT FINAL)
     Q_PROPERTY(bool busy READ busy NOTIFY revisionChanged FINAL)
     Q_PROPERTY(QVariantMap pendingPackage READ pendingPackage NOTIFY revisionChanged FINAL)
+    Q_PROPERTY(bool safeMode READ safeMode NOTIFY revisionChanged FINAL)
 public:
     explicit AddonManager(const QString& storageDirectory, QObject* parent = nullptr);
     ~AddonManager() override;
@@ -27,9 +28,11 @@ public:
     QString storageDirectory() const { return m_store.storageDirectory(); }
     QVariantList contributionsOfType(const QString& type, bool includeDisabled = false) const;
     QJsonObject contributionResource(const QString& globalId, const QString& resourceField) const;
+    QByteArray contributionFile(const QString& globalId, const QString& path, qint64 maximumBytes) const;
     QJsonObject grantedScope(const QString& packageId, const QString& capability) const;
     bool credentialPersistenceAvailable() const { return CredentialStore::persistentAvailable(); }
     bool busy() const { return m_repositoryThread != nullptr; }
+    bool safeMode() const { return m_store.safeMode(); }
     QVariantMap pendingPackage() const;
     void setWorkerExecutable(const QString&);
     Q_INVOKABLE QVariantList providersForFeature(const QString& feature) const;
@@ -44,12 +47,18 @@ public:
     Q_INVOKABLE bool saveAddonSettings(const QString& packageId, const QVariantMap& values, const QVariantMap& secretOperations);
     Q_INVOKABLE QVariantMap inspectLocalPackage(const QString& directory) const;
     bool installLocalPackage(const QString& directory, bool approveRequiredPermissions);
+    // Only the app distribution calls this API with its trusted package path.
+    bool ensureDistributionPackage(const QString& directory, const QString& expectedPackageId);
+    Q_INVOKABLE bool restoreDistributionPackage(const QString& packageId);
     Q_INVOKABLE bool stageLocalPackage(const QString& directory);
     Q_INVOKABLE bool stageRepository(const QString& source, const QString& tag);
     Q_INVOKABLE bool approvePendingPackage(bool enableAfterInstall = false);
     Q_INVOKABLE void discardPendingPackage();
     Q_INVOKABLE bool setEnabled(const QString& packageId, bool enabled);
     Q_INVOKABLE bool rollback(const QString& packageId);
+    Q_INVOKABLE bool setSafeMode(bool enabled);
+    Q_INVOKABLE bool recoverPackage(const QString& packageId);
+    Q_INVOKABLE QVariantList retainedGenerations(const QString& packageId) const;
     Q_INVOKABLE bool uninstall(const QString& packageId, bool removeData);
     QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context);
     void cancel(const QString& invocation);
@@ -78,6 +87,7 @@ private:
     QHash<QString, QString> m_invocationPackages, m_invocationContributions;
     QJsonObject m_providerOrder;
     QMap<QString, QVariantMap> m_builtinProviders;
+    QMap<QString, QString> m_distributionDirectories;
     std::shared_ptr<PackageCandidate> m_pendingPackage;
     QThread* m_repositoryThread = nullptr;
     QString m_workerExecutable, m_error;

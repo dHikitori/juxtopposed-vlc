@@ -19,6 +19,8 @@ addon_host_sources = files(
     'addons/addon_network.cpp',
     'addons/addon_network.hpp',
     'addons/addon_host_services.cpp',
+    'addons/addon_settings_migrations.cpp',
+    'addons/addon_settings_migrations.hpp',
     'addons/addon_host_services.hpp',
     'addons/addon_worker.cpp',
     'addons/addon_worker.hpp',

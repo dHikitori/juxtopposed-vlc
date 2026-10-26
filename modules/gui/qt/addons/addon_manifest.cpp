@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manifest.hpp"
+#include "addon_settings_migrations.hpp"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -292,7 +293,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     for (const auto& value : root.value("contributions").toArray()) {
         if (!value.isObject()) return fail(error, QStringLiteral("Invalid contribution"));
         Contribution contribution; contribution.document = value.toObject(); const auto item = contribution.document;
-        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "qualityTiers", "analysisChannels", "extensions"}, error, "contribution")
+        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "qualityTiers", "analysisChannels", "extensions"}, error, "contribution")
             || !text(item,"id",&contribution.id,error) || !text(item,"type",&contribution.type,error) || !text(item,"contract",&contribution.contract,error)) return false;
         if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9.-]{0,63}$")).match(contribution.id).hasMatch() || identifiers.contains(contribution.id)
             || !types.contains(contribution.type)) return fail(error, QStringLiteral("Invalid or duplicate contribution ID/type"));
@@ -304,6 +305,14 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
             || !strings(item.value("operations"),&contribution.operations,error,"operations") || !strings(item.value("requires"),&contribution.requires,error,"requires")) return false;
         for (const auto& capability : contribution.requires)
             if (!result.permissionDeclared(capability)) return fail(error, QStringLiteral("Contribution requires undeclared permission"));
+        if (contribution.type.startsWith(QLatin1String("ui."))) {
+            for (const auto& key : {QStringLiteral("parameters"), QStringLiteral("stateSchema"), QStringLiteral("resultSchema")})
+                if (item.contains(key) && (!item.value(key).isObject() || !validateUiSchema(item.value(key).toObject())
+                    || item.value(key).toObject().value("type").toString() != QLatin1String("object")))
+                    return fail(error, QStringLiteral("The UI data schema is not correct."));
+            if (item.contains("stateSchema") && !validateUiValue(item.value("stateSchema").toObject(), item.contains("state") ? item.value("state") : QJsonValue(QJsonObject{})))
+                return fail(error, QStringLiteral("The initial UI state does not agree with its schema."));
+        }
         for (const auto& key : {QStringLiteral("resource"), QStringLiteral("view"), QStringLiteral("theme"), QStringLiteral("scene"), QStringLiteral("icon")})
             if (item.contains(key) && (!item.value(key).isString() || !requiredResource(item.value(key).toString(),result.files,error))) return false;
         if ((contribution.type == QStringLiteral("metadata.provider") || contribution.type == QStringLiteral("discovery.source") || contribution.type == QStringLiteral("session.controller")) && result.runtimeEntry.isEmpty())
@@ -329,8 +338,10 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     }
     if (root.contains("icon") && (!root.value("icon").isString() || !requiredResource(root.value("icon").toString(),result.files,error))) return false;
     for (const auto& contribution : result.contributions)
-        if (contribution.type == QStringLiteral("visualizer") && (result.permissionDeclared("network.http") || result.permissionDeclared("network.websocket")))
-            return fail(error, QStringLiteral("Portable visualizer packages cannot request network access"));
+        if (contribution.type == QStringLiteral("visualizer")
+            && (result.permissionDeclared("network.http") || result.permissionDeclared("network.websocket")
+                || result.permissionDeclared("session.background")))
+            return fail(error, QStringLiteral("Visualizer packages cannot have network or background session permissions."));
     const auto bindingScope = result.permissionScope(QStringLiteral("credentials.use"));
     const auto network = result.permissionScope(QStringLiteral("network.http")).value("origins").toArray();
     for (const auto& binding : bindingScope.value("bindings").toArray()) {
@@ -338,6 +349,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
         for (const auto& item : network) allowed |= origin == exactHttpsOrigin(item.toString());
         if (!allowed || result.settingsSchema.isEmpty()) return fail(error, QStringLiteral("Credential binding needs a settings field and declared HTTP origin"));
     }
+    if (!validateSettingsMigrations(result, {}, error)) return false;
     if (output) *output = result;
     if (error) error->clear();
     return true;
@@ -381,6 +393,7 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
                 return fail(error,QStringLiteral("Credential binding does not reference a secret field"));
         }
     }
+    if (!validateSettingsMigrations(manifest, data, error)) return false;
     if (output) *output = manifest;
     if (contents) *contents = data;
     if (error) error->clear();
@@ -394,6 +407,90 @@ QJsonObject Manifest::permissionScope(const QString& capability) const
 {
     return requiredPermissions.contains(capability) ? requiredPermissions.value(capability).toObject() : optionalPermissions.value(capability).toObject();
 }
+namespace {
+bool uiSchema(const QJsonObject& schema, int depth, int& nodes)
+{
+    if (depth > 10 || --nodes < 0) return false;
+    static const QSet<QString> allowed{"type", "properties", "required", "additionalProperties", "items", "enum", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"};
+    for (auto it = schema.begin(); it != schema.end(); ++it) if (!allowed.contains(it.key())) return false;
+    const auto type = schema.value("type").toString();
+    if (!QStringList{"object", "array", "string", "number", "integer", "boolean"}.contains(type)) return false;
+    if ((schema.contains("minimum") || schema.contains("maximum")) && type != QLatin1String("number") && type != QLatin1String("integer")) return false;
+    if ((schema.contains("minLength") || schema.contains("maxLength")) && type != QLatin1String("string")) return false;
+    if (schema.contains("enum")) {
+        const auto values = schema.value("enum").toArray();
+        if (!schema.value("enum").isArray() || values.isEmpty() || values.size() > 64) return false;
+        QJsonArray seen;
+        for (const auto& value : values) {
+            if (seen.contains(value) || (type == QLatin1String("string") ? !value.isString() || value.toString().size() > 16384
+                : type == QLatin1String("boolean") ? !value.isBool()
+                : type == QLatin1String("number") || type == QLatin1String("integer") ? !value.isDouble() || !std::isfinite(value.toDouble()) || (type == QLatin1String("integer") && std::floor(value.toDouble()) != value.toDouble()) : true)) return false;
+            seen.append(value);
+        }
+    }
+    for (const auto& pair : {qMakePair(QStringLiteral("minimum"), QStringLiteral("maximum")), qMakePair(QStringLiteral("minLength"), QStringLiteral("maxLength")), qMakePair(QStringLiteral("minItems"), QStringLiteral("maxItems"))}) {
+        for (const auto& key : {pair.first, pair.second}) if (schema.contains(key)) {
+            const auto value = schema.value(key);
+            if (!value.isDouble() || !std::isfinite(value.toDouble())) return false;
+            if (key != QLatin1String("minimum") && key != QLatin1String("maximum")
+                && (value.toDouble() < 0 || std::floor(value.toDouble()) != value.toDouble() || value.toDouble() > 16384)) return false;
+        }
+        if (schema.contains(pair.first) && schema.contains(pair.second) && schema.value(pair.first).toDouble() > schema.value(pair.second).toDouble()) return false;
+    }
+    if (type == QLatin1String("object")) {
+        if (!schema.value("properties").isObject() || schema.value("additionalProperties") != QJsonValue(false)) return false;
+        const auto properties = schema.value("properties").toObject(); if (properties.size() > 64) return false;
+        for (auto it = properties.begin(); it != properties.end(); ++it) {
+            if (it.key() == QLatin1String("__proto__") || it.key() == QLatin1String("constructor") || it.key() == QLatin1String("prototype")
+                || it.key().size() > 96 || !it.value().isObject() || !uiSchema(it.value().toObject(), depth + 1, nodes)) return false;
+        }
+        if (schema.contains("required")) {
+            if (!schema.value("required").isArray()) return false;
+            QSet<QString> seen;
+            for (const auto& field : schema.value("required").toArray()) {
+                if (!field.isString() || !properties.contains(field.toString()) || seen.contains(field.toString())) return false;
+                seen.insert(field.toString());
+            }
+        }
+    } else if (schema.contains("properties") || schema.contains("required") || schema.contains("additionalProperties")) return false;
+    if (type == QLatin1String("array")) {
+        if (!schema.value("items").isObject() || !uiSchema(schema.value("items").toObject(), depth + 1, nodes)) return false;
+    } else if (schema.contains("items") || schema.contains("minItems") || schema.contains("maxItems")) return false;
+    return true;
+}
+bool uiValue(const QJsonObject& schema, const QJsonValue& value, int depth, int& nodes)
+{
+    if (depth > 10 || --nodes < 0) return false;
+    const auto type = schema.value("type").toString();
+    if (schema.contains("enum") && !schema.value("enum").toArray().contains(value)) return false;
+    if (type == QLatin1String("object")) {
+        if (!value.isObject()) return false;
+        const auto object = value.toObject(), properties = schema.value("properties").toObject();
+        for (auto it = object.begin(); it != object.end(); ++it)
+            if (!properties.contains(it.key()) || !uiValue(properties.value(it.key()).toObject(), it.value(), depth + 1, nodes)) return false;
+        for (const auto& field : schema.value("required").toArray()) if (!object.contains(field.toString())) return false;
+    } else if (type == QLatin1String("array")) {
+        if (!value.isArray()) return false;
+        const auto array = value.toArray();
+        if (array.size() < schema.value("minItems").toInt(0) || array.size() > std::min(1000, schema.value("maxItems").toInt(1000))) return false;
+        for (const auto& child : array) if (!uiValue(schema.value("items").toObject(), child, depth + 1, nodes)) return false;
+    } else if (type == QLatin1String("string")) {
+        if (!value.isString() || value.toString().size() < schema.value("minLength").toInt(0)
+            || value.toString().size() > std::min(16384, schema.value("maxLength").toInt(16384))) return false;
+    } else if (type == QLatin1String("boolean")) { if (!value.isBool()) return false; }
+    else {
+        if (!value.isDouble() || !std::isfinite(value.toDouble()) || (type == QLatin1String("integer") && std::floor(value.toDouble()) != value.toDouble())) return false;
+        if ((schema.contains("minimum") && value.toDouble() < schema.value("minimum").toDouble())
+            || (schema.contains("maximum") && value.toDouble() > schema.value("maximum").toDouble())) return false;
+    }
+    return true;
+}
+}
+bool validateUiSchema(const QJsonObject& schema)
+{ int nodes = 256; return uiSchema(schema, 0, nodes); }
+bool validateUiValue(const QJsonObject& schema, const QJsonValue& value)
+{ int nodes = 4096; return validateUiSchema(schema) && uiValue(schema, value, 0, nodes); }
+
 const Contribution* Manifest::contribution(const QString& id) const
 {
     for (const auto& item : contributions) if (item.id == id) return &item;

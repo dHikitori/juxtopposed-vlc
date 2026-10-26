@@ -22,6 +22,8 @@ struct SemanticVersion
 
 bool versionSatisfies(const QString& version, const QString& range);
 bool portablePackagePath(const QString& path);
+bool validateUiSchema(const QJsonObject& schema);
+bool validateUiValue(const QJsonObject& schema, const QJsonValue& value);
 // Returns an empty string for non-HTTPS origins, credentials, paths or fragments.
 QString exactHttpsOrigin(const QString& origin);
 

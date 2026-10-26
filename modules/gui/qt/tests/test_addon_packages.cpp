@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include "addons/addon_manifest.hpp"
 #include "addons/addon_package_store.hpp"
+#include "addons/addon_manager.hpp"
 
 using namespace vlc::addons;
 
@@ -37,6 +38,26 @@ class TestAddonPackages : public QObject
             && write(QDir(directory).filePath("LICENSE"), "test license\n")
             && write(QDir(directory).filePath("theme.json"), "{\"contract\":\"theme@1\"}\n");
     }
+    static bool settingsPackage(const QString& directory, const QString& packageVersion,
+                                int settingsVersion, const QString& field, const QJsonArray& operations = {})
+    {
+        auto document = manifest(packageVersion);
+        auto api = document.value("api").toObject(), contracts = api.value("contracts").toObject();
+        contracts.insert("settings", "^1.0.0"); api.insert("contracts", contracts); document.insert("api", api);
+        auto files = document.value("files").toArray(); files.append("settings/schema.json");
+        QJsonObject settings{{"version", settingsVersion}, {"schema", "settings/schema.json"}};
+        if (!operations.isEmpty()) {
+            files.append("settings/migrate.json");
+            settings.insert("migrations", QJsonArray{QJsonObject{{"from", settingsVersion - 1},
+                {"to", settingsVersion}, {"resource", "settings/migrate.json"}}});
+            if (!write(QDir(directory).filePath("settings/migrate.json"), QJsonDocument(QJsonObject{
+                {"formatVersion", 1}, {"operations", operations}}).toJson())) return false;
+        }
+        document.insert("files", files); document.insert("settings", settings);
+        return populate(directory, document) && write(QDir(directory).filePath("settings/schema.json"),
+            QJsonDocument(QJsonObject{{"type", "object"}, {"properties", QJsonObject{{field, QJsonObject{{"type", "string"}}}}},
+                {"required", QJsonArray{field}}, {"additionalProperties", false}}).toJson());
+    }
     static ReleaseIdentity release(QString version = QStringLiteral("1.0.0"), QChar object = QLatin1Char('a'))
     {
         ReleaseIdentity identity;
@@ -63,6 +84,194 @@ class TestAddonPackages : public QObject
         return process.waitForFinished(10000) && process.exitCode() == 0;
     }
 private slots:
+    void removedDistributionPackageNeedsExplicitHostRestore()
+    {
+        QTemporaryDir source, storage; const QString id = QStringLiteral("org.example.package");
+        QVERIFY(populate(source.path(), manifest()));
+        {
+            AddonManager manager(storage.path());
+            QVERIFY(manager.ensureDistributionPackage(source.path(), id));
+            QVERIFY(manager.uninstall(id, true));
+        }
+        PackageStore store(storage.path()); InstalledPackage installed;
+        QVERIFY(store.distributionSuppressed(id)); QVERIFY(!store.installed(id, &installed));
+        AddonManager restarted(storage.path());
+        QVERIFY(restarted.ensureDistributionPackage(source.path(), id));
+        QVERIFY(!store.installed(id, &installed));
+        QVERIFY(restarted.packages().first().toMap().value("suppressed").toBool());
+        QVERIFY(!restarted.restoreDistributionPackage(QStringLiteral("org.example.untrusted")));
+        QVERIFY(restarted.restoreDistributionPackage(id));
+        QVERIFY(!store.distributionSuppressed(id)); QVERIFY(store.installed(id, &installed)); QVERIFY(installed.enabled);
+        QVERIFY(restarted.setEnabled(id, false));
+        AddonManager afterDisable(storage.path()); QVERIFY(afterDisable.ensureDistributionPackage(source.path(), id));
+        QVERIFY(store.installed(id, &installed)); QVERIFY(!installed.enabled);
+        PackageCandidate gitUpdate;
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &gitUpdate));
+        QVERIFY(store.install(gitUpdate, {}));
+        QVERIFY(afterDisable.ensureDistributionPackage(source.path(), id));
+        QVERIFY(store.installed(id, &installed)); QVERIFY(!installed.identity.distributionSource); QVERIFY(!installed.enabled);
+    }
+    void settingsMigrationCommitsWithMatchingRollbackSnapshot()
+    {
+        QTemporaryDir source, storage; QString error;
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.0.0"), 1, QStringLiteral("language")));
+        PackageCandidate first, next; PackageStore store(storage.path());
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &first, &error));
+        QVERIFY(store.install(first, {}, &error));
+        QVERIFY(store.saveSettings(first.manifest.id, QJsonObject{{"language", "en"}}, 0, &error));
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.1.0"), 2, QStringLiteral("locale"),
+            QJsonArray{QJsonObject{{"op", "rename"}, {"from", "language"}, {"to", "locale"}}}));
+        QVERIFY2(PackageStore::inspectDirectory(source.path(), release(QStringLiteral("1.1.0")), &next, &error), qPrintable(error));
+        QVERIFY2(store.install(next, {}, &error), qPrintable(error));
+        QJsonObject settings; quint64 revision;
+        QVERIFY(store.settings(first.manifest.id, &settings, &revision)); QCOMPARE(settings, QJsonObject({{"locale", "en"}}));
+        QCOMPARE(revision, quint64(2));
+        QVERIFY(store.saveSettings(first.manifest.id, QJsonObject{{"locale", "fr"}}, revision, &error));
+        QVERIFY(store.rollback(first.manifest.id, &error));
+        QVERIFY(store.settings(first.manifest.id, &settings, &revision)); QCOMPARE(settings, QJsonObject({{"language", "en"}}));
+        QCOMPARE(revision, quint64(1));
+        QVERIFY(store.rollback(first.manifest.id, &error));
+        QVERIFY(store.settings(first.manifest.id, &settings)); QCOMPARE(settings, QJsonObject({{"locale", "fr"}}));
+    }
+
+    void failedMigrationAndCommitKeepTheActiveGeneration()
+    {
+        QTemporaryDir source, storage; QString error;
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.0.0"), 1, QStringLiteral("language")));
+        PackageCandidate first, next; PackageStore store(storage.path());
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &first)); QVERIFY(store.install(first, {}));
+        QVERIFY(store.saveSettings(first.manifest.id, QJsonObject{{"language", "en"}}, 0));
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.1.0"), 2, QStringLiteral("locale"),
+            QJsonArray{QJsonObject{{"op", "remove"}, {"field", "language"}},
+                QJsonObject{{"op", "default"}, {"field", "locale"}, {"value", true}}}));
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(QStringLiteral("1.1.0")), &next));
+        QVERIFY(!store.install(next, {}, &error));
+        InstalledPackage active; QVERIFY(store.installed(first.manifest.id, &active)); QCOMPARE(active.digest, first.digest);
+        QJsonObject settings; QVERIFY(store.settings(first.manifest.id, &settings)); QCOMPARE(settings, QJsonObject({{"language", "en"}}));
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.1.0"), 2, QStringLiteral("locale"),
+            QJsonArray{QJsonObject{{"op", "remove"}, {"field", "language"}}}));
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(QStringLiteral("1.1.0")), &next));
+        QVERIFY(!store.install(next, {}, &error)); QVERIFY(error.contains(QStringLiteral("required settings field")));
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.2.0"), 3, QStringLiteral("locale"),
+            QJsonArray{QJsonObject{{"op", "rename"}, {"from", "language"}, {"to", "locale"}}}));
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(QStringLiteral("1.2.0")), &next));
+        QVERIFY(!store.install(next, {}, &error)); QVERIFY(error.contains(QStringLiteral("step is missing")));
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.1.0"), 2, QStringLiteral("locale"),
+            QJsonArray{QJsonObject{{"op", "rename"}, {"from", "language"}, {"to", "locale"}}}));
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(QStringLiteral("1.1.0")), &next));
+        const auto backup = QDir(storage.path()).filePath(QStringLiteral("packages/") + first.manifest.id + QStringLiteral("/state.json.backup"));
+        QVERIFY(QFile::remove(backup)); QVERIFY(QDir().mkdir(backup));
+        QVERIFY(!store.install(next, {}, &error));
+        QVERIFY(store.installed(first.manifest.id, &active)); QCOMPARE(active.digest, first.digest);
+        QVERIFY(QDir(backup).removeRecursively());
+        QVERIFY2(store.install(next, {}, &error), qPrintable(error));
+    }
+
+    void safeModeAndStateBackupNeedExplicitRecovery()
+    {
+        QTemporaryDir source, storage; QString error;
+        QVERIFY(populate(source.path(), manifest())); PackageCandidate candidate;
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &candidate));
+        PackageStore store(storage.path()); QVERIFY(store.install(candidate, {}));
+        QVERIFY(store.setEnabled(candidate.manifest.id, true));
+        QVERIFY(store.setSafeMode(true)); InstalledPackage active;
+        QVERIFY(store.installed(candidate.manifest.id, &active)); QVERIFY(!active.enabled);
+        QVERIFY(store.setSafeMode(false)); QVERIFY(store.installed(candidate.manifest.id, &active)); QVERIFY(active.enabled);
+        const auto state = QDir(storage.path()).filePath(QStringLiteral("packages/") + candidate.manifest.id + QStringLiteral("/state.json"));
+        QVERIFY(write(state, "interrupted-state-fixture"));
+        QVERIFY(store.installed(candidate.manifest.id, &active)); QVERIFY(active.recoveryRequired); QVERIFY(!active.enabled);
+        QVERIFY(!store.install(candidate, {}, &error));
+        QVERIFY2(store.recover(candidate.manifest.id, &error), qPrintable(error));
+        QVERIFY(store.installed(candidate.manifest.id, &active)); QVERIFY(!active.recoveryRequired); QVERIFY(!active.enabled);
+        QVERIFY(store.setEnabled(candidate.manifest.id, true)); QVERIFY(store.installed(candidate.manifest.id, &active)); QVERIFY(active.enabled);
+        QVERIFY(QFile::remove(state)); QVERIFY(store.installedIds().contains(candidate.manifest.id));
+        QVERIFY(!store.install(candidate, {}, &error)); QVERIFY(store.recover(candidate.manifest.id, &error));
+    }
+
+    void retainedGenerationsHaveABoundedCoherentHistory()
+    {
+        QTemporaryDir source, storage; PackageStore store(storage.path()); const QString id = QStringLiteral("org.example.package");
+        for (int index = 0; index < 6; ++index) {
+            const QString version = QStringLiteral("1.0.") + QString::number(index);
+            QVERIFY(populate(source.path(), manifest(version))); PackageCandidate candidate;
+            QVERIFY(PackageStore::inspectDirectory(source.path(), release(version, QChar(QLatin1Char('a').unicode() + index)), &candidate));
+            QVERIFY(store.install(candidate, {})); quint64 revision;
+            QVERIFY(store.settings(id, nullptr, &revision)); QVERIFY(store.saveSettings(id, QJsonObject{{"value", index}}, revision));
+        }
+        QCOMPARE(store.retainedGenerations(id).size(), 4);
+        QVERIFY(store.rollback(id)); QJsonObject settings;
+        QVERIFY(store.settings(id, &settings)); QCOMPARE(settings, QJsonObject({{"value", 4}}));
+        QVERIFY(store.rollback(id)); QVERIFY(store.settings(id, &settings)); QCOMPARE(settings, QJsonObject({{"value", 5}}));
+    }
+
+    void recoveryRejectsCorruptReleaseAndRetainsNewerSettings()
+    {
+        QTemporaryDir source, storage; PackageStore store(storage.path()); QString error;
+        PackageCandidate first, next;
+        QVERIFY(populate(source.path(), manifest())); QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &first));
+        QVERIFY(store.install(first, {})); QVERIFY(store.saveSettings(first.manifest.id, QJsonObject{{"value", 1}}, 0));
+        QVERIFY(populate(source.path(), manifest(QStringLiteral("1.1.0"))));
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(QStringLiteral("1.1.0")), &next));
+        QVERIFY(store.install(next, {})); QVERIFY(store.saveSettings(first.manifest.id, QJsonObject{{"value", 2}}, 1));
+        InstalledPackage active; QVERIFY(store.installed(first.manifest.id, &active));
+        const auto resource = QDir(active.directory).filePath(QStringLiteral("theme.json"));
+        QVERIFY(QFile::setPermissions(resource, QFile::ReadOwner | QFile::WriteOwner)); QVERIFY(write(resource, "corrupt-release-fixture"));
+        QVERIFY(!store.installed(first.manifest.id, &active)); QVERIFY2(store.recover(first.manifest.id, &error), qPrintable(error));
+        QVERIFY(store.installed(first.manifest.id, &active)); QCOMPARE(active.digest, first.digest); QVERIFY(!active.enabled);
+        QJsonObject settings; QVERIFY(store.settings(first.manifest.id, &settings)); QCOMPARE(settings, QJsonObject({{"value", 1}}));
+        QVERIFY(store.retainedGenerations(first.manifest.id).size() >= 2);
+    }
+
+    void visualizerRejectsRequiredAndOptionalBackgroundSessions()
+    {
+        auto document = manifest();
+        auto api = document.value("api").toObject();
+        api.insert("contracts", QJsonObject{{"visualizer", "^1.0.0"}});
+        document.insert("api", api);
+        document.insert("contributions", QJsonArray{QJsonObject{{"id", "visualizer"},
+            {"type", "visualizer"}, {"contract", "visualizer@1"}, {"scene", "theme.json"}}});
+        Manifest parsed; QString error;
+        QVERIFY2(Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error), qPrintable(error));
+        for (const auto* category : {"required", "optional"}) {
+            document.insert("permissions", QJsonObject{{QLatin1String(category),
+                QJsonObject{{"session.background", QJsonObject{}}}}});
+            QVERIFY(!Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error));
+            QVERIFY(error.contains(QStringLiteral("background session")));
+        }
+    }
+
+    void distributionBootstrapPreservesUserStateAndGitUpdates()
+    {
+        QTemporaryDir source, storage; QVERIFY(source.isValid()); QVERIFY(storage.isValid());
+        QVERIFY(populate(source.path(), manifest()));
+        AddonManager manager(storage.path());
+        QVERIFY(manager.ensureDistributionPackage(source.path(), QStringLiteral("org.example.package")));
+        PackageStore store(storage.path()); InstalledPackage installed;
+        QVERIFY(store.installed(QStringLiteral("org.example.package"), &installed));
+        QVERIFY(installed.enabled); QVERIFY(installed.identity.distributionSource); QVERIFY(!installed.identity.developerSource);
+        QCOMPARE(installed.identity.objectFormat, QStringLiteral("distribution-sha256"));
+        QVERIFY(manager.packages().first().toMap().value(QStringLiteral("commit")).toString().isEmpty());
+        QCOMPARE(manager.packages().first().toMap().value(QStringLiteral("publisherVerified")).toBool(), false);
+        QVERIFY(manager.setEnabled(QStringLiteral("org.example.package"), false));
+        QVERIFY(store.saveSettings(QStringLiteral("org.example.package"), {{QStringLiteral("saved"), 7}}, 0));
+        QVERIFY(manager.ensureDistributionPackage(source.path(), QStringLiteral("org.example.package")));
+        QVERIFY(store.installed(QStringLiteral("org.example.package"), &installed)); QVERIFY(!installed.enabled);
+        const auto digest = installed.digest;
+        PackageCandidate gitRelease;
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &gitRelease));
+        QVERIFY(store.install(gitRelease, {}));
+        QVERIFY(store.installed(QStringLiteral("org.example.package"), &installed));
+        QVERIFY(!installed.identity.distributionSource); QCOMPARE(installed.identity.commitId, release().commitId);
+        QCOMPARE(installed.digest, digest); QVERIFY(!installed.enabled);
+        QJsonObject settings; QVERIFY(store.settings(QStringLiteral("org.example.package"), &settings));
+        QCOMPARE(settings.value(QStringLiteral("saved")).toInt(), 7);
+        QVERIFY(populate(source.path(), manifest(QStringLiteral("1.1.0"))));
+        QVERIFY(manager.ensureDistributionPackage(source.path(), QStringLiteral("org.example.package")));
+        QVERIFY(store.installed(QStringLiteral("org.example.package"), &installed));
+        QCOMPARE(installed.manifest.version, QStringLiteral("1.0.0")); QVERIFY(!installed.identity.distributionSource);
+        QVERIFY(!manager.ensureDistributionPackage(source.path(), QStringLiteral("org.example.wrong")));
+    }
+
     void semanticVersionOrdering()
     {
         SemanticVersion a, b;
@@ -276,6 +485,18 @@ private slots:
         QJsonObject persisted;
         QVERIFY(store.settings(candidate.manifest.id, &persisted));
         QCOMPARE(persisted, valid);
+        object.insert("version", "1.1.0");
+        auto permissions = object.value("permissions").toObject();
+        auto required = permissions.value("required").toObject();
+        auto credentials = required.value("credentials.use").toObject();
+        auto binding = credentials.value("bindings").toArray().first().toObject();
+        binding.insert("header", "X-Api-Key"); credentials.insert("bindings", QJsonArray{binding});
+        required.insert("credentials.use", credentials); permissions.insert("required", required); object.insert("permissions", permissions);
+        QVERIFY(populate(package.path(), object)); PackageCandidate update;
+        QVERIFY(PackageStore::inspectDirectory(package.path(), release(QStringLiteral("1.1.0")), &update, &error));
+        QVERIFY(!store.install(update, update.manifest.requiredPermissions, &error));
+        QVERIFY(error.contains(QStringLiteral("credential binding")));
+        QVERIFY(store.settings(candidate.manifest.id, &persisted)); QCOMPARE(persisted, valid);
     }
     void referenceSubtitleAddonManifest()
     {
@@ -314,6 +535,10 @@ private slots:
         PackageCandidate changed;
         QVERIFY2(PackageStore::fetchGitTag(repository.path(), "v1.0.0", &changed, &error, true), qPrintable(error));
         QVERIFY(!store.install(changed, {}, &error));
+        QVERIFY(git(repository.path(), {"tag", "1.0.0"}));
+        QVERIFY(PackageStore::fetchGitTag(repository.path(), "1.0.0", &changed, &error, true));
+        QVERIFY(!store.install(changed, {}, &error));
+        QVERIFY(error.contains(QStringLiteral("version already has different locked contents")));
         QVERIFY(!PackageStore::fetchGitTag(repository.path(), "main", &changed, &error, true));
     }
 };

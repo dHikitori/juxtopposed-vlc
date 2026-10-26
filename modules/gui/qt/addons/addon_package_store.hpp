@@ -13,6 +13,7 @@ struct ReleaseIdentity
     QString source, tag, tagObjectId, commitId;
     QString objectFormat = QStringLiteral("sha1");
     bool developerSource = false;
+    bool distributionSource = false;
 };
 
 struct PackageCandidate
@@ -32,6 +33,7 @@ struct InstalledPackage
     QString previousDigest;
     QJsonObject grants;
     bool enabled = false;
+    bool recoveryRequired = false;
     quint64 generation = 0;
 };
 
@@ -54,12 +56,20 @@ public:
     // Versioned nonsecret settings live in the same state pointer as the release.
     bool settings(const QString& id, QJsonObject*, quint64* revision = nullptr, QString* error = nullptr) const;
     bool saveSettings(const QString& id, const QJsonObject&, quint64 expectedRevision, QString* error = nullptr);
+    QJsonArray retainedGenerations(const QString& id, QString* error = nullptr) const;
+    bool recover(const QString& id, QString* error = nullptr);
+    bool safeMode() const;
+    bool setSafeMode(bool enabled, QString* error = nullptr);
+    QStringList credentialReferences(const QString& id, const QString& field = {}) const;
+    bool distributionSuppressed(const QString& id) const;
+    bool setDistributionSuppressed(const QString& id, bool suppressed, QString* error = nullptr);
 
 private:
     QString m_root;
     bool loadState(const QString& id, QJsonObject*, QString* error) const;
     bool saveState(const QString& id, const QJsonObject&, QString* error) const;
     QString releaseDirectory(const QString& id, const QString& digest) const;
+    bool validateSnapshot(const QString& id, const QJsonObject&, QString* error) const;
 };
 
 } // namespace vlc::addons

@@ -71,8 +71,11 @@ private slots:
         QVERIFY(manager.saveAddonSettings(id, {{"language", "fr"}}, {}));
         QVERIFY(!manager.saveAddonSettings(id, {{"language", "xx/../../"}}, replace(QStringLiteral("replacement-secret"))));
         QCOMPARE(manager.settingsValues(id).value("language").toString(), QStringLiteral("fr"));
-        QVERIFY(!manager.saveAddonSettings(id, {{"language", "en"}}, {{"apiKey", QVariantMap{{"operation", "delete"}}}}));
-        QVERIFY(manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
+        QSignalSpy withdrawn(&manager, &AddonManager::packageWithdrawn);
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, {{"apiKey", QVariantMap{{"operation", "delete"}}}}));
+        QVERIFY(!withdrawn.isEmpty());
+        QVERIFY(!manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
+        QVERIFY(!manager.providersForFeature(QStringLiteral("subtitles")).first().toMap().value("configured").toBool());
         AddonManager restarted(storage.path());
         QVERIFY(!restarted.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
     }
@@ -86,6 +89,22 @@ private slots:
         QVERIFY(store.present(QStringLiteral("org.example.one"), secret.reference));
         store.remove(QStringLiteral("org.example.one"), secret.reference);
         QVERIFY(!store.present(QStringLiteral("org.example.one"), secret.reference));
+    }
+    void fullRemovalRevokesAllCredentialGenerations() {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("first-unit-secret"))));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("second-unit-secret"))));
+        PackageStore store(storage.path()); const auto references = store.credentialReferences(id);
+        QCOMPARE(references.size(), 2);
+        QVERIFY(manager.uninstall(id, true)); QVERIFY(manager.installLocalPackage(reference(), true));
+        quint64 revision = 0;
+        for (const auto& reference : references) {
+            QVERIFY(store.saveSettings(id, {{"language", "en"},
+                {"_credentials", QJsonObject{{"apiKey", reference}}}}, revision++));
+            QVERIFY(!manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
+        }
     }
     void realPortableWorkerHasNoAmbientCredential() {
         const auto executable = qEnvironmentVariable("VLC_ADDON_WORKER");

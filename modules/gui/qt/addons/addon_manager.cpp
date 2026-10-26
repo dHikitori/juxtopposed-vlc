@@ -149,59 +149,77 @@ bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input
     InstalledPackage package; QString error;
     if (!m_store.installed(id, &package, &error)) return changed(false, error);
     const auto document = schema(package), properties = document.value("properties").toObject();
-    if (document.value("type").toString() != QLatin1String("object") || properties.size() > 64) return changed(false, tr("The add-on settings schema is unsupported."));
+    if (document.value("type").toString() != QLatin1String("object") || properties.size() > 64) return changed(false, tr("VLC cannot use this settings schema."));
     QJsonObject saved; quint64 expectedRevision = 0;
     if (!m_store.settings(id, &saved, &expectedRevision, &error)) return changed(false, error);
     const auto originalReferences = saved.value("_credentials").toObject();
     auto references = originalReferences; QJsonObject values;
-    QStringList created;
+    QStringList created, deletedFields;
     auto reject = [&](const QString& message) { for (const auto& ref : created) m_secrets.remove(id, ref); return changed(false, message); };
     const auto incoming = QJsonObject::fromVariantMap(input);
     for (auto it = incoming.begin(); it != incoming.end(); ++it) {
         const auto field = properties.value(it.key()).toObject();
         if (it.key().startsWith('_') || field.isEmpty() || secretField(field) || !valueValid(it.value(), field))
-            return reject(tr("Check the add-on's settings values."));
+            return reject(tr("Make sure that the add-on settings are correct."));
         values.insert(it.key(), it.value());
     }
     for (auto it = secretOperations.begin(); it != secretOperations.end(); ++it) {
         const auto field = properties.value(it.key()).toObject(); const auto operation = it.value().toMap();
         const auto action = operation.value("operation").toString();
         if (!secretField(field) || (action != QLatin1String("keep") && action != QLatin1String("replace") && action != QLatin1String("delete")))
-            return reject(tr("The credential operation is invalid."));
-        if (action == QLatin1String("delete")) references.remove(it.key());
+            return reject(tr("VLC cannot use this credential operation."));
+        if (action == QLatin1String("delete")) { references.remove(it.key()); deletedFields.append(it.key()); }
         if (action == QLatin1String("replace")) {
-            if (!valueValid(QJsonValue::fromVariant(operation.value("value")), field)) return reject(tr("Check the credential field."));
+            if (!valueValid(QJsonValue::fromVariant(operation.value("value")), field)) return reject(tr("Make sure that the credential is correct."));
             const auto result = m_secrets.create(id, it.key(), operation.value("value").toString().toUtf8(), operation.value("sessionOnly").toBool());
-            if (result.reference.isEmpty()) return reject(tr("The secure credential store is unavailable. Choose session-only storage explicitly to continue."));
+            if (result.reference.isEmpty()) return reject(tr("The secure credential store is not available. Select temporary storage to keep the credential until VLC closes."));
             references.insert(it.key(), result.reference); created.append(result.reference);
         }
     }
     for (const auto& required : document.value("required").toArray()) {
         const auto name = required.toString(); const auto field = properties.value(name).toObject();
         if (secretField(field)) {
-            if (!m_secrets.present(id, references.value(name).toString())) return reject(tr("Set up the required account or API key first."));
+            if (!deletedFields.contains(name) && !m_secrets.present(id, references.value(name).toString())) return reject(tr("Enter the account data or API key first."));
         } else if (!values.contains(name)) {
             if (field.contains("default") && valueValid(field.value("default"), field)) values.insert(name, field.value("default"));
-            else return reject(tr("Complete the required settings."));
+            else return reject(tr("Enter all necessary settings."));
         }
     }
     values.insert("_credentials", references);
     if (!m_store.saveSettings(id, values, expectedRevision, &error)) return reject(error);
-    // Existing references are retained for release/data rollback. They are
-    // removed only when all retained generations are explicitly discarded.
-    withdraw(id); return changed(true);
+    // Keep old credentials for rollback. Explicit account deletion revokes all generations.
+    withdraw(id);
+    for (const auto& field : deletedFields)
+        for (const auto& reference : m_store.credentialReferences(id, field)) m_secrets.remove(id, reference);
+    return changed(true);
 }
 
 QVariantList AddonManager::packages() const
 {
     QVariantList result;
-    for (const auto& id : m_store.installedIds()) {
-        InstalledPackage package; if (!m_store.installed(id, &package)) continue;
+    const auto installedIds = m_store.installedIds();
+    for (const auto& id : installedIds) {
+        InstalledPackage package; QString error;
+        if (!m_store.installed(id, &package, &error)) {
+            result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", true}, {"enabled", false},
+                {"configured", false}, {"recoveryRequired", true}, {"error", error}});
+            continue;
+        }
         result.append(QVariantMap{{"id", id}, {"name", package.manifest.name}, {"version", package.manifest.version},
-            {"source", package.identity.source}, {"tag", package.identity.tag}, {"commit", package.identity.commitId},
+            {"source", package.identity.source}, {"tag", package.identity.tag},
+            {"commit", package.identity.distributionSource ? QString{} : package.identity.commitId},
+            {"distributionSource", package.identity.distributionSource}, {"publisherVerified", false},
             {"digest", QString::fromLatin1(package.digest)}, {"enabled", package.enabled},
-            {"configured", configured(package)}, {"hasPrevious", !package.previousDigest.isEmpty()}});
+            {"configured", configured(package)}, {"hasPrevious", !package.previousDigest.isEmpty()},
+            {"installed", true}, {"recoveryRequired", package.recoveryRequired}});
     }
+    for (auto it = m_distributionDirectories.begin(); it != m_distributionDirectories.end(); ++it)
+        if (!installedIds.contains(it.key()) && m_store.distributionSuppressed(it.key())) {
+            const auto manifest = readObject(QDir(it.value()).filePath(QStringLiteral("addon.json")));
+            result.append(QVariantMap{{"id", it.key()}, {"name", manifest.value("name").toString(it.key())},
+                {"distributionSource", true}, {"publisherVerified", false}, {"installed", false},
+                {"suppressed", true}, {"enabled", false}, {"configured", false}});
+        }
     return result;
 }
 QVariantList AddonManager::contributionsOfType(const QString& type, bool includeDisabled) const
@@ -231,6 +249,17 @@ QJsonObject AddonManager::contributionResource(const QString& global, const QStr
 }
 QJsonObject AddonManager::grantedScope(const QString& id, const QString& capability) const
 { InstalledPackage package; return m_store.installed(id, &package) && package.enabled ? package.grants.value(capability).toObject() : QJsonObject{}; }
+QByteArray AddonManager::contributionFile(const QString& global, const QString& path, qint64 maximumBytes) const
+{
+    if (!portablePackagePath(path) || maximumBytes < 1 || maximumBytes > Manifest::MaximumFileBytes) return {};
+    InstalledPackage package;
+    if (!m_store.installed(packagePart(global), &package) || !package.enabled
+        || !package.manifest.contribution(localPart(global)) || !package.manifest.files.contains(path)) return {};
+    QFile file(QDir(package.directory).filePath(path));
+    if (QFileInfo(file).isSymLink() || file.size() < 0 || file.size() > maximumBytes || !file.open(QIODevice::ReadOnly)) return {};
+    const auto bytes = file.read(maximumBytes + 1);
+    return bytes.size() <= maximumBytes ? bytes : QByteArray{};
+}
 QVariantList AddonManager::providersForFeature(const QString& feature) const
 {
     QVariantList result;
@@ -270,12 +299,12 @@ void AddonManager::unregisterBuiltinProvider(const QString& id)
 { if (m_builtinProviders.remove(id)) changed(true); }
 bool AddonManager::setProviderOrder(const QString& feature, const QStringList& ids)
 {
-    if (feature.isEmpty() || feature.startsWith('_') || feature.size() > 128 || ids.size() > 128 || QSet<QString>(ids.begin(), ids.end()).size() != ids.size()) return changed(false, tr("The provider order is invalid."));
+    if (feature.isEmpty() || feature.startsWith('_') || feature.size() > 128 || ids.size() > 128 || QSet<QString>(ids.begin(), ids.end()).size() != ids.size()) return changed(false, tr("The provider order is not correct."));
     auto order = m_providerOrder; order.insert(feature, QJsonArray::fromStringList(ids));
     QSaveFile file(QDir(m_store.storageDirectory()).filePath(QStringLiteral("provider-order.json")));
-    if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("The provider preferences could not be saved."));
+    if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("VLC cannot save the provider settings."));
     const auto bytes = QJsonDocument(order).toJson(QJsonDocument::Compact);
-    if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("The provider preferences could not be saved."));
+    if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("VLC cannot save the provider settings."));
     m_providerOrder = order; return changed(true);
 }
 
@@ -297,7 +326,7 @@ QVariantMap AddonManager::pendingPackage() const
 }
 bool AddonManager::stageLocalPackage(const QString& directory)
 {
-    if (busy()) return changed(false, tr("Wait for the repository lookup to finish or cancel it."));
+    if (busy()) return changed(false, tr("Wait for the repository request to end. You can cancel the request."));
     Manifest manifest; QString error;
     if (!Manifest::loadDirectory(directory, &manifest, nullptr, &error)) return changed(false, error);
     ReleaseIdentity identity; identity.source = manifest.source.toString(); identity.tag = QStringLiteral("v") + manifest.version;
@@ -306,10 +335,42 @@ bool AddonManager::stageLocalPackage(const QString& directory)
     if (!PackageStore::inspectDirectory(directory, identity, candidate.get(), &error)) return changed(false, error);
     m_pendingPackage = std::move(candidate); return changed(true);
 }
+bool AddonManager::ensureDistributionPackage(const QString& directory, const QString& expectedPackageId)
+{
+    if (expectedPackageId.isEmpty()) return changed(false, tr("The distribution package ID is invalid."));
+    m_distributionDirectories.insert(expectedPackageId, directory);
+    if (m_store.distributionSuppressed(expectedPackageId)) return true;
+    InstalledPackage existing;
+    if (m_store.installed(expectedPackageId, &existing)) return true;
+    if (QFileInfo::exists(QDir(m_store.storageDirectory()).filePath(QStringLiteral("packages/") + expectedPackageId + QStringLiteral("/state.json"))))
+        return changed(false, tr("The installed package state is invalid. Restore the package before the next import."));
+    Manifest manifest; QString error;
+    if (!Manifest::loadDirectory(directory, &manifest, nullptr, &error)) return changed(false, error);
+    if (manifest.id != expectedPackageId)
+        return changed(false, tr("The distribution package ID is invalid."));
+    ReleaseIdentity identity;
+    identity.source = manifest.source.toString(); identity.tag = QStringLiteral("v") + manifest.version;
+    identity.distributionSource = true;
+    PackageCandidate candidate;
+    if (!PackageStore::inspectDirectory(directory, identity, &candidate, &error)
+        || !m_store.install(candidate, manifest.requiredPermissions, &error)
+        || !m_store.setEnabled(manifest.id, true, &error)) return changed(false, error);
+    return changed(true);
+}
+bool AddonManager::restoreDistributionPackage(const QString& id)
+{
+    if (!m_distributionDirectories.contains(id))
+        return changed(false, tr("VLC has no trusted distribution path for this package."));
+    QString error;
+    if (!m_store.setDistributionSuppressed(id, false, &error)) return changed(false, error);
+    if (ensureDistributionPackage(m_distributionDirectories.value(id), id)) return true;
+    m_store.setDistributionSuppressed(id, true);
+    return false;
+}
 bool AddonManager::stageRepository(const QString& source, const QString& tag)
 {
-    if (busy()) return changed(false, tr("A repository lookup is already running."));
-    if (source.size() > 8192 || tag.size() > 128) return changed(false, tr("The repository or tag is too long."));
+    if (busy()) return changed(false, tr("A repository request is already active."));
+    if (source.size() > 8192 || tag.size() > 128) return changed(false, tr("The repository address or tag is too long."));
     m_pendingPackage.reset();
     auto candidate = std::make_shared<PackageCandidate>();
     auto error = std::make_shared<QString>();
@@ -321,14 +382,14 @@ bool AddonManager::stageRepository(const QString& source, const QString& tag)
     connect(thread, &QThread::finished, this, [this, thread, candidate, error, success] {
         if (m_repositoryThread == thread) m_repositoryThread = nullptr;
         if (*success && !thread->isInterruptionRequested()) m_pendingPackage = candidate;
-        changed(*success && !thread->isInterruptionRequested(), thread->isInterruptionRequested() ? tr("Repository lookup cancelled.") : *error);
+        changed(*success && !thread->isInterruptionRequested(), thread->isInterruptionRequested() ? tr("VLC canceled the repository request.") : *error);
         thread->deleteLater();
     });
     thread->start(); return changed(true);
 }
 bool AddonManager::approvePendingPackage(bool enable)
 {
-    if (busy() || !m_pendingPackage) return changed(false, tr("Review an add-on package first."));
+    if (busy() || !m_pendingPackage) return changed(false, tr("Select an add-on package first."));
     const auto candidate = m_pendingPackage; QString error;
     withdraw(candidate->manifest.id);
     if (!m_store.install(*candidate, candidate->manifest.requiredPermissions, &error)) return changed(false, error);
@@ -345,7 +406,7 @@ bool AddonManager::installLocalPackage(const QString& directory, bool approve)
 {
     Manifest manifest; QString error;
     if (!Manifest::loadDirectory(directory, &manifest, nullptr, &error)) return changed(false, error);
-    if (!approve && !manifest.requiredPermissions.isEmpty()) return changed(false, tr("Review and approve the add-on permissions first."));
+    if (!approve && !manifest.requiredPermissions.isEmpty()) return changed(false, tr("Give permission before you install this add-on."));
     ReleaseIdentity identity; identity.source = manifest.source.toString(); identity.tag = QStringLiteral("v") + manifest.version;
     identity.developerSource = true;
     PackageCandidate candidate;
@@ -361,9 +422,9 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
         auto document = m_providerOrder, preferences = document.value("_builtinEnabled").toObject();
         preferences.insert(id, enabled); document.insert("_builtinEnabled", preferences);
         QSaveFile file(QDir(m_store.storageDirectory()).filePath(QStringLiteral("provider-order.json")));
-        if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("The provider preferences could not be saved."));
+        if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("VLC cannot save the provider settings."));
         const auto bytes = QJsonDocument(document).toJson(QJsonDocument::Compact);
-        if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("The provider preferences could not be saved."));
+        if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("VLC cannot save the provider settings."));
         m_providerOrder = document;
         for (auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) descriptor.insert("enabled", enabled);
         return changed(true);
@@ -372,12 +433,24 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
 }
 bool AddonManager::rollback(const QString& id)
 { QString error; withdraw(id); return changed(m_store.rollback(id, &error), error); }
+bool AddonManager::setSafeMode(bool enabled)
+{
+    QString error;
+    if (!m_store.setSafeMode(enabled, &error)) return changed(false, error);
+    if (enabled) for (const auto& id : m_store.installedIds()) withdraw(id);
+    return changed(true);
+}
+bool AddonManager::recoverPackage(const QString& id)
+{ QString error; withdraw(id); return changed(m_store.recover(id, &error), error); }
+QVariantList AddonManager::retainedGenerations(const QString& id) const
+{ return m_store.retainedGenerations(id).toVariantList(); }
 bool AddonManager::uninstall(const QString& id, bool removeData)
 {
     QString error; withdraw(id);
-    const auto references = savedSettings(id).value("_credentials").toObject();
+    const auto references = m_store.credentialReferences(id);
+    if (!m_store.setDistributionSuppressed(id, true, &error)) return changed(false, error);
     const bool success = m_store.uninstall(id, removeData, &error);
-    if (success && removeData) for (const auto& reference : references) m_secrets.remove(id, reference.toString());
+    if (success && removeData) for (const auto& reference : references) m_secrets.remove(id, reference);
     return changed(success, error);
 }
 
@@ -404,7 +477,7 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
     const auto packageId = packagePart(contributionId); InstalledPackage package;
     if (!m_store.installed(packageId, &package) || !package.enabled || !configured(package)) {
         const auto request = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        QTimer::singleShot(0, this, [this, request, contributionId] { emit operationFinished(request, contributionId, QStringLiteral("auth_required"), {}, tr("Enable and configure this add-on first.")); });
+        QTimer::singleShot(0, this, [this, request, contributionId] { emit operationFinished(request, contributionId, QStringLiteral("auth_required"), {}, tr("Enable this add-on. Then enter its settings.")); });
         return request;
     }
     QJsonObject projected = QJsonObject::fromVariantMap(context);
@@ -428,7 +501,7 @@ quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObjec
 {
     const auto id = packagePart(contributionId); InstalledPackage package;
     if (!m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
-        QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is unavailable."); callback(response); }); return 0;
+        QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
     }
     return m_network.fetch(package.manifest, package.grants, descriptor,
         [this, id](const QString& field) { return credential(id, field); }, std::move(callback), 16 * 1024 * 1024);
@@ -442,7 +515,7 @@ void AddonManager::withdraw(const QString& id)
     const auto requests = m_invocationPackages.keys(id);
     for (const auto& request : requests) {
         const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);
-        emit operationFinished(request, contribution, QStringLiteral("error"), {}, tr("The add-on configuration changed."));
+        emit operationFinished(request, contribution, QStringLiteral("error"), {}, tr("The add-on settings changed."));
     }
 }
 bool AddonManager::changed(bool success, const QString& error)
