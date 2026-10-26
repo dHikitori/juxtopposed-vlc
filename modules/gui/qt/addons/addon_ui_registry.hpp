@@ -45,6 +45,8 @@ public:
     Q_INVOKABLE void acknowledgeSession(const QString& sessionId);
     Q_INVOKABLE bool completeModal(const QString& ticket, const QVariantMap& result);
     Q_INVOKABLE void cancelModal(const QString& ticket);
+    Q_INVOKABLE bool canUseSelection(const QString& contributionId, const QString& hook) const;
+    Q_INVOKABLE bool validateSessionResult(const QString& sessionId, const QVariantMap& result) const;
     static bool validViewDocument(const QJsonObject&);
 public slots:
     void operationFinished(const QString& request, const QString& contribution, const QString& status, const QVariantMap& data, const QString& error);

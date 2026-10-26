@@ -6,23 +6,23 @@ Updated 27 October 2026. The user has approved code edits, fixes, builds, stagin
 
 - Guest storage: 18 cases pass. Package, runtime, broker, and host service regressions pass. The final host service cancellation test also passes.
 - SDK credential capacity: nine Rust cases and four real-worker cases pass. The SDK accepts the host's 64 credential presence fields. All four artwork packages have now been built with that SDK change. All five artwork worker fixtures pass.
-- Typed interface and recovery: the normal app build, final host service link, and nine native registry cases pass. The broad interface run has 548 passes and one failure, with no skips. The failure is in `tests/tst_AddonTypedDialogs.qml:166`: the saved playlist ID is `playlist-24`; the expected ID is `playlist-23`. The cause is not confirmed. The earlier focused 17-case run passed. Keep this group open until the failure is explained and repaired.
+- Typed interface and recovery: nine native registry cases pass. The recovery repair passes 28 focused QML cases; the earlier broad repaired-source run passed 558 cases in 23 suites, with no failures or skips. The prior 548-pass/one-failure result remains historical evidence. The final normal app build still needs to include the complete repairs.
 
 The [implementation record](IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) is now approved. No earlier rejected database change ran.
 
 ## Playlist recovery: test and submission guards
 
-The read-only trace found two separate repair needs. No new test ran during this review.
+The initial read-only trace found separate test and product repair needs. Both now have source changes and passing regressions.
 
 The earlier test changes the second row from `playlist-23` to `playlist-24`. Test setup then clears and fills the model with `playlist-23`. The recovery test waits for a non-null delegate and calls its `clicked()` signal directly. It does not first confirm the delegate's current key.
 
 In Qt 6.8.3, `itemAtIndex()` reads the visible-item cache. Non-reset model changes schedule a later layout; `forceLayout()` applies pending changes. This supports a possible old-delegate timing cause. The model and delegate values at the failure were not captured, so this cause is still an inference. See the [Qt item-view source](https://raw.githubusercontent.com/qt/qtdeclarative/v6.8.3/src/quick/items/qquickitemview.cpp).
 
-Repair the test precondition: apply pending layout, confirm that the model ID and delegate key are both `playlist-23`, then use a mouse event to select the row. Keep the final saved-ID assertion. Do not close the regression from a longer wait alone.
+The recovery test now applies pending layout, confirms that the model ID and delegate key are both `playlist-23`, then uses a mouse event to select the row. It retains the saved-ID assertion. This establishes a current visible target before the click.
 
-The product also needs a guard. The built-in delegate copies its key to `selectedKey`; `submitCore()` emits that key without a current model or revision comparison. Model signals invalidate add-on choices but leave the built-in selection intact. The native save path rejects a missing or read-only playlist. It can still accept a different writable playlist that exists.
+The old product path copied a delegate key to `selectedKey` and emitted it without a current model or revision comparison. Model signals invalidated add-on choices but left the built-in selection intact. The native save path rejected a missing or read-only playlist, but could still accept a different writable playlist that existed.
 
-Clear the built-in selection when its model revision changes. Reject a delegate selection that no longer agrees with the current row. Before submission, confirm the selected target and captured revision again. Add a separate regression that changes or removes a selected target before submission. Require a fresh selection and no save from the old target. The native [playlist transaction plan](native-playlist-cas.md) covers the separate change between UI validation and database append.
+The repair clears selection on a model revision change. Both click and Save read the current target and compare its key, row, dialog generation, and model revision. Old asynchronous callbacks cannot submit. Separate regressions cover target replacement, removal, read-only state, move, reset, an old presented key, a late callback, and dialog closure. The native [playlist transaction plan](native-playlist-cas.md) covers the separate change between UI validation and database append.
 
 The recovery path does not supply an add-on result. This failure does not establish a defect in opaque choice-reference resolution.
 

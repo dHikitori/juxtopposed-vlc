@@ -11,14 +11,32 @@ C.Dialog {
     property color accentColor: "#d37918"
     property Component videoBackdropContent
     property var playlistModel
+    property var addonRegistry: typeof redesignAddonUi === "undefined" ? null : redesignAddonUi
+    property int addonDialogGeneration: 0
+    property int addonPlaylistRevision: 0
+    property int addonDataRequest: 0
+    property bool addonChoicesReady: false
+    property var addonTargets: []
+    property bool addonFallback: false
+    readonly property var addonReplacement: { if (!addonRegistry) return ({}); addonRegistry.revision; return addonRegistry.replacement("dialog.add-to-playlist.content@1") }
+    readonly property string addonSelectionId: addonReplacement.id || ""
+    readonly property bool addonWanted: addonSelectionId.length > 0 && !addonFallback
     property Item scrollFocusItem
     property int itemCount: 0
     property bool busy: false
     property string errorMessage: ""
     property string selectedKey: ""
+    property int selectedIndex: -1
+    property int selectedRevision: -1
+    property int selectedGeneration: -1
+    property int targetRequest: 0
+    property bool checkingTarget: false
+    readonly property bool currentSelection: selectedKey.length > 0 && selectedIndex >= 0
+        && selectedRevision === addonPlaylistRevision && selectedGeneration === addonDialogGeneration
     property alias newName: nameField.text
     property alias filterText: searchField.text
-    readonly property bool valid: itemCount > 0 && (selectedKey.length > 0 || newName.trim().length > 0)
+    readonly property bool valid: itemCount > 0 && !checkingTarget
+        && (addonWanted ? addonPicker.usingReplacement && !!addonPicker.preview : currentSelection || newName.trim().length > 0)
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal saveRequested(string key, string name)
     title: qsTr("Add to Playlist")
@@ -32,19 +50,118 @@ C.Dialog {
     C.Overlay.modal: Rectangle { color: "#80000000" }
     function begin(count) {
         if (visible) return false
-        itemCount = count; selectedKey = ""; newName = ""; filterText = ""; errorMessage = ""
+        clearSelection(); itemCount = count; newName = ""; filterText = ""; errorMessage = ""
+        addonFallback = false; ++addonDialogGeneration
         open()
         return true
     }
     function submit() {
         if (!valid || busy) return
-        busy = true; errorMessage = ""
-        saveRequested(selectedKey, newName.trim())
+        if (addonWanted) { if (addonPicker.usingReplacement) addonPicker.confirm(); return }
+        submitCore()
+    }
+    function submitCore() {
+        if (!visible || busy || checkingTarget || itemCount <= 0) return
+        const name = newName.trim()
+        if (name.length) { busy = true; errorMessage = ""; saveRequested("", name); return }
+        if (!currentSelection) return
+        const key = selectedKey, index = selectedIndex, revision = selectedRevision, generation = selectedGeneration
+        readCurrentTarget(index, key, revision, generation, () => {
+            if (!currentSelection || selectedKey !== key || newName.trim().length) return
+            busy = true; errorMessage = ""; saveRequested(key, "")
+        })
+    }
+    function clearSelection() {
+        ++targetRequest; checkingTarget = false
+        selectedKey = ""; selectedIndex = -1; selectedRevision = -1; selectedGeneration = -1
+    }
+    function readCurrentTarget(index, key, revision, generation, complete) {
+        const model = playlistModel, request = ++targetRequest, owner = root
+        checkingTarget = true
+        function received(data) {
+            if (!Qt.isQtObject(owner) || request !== owner.targetRequest) return
+            owner.checkingTarget = false
+            if (!owner.visible || owner.busy || model !== owner.playlistModel
+                || revision !== owner.addonPlaylistRevision || generation !== owner.addonDialogGeneration) return
+            const row = Array.isArray(data) && data.length === 1 ? data[0] : null
+            if (!row || row.id === undefined || row.id === null || row.id.toString() !== key || row.readOnly === true) {
+                owner.invalidateAddonChoices(); owner.errorMessage = qsTr("The playlist changed. Select it again."); return
+            }
+            complete()
+        }
+        if (!model || !Number.isInteger(index) || index < 0 || index >= Number(model.count)) { received([]); return }
+        if (typeof model.getDataFlat === "function") model.getDataFlat([index], received)
+        else if (typeof model.get === "function") received([model.get(index)])
+        else received([])
+    }
+    function chooseBuiltinTarget(index, key) {
+        if (!visible || busy || addonWanted) return
+        clearSelection(); newName = ""; errorMessage = ""
+        const revision = addonPlaylistRevision, generation = addonDialogGeneration
+        readCurrentTarget(index, key, revision, generation, () => {
+            if (addonWanted) return
+            selectedIndex = index; selectedRevision = revision; selectedGeneration = generation; selectedKey = key
+        })
+    }
+    function acceptAddonSelection(selection) {
+        if (!visible || busy || !addonWanted || !addonChoicesReady) return
+        clearSelection(); newName = selection.name
+        if (selection.key.length) {
+            const index = addonTargets.findIndex(row => row.key === selection.key && row.enabled)
+            if (index < 0) return
+            selectedIndex = index; selectedRevision = addonPlaylistRevision
+            selectedGeneration = addonDialogGeneration; selectedKey = selection.key
+        }
+        submitCore()
     }
     function finish(success, message) {
         busy = false
         if (success) accept()
-        else errorMessage = message || qsTr("VLC cannot save this selection. Try again.")
+        else { errorMessage = message || qsTr("VLC cannot save this selection. Try again."); addonPicker.begin() }
+    }
+    function invalidateAddonChoices() {
+        clearSelection()
+        ++addonPlaylistRevision; ++addonDataRequest; addonChoicesReady = false
+        Qt.callLater(reloadAddonChoices)
+    }
+    function reloadAddonChoices() {
+        const request = ++addonDataRequest
+        addonChoicesReady = false
+        if (!visible || !addonRegistry || !addonWanted || !playlistModel || busy) return
+        const count = Number(playlistModel.count)
+        if (!Number.isInteger(count) || count < 0 || count > 200) { addonFallback = true; return }
+        const owner = root
+        function received(data) {
+            if (!Qt.isQtObject(owner) || !owner.visible || request !== owner.addonDataRequest || !Array.isArray(data) || data.length !== count) return
+            const choices = []
+            for (let index = 0; index < data.length; ++index) {
+                const row = data[index]
+                if (!row || row.id === undefined || row.id === null) { owner.addonFallback = true; return }
+                const key = row.id.toString()
+                if (!key.length) { owner.addonFallback = true; return }
+                choices.push({key: key, title: String(row.name || qsTr("Playlist %1").arg(index + 1)).slice(0, 512), enabled: row.readOnly !== true})
+            }
+            owner.addonTargets = choices; owner.addonChoicesReady = true
+        }
+        if (typeof playlistModel.getDataFlat === "function") playlistModel.getDataFlat(Array.from({length: count}, (_, index) => index), received)
+        else if (typeof playlistModel.get === "function") received(Array.from({length: count}, (_, index) => playlistModel.get(index)))
+    }
+    onAddonReplacementChanged: invalidateAddonChoices()
+    onAddonSelectionIdChanged: addonFallback = false
+    onPlaylistModelChanged: invalidateAddonChoices()
+    onVisibleChanged: {
+        if (visible) Qt.callLater(reloadAddonChoices)
+        else { clearSelection(); ++addonDataRequest; addonChoicesReady = false; addonTargets = [] }
+    }
+    Connections {
+        target: root.playlistModel || null
+        ignoreUnknownSignals: true
+        function onCountChanged() { root.invalidateAddonChoices() }
+        function onModelReset() { root.invalidateAddonChoices() }
+        function onRowsInserted() { root.invalidateAddonChoices() }
+        function onRowsRemoved() { root.invalidateAddonChoices() }
+        function onDataChanged() { root.invalidateAddonChoices() }
+        function onLayoutChanged() { root.invalidateAddonChoices() }
     }
     function revealOnFocus(item) {
         scrollFocusItem = item
@@ -87,8 +204,8 @@ C.Dialog {
         }
         onAccepted: root.submit()
     }
-    onNewNameChanged: { if (newName.length) selectedKey = ""; errorMessage = "" }
-    onFilterTextChanged: { selectedKey = ""; errorMessage = "" }
+    onNewNameChanged: { if (newName.length) clearSelection(); errorMessage = "" }
+    onFilterTextChanged: { clearSelection(); errorMessage = "" }
     onOpened: searchField.forceActiveFocus()
     Shortcut { sequence: "Ctrl+Return"; enabled: root.visible && root.valid && !root.busy; onActivated: root.submit() }
     Shortcut { sequence: "Ctrl+Enter"; enabled: root.visible && root.valid && !root.busy; onActivated: root.submit() }
@@ -100,7 +217,16 @@ C.Dialog {
         }
         Text {
             anchors.left: parent.left; anchors.leftMargin: root.theme.dp(20); anchors.verticalCenter: parent.verticalCenter
-            text: root.title; color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
+            width: Math.max(0, parent.width - root.theme.dp(root.addonReplacement.id ? 270 : 72))
+            text: root.title; textFormat: Text.PlainText; elide: Text.ElideRight; color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
+        }
+        RedesignButton {
+            objectName: "addonPlaylistRecovery"
+            anchors.right: parent.right; anchors.rightMargin: root.theme.dp(52); anchors.verticalCenter: parent.verticalCenter
+            caption: root.width >= root.theme.dp(500) ? qsTr("Use built-in view") : ""; iconName: "back"; text: qsTr("Use built-in view")
+            tooltipTextFormat: Text.PlainText; visible: !!root.addonReplacement.id; enabled: !root.busy
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            onClicked: addonPicker.useBuiltin()
         }
         RedesignButton {
             objectName: "addToPlaylistClose"
@@ -110,8 +236,12 @@ C.Dialog {
             onClicked: root.reject()
         }
     }
-    contentItem: C.ScrollView {
+    contentItem: Item {
+      C.ScrollView {
         id: scroll
+        anchors.fill: parent
+        visible: !addonPicker.usingReplacement
+        enabled: !root.addonWanted
         contentWidth: availableWidth; clip: true
         C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
         onAvailableHeightChanged: if (root.opened) root.revealFocusedItem()
@@ -182,7 +312,7 @@ C.Dialog {
                     }
                     enabled: !root.busy && model.readOnly !== true
                     highlighted: root.selectedKey === key
-                    onClicked: { root.newName = ""; root.selectedKey = key; root.errorMessage = "" }
+                    onClicked: root.chooseBuiltinTarget(index, key)
                     background: Rectangle {
                         radius: root.theme.dp(6)
                         color: destination.highlighted ? root.theme.field : destination.hovered ? root.theme.hover : "transparent"
@@ -196,7 +326,9 @@ C.Dialog {
                             source: destination.model.thumbnail || ""; iconName: "playlist"; iconSize: 24; cornerRadius: 2
                         }
                         Text {
+                            objectName: "playlistDestinationLabel"
                             Layout.fillWidth: true; text: destination.model.name; elide: Text.ElideRight
+                            textFormat: Text.PlainText
                             color: root.theme.playerHeading; font.pixelSize: root.theme.dp(14)
                         }
                         RedesignIcon {
@@ -240,6 +372,19 @@ C.Dialog {
             }
             Item { width: 1; height: root.theme.dp(20) }
         }
+      }
+      RedesignAddonSelection {
+        id: addonPicker
+        objectName: "addonPlaylistSelection"
+        anchors.fill: parent; anchors.margins: root.theme.dp(20)
+        registry: root.addonRegistry; hook: "dialog.add-to-playlist.content@1"; kind: "playlist"
+        choiceSet: "playlist:" + root.addonDialogGeneration + ":" + root.addonPlaylistRevision + ":" + root.itemCount
+        targets: root.addonTargets; active: root.visible && root.addonChoicesReady && root.addonWanted
+        visible: prepared; busy: root.busy || root.checkingTarget; showActions: false; showRecovery: false
+        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+        onConfirmed: selection => root.acceptAddonSelection(selection)
+        onFallbackRequested: root.addonFallback = true
+      }
     }
     footer: Item {
         implicitHeight: root.theme.dp(74) + (errorText.visible ? errorText.implicitHeight + root.theme.dp(12) : 0)
@@ -249,7 +394,7 @@ C.Dialog {
             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
             anchors.leftMargin: root.theme.dp(20); anchors.rightMargin: root.theme.dp(20); anchors.topMargin: root.theme.dp(8)
             visible: root.errorMessage.length > 0
-            text: root.errorMessage; color: root.theme.danger; font.pixelSize: root.theme.dp(14); wrapMode: Text.WordWrap
+            text: root.errorMessage; textFormat: Text.PlainText; color: root.theme.danger; font.pixelSize: root.theme.dp(14); wrapMode: Text.WordWrap
             Accessible.role: Accessible.AlertMessage
         }
         RowLayout {

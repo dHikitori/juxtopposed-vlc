@@ -136,11 +136,16 @@ QVariantList AddonUiRegistry::replacementChoices(const QString& hook) const
 }
 QVariantMap AddonUiRegistry::replacement(const QString& hook) const
 {
-    if (!replaceable(hook)) return {};
+    if (!m_manager || !replaceable(hook)) return {};
     const auto id = m_selected.value(hook).toString();
     if (!m_entries.contains(id) || m_entries.value(id).value("document").toMap().value("hook").toString() != hook) return {};
     if (hook.startsWith(QLatin1String("actions."))) return m_entries.value(id);
-    return view(id);
+    auto descriptor = view(id);
+    if (!descriptor.isEmpty() && hook == QLatin1String("subtitles.search.content@1")) {
+        const auto fields = m_manager->grantedScope(m_entries.value(id).value("packageId").toString(), QStringLiteral("metadata.context")).value("fields").toArray();
+        descriptor.insert(QStringLiteral("selectionTitlesAllowed"), fields.contains(QStringLiteral("title")));
+    }
+    return descriptor;
 }
 bool AddonUiRegistry::selectReplacement(const QString& hook, const QString& id)
 {
@@ -379,4 +384,31 @@ bool AddonUiRegistry::completeModal(const QString& ticket, const QVariantMap& re
 }
 void AddonUiRegistry::cancelModal(const QString& ticket)
 { if (m_modals.remove(ticket)) emit modalFinished(ticket, false, {}); }
+
+bool AddonUiRegistry::canUseSelection(const QString& id, const QString& hook) const
+{
+    if (!m_manager || (hook != QLatin1String("subtitles.search.content@1") && hook != QLatin1String("dialog.add-to-playlist.content@1"))
+        || m_selected.value(hook).toString() != id || view(id).isEmpty()) return false;
+    const auto entry = m_entries.value(id), document = entry.value("document").toMap();
+    if (document.value("type").toString() != QLatin1String("ui.replacement") || document.value("hook").toString() != hook
+        || !permitted(entry, hook)) return false;
+    if (hook == QLatin1String("dialog.add-to-playlist.content@1")) {
+        const auto scope = m_manager->grantedScope(entry.value("packageId").toString(), QStringLiteral("library.read"));
+        return scope.value("collections").toArray().contains(QStringLiteral("playlists"))
+            && scope.value("fields").toArray().contains(QStringLiteral("title"));
+    }
+    return true;
+}
+
+bool AddonUiRegistry::validateSessionResult(const QString& id, const QVariantMap& result) const
+{
+    const auto session = m_sessions.constFind(id);
+    if (session == m_sessions.cend() || session->suspended || !m_entries.contains(session->contribution)) return false;
+    const auto choiceSet = session->parameters.value(QStringLiteral("choiceSet"));
+    if (choiceSet.metaType().id() != QMetaType::QString || choiceSet.toString().isEmpty()
+        || result.value(QStringLiteral("choiceSet")) != choiceSet) return false;
+    const auto document = m_entries.value(session->contribution).value("document").toMap();
+    return canUseSelection(session->contribution, document.value("hook").toString()) && document.contains("resultSchema")
+        && parametersValid(result, QJsonObject::fromVariantMap(document.value("resultSchema").toMap()));
+}
 }

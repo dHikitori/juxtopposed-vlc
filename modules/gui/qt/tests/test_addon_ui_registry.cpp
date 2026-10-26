@@ -39,7 +39,70 @@ class TestAddonUiRegistry : public QObject
         write(path + QStringLiteral("/LICENSE"), "Test fixture\n");
         write(path + QStringLiteral("/view.json"), QJsonDocument(view).toJson());
     }
+    static void selectionPackage(const QString& path, bool libraryAccess, bool mediaTitles = false) {
+        package(path);
+        QFile file(path + QStringLiteral("/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
+        auto manifest = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        auto permissions = manifest.value("permissions").toObject(), required = permissions.value("required").toObject();
+        auto ui = required.value("ui.contribute").toObject(); auto hooks = ui.value("hooks").toArray();
+        hooks.append("dialog.add-to-playlist.content@1"); hooks.append("subtitles.search.content@1"); ui.insert("hooks", hooks);
+        required.insert("ui.contribute", ui);
+        if (libraryAccess) required.insert("library.read", QJsonObject{{"collections", QJsonArray{"playlists"}}, {"fields", QJsonArray{"title"}}});
+        if (mediaTitles) required.insert("metadata.context", QJsonObject{{"fields", QJsonArray{"title"}}});
+        permissions.insert("required", required); manifest.insert("permissions", permissions);
+        const QJsonObject choice{{"type", "object"}, {"additionalProperties", false}, {"properties", QJsonObject{
+            {"ref", QJsonObject{{"type", "string"}}}, {"title", QJsonObject{{"type", "string"}}}, {"enabled", QJsonObject{{"type", "boolean"}}}}}};
+        const QJsonObject parameters{{"type", "object"}, {"additionalProperties", false}, {"properties", QJsonObject{
+            {"choiceSet", QJsonObject{{"type", "string"}}}, {"targets", QJsonObject{{"type", "array"}, {"items", choice}, {"maxItems", 200}}},
+            {"assets", QJsonObject{{"type", "array"}, {"items", choice}, {"maxItems", 200}}}}}, {"required", QJsonArray{"choiceSet", "targets", "assets"}}};
+        const QJsonObject result{{"type", "object"}, {"additionalProperties", false}, {"properties", QJsonObject{
+            {"choiceSet", QJsonObject{{"type", "string"}}}, {"selected", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}, {"maxItems", 1}}},
+            {"newName", QJsonObject{{"type", "string"}, {"maxLength", 256}}}}}, {"required", QJsonArray{"choiceSet", "selected"}}};
+        auto contributions = manifest.value("contributions").toArray();
+        for (const auto& pair : {qMakePair(QStringLiteral("playlist"), QStringLiteral("dialog.add-to-playlist.content@1")),
+                                qMakePair(QStringLiteral("subtitles"), QStringLiteral("subtitles.search.content@1"))})
+            contributions.append(QJsonObject{{"id", pair.first}, {"type", "ui.replacement"}, {"contract", "ui@1"}, {"hook", pair.second},
+                {"view", "view.json"}, {"parameters", parameters}, {"resultSchema", result}});
+        manifest.insert("contributions", contributions); write(path + QStringLiteral("/addon.json"), QJsonDocument(manifest).toJson());
+    }
 private slots:
+    void typedSelectionNeedsExplicitChoiceAndDataScope() {
+        const QString playlist = QStringLiteral("org.example.ui/playlist"), subtitles = QStringLiteral("org.example.ui/subtitles");
+        const QString playlistHook = QStringLiteral("dialog.add-to-playlist.content@1"), subtitleHook = QStringLiteral("subtitles.search.content@1");
+        for (const bool libraryAccess : {false, true}) {
+            QTemporaryDir source, storage; selectionPackage(source.path(), libraryAccess); AddonManager manager(storage.path());
+            QVERIFY2(manager.installLocalPackage(source.path(), true), qPrintable(manager.errorMessage())); QVERIFY(manager.setEnabled("org.example.ui", true));
+            AddonUiRegistry registry(&manager); QVERIFY(!registry.canUseSelection(playlist, playlistHook));
+            QVERIFY(registry.selectReplacement(playlistHook, playlist)); QCOMPARE(registry.canUseSelection(playlist, playlistHook), libraryAccess);
+            QVERIFY(!registry.canUseSelection(playlist, subtitleHook));
+            QVERIFY(registry.selectReplacement(subtitleHook, subtitles)); QVERIFY(registry.canUseSelection(subtitles, subtitleHook));
+            QVERIFY(!registry.replacement(subtitleHook).value("selectionTitlesAllowed").toBool());
+            registry.reportViewFailure(subtitles); QVERIFY(!registry.canUseSelection(subtitles, subtitleHook));
+        }
+        QTemporaryDir source, storage; selectionPackage(source.path(), true, true); AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled("org.example.ui", true));
+        AddonUiRegistry registry(&manager); QVERIFY(registry.selectReplacement(subtitleHook, subtitles));
+        QVERIFY(registry.replacement(subtitleHook).value("selectionTitlesAllowed").toBool());
+    }
+    void typedResultsNeedACurrentActiveSessionAndDeclaredSchema() {
+        QTemporaryDir source, storage; selectionPackage(source.path(), true); AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled("org.example.ui", true)); AddonUiRegistry registry(&manager);
+        const QString hook = QStringLiteral("dialog.add-to-playlist.content@1"), id = QStringLiteral("org.example.ui/playlist");
+        QVERIFY(registry.selectReplacement(hook, id));
+        const QVariantMap parameters{{"choiceSet", "one"}, {"targets", QVariantList{QVariantMap{{"ref", "target:0"}, {"title", "Films"}, {"enabled", true}}}}, {"assets", QVariantList{}}};
+        const auto session = registry.createSession(id, parameters); QVERIFY(!session.isEmpty());
+        const QVariantMap result{{"choiceSet", "one"}, {"selected", QVariantList{QStringLiteral("target:0")}}};
+        QVERIFY(registry.validateSessionResult(session, result));
+        QVERIFY(!registry.validateSessionResult(session, {{"choiceSet", "old"}, {"selected", QVariantList{QStringLiteral("target:0")}}}));
+        QVERIFY(!registry.validateSessionResult(session, {{"choiceSet", "one"}, {"selected", QVariantList{1}}}));
+        QVERIFY(!registry.validateSessionResult(session, {{"choiceSet", "one"}, {"selected", QVariantList{QStringLiteral("target:0"), QStringLiteral("target:1")}}}));
+        registry.suspendSession(session, true); QVERIFY(!registry.validateSessionResult(session, result));
+        registry.suspendSession(session, false); QVERIFY(registry.validateSessionResult(session, result));
+        QVERIFY(registry.selectReplacement(hook, {})); QVERIFY(!registry.validateSessionResult(session, result));
+        QVERIFY(registry.selectReplacement(hook, id)); registry.closeSession(session); QVERIFY(!registry.validateSessionResult(session, result));
+        const auto active = registry.createSession(id, parameters); QVERIFY(manager.setEnabled("org.example.ui", false));
+        QVERIFY(!registry.validateSessionResult(active, result));
+    }
     void boundedVocabularyRejectsCodeAndExternalSources() {
         QVERIFY(AddonUiRegistry::validViewDocument({{"contract", "ui@1"}, {"root", QJsonObject{{"type", "Text"}, {"text", "Hello"}}}}));
         QVERIFY(!AddonUiRegistry::validViewDocument({{"contract", "ui@1"}, {"root", QJsonObject{{"type", "Loader"}}}}));

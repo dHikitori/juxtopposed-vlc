@@ -27,6 +27,7 @@ Item {
         release()
         if (!registry || !contributionId.length) return
         sessionId = registry.createSession(contributionId, parameters, hostContext)
+        if (!sessionId.length) { descriptor = ({}); failed(); return }
         descriptor = sessionId.length ? registry.session(sessionId) : ({})
         if (!visible && sessionId.length) registry.suspendSession(sessionId, true)
     }

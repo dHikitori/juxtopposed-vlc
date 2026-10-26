@@ -31,7 +31,7 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Worker lifetime | Cancellation reaches the guest. Restart creates a new request-ID namespace. Reentrant native calls cannot restore a canceled invocation. The current broker suite passes 61 tests. Credential packets contain presence flags only. |
 | Account scope | Workers and assets keep captured credential references, release, grants, and settings revision. External state changes revoke old work. Opaque account references preserve display-only changes and code updates. Declared account fields and key changes require a new account reference. |
 | Artwork packages | MusicBrainz, Last.fm, French TV, and image search have portable packages. Eleven parser tests and five worker fixtures pass. Four public native image paths passed. Google and some old French URLs have incomplete live evidence; their core paths remain. See [the migration record](metadata-provider-migration.md). |
-| Themes and interfaces | Shared theme state reaches QML and native widgets. Contrast tests cover status text and accent surfaces. Known hooks support bounded JSON interface sessions, commands, home replacement, and result shells. Typed core dialog adapters remain open. |
+| Themes and interfaces | Shared theme state reaches QML and native widgets. Contrast tests cover status text and accent surfaces. Known hooks support bounded JSON interface sessions, commands, home replacement, and typed subtitle/playlist selection shells. Nine native registry cases pass. Recovery and stale playlist target checks pass 28 focused QML cases; the earlier broad source run passed 558 cases in 23 suites. The normal app build of the final repairs remains pending. |
 | Discovery browser | Roots, folders, search, page cursors, independent views, and stable source admissions are mounted. Real queue tests cover one-batch append, revisions, title refresh, export, and account changes. The production Play and Enqueue controls remain unavailable until the lazy resolver and contained transport are complete. |
 | Native input policy | Item copies and native children retain policy. URL, connection, HTTP, FFmpeg secondary I/O, AVIO, and Live555 paths have guards. Native policy, HTTP, and direct AVIO controls passed. Core source/proxy profile checks and atomic source-item policy creation pass the normal native suite, including 16 concurrent callers. Live555 is not configured in this build. |
 | Native source jobs | Bounded retained jobs and one-owner transport leases. Cancellation and Close revoke pending and issued transports without a Qt event. Ten C case groups pass, including cancel before Start; the suite includes 200 result races. The earlier nine-group version also passed sanitizers. All 19 backend/job exports remain. Access binding and stream proxy work remain open. |
@@ -85,7 +85,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 
 - Finish supported-platform app/runtime/package tests and repeat release checks after the remaining implementation changes.
 - Complete application-distribution upgrades, recovery UI, safe mode, and Git object-format negotiation. Keep publisher verification claims consistent with actual evidence.
-- Mount typed host result adapters before modal replacements can change core state. Theme and mounted UI regression tests have passed for the current scope.
+- Keep typed host result adapters as the only path from modal replacements to core state. Complete the final normal app build and UI checks after the current repairs.
 - Complete the owned metadata route for player, preparser, library, and artwork requests. Preserve each working provider as an add-on before removal.
 - Complete discovery subscriptions and the native lazy playback route. Enforce stream policy through redirects, nested manifests, segments, and keys before playback.
 - Keep the verified stable queue reference and append path. Implement media-library playlist CAS from [the approved database plan](native-playlist-cas.md).
@@ -93,7 +93,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Connect session authority to the native player, host consent UI, and outbound WSS. Exercise two-player drift correction and competing local input.
 - Complete host service adapters, author tooling, schemas, SDK text, and profile conformance tests.
 - Audit all new app English against the requested ASD-STE100 rules and technical terminology.
-- Repair the typed playlist recovery test precondition and built-in target guards listed in [the pending review](pending-implementation-review.md). The latest broad UI run has 548 passes and one failure; the earlier 493-case regression group passed. The possible old-delegate timing cause still needs test evidence.
+- Verify the typed playlist recovery and target guards in the final normal app build. The repaired source passes its focused and broad QML checks; see [the review record](pending-implementation-review.md).
 - Repair the metadata AutoText consumers. Mount UI image handles only after format, decode, and reference tests pass. The current host asset map is empty.
 - Use the verified source-owner retirement boundary when mounting native source access.
 - Compare the completed implementation with every requirement in the architecture documents.

@@ -1429,6 +1429,8 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonManagement.qml \
 	player/qml/redesign/RedesignAddonDiscovery.qml \
 	player/qml/redesign/RedesignAddonDiscoveryWindow.qml \
+	player/qml/redesign/RedesignAddonSelection.qml \
+	player/qml/redesign/RedesignAddonRecovery.qml \
 	player/qml/redesign/RedesignAddonNode.qml \
 	player/qml/redesign/RedesignAddonProviders.qml \
 	player/qml/redesign/RedesignAddonSettings.qml \
@@ -1444,6 +1446,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonWindow.qml \
 	player/qml/redesign/RedesignAddonVisualizerSelector.qml \
 	player/qml/redesign/AddonUi.js \
+	player/qml/redesign/AddonSelectionContracts.js \
 	player/qml/redesign/AddonTheme.js \
 	player/qml/redesign/RedesignPlugins.qml \
 	player/qml/redesign/RedesignTrackAssignments.qml \
@@ -2969,6 +2972,8 @@ EXTRA_DIST += tests/tst_AddonInstaller.qml
 TESTS += tests/tst_AddonInstaller.qml
 EXTRA_DIST += tests/tst_AddonDiscovery.qml
 TESTS += tests/tst_AddonDiscovery.qml
+EXTRA_DIST += tests/tst_AddonSelections.qml tests/tst_AddonSelectionSurface.qml tests/tst_AddonRecovery.qml tests/tst_AddonTypedDialogs.qml
+TESTS += tests/tst_AddonSelections.qml tests/tst_AddonSelectionSurface.qml tests/tst_AddonRecovery.qml tests/tst_AddonTypedDialogs.qml
 EXTRA_DIST += tests/tst_AddonMounts.qml
 TESTS += tests/tst_AddonMounts.qml
 EXTRA_DIST += tests/tst_AddonUi.qml tests/tst_AddonTheme.qml tests/tst_AddonThemeSelection.qml tests/tst_AddonThemeHost.qml tests/tst_AddonIntegration.qml tests/tst_AddonTrackPreparation.qml

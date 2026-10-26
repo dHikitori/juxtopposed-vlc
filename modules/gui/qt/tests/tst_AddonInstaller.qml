@@ -12,6 +12,9 @@ TestCase {
         property int revision: 0
         property bool busy: false
         property bool credentialPersistenceAvailable: true
+        property bool safeMode: false
+        property int recoveries: 0
+        property int restores: 0
         property string errorMessage: ""
         property var pendingPackage: ({})
         property var packages: []
@@ -49,6 +52,10 @@ TestCase {
             revision++
         }
         function setEnabled(id, enabled) { return true }
+        function setSafeMode(enabled) { safeMode = enabled; revision++; return true }
+        function recoverPackage(id) { recoveries++; lastPackage = id; return true }
+        function restoreDistributionPackage(id) { restores++; lastPackage = id; return true }
+        function retainedGenerations(id) { return [{version: "1.0.0"}] }
         function rollback(id) { rollbacks++; lastPackage = id; return true }
         function uninstall(id, removeData) { removals++; lastPackage = id; removedData = removeData; return true }
         function settingsSchema(id) { return {type: "object", properties: {}, additionalProperties: false} }
@@ -59,6 +66,7 @@ TestCase {
     function item(name) { return findChild(page, name) }
     function init() {
         manager.busy = false; manager.pendingPackage = ({}); manager.packages = []
+        manager.safeMode = false; manager.recoveries = 0; manager.restores = 0
         manager.updateResult = ({}); manager.updateRequests = 0; manager.lastRange = ""; manager.lastPrerelease = true; manager.errorMessage = ""
         manager.stages = 0; manager.approvals = 0; manager.discards = 0; manager.rollbacks = 0; manager.removals = 0
         manager.lastSource = ""; manager.lastTag = ""; manager.lastDirectory = ""; manager.lastEnable = false
@@ -75,6 +83,25 @@ TestCase {
         item("addonRepositorySource").text = "https://git.example.org/community/radio.git"
         item("addonRepositoryTag").text = "v1.0.0"
         mouseClick(item("addonStagePackage"))
+    }
+    function test_coreRecoveryControlsAreMounted() {
+        const recovery = item("addonManagementRecovery")
+        verify(recovery.supported); item("addonSafeMode").clicked(); compare(manager.safeMode, true)
+        manager.packages = [{id: "org.example.radio", name: "<b>Radio</b>", recoveryRequired: true, installed: false}]; manager.revision++
+        tryVerify(() => item("addonRecover_org.example.radio") !== null)
+        verify(item("addonPackage_org.example.radio") === null)
+        item("addonRecover_org.example.radio").clicked()
+        const confirmation = item("addonRecoveryConfirmation")
+        tryVerify(() => confirmation.visible); compare(manager.recoveries, 0)
+        confirmation.accept(); compare(manager.recoveries, 1)
+    }
+    function test_builtinAndRemovedPackagesHaveNoRepositoryActions() {
+        manager.packages = [{id: "vlc.builtin.opensubtitles", name: "OpenSubtitles", builtin: true, installed: true},
+            {id: "org.example.app", name: "App package", distributionSource: true, suppressed: true, installed: false}]; manager.revision++
+        compare(page.managedPackages.length, 0)
+        verify(item("addonPackage_vlc.builtin.opensubtitles") === null)
+        verify(item("addonPackage_org.example.app") === null)
+        tryVerify(() => item("addonRestore_org.example.app") !== null)
     }
     function test_repositoryStagingNeverInstallsOrGrants() {
         verify(!item("addonStagePackage").enabled)

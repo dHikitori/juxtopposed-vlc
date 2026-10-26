@@ -18,6 +18,7 @@ ColumnLayout {
     readonly property var pendingPackage: backend.pendingPackage || ({})
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property var packages: { backend.revision; return backend.packages || [] }
+    readonly property var managedPackages: packages.filter(row => row.builtin !== true && row.installed !== false && row.recoveryRequired !== true)
     readonly property var updateResult: backend.updateResult || ({})
     readonly property var hostCapabilities: pendingPackage.hostCapabilities || backend.capabilities || ({})
     readonly property bool updatingInstalledPackage: !!pendingPackage.id && packages.some(entry => entry.id === pendingPackage.id && entry.installed !== false)
@@ -108,6 +109,14 @@ ColumnLayout {
         }
         if (capabilities.safeMode === true) limits.push(qsTr("Add-ons are temporarily disabled."))
         return limits.join("\n")
+    }
+    RedesignAddonRecovery {
+        id: recovery
+        objectName: "addonManagementRecovery"
+        Layout.fillWidth: true
+        backend: root.backend
+        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+        videoBackdropContent: root.videoBackdropContent
     }
     Text {
         Layout.fillWidth: true
@@ -275,7 +284,7 @@ ColumnLayout {
         color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16)
     }
     Repeater {
-        model: root.packages
+        model: root.managedPackages
         Rectangle {
             id: row
             required property var modelData
@@ -290,7 +299,8 @@ ColumnLayout {
                 Text { Layout.fillWidth: true; text: row.modelData.name; textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.bright; font.pixelSize: root.theme.dp(15) }
                 Text {
                     Layout.fillWidth: true
-                    text: qsTr("Version %1 · %2").arg(row.modelData.version).arg(row.modelData.configured === false ? qsTr("Not configured") : row.modelData.enabled ? qsTr("Enabled") : qsTr("Disabled"))
+                    text: qsTr("Version %1 · %2").arg(row.modelData.version).arg(row.modelData.configured === false ? qsTr("Setup required")
+                        : row.modelData.enabled && root.backend.safeMode === true ? qsTr("Temporarily disabled") : row.modelData.enabled ? qsTr("Enabled") : qsTr("Disabled"))
                     textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
                 }
                 RedesignSwitchRow {
@@ -333,13 +343,13 @@ ColumnLayout {
         }
     }
     Text {
-        Layout.fillWidth: true; visible: !root.packages.length
+        Layout.fillWidth: true; visible: !root.managedPackages.length
         text: qsTr("No add-ons from repositories are installed."); textFormat: Text.PlainText; wrapMode: Text.Wrap
         color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
     }
     Text {
         objectName: "addonManagementError"
-        Layout.fillWidth: true; visible: text.length > 0
+        Layout.fillWidth: true; visible: text.length > 0 && text !== recovery.actionError
         text: root.backend.errorMessage || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap
         color: root.theme.danger; font.pixelSize: root.theme.dp(13)
         Accessible.role: Accessible.AlertMessage

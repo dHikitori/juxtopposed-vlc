@@ -18,7 +18,9 @@ Column {
     }
     Repeater {
         model: [{hook: "home.content@1", label: qsTr("Home")},
-            {hook: "actions.subtitles.open@1", label: qsTr("Open subtitle search")}]
+            {hook: "actions.subtitles.open@1", label: qsTr("Open subtitle search")},
+            {hook: "subtitles.search.content@1", label: qsTr("Subtitle selection")},
+            {hook: "dialog.add-to-playlist.content@1", label: qsTr("Playlist selection")}]
         Column {
             id: row
             required property var modelData

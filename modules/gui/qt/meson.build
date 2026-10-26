@@ -955,6 +955,8 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonManagement.qml',
        'player/qml/redesign/RedesignAddonDiscovery.qml',
        'player/qml/redesign/RedesignAddonDiscoveryWindow.qml',
+       'player/qml/redesign/RedesignAddonSelection.qml',
+       'player/qml/redesign/RedesignAddonRecovery.qml',
        'player/qml/redesign/RedesignAddonNode.qml',
        'player/qml/redesign/RedesignAddonProviders.qml',
        'player/qml/redesign/RedesignAddonSettings.qml',
@@ -970,6 +972,7 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonVisualizerSelector.qml',
        'player/qml/redesign/RedesignAddonTrackPreparation.qml',
        'player/qml/redesign/AddonUi.js',
+       'player/qml/redesign/AddonSelectionContracts.js',
        'player/qml/redesign/AddonTheme.js',
        'player/qml/redesign/RedesignPlugins.qml',
        'player/qml/redesign/RedesignTrackAssignments.qml',
@@ -1252,6 +1255,10 @@ qml_modules += {
 }
 
 qml_tests = {
+    'tst_AddonSelections': files('tests/tst_AddonSelections.qml'),
+    'tst_AddonSelectionSurface': files('tests/tst_AddonSelectionSurface.qml'),
+    'tst_AddonRecovery': files('tests/tst_AddonRecovery.qml'),
+    'tst_AddonTypedDialogs': files('tests/tst_AddonTypedDialogs.qml'),
     'tst_AddonDiscovery': files('tests/tst_AddonDiscovery.qml'),
     'tst_AddonInstaller': files('tests/tst_AddonInstaller.qml'),
     'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),
