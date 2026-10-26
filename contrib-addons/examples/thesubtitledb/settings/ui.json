@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "groups": [{
+    "id": "account",
+    "title": "TheSubtitleDB",
+    "description": "Get an API key from your TheSubtitleDB account. VLC sends it only to the API origin; the add-on never receives its value.",
+    "fields": ["apiKey", "language"],
+    "links": [{"label": "Get an API key", "url": "https://thesubtitledb.org/account/keys"}]
+  }]
+}
