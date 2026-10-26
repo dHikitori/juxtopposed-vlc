@@ -27,7 +27,7 @@ public:
 
     Q_INVOKABLE QVariantList sources() const;
     Q_INVOKABLE bool supports(const QString& source, const QString& operation) const;
-    Q_INVOKABLE QString roots(const QString& source, const QString& view, quint64 generation);
+    Q_INVOKABLE QString roots(const QString& source, const QString& view, quint64 generation, const QString& cursor = {});
     Q_INVOKABLE QString browse(const QString& node, const QString& view, quint64 generation,
                               const QString& cursor = {});
     Q_INVOKABLE QString search(const QString& source, const QString& query, const QVariantMap& filters,

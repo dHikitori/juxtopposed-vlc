@@ -79,6 +79,10 @@
 #include "addons/addon_ui_registry.hpp"
 #include "addons/addon_player_visualizers.hpp"
 #include "addons/addon_visualizer_surface.hpp"
+#include "addons/addon_discovery_service.hpp"
+#include "addons/addon_native_queue_store.hpp"
+#include "addons/addon_player_discovery.hpp"
+#include "addons/addon_playable_gate.hpp"
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -195,6 +199,7 @@ bool MainUI::setup(QQmlEngine* engine)
     engine->rootContext()->setContextProperty(QStringLiteral("redesignAppearance"), m_mainCtx);
     engine->rootContext()->setContextProperty(QStringLiteral("redesignThemeService"), vlc::addons::AddonThemeService::instance());
     engine->rootContext()->setContextProperty(QStringLiteral("redesignAddonUi"), findChild<vlc::addons::AddonUiRegistry*>());
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignDiscoveryService"), findChild<vlc::addons::AddonDiscoveryService*>());
     engine->addImageProvider(QStringLiteral("vlcaccess"), new VLCAccessImageProvider());
     engine->addImageProvider(QStringLiteral("seekpreview"), new SeekPreviewImageProvider());
 
@@ -362,8 +367,8 @@ void MainUI::registerQMLTypes()
         AddonMetadataService* metadataService = nullptr;
         if (!dataDirectory.isEmpty()) {
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
-            addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
+            addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
             const auto installedReference = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference/tvmaze")) : QString();
             free(sharedDirectory);
@@ -390,6 +395,15 @@ void MainUI::registerQMLTypes()
             qmlRegisterSingletonInstance<vlc::addons::AddonUiRegistry>(uri, versionMajor, versionMinor, "AddonUiRegistry", addonUi);
             auto* visualizers = vlc::addons::createPlayerVisualizers(addonManager, m_intf->p_mainPlayerController, this);
             qmlRegisterSingletonInstance<vlc::addons::AddonVisualizers>(uri, versionMajor, versionMinor, "AddonVisualizers", visualizers);
+            const QPointer<vlc::addons::AddonManager> managerOwner(addonManager);
+            auto admissions = std::make_shared<vlc::addons::AddonSourceAdmissions>(addonManager->storageDirectory(),
+                [managerOwner](const QVariantMap& reference) { return vlc::addons::discoveryReferenceAvailable(managerOwner, reference); });
+            auto* nativeQueue = new vlc::addons::AddonNativeQueueStore(m_intf->p_mainPlaylistController ? m_intf->p_mainPlaylistController->getPlaylist().m_playlist : nullptr, admissions, this);
+            nativeQueue->setObjectName(QStringLiteral("addonNativeQueueStore"));
+            auto* playableGate = new vlc::addons::AddonPlayableGate(addonManager, this);
+            playableGate->setObjectName(QStringLiteral("addonPlayableGate"));
+            auto* discovery = vlc::addons::createPlayerDiscovery(addonManager, playableGate, nativeQueue->backend(), this);
+            qmlRegisterSingletonInstance<vlc::addons::AddonDiscoveryService>(uri, versionMajor, versionMinor, "AddonDiscovery", discovery);
         }
         qmlRegisterType<vlc::addons::AddonVisualizerSurface>(uri, versionMajor, versionMinor, "AddonVisualizerSurface");
         auto* subtitleSources = new SubtitleSourceService(this);

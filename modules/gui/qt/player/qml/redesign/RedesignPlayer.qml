@@ -38,6 +38,13 @@ FocusScope {
         registry: typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
         scaleFactor: view.scaleFactor; accentColor: view.accentColor; lightTheme: view.lightTheme
     }
+    RedesignAddonDiscoveryWindow {
+        id: discoveryWindow
+        backend: typeof AddonDiscovery === "undefined" ? null : AddonDiscovery
+        settingsBackend: typeof AddonManager === "undefined" ? null : AddonManager
+        scaleFactor: view.scaleFactor; accentColor: view.accentColor; lightTheme: view.lightTheme
+        onManageRequested: DialogsProvider.prefsPageDialog("extensions")
+    }
     // The projection retains folder state while its lazy source is unloaded.
     PlaylistTreeModel { id: queueTreeModel; treeEnabled: MainCtx.playlistTree }
     property int requestedLibraryCategory: -1
@@ -295,7 +302,7 @@ FocusScope {
     Binding {
         target: MainCtx
         property: "preferHotkeys"
-        value: MainCtx.useGlobalShortcuts && !view.controlsLocked && !tracksPopup.visible && !mediaMenu.visible && !shortcutEditor.visible && !addonWindow.visible
+        value: MainCtx.useGlobalShortcuts && !view.controlsLocked && !tracksPopup.visible && !mediaMenu.visible && !shortcutEditor.visible && !addonWindow.visible && !discoveryWindow.visible
         restoreMode: Binding.RestoreBindingOrValue
     }
     Binding { target: Player; property: "seekPreviewEnabled"; value: MainCtx.redesignPlayerPreferences.seekPreview }
@@ -551,6 +558,7 @@ FocusScope {
                     item.videoBackdropContent = rootPlayer.menuBackdropContent
                     item.expanded = Qt.binding(() => view.libraryExpanded)
                     item.fullLibraryRequested.connect(() => { view.libraryExpanded = !view.libraryExpanded })
+                    item.discoveryRequested.connect(source => discoveryWindow.openSource(source))
                     rootPlayer.applyLibraryCategory()
                 }
                 Loader {
@@ -568,6 +576,7 @@ FocusScope {
                         onFolderRequested: DialogsProvider.PLOpenDir()
                         onFullLibraryRequested: view.libraryExpanded = !view.libraryExpanded
                         onPreferencesRequested: DialogsProvider.prefsPageDialog("library")
+                        onDiscoveryRequested: source => discoveryWindow.openSource(source)
                     }
                     onLoaded: rootPlayer.applyLibraryCategory()
                 }
@@ -733,6 +742,7 @@ FocusScope {
         recentFilesEnabled: { playerPreferences.revision; return !!playerPreferences.value("save-recentplay") }
         profiles: { applicationProfiles.revision; return applicationProfiles.playerPresets }
         selectedProfile: { applicationProfiles.revision; return applicationProfiles.selectedPlayerPreset }
+        onDiscoveryRequested: discoveryWindow.openSource("")
         onRecentRequested: mediaId => { if (recentMenuModel.item) recentMenuModel.item.playMedia(mediaId) }
         onClearRecentRequested: if (recentMenuModel.item) recentMenuModel.item.clearHistory()
         onProfileActionsRequested: (profileId, name, x, y) => profileEditor.openProfileActions(profileId, name, x, y)

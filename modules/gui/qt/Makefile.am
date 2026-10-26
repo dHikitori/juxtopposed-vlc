@@ -134,6 +134,16 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_metadata_service.hpp \
 	addons/addon_discovery_coordinator.cpp \
 	addons/addon_discovery_coordinator.hpp \
+	addons/addon_queue_transactions.cpp \
+	addons/addon_queue_transactions.hpp \
+	addons/addon_discovery_service.cpp \
+	addons/addon_discovery_service.hpp \
+	addons/addon_player_discovery.cpp \
+	addons/addon_player_discovery.hpp \
+	addons/addon_source_admissions.cpp \
+	addons/addon_source_admissions.hpp \
+	addons/addon_native_queue_store.cpp \
+	addons/addon_native_queue_store.hpp \
 	addons/addon_theme_service.cpp \
 	addons/addon_theme_service.hpp \
 	addons/addon_sessions.cpp \
@@ -147,9 +157,11 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_settings_migrations.cpp \
 	addons/addon_settings_migrations.hpp \
 	addons/addon_host_services.cpp \
+	addons/addon_host_services.hpp \
 	addons/addon_repository_updates.cpp \
 	addons/addon_repository_updates.hpp \
-	addons/addon_host_services.hpp \
+	addons/addon_playable_gate.cpp \
+	addons/addon_playable_gate.hpp \
 	addons/addon_artwork_assets.cpp \
 	addons/addon_artwork_assets.hpp
 QT_ADDON_HOST_MOC = \
@@ -160,10 +172,14 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_ui_registry.moc.cpp \
 	addons/addon_metadata_service.moc.cpp \
 	addons/addon_discovery_coordinator.moc.cpp \
+	addons/addon_queue_transactions.moc.cpp \
+	addons/addon_discovery_service.moc.cpp \
+	addons/addon_native_queue_store.moc.cpp \
 	addons/addon_theme_service.moc.cpp \
 	addons/addon_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
 	addons/addon_host_services.moc.cpp \
+	addons/addon_playable_gate.moc.cpp \
 	addons/addon_artwork_assets.moc.cpp
 
 libqt_addon_host_la_SOURCES = $(QT_ADDON_HOST_SOURCES)
@@ -1407,6 +1423,8 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonChild.qml \
 	player/qml/redesign/RedesignAddonField.qml \
 	player/qml/redesign/RedesignAddonManagement.qml \
+	player/qml/redesign/RedesignAddonDiscovery.qml \
+	player/qml/redesign/RedesignAddonDiscoveryWindow.qml \
 	player/qml/redesign/RedesignAddonNode.qml \
 	player/qml/redesign/RedesignAddonProviders.qml \
 	player/qml/redesign/RedesignAddonSettings.qml \
@@ -2231,6 +2249,7 @@ test_qt_addon_host_services_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFOR
 check_PROGRAMS += test_qt_addon_host_services
 TESTS += test_qt_addon_host_services
 
+
 test_qt_addon_repository_updates_SOURCES = tests/test_addon_repository_updates.cpp
 nodist_test_qt_addon_repository_updates_SOURCES = tests/test_addon_repository_updates.moc
 BUILT_SOURCES += tests/test_addon_repository_updates.moc
@@ -2241,6 +2260,17 @@ test_qt_addon_repository_updates_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_l
 test_qt_addon_repository_updates_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_repository_updates
 TESTS += test_qt_addon_repository_updates
+
+test_qt_addon_playable_gate_SOURCES = tests/test_addon_playable_gate.cpp
+nodist_test_qt_addon_playable_gate_SOURCES = tests/test_addon_playable_gate.moc
+BUILT_SOURCES += tests/test_addon_playable_gate.moc
+CLEANFILES += tests/test_addon_playable_gate.moc
+test_qt_addon_playable_gate_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_playable_gate_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_playable_gate_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_playable_gate_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_playable_gate
+TESTS += test_qt_addon_playable_gate
 
 
 test_qt_addon_artwork_assets_SOURCES = tests/test_addon_artwork_assets.cpp
@@ -2253,6 +2283,52 @@ test_qt_addon_artwork_assets_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd
 test_qt_addon_artwork_assets_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_artwork_assets
 TESTS += test_qt_addon_artwork_assets
+
+
+test_qt_addon_queue_transactions_SOURCES = tests/test_addon_queue_transactions.cpp
+nodist_test_qt_addon_queue_transactions_SOURCES = tests/test_addon_queue_transactions.moc
+BUILT_SOURCES += tests/test_addon_queue_transactions.moc
+CLEANFILES += tests/test_addon_queue_transactions.moc
+test_qt_addon_queue_transactions_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_queue_transactions_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_queue_transactions_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_queue_transactions_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_queue_transactions
+TESTS += test_qt_addon_queue_transactions
+
+test_qt_addon_discovery_service_SOURCES = tests/test_addon_discovery_service.cpp
+nodist_test_qt_addon_discovery_service_SOURCES = tests/test_addon_discovery_service.moc
+BUILT_SOURCES += tests/test_addon_discovery_service.moc
+CLEANFILES += tests/test_addon_discovery_service.moc
+test_qt_addon_discovery_service_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_discovery_service_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_discovery_service_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_discovery_service_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_discovery_service
+TESTS += test_qt_addon_discovery_service
+
+test_qt_addon_source_admissions_SOURCES = tests/test_addon_source_admissions.cpp
+nodist_test_qt_addon_source_admissions_SOURCES = tests/test_addon_source_admissions.moc
+BUILT_SOURCES += tests/test_addon_source_admissions.moc
+CLEANFILES += tests/test_addon_source_admissions.moc
+test_qt_addon_source_admissions_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_source_admissions_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_source_admissions_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_source_admissions_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_source_admissions
+TESTS += test_qt_addon_source_admissions
+
+test_qt_addon_native_queue_store_SOURCES = tests/test_addon_native_queue_store.cpp
+nodist_test_qt_addon_native_queue_store_SOURCES = tests/test_addon_native_queue_store.moc
+BUILT_SOURCES += tests/test_addon_native_queue_store.moc
+CLEANFILES += tests/test_addon_native_queue_store.moc
+test_qt_addon_native_queue_store_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_native_queue_store_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_native_queue_store_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_native_queue_store_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_native_queue_store
+TESTS += test_qt_addon_native_queue_store
+
 
 LIBVLC = ../../../lib/libvlc.la
 QT_QTEST_COMMON_cppflags = $(libqt_plugin_la_CPPFLAGS) -I$(builddir)/tests -DTOP_BUILDDIR=\"$(abs_top_builddir)\"
@@ -2876,6 +2952,8 @@ QML_LOG_COMPILER = $(builddir)/qml_test -input
 if HAVE_QT_QUICK_TEST
 EXTRA_DIST += tests/tst_AddonInstaller.qml
 TESTS += tests/tst_AddonInstaller.qml
+EXTRA_DIST += tests/tst_AddonDiscovery.qml
+TESTS += tests/tst_AddonDiscovery.qml
 EXTRA_DIST += tests/tst_AddonMounts.qml
 TESTS += tests/tst_AddonMounts.qml
 EXTRA_DIST += tests/tst_AddonUi.qml tests/tst_AddonTheme.qml tests/tst_AddonThemeSelection.qml tests/tst_AddonThemeHost.qml tests/tst_AddonIntegration.qml tests/tst_AddonTrackPreparation.qml

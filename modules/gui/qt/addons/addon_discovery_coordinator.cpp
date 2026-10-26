@@ -118,8 +118,8 @@ QString AddonDiscoveryCoordinator::rejected(const QString& view, quint64 generat
     });
     return request;
 }
-QString AddonDiscoveryCoordinator::roots(const QString& source, const QString& view, quint64 generation)
-{ return start(source, QStringLiteral("roots"), {}, view, generation); }
+QString AddonDiscoveryCoordinator::roots(const QString& source, const QString& view, quint64 generation, const QString& cursor)
+{ return start(source, QStringLiteral("roots"), {}, view, generation, cursor); }
 QString AddonDiscoveryCoordinator::browse(const QString& node, const QString& view, quint64 generation, const QString& cursor)
 {
     const auto found = m_handles.constFind(node);

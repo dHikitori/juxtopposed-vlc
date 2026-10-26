@@ -213,12 +213,13 @@ FocusScope {
                     objectName: row.queueIndex >= 0 ? "queueItem_" + row.queueIndex : "queueGroup_" + row.index
                     Layout.fillWidth: true
                     text: row.title
+                    tooltipTextFormat: Text.PlainText
                     selected: row.queueIndex >= 0 ? !root.selectedGroupKey.length && root.selectedIndex === row.queueIndex : root.selectedGroupKey === row.groupKey
                     selectedForeground: row.isCurrent ? theme.accent : theme.foreground
                     contentItem: RowLayout {
                         spacing: theme.dp(12)
                         RedesignIcon { visible: row.group; Layout.preferredWidth: theme.dp(18); Layout.preferredHeight: theme.dp(18); name: row.model.treePlaylist ? "playlist" : "folder"; color: row.containsCurrent ? theme.accent : theme.foreground }
-                        Text { Layout.fillWidth: true; text: row.title; elide: Text.ElideRight; font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground }
+                        Text { Layout.fillWidth: true; text: row.title; textFormat: Text.PlainText; elide: Text.ElideRight; font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground }
                         Text { objectName: "queueDuration_" + row.queueIndex; text: root.durationText(row.model.duration); font.pixelSize: theme.dp(14); color: theme.playerLabel }
                     }
                     mediaItem: true

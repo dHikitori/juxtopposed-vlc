@@ -95,6 +95,7 @@ Item {
     signal homeEnqueueRequested(string section, int index)
     signal homeSectionRequested(string section)
     signal categoryRequested(int category)
+    signal discoveryRequested(string source)
     signal activated(int index)
     signal enqueueRequested(int index)
     signal addRequested()
@@ -292,6 +293,7 @@ Item {
         atCategoryRoot: root.breadcrumbs.length <= 1
         pins: root.pins; selectedPinId: root.selectedPinId
         onCategoryRequested: category => root.categoryRequested(category)
+        onDiscoveryRequested: source => root.discoveryRequested(source)
         onAddRequested: root.addRequested()
         onPinActivated: pin => root.pinActivated(pin)
         onPinRemoved: pin => root.pinRemoved(pin)

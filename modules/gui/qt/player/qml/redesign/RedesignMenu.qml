@@ -15,6 +15,8 @@ C.Menu {
     property bool recentFilesEnabled: true
     property var profiles: []
     property var addonRegistry: typeof redesignAddonUi === "undefined" ? null : redesignAddonUi
+    property var discoveryBackend: typeof redesignDiscoveryService === "undefined" ? null : redesignDiscoveryService
+    readonly property bool discoveryAvailable: { if (!discoveryBackend) return false; discoveryBackend.revision; return discoveryBackend.sources.length > 0 }
     readonly property var addonCommands: {
         if (!addonRegistry) return []
         addonRegistry.revision
@@ -37,6 +39,7 @@ C.Menu {
     readonly property string profileName: profiles.find(profile => profile.id === selectedProfile)?.name || qsTr("Default Profile")
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal actionRequested(string action)
+    signal discoveryRequested()
     signal recentRequested(var mediaId)
     signal clearRecentRequested()
     signal profileRequested(string profileId)
@@ -276,6 +279,17 @@ C.Menu {
         MenuRow { objectName: "profileCreateAction"; text: qsTr("New"); glyph: "add"; onTriggered: root.activate("new-profile") }
     }
     MenuRow { text: qsTr("Keyboard Shortcuts"); glyph: "menu-keyboard"; onTriggered: root.activate("shortcuts") }
+    Instantiator {
+        objectName: "addonDiscoveryActions"
+        model: root.discoveryAvailable ? [true] : []
+        delegate: MenuRow {
+            objectName: "addonDiscoveryMenuAction"
+            text: qsTr("Find media"); glyph: "network"
+            onTriggered: { root.dismiss(); root.discoveryRequested() }
+        }
+        onObjectAdded: (index, object) => root.insertItem(Math.max(0, root.count - 3), object)
+        onObjectRemoved: (index, object) => root.removeItem(object)
+    }
     Instantiator {
         model: root.addonCommands
         delegate: MenuRow {

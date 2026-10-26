@@ -11,7 +11,9 @@ add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_credentials.cpp
     addon_network.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
-    addon_visual_scene.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_host_services.cpp addon_repository_updates.cpp addon_artwork_assets.cpp)
+    addon_visual_scene.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_host_services.cpp
+    addon_repository_updates.cpp addon_playable_gate.cpp addon_artwork_assets.cpp
+    addon_queue_transactions.cpp addon_discovery_service.cpp addon_player_discovery.cpp addon_source_admissions.cpp)
 target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network Threads::Threads)
 target_compile_definitions(vlc_addon_host PUBLIC QT_USE_QSTRINGBUILDER QT_NO_CAST_TO_ASCII QT_NO_CAST_FROM_BYTEARRAY QT_STRICT_ITERATORS)
 target_include_directories(vlc_addon_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -20,7 +22,7 @@ if(WIN32)
 elseif(APPLE)
     target_link_libraries(vlc_addon_host PRIVATE "-framework Security")
 endif()
-foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizers host_services repository_updates artwork_assets)
+foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizers host_services repository_updates playable_gate artwork_assets queue_transactions discovery_service source_admissions)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
@@ -35,7 +37,8 @@ if(VLC_BUILD_DIR)
         PATHS "${VLC_BUILD_DIR}/src" "${VLC_BUILD_DIR}/src/.libs" NO_DEFAULT_PATH REQUIRED)
     add_library(vlc_addon_core UNKNOWN IMPORTED)
     set_target_properties(vlc_addon_core PROPERTIES IMPORTED_LOCATION "${VLC_CORE_LIBRARY}")
-    add_library(vlc_addon_native_metadata STATIC addon_metadata_service.cpp addon_metadata_service.hpp)
+    add_library(vlc_addon_native_metadata STATIC addon_metadata_service.cpp addon_metadata_service.hpp
+        addon_native_queue_store.cpp addon_native_queue_store.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
@@ -46,6 +49,14 @@ if(VLC_BUILD_DIR)
     add_executable(test_addon_metadata_service "../tests/test_addon_metadata_service.cpp")
     target_link_libraries(test_addon_metadata_service PRIVATE vlc_addon_native_metadata Qt6::Test)
     add_test(NAME addon_metadata_service COMMAND test_addon_metadata_service)
+
+    find_library(VLC_PUBLIC_LIBRARY NAMES vlc
+        PATHS "${VLC_BUILD_DIR}/lib" "${VLC_BUILD_DIR}/lib/.libs" NO_DEFAULT_PATH REQUIRED)
+    add_executable(test_addon_native_queue_store "../tests/test_addon_native_queue_store.cpp")
+    target_link_libraries(test_addon_native_queue_store PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
+    target_include_directories(test_addon_native_queue_store PRIVATE "${VLC_SOURCE_ROOT}")
+    target_compile_definitions(test_addon_native_queue_store PRIVATE VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
+    add_test(NAME addon_native_queue_store COMMAND test_addon_native_queue_store)
 
     add_executable(test_metadata_backend "${VLC_SOURCE_ROOT}/test/src/misc/metadata_backend.c")
     set_target_properties(test_metadata_backend PROPERTIES AUTOMOC OFF)

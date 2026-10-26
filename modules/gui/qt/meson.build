@@ -28,6 +28,16 @@ addon_host_sources = files(
     'addons/addon_metadata_service.hpp',
     'addons/addon_discovery_coordinator.cpp',
     'addons/addon_discovery_coordinator.hpp',
+    'addons/addon_queue_transactions.cpp',
+    'addons/addon_queue_transactions.hpp',
+    'addons/addon_discovery_service.cpp',
+    'addons/addon_discovery_service.hpp',
+    'addons/addon_player_discovery.cpp',
+    'addons/addon_player_discovery.hpp',
+    'addons/addon_source_admissions.cpp',
+    'addons/addon_source_admissions.hpp',
+    'addons/addon_native_queue_store.cpp',
+    'addons/addon_native_queue_store.hpp',
     'addons/addon_theme_service.cpp',
     'addons/addon_theme_service.hpp',
     'addons/addon_sessions.cpp',
@@ -41,9 +51,11 @@ addon_host_sources = files(
     'addons/addon_settings_migrations.cpp',
     'addons/addon_settings_migrations.hpp',
     'addons/addon_host_services.cpp',
+    'addons/addon_host_services.hpp',
     'addons/addon_repository_updates.cpp',
     'addons/addon_repository_updates.hpp',
-    'addons/addon_host_services.hpp',
+    'addons/addon_playable_gate.cpp',
+    'addons/addon_playable_gate.hpp',
     'addons/addon_artwork_assets.cpp',
     'addons/addon_artwork_assets.hpp',
 )
@@ -55,10 +67,14 @@ addon_host_moc_headers = files(
     'addons/addon_ui_registry.hpp',
     'addons/addon_metadata_service.hpp',
     'addons/addon_discovery_coordinator.hpp',
+    'addons/addon_queue_transactions.hpp',
+    'addons/addon_discovery_service.hpp',
+    'addons/addon_native_queue_store.hpp',
     'addons/addon_theme_service.hpp',
     'addons/addon_sessions.hpp',
     'addons/addon_visualizers.hpp',
     'addons/addon_host_services.hpp',
+    'addons/addon_playable_gate.hpp',
     'addons/addon_artwork_assets.hpp',
 )
 
@@ -932,6 +948,8 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonChild.qml',
        'player/qml/redesign/RedesignAddonField.qml',
        'player/qml/redesign/RedesignAddonManagement.qml',
+       'player/qml/redesign/RedesignAddonDiscovery.qml',
+       'player/qml/redesign/RedesignAddonDiscoveryWindow.qml',
        'player/qml/redesign/RedesignAddonNode.qml',
        'player/qml/redesign/RedesignAddonProviders.qml',
        'player/qml/redesign/RedesignAddonSettings.qml',
@@ -1229,6 +1247,7 @@ qml_modules += {
 }
 
 qml_tests = {
+    'tst_AddonDiscovery': files('tests/tst_AddonDiscovery.qml'),
     'tst_AddonInstaller': files('tests/tst_AddonInstaller.qml'),
     'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),
     'tst_AddonUi': files('tests/tst_AddonUi.qml'),
@@ -1721,7 +1740,7 @@ if qt6_dep.found()
 
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
-        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizers', 'host_services', 'repository_updates', 'artwork_assets']
+        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions']
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,
                 'sources': files('tests/test_addon_' + addon_test + '.cpp'),
@@ -1736,6 +1755,17 @@ if qt6_dep.found()
                 'env': addon_worker_environment,
             }
         endforeach
+        vlc_tests += {
+            'name': 'test_qt_addon_native_queue_store',
+            'sources': files('tests/test_addon_native_queue_store.cpp'),
+            'moc_sources': files('tests/test_addon_native_queue_store.cpp'),
+            'link_with': [addon_host_library, libvlccore, libvlc],
+            'suite': ['qt', 'addons'],
+            'include_directories': [qt_include_dir, include_directories('../../..')],
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'cpp_args': ['-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'],
+            'link_args': qt_link_args,
+        }
         if host_system == 'windows'
             vlc_tests += {
                 'name': 'test_qt_window_fullscreen',

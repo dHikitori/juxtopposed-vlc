@@ -115,6 +115,21 @@ private slots:
         QCOMPARE(data.value("items").toList().size(), 1); QCOMPARE(data.value("updates").toList().size(), 1);
         QCOMPARE(data.value("updates").toList()[0].toMap().value("ref").toString(), first);
     }
+    void rootsPaginationKeepsCursorAuthorityInTheHost() {
+        Fake fake; AddonDiscoveryCoordinator discovery(fake.backend());
+        QSignalSpy done(&discovery, &AddonDiscoveryCoordinator::finished);
+        discovery.roots(sourceId, "view", 1); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(discovery, fake.calls[0], {{"items", QVariantList{media()}}, {"cursor", QVariantMap{{"offset", 2}}}});
+        QTRY_COMPARE(done.size(), 1);
+        const auto cursor = done.last()[2].toMap().value("cursor").toString(); QVERIFY(!cursor.isEmpty());
+        discovery.roots(sourceId, "other-view", 1, cursor); QTRY_COMPARE(done.size(), 2); QCOMPARE(fake.calls.size(), 1);
+        discovery.search(sourceId, "jazz", {}, "view", 1, cursor); QTRY_COMPARE(done.size(), 3); QCOMPARE(fake.calls.size(), 1);
+        discovery.roots(sourceId, "view", 1, cursor); QTRY_COMPARE(fake.calls.size(), 2);
+        QCOMPARE(fake.calls.last().operation, QStringLiteral("roots"));
+        QCOMPARE(fake.calls.last().context.value("cursor").toMap().value("offset").toInt(), 2);
+        complete(discovery, fake.calls.last(), page({media("station-2")})); QTRY_COMPARE(done.size(), 4);
+        QCOMPARE(done.last()[2].toMap().value("items").toList().size(), 1);
+    }
     void changingGenerationCancelsJobsAndRevokesHandles() {
         Fake fake; AddonDiscoveryCoordinator discovery(fake.backend());
         QSignalSpy done(&discovery, &AddonDiscoveryCoordinator::finished);

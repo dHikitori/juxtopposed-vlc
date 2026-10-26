@@ -15,6 +15,9 @@ Rectangle {
     property string selectedPinId: ""
     property var addonRegistry: typeof redesignAddonUi === "undefined" ? null : redesignAddonUi
     readonly property var addonRoutes: { if (!addonRegistry) return []; addonRegistry.revision; return addonRegistry.routes().slice(0, 16) }
+    property var discoveryBackend: typeof redesignDiscoveryService === "undefined" ? null : redesignDiscoveryService
+    readonly property var discoverySources: { if (!discoveryBackend) return []; discoveryBackend.revision; return discoveryBackend.sources.slice(0, 16) }
+    signal discoveryRequested(string source)
     signal categoryRequested(int category)
     signal addRequested()
     signal pinActivated(var pin)
@@ -111,6 +114,17 @@ Rectangle {
                     caption: root.expanded ? text : ""; captionTextFormat: Text.PlainText
                     iconName: "info"
                     onClicked: root.addonRegistry.openRoute(modelData.route, {})
+                }
+            }
+            Repeater {
+                model: root.discoverySources
+                NavigationButton {
+                    required property var modelData
+                    objectName: "addonDiscoveryNavigation_" + modelData.id
+                    text: modelData.name || modelData.id; tooltipTextFormat: Text.PlainText
+                    caption: root.expanded ? text : ""; captionTextFormat: Text.PlainText
+                    iconName: "network"
+                    onClicked: root.discoveryRequested(modelData.id)
                 }
             }
             Repeater {
