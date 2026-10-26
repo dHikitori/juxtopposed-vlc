@@ -10,6 +10,7 @@ const MAX_MESSAGE: usize = 1024 * 1024;
 const MAX_MODULE: usize = 16 * 1024 * 1024;
 const MAX_MEMORY: usize = 64 * 1024 * 1024;
 const MAX_OUTGOING: usize = 64;
+const OUTPUT_ENVELOPE_BYTES: usize = br#"{"type":"messages","messages":[]}"#.len();
 const DISPATCH_FUEL: u64 = 10_000_000;
 
 struct State {
@@ -46,7 +47,7 @@ impl Runtime {
             limits: StoreLimitsBuilder::new().memory_size(MAX_MEMORY)
                 .instances(1).memories(1).tables(1).table_elements(16384)
                 .trap_on_grow_failure(true).build(),
-            messages: Vec::new(), bytes: 0,
+            messages: Vec::new(), bytes: OUTPUT_ENVELOPE_BYTES,
         };
         let mut store = Store::new(&engine, state);
         store.limiter(|state| &mut state.limits);
@@ -54,8 +55,8 @@ impl Runtime {
         let mut linker = Linker::new(&engine);
         linker.func_wrap("vlc", "host_send", |mut caller: Caller<'_, State>, ptr: i32, len: i32| -> Result<i32> {
             let len = usize::try_from(len).context("invalid message length")?;
-            if len > MAX_MESSAGE || caller.data().messages.len() >= MAX_OUTGOING
-                || caller.data().bytes.checked_add(len).is_none_or(|n| n > MAX_MESSAGE) {
+            let separator = usize::from(!caller.data().messages.is_empty());
+            if len > MAX_MESSAGE || caller.data().messages.len() >= MAX_OUTGOING {
                 bail!("outgoing message quota exceeded");
             }
             let memory = caller.get_export("memory").and_then(|e| e.into_memory())
@@ -65,8 +66,13 @@ impl Runtime {
             let data = memory.data(&caller).get(start..end).context("message outside guest memory")?;
             let message: Value = serde_json::from_slice(data).context("invalid outgoing JSON")?;
             if !message.is_object() { bail!("outgoing message must be an object"); }
+            // JSON number normalization can increase the final encoded size.
+            let encoded = serde_json::to_vec(&message)?.len();
+            if caller.data().bytes.checked_add(encoded).and_then(|n| n.checked_add(separator)).is_none_or(|n| n > MAX_MESSAGE) {
+                bail!("outgoing message quota exceeded");
+            }
             caller.data_mut().messages.push(message);
-            caller.data_mut().bytes += len;
+            caller.data_mut().bytes += encoded + separator;
             Ok(0)
         })?;
         let instance = linker.instantiate(&mut store, &module).context("cannot instantiate guest")?;
@@ -85,7 +91,7 @@ impl Runtime {
         if bytes.len() > MAX_MESSAGE { bail!("incoming message quota exceeded"); }
         self.store.set_fuel(DISPATCH_FUEL)?;
         self.store.data_mut().messages.clear();
-        self.store.data_mut().bytes = 0;
+        self.store.data_mut().bytes = OUTPUT_ENVELOPE_BYTES;
         let len = i32::try_from(bytes.len())?;
         let ptr = self.alloc.call(&mut self.store, len).context("guest allocation failed")?;
         self.memory.write(&mut self.store, ptr as u32 as usize, &bytes)
@@ -220,6 +226,38 @@ mod tests {
             let input = json!({"type":"test","n":n});
             assert_eq!(runtime.dispatch(&input).unwrap(), vec![input]);
         }
+    }
+    #[test]
+    fn outgoing_batch_reserves_the_complete_ipc_envelope() {
+        fn with_reply(bytes: &[u8]) -> Runtime {
+            let encoded: String = bytes.iter().map(|byte| format!("\\{byte:02x}")).collect();
+            let wasm = wat::parse_str(format!(r#"(module
+                (import "vlc" "host_send" (func $send (param i32 i32) (result i32)))
+                (memory (export "memory") 17 1024)
+                (data (i32.const 0) "{encoded}")
+                (func (export "vlc_alloc") (param i32) (result i32) i32.const 1052672)
+                (func (export "vlc_dealloc") (param i32 i32))
+                (func (export "vlc_dispatch") (param i32 i32)
+                    i32.const 0 i32.const {} call $send drop))"#, bytes.len())).unwrap();
+            Runtime::new(&wasm).unwrap()
+        }
+        let empty = serde_json::to_vec(&json!({"body":""})).unwrap().len();
+        for extra in [0, 1] {
+            let reply = json!({"body":"x".repeat(MAX_MESSAGE - OUTPUT_ENVELOPE_BYTES - empty + extra)});
+            let bytes = serde_json::to_vec(&reply).unwrap();
+            let mut runtime = with_reply(&bytes);
+            let result = runtime.dispatch(&json!({}));
+            if extra == 0 {
+                let line = json!({"type":"messages", "messages":result.unwrap()});
+                assert_eq!(serde_json::to_vec(&line).unwrap().len(), MAX_MESSAGE);
+            } else { assert!(result.is_err()); }
+        }
+        let empty = r#"{"n":1e9,"body":""}"#;
+        let body = "x".repeat(MAX_MESSAGE - OUTPUT_ENVELOPE_BYTES - empty.len());
+        let raw = format!(r#"{{"n":1e9,"body":"{body}"}}"#);
+        assert_eq!(raw.len() + OUTPUT_ENVELOPE_BYTES, MAX_MESSAGE);
+        let mut runtime = with_reply(raw.as_bytes());
+        assert!(runtime.dispatch(&json!({})).is_err());
     }
     #[test]
     fn rejects_ambient_wasi() {
