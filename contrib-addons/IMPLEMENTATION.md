@@ -4,6 +4,8 @@ This file records implementation progress and test evidence. Updated 27 October 
 
 The full scope in this directory remains the objective. SDK v1 still has open completion gates.
 
+Code edits, builds, and staging are now on hold for direct scope approval. Automatic approval review rejected the artwork package builds and storage staging because it treated the first Markdown-only request as the active scope. See [the pending review](pending-implementation-review.md) for concrete files, test results, and required repairs.
+
 ## Verified work
 
 | Area | Implementation and evidence |
@@ -14,6 +16,7 @@ The full scope in this directory remains the objective. SDK v1 still has open co
 | Real subtitle service | The native search and Save path returned four candidates and a 40,610-byte local subtitle through the host broker. The test used the supplied key in temporary session storage. No key entered source, saved settings, worker messages, or logs. |
 | Package host | Strict manifests; repository, tag, and content identity; isolated Git object fetch; immutable release snapshots; permission approval; enable, disable, update, and rollback. Native tests pass. |
 | Credentials and network | OS credential store with an explicit temporary-storage option; exact origin and method scopes; DNS and public-address checks; pinned connections; redirect checks; credential removal on cross-origin redirects. Native tests pass. |
+| Guest private storage | In the working tree: mounted `storage.get`, `storage.set`, and `storage.remove`; shared package quotas; account partitions; pure migrations; matching rollback snapshots. All 18 focused cases pass. Staging waits for scope approval. See [the storage contract](guest-storage-contract.md). |
 | Metadata coordinator | Ordered providers; partial field patches; provenance; strong identity checks; protected fields; bounded cache partitions; independent cancellation. Native tests pass. |
 | Episode consumer | Eleven real consumer parity cases pass. Host results retain their per-field source credit in a separate cache namespace. The old episode cache reader and local readers remain. |
 | Subtitle integration | Native OpenSubtitles and portable providers use one provider order. Host handles resolve through the normal Save path. The latest native suite passes 53 cases. |
@@ -23,8 +26,8 @@ The full scope in this directory remains the objective. SDK v1 still has open co
 | Session authority | Exclusive control leases; typed observations; media and revision checks; duplicate rejection; deadlines; local user priority; owned rate restoration. Nine focused cases pass. Native player and relay integration remain open. |
 | Audio analysis | The callback copies bounded samples without allocation or locks. A separate worker calculates spectrum, waveform, and levels. Six cases pass for formats, time, media changes, and overload. |
 | Visual scenes | Trusted spectrum, waveform, spectrogram, particle, gradient, group, texture, and feedback primitives. Scene and controller suites pass. The normal app mounts the surface and selection UI. Real playback performance and device-loss tests remain open. |
-| Host API dispatch | A closed operation map; permission and operation scopes; request limits; cancellation; handler lifetime; thread-safe completion. Nine focused cases pass. Individual service adapters still need integration tests. |
-| Rust author SDK | Owned ABI buffers, typed input views, pending-call ownership, and complete encoded output bounds. Eight Rust tests and three real-worker fixture tests pass. Four artwork packages use this SDK. |
+| Host API dispatch | A closed operation map; permission and operation scopes; request limits; cancellation; handler lifetime; thread-safe completion. Eleven focused cases pass. Individual service adapters still need integration tests. |
+| Rust author SDK | Owned ABI buffers, typed input views, pending-call ownership, and complete encoded output bounds. The 64-field credential fix passes nine Rust tests and four real-worker tests. That fix remains in the working tree; the four artwork package builds wait for approval. |
 | Worker lifetime | Cancellation reaches the guest. Restart creates a new request-ID namespace. Reentrant native calls cannot restore a canceled invocation. The current broker suite passes 61 tests. Credential packets contain presence flags only. |
 | Account scope | Workers and assets keep captured credential references, release, grants, and settings revision. External state changes revoke old work. Opaque account references preserve display-only changes and code updates. Declared account fields and key changes require a new account reference. |
 | Artwork packages | MusicBrainz, Last.fm, French TV, and image search have portable packages. Eleven parser tests and five worker fixtures pass. Four public native image paths passed. Google and some old French URLs have incomplete live evidence; their core paths remain. See [the migration record](metadata-provider-migration.md). |
@@ -71,11 +74,13 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - `65019a4ec2`: retained native discovery jobs and transport revocation.
 - `a9856efaea`: final serialized IPC frame limits.
 - `2fd6ca2651`: mounted discovery browser, stable admissions, and native queue transactions.
+- `283fcbef04`: episode consumer cache and provenance parity.
+- `41174296b1`: native metadata field and extra-tag revision snapshots.
 
 ## Open completion gates
 
 - Finish supported-platform app/runtime/package tests and repeat release checks after the remaining implementation changes.
-- Complete application-distribution upgrades, private guest storage and migrations, recovery UI, safe mode, and Git object-format negotiation. Keep publisher verification claims consistent with actual evidence.
+- Complete application-distribution upgrades, recovery UI, safe mode, and Git object-format negotiation. Keep publisher verification claims consistent with actual evidence.
 - Mount typed host result adapters before modal replacements can change core state. Theme and mounted UI regression tests have passed for the current scope.
 - Complete the owned metadata route for player, preparser, library, and artwork requests. Preserve each working provider as an add-on before removal.
 - Complete discovery subscriptions and the native lazy playback route. Enforce stream policy through redirects, nested manifests, segments, and keys before playback.
@@ -84,6 +89,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Connect session authority to the native player, host consent UI, and outbound WSS. Exercise two-player drift correction and competing local input.
 - Complete host service adapters, author tooling, schemas, SDK text, and profile conformance tests.
 - Audit all new app English against the requested ASD-STE100 rules and technical terminology.
+- Repair the typed playlist recovery test failure and the metadata AutoText consumers listed in [the pending review](pending-implementation-review.md). The latest broad UI run has 548 passes and one failure; the earlier 493-case regression group passed.
 - Compare the completed implementation with every requirement in the architecture documents.
 
 Successful subtitle tests do not close the other gates. The full implementation remains active while these items are open.

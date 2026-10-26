@@ -55,6 +55,23 @@ The queue and library retain the admitted URI.
 HLS and DASH remain within this one input.
 Reject generic playlist expansion until every child preserves the same admission and native policy.
 
+The native input owns the transport lease.
+Do not cancel it when one manifest, segment, or key reaches EOF.
+Stop and the end of playback cancel it, revoke its policy, and release its references.
+The backend retains issued leases so that account withdrawal and interface shutdown can close them.
+The input must therefore cancel its lease explicitly; a reference release alone is insufficient.
+
+Use an atomic native helper to get or create the item's exact source-only policy.
+Two inputs can use the same item; concurrent opens must not attach two conflicting bootstrap objects.
+Accept an existing policy only if it is the core source-only profile for that exact admitted URI.
+The loopback result must also use the core proxy profile, with no local file or attachment access.
+Refuse an unrelated policy before dispatch or replacement.
+
+The source owner closes native work before interface destruction can wait for an input thread.
+Its instance binding remains in the retiring state until input users end.
+Reject a replacement owner during this cleanup phase.
+Forget the binding only after those users have ended.
+
 ## Consent and selected-item intent
 
 Add a closed permission named `media.stream` with this profile:
