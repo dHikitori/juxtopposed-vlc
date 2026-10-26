@@ -1140,6 +1140,8 @@ vlc_source_backend_Release
 vlc_source_backend_Close
 vlc_source_backend_IsClosed
 vlc_source_job_New
+vlc_source_owner_Set
+vlc_source_owner_Hold
 vlc_source_job_Hold
 vlc_source_job_Release
 vlc_source_job_Start

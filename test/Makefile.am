@@ -40,6 +40,7 @@ check_PROGRAMS = \
     test_src_input_policy \
     test_src_input_source_backend \
     test_src_misc_media_library_startup \
+    test_src_input_source_owner \
 	test_src_misc_iso_language \
 	test_libvlc_core \
 	test_libvlc_downloader \
@@ -254,6 +255,9 @@ if HAVE_WIN32
 check_PROGRAMS += test_src_config_dirs_win32
 test_src_config_dirs_win32_SOURCES = src/config/dirs_win32.c
 test_src_config_dirs_win32_LDADD = $(LIBVLCCORE) -lshell32 -lole32 -ladvapi32 -luuid
+test_src_input_source_owner_SOURCES = src/input/source_owner.c
+test_src_input_source_owner_LDADD = $(LIBVLCCORE)
+
 check_PROGRAMS += test_src_misc_win32_pipe
 test_src_misc_win32_pipe_SOURCES = src/misc/win32_pipe.c
 test_src_misc_win32_pipe_LDADD = $(LIBVLCCORE)

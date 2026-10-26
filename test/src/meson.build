@@ -34,6 +34,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_input_source_owner',
+    'sources': files('input/source_owner.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_misc_file_logger',
     'sources': files('misc/file_logger.c'),
     'suite': ['src', 'test_src'],

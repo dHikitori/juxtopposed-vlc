@@ -46,20 +46,20 @@ Repair tests must use title, artist, and filename text with image markup. Confir
 
 ## Source owner retirement
 
-The isolated `source_owner` draft passes its initial ownership and cleanup tests. It is not registered or mounted. Review found two additional cases that its current draft does not handle:
+The native `source_owner` registry is now registered and mounted in instance cleanup. Its normal C suite passes seven groups and 100 Set/Close races. Review led to fixes for these cases:
 
 1. `Close` on an instance with no owner must still prevent a later `Set` during cleanup.
 2. `Forget` must keep the retirement state through the final backend release. A destroy callback must not create another owner or drain the same entry twice.
 
-Use a private `source_owner_retiring` flag in `libvlc_priv_t`. Initialize it to false in `libvlc_InternalCreate`, before the instance is published. No existing exit, interface, or playlist field supplies this state. Protect the new flag with the existing source `owner_lock`.
+The private `source_owner_retiring` flag in `libvlc_priv_t` starts false in `libvlc_InternalCreate`, before the instance is published. No existing exit, interface, or playlist field supplies this state. The existing source `owner_lock` protects the flag.
 
-`Close` sets the flag before it looks for a registry entry. `Set` tests the flag before it allocates or attaches an entry. Never clear it for that instance. This works without an allocation when the registry is full or no owner was installed.
+`Close` sets the flag before it looks for a registry entry. `Set` tests the flag before it allocates or attaches an entry. The flag is never cleared for that instance. This works without an allocation when the registry is full or no owner was installed.
 
-The persistent flag permits a simpler `Forget` path than the earlier entry-retention proposal: unlink the entry once under `owner_lock`, then release the detached backend outside that lock. During its destroy callback, `Set` fails from the instance flag; `Forget` finds no entry; `Hold` returns NULL. No separate tombstone allocation is required. Before `Forget`, `Hold` can still return the closed owner for an active completion callback.
+`Forget` unlinks the entry once under `owner_lock`, then releases the detached backend outside that lock. During its destroy callback, `Set` fails from the instance flag; `Forget` finds no entry; `Hold` returns NULL. No separate tombstone allocation is required. Before `Forget`, `Hold` can still return the closed owner for an active completion callback.
 
-The private cleanup functions run on the instance cleanup thread. Mount `Close` before `intf_DestroyAll` in `src/libvlc.c`. Mount `Forget` after the VLM, playlist, media-library, and media-source users end, before dialog, key-store, logger, and module cleanup. An idempotent `Forget` before final object deletion supplies a last guard. These calls are not a concurrent callback drain. Host callback state must remain valid until an active callback returns.
+The private cleanup functions run on the instance cleanup thread. `Close` runs before `intf_DestroyAll` in `src/libvlc.c`. `Forget` runs after the VLM, playlist, media-library, and media-source users end, before dialog, key-store, logger, and module cleanup. An idempotent `Forget` before final object deletion supplies a last guard. These calls are not a concurrent callback drain. Host callback state must remain valid until an active callback returns.
 
-The current isolated tests create generic object roots. Change them to real `libvlc_InternalCreate`/`libvlc_InternalDestroy` instances before the code reads private instance fields. Cover an unbound Close followed by Set, allocation failure, full registry, destroy followed by Set/Forget/Hold, concurrent Set/Close, repeated cleanup, and a fresh instance after the previous one ends.
+The tests use real `libvlc_InternalCreate`/`libvlc_InternalDestroy` instances. They cover an unbound Close followed by Set, allocation failure, full registry, destroy followed by Set/Forget/Hold, concurrent Set/Close, repeated cleanup, and a fresh instance after the previous one ends. Separate cases exercise the registry through actual native Cleanup and Destroy. Only Set and Hold have public exports; cleanup functions stay private. The native source access bridge is still open work.
 
 ## Package images and theme resources
 
