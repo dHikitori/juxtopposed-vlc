@@ -47,6 +47,13 @@ class WorkerSdk(unittest.TestCase):
             self.assertEqual(self.invoke(identifier, "state"), [
                 {"type": "result", "id": identifier, "status": "match", "data": {"pending": 0}}])
 
+    def test_host_credential_status_capacity(self):
+        response = self.send({"type": "invoke", "id": "many-fields", "contribution": "fixture",
+                              "operation": "state", "context": {}, "settings": {},
+                              "credentials": {f"key{number}": {"present": False} for number in range(64)},
+                              "hostCapabilities": {}})
+        self.assertEqual(response[0]["status"], "match")
+
     def test_cancel_removes_pending_call_and_late_result(self):
         call = self.invoke("job-1", "wait")[0]
         self.assertEqual(call["invocation"], "job-1")

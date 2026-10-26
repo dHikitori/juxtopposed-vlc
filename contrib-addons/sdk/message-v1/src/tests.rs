@@ -63,6 +63,17 @@ fn rejects_raw_credentials_and_invalid_identifiers() {
     }
 }
 #[test]
+fn accepts_the_hosts_64_credential_status_fields() {
+    let mut value = invoke();
+    value["credentials"] = json!({});
+    for number in 0..64 {
+        value["credentials"][format!("key{number}")] = json!({"present":false});
+    }
+    assert!(Incoming::parse(&value).is_ok());
+    value["credentials"]["extra"] = json!({"present":false});
+    assert!(Incoming::parse(&value).is_err());
+}
+#[test]
 fn validates_host_result_shape() {
     let mut value = json!({"type":"host-result","id":"call-1","invocation":"job-1","status":"error","error":"Access denied."});
     assert!(matches!(

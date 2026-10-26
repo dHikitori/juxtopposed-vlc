@@ -73,7 +73,7 @@ impl<'a> Incoming<'a> {
                         .ok_or(Error::Message)
                 };
                 let credentials = map("credentials")?;
-                if credentials.len() > 32
+                if credentials.len() > 64
                     || credentials.iter().any(|(key, status)| {
                         !identifier(key)
                             || status.as_object().is_none_or(|status| {

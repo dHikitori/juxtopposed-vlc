@@ -27,7 +27,7 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Audio analysis | The callback copies bounded samples without allocation or locks. A separate worker calculates spectrum, waveform, and levels. Six cases pass for formats, time, media changes, and overload. |
 | Visual scenes | Trusted spectrum, waveform, spectrogram, particle, gradient, group, texture, and feedback primitives. Scene and controller suites pass. The normal app mounts the surface and selection UI. Real playback performance and device-loss tests remain open. |
 | Host API dispatch | A closed operation map; permission and operation scopes; request limits; cancellation; handler lifetime; thread-safe completion. Eleven focused cases pass. Individual service adapters still need integration tests. |
-| Rust author SDK | Owned ABI buffers, typed input views, pending-call ownership, and complete encoded output bounds. The 64-field credential fix passes nine Rust tests and four real-worker tests. That fix remains in the working tree; the four artwork package builds wait for approval. |
+| Rust author SDK | Owned ABI buffers, typed input views, pending-call ownership, and complete encoded output bounds. The 64-field credential fix passes nine Rust tests and four real-worker tests. All four artwork packages have been built with the fix; all five artwork worker fixtures pass. |
 | Worker lifetime | Cancellation reaches the guest. Restart creates a new request-ID namespace. Reentrant native calls cannot restore a canceled invocation. The current broker suite passes 61 tests. Credential packets contain presence flags only. |
 | Account scope | Workers and assets keep captured credential references, release, grants, and settings revision. External state changes revoke old work. Opaque account references preserve display-only changes and code updates. Declared account fields and key changes require a new account reference. |
 | Artwork packages | MusicBrainz, Last.fm, French TV, and image search have portable packages. Eleven parser tests and five worker fixtures pass. Four public native image paths passed. Google and some old French URLs have incomplete live evidence; their core paths remain. See [the migration record](metadata-provider-migration.md). |
@@ -76,6 +76,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - `2fd6ca2651`: mounted discovery browser, stable admissions, and native queue transactions.
 - `283fcbef04`: episode consumer cache and provenance parity.
 - `41174296b1`: native metadata field and extra-tag revision snapshots.
+- `65e46b727a`: mounted private storage, account partitions, pure migrations, and recovery snapshots.
 
 ## Open completion gates
 
