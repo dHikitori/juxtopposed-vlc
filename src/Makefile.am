@@ -66,6 +66,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_input.h \
 	../include/vlc_input_item.h \
 	../include/vlc_input_policy.h \
+	../include/vlc_source_backend.h \
 	../include/vlc_interface.h \
 	../include/vlc_interrupt.h \
 	../include/vlc_keystore.h \
@@ -292,6 +293,7 @@ libvlccore_la_SOURCES = \
 	input/item.c \
 	input/policy.c \
 	input/policy.h \
+	input/source_backend.c \
 	input/access.c \
 	clock/clock_internal.c \
 	clock/input_clock.c \

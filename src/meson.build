@@ -155,6 +155,7 @@ libvlccore_sources_base = files(
     'input/item.c',
     'input/policy.c',
     'input/policy.h',
+    'input/source_backend.c',
     'input/access.c',
     'clock/clock_internal.c',
     'clock/input_clock.c',
