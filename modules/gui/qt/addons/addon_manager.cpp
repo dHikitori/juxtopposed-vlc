@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocale>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QTimer>
@@ -93,6 +94,18 @@ QJsonObject AddonManager::savedSettings(const QString& id) const
 { QJsonObject values; m_store.settings(id, &values); return values; }
 QVariantMap AddonManager::settingsSchema(const QString& id) const
 { InstalledPackage package; return m_store.installed(id, &package) ? schema(package).toVariantMap() : QVariantMap{}; }
+QVariantMap AddonManager::settingsMessages(const QString& id) const
+{
+    InstalledPackage package; if (!m_store.installed(id, &package)) return {};
+    const auto locales = package.manifest.document.value("locales").toObject();
+    const auto files = locales.value("files").toObject();
+    QString language = QLocale().name().replace('_', '-');
+    if (!files.contains(language)) language = language.section('-', 0, 0);
+    if (!files.contains(language)) language = locales.value("default").toString();
+    const auto path = files.value(language).toString();
+    if (!package.manifest.files.contains(path)) return {};
+    return readObject(QDir(package.directory).filePath(path)).toVariantMap();
+}
 QVariantMap AddonManager::settingsValues(const QString& id) const
 {
     InstalledPackage package; if (!m_store.installed(id, &package)) return {};
@@ -191,6 +204,33 @@ QVariantList AddonManager::packages() const
     }
     return result;
 }
+QVariantList AddonManager::contributionsOfType(const QString& type, bool includeDisabled) const
+{
+    QVariantList result;
+    for (const auto& id : m_store.installedIds()) {
+        InstalledPackage package; if (!m_store.installed(id, &package) || (!includeDisabled && !package.enabled)) continue;
+        for (const auto& contribution : package.manifest.contributions) {
+            if (contribution.type != type) continue;
+            result.append(QVariantMap{{"id", QString(id + '/' + contribution.id)}, {"packageId", id},
+                {"name", contribution.document.value("name").toString(package.manifest.name)}, {"enabled", package.enabled},
+                {"document", contribution.document.toVariantMap()},
+                {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation))}});
+        }
+    }
+    return result;
+}
+QJsonObject AddonManager::contributionResource(const QString& global, const QString& resourceField) const
+{
+    static const QSet<QString> fields{QStringLiteral("resource"), QStringLiteral("view"), QStringLiteral("theme"), QStringLiteral("scene")};
+    if (!fields.contains(resourceField)) return {};
+    InstalledPackage package; if (!m_store.installed(packagePart(global), &package) || !package.enabled) return {};
+    const auto* contribution = package.manifest.contribution(localPart(global)); if (!contribution) return {};
+    const auto path = contribution->document.value(resourceField).toString();
+    if (!package.manifest.files.contains(path)) return {};
+    return readObject(QDir(package.directory).filePath(path));
+}
+QJsonObject AddonManager::grantedScope(const QString& id, const QString& capability) const
+{ InstalledPackage package; return m_store.installed(id, &package) && package.enabled ? package.grants.value(capability).toObject() : QJsonObject{}; }
 QVariantList AddonManager::providersForFeature(const QString& feature) const
 {
     QVariantList result;

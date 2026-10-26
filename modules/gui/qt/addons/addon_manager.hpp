@@ -24,6 +24,10 @@ public:
     int revision() const { return m_revision; }
     QString errorMessage() const { return m_error; }
     QVariantList packages() const;
+    QString storageDirectory() const { return m_store.storageDirectory(); }
+    QVariantList contributionsOfType(const QString& type, bool includeDisabled = false) const;
+    QJsonObject contributionResource(const QString& globalId, const QString& resourceField) const;
+    QJsonObject grantedScope(const QString& packageId, const QString& capability) const;
     bool credentialPersistenceAvailable() const { return CredentialStore::persistentAvailable(); }
     bool busy() const { return m_repositoryThread != nullptr; }
     QVariantMap pendingPackage() const;
@@ -34,6 +38,7 @@ public:
     void registerBuiltinProvider(const QString& feature, const QVariantMap& descriptor);
     void unregisterBuiltinProvider(const QString& contributionId);
     Q_INVOKABLE QVariantMap settingsSchema(const QString& packageId) const;
+    Q_INVOKABLE QVariantMap settingsMessages(const QString& packageId) const;
     Q_INVOKABLE QVariantMap settingsValues(const QString& packageId) const;
     Q_INVOKABLE QVariantMap settingsSecretStatus(const QString& packageId) const;
     Q_INVOKABLE bool saveAddonSettings(const QString& packageId, const QVariantMap& values, const QVariantMap& secretOperations);
