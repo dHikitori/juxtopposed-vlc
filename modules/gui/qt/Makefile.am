@@ -149,7 +149,9 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_host_services.cpp \
 	addons/addon_repository_updates.cpp \
 	addons/addon_repository_updates.hpp \
-	addons/addon_host_services.hpp
+	addons/addon_host_services.hpp \
+	addons/addon_artwork_assets.cpp \
+	addons/addon_artwork_assets.hpp
 QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
 	addons/addon_network.moc.cpp \
@@ -161,7 +163,8 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_theme_service.moc.cpp \
 	addons/addon_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
-	addons/addon_host_services.moc.cpp
+	addons/addon_host_services.moc.cpp \
+	addons/addon_artwork_assets.moc.cpp
 
 libqt_addon_host_la_SOURCES = $(QT_ADDON_HOST_SOURCES)
 nodist_libqt_addon_host_la_SOURCES = $(QT_ADDON_HOST_MOC)
@@ -2239,6 +2242,17 @@ test_qt_addon_repository_updates_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PL
 check_PROGRAMS += test_qt_addon_repository_updates
 TESTS += test_qt_addon_repository_updates
 
+
+test_qt_addon_artwork_assets_SOURCES = tests/test_addon_artwork_assets.cpp
+nodist_test_qt_addon_artwork_assets_SOURCES = tests/test_addon_artwork_assets.moc
+BUILT_SOURCES += tests/test_addon_artwork_assets.moc
+CLEANFILES += tests/test_addon_artwork_assets.moc
+test_qt_addon_artwork_assets_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_artwork_assets_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_artwork_assets_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_artwork_assets_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_artwork_assets
+TESTS += test_qt_addon_artwork_assets
 
 LIBVLC = ../../../lib/libvlc.la
 QT_QTEST_COMMON_cppflags = $(libqt_plugin_la_CPPFLAGS) -I$(builddir)/tests -DTOP_BUILDDIR=\"$(abs_top_builddir)\"

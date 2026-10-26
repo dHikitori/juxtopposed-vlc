@@ -58,6 +58,7 @@ private:
         QVariantMap fields;
         QVariantMap provenance;
         QVariantList labelArtwork;
+        QVariantList ambiguousArtwork;
         QSet<QString> pending;
         QString status = QStringLiteral("no_match");
         QString error;
@@ -65,6 +66,7 @@ private:
         int outstanding = 0;
         bool aggregate = false;
         bool ambiguous = false;
+        bool entityAmbiguous = false;
     };
     struct Job {
         QString invocation;

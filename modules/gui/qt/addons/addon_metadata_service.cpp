@@ -5,9 +5,11 @@
 #include "addon_metadata_service.hpp"
 #include <vlc_metadata_backend.h>
 #include "addon_manager.hpp"
+#include "addon_artwork_assets.hpp"
 #include "util/media_identity_vlc.hpp"
 #include <QCryptographicHash>
 #include <QFileInfo>
+#include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QThread>
@@ -126,6 +128,11 @@ AddonMetadataService::AddonMetadataService(vlc::addons::AddonManager* manager, Q
     if (manager) {
         connect(manager, &vlc::addons::AddonManager::operationFinished, this, &AddonMetadataService::operationFinished);
         connect(manager, &vlc::addons::AddonManager::revisionChanged, this, &AddonMetadataService::invalidate);
+        QPointer<AddonArtworkAssets> assets(new AddonArtworkAssets(manager,
+            QDir(manager->storageDirectory()).filePath(QStringLiteral("artwork-cache")), this));
+        setArtworkAdapter([assets](const QString& provider, const QVariant& descriptor, ArtworkCallback completed) {
+            return assets ? assets->resolve(provider, descriptor, std::move(completed)) : QString{};
+        }, [assets](const QString& request) { if (assets) assets->cancel(request); });
     }
 }
 AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
@@ -384,7 +391,7 @@ void AddonMetadataService::coordinatorFinished(const QString& consumer, const QS
         auto result = m_results.find(consumer);
         if (result == m_results.end()) { if (!job.isEmpty() && m_backend.cancelArtwork) m_backend.cancelArtwork(job); return; }
         result->assets.insert(field, job);
-        if (job.isEmpty()) complete({}, tr("No artwork asset adapter is available."));
+        if (job.isEmpty()) complete({}, m_backend.resolveArtwork ? tr("The artwork request did not start.") : tr("No artwork asset adapter is available."));
     }
 }
 void AddonMetadataService::artworkFinished(const QString& consumer, const QString& field, const QUrl& url, const QString& error)

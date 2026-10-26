@@ -361,7 +361,7 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     auto it = m_consumers.find(consumerId);
     if (it == m_consumers.end()) return;
     if (statusWeight(status) > statusWeight(it->status)) { it->status = status; it->error = error.left(512); }
-    if (status == QStringLiteral("ambiguous")) it->ambiguous = true;
+    if (status == QStringLiteral("ambiguous")) { it->ambiguous = true; it->entityAmbiguous = true; }
     const bool manual = it->context.value(QStringLiteral("manual")).toBool()
         || (it->operation == QStringLiteral("searchAssets") && it->context.value(QStringLiteral("interactive")).toBool());
     const bool explicitAlternatives = status == QStringLiteral("ambiguous") && manual
@@ -382,12 +382,14 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
                 continue;
             }
             const auto match = compare(target, candidate.value(QStringLiteral("identity")).toMap());
+            const bool artworkLabel = it->feature == QStringLiteral("artwork")
+                && candidate.value(QStringLiteral("evidence")).toMap().value(QStringLiteral("type")) == QStringLiteral("label");
             if (!manual && (match.conflict || !match.strong)) { if (!match.conflict) it->ambiguous = true; continue; }
             candidate.insert(QStringLiteral("provider"), provider);
             candidate.insert(QStringLiteral("provenance"), provenance);
             candidate.insert(QStringLiteral("hostMatch"), QVariantMap{{QStringLiteral("score"), match.score},
                 {QStringLiteral("strong"), match.strong}, {QStringLiteral("conflicts"), match.conflicts},
-                {QStringLiteral("requiresConfirmation"), explicitAlternatives || match.conflict || !match.strong}});
+                {QStringLiteral("requiresConfirmation"), explicitAlternatives || artworkLabel || match.conflict || !match.strong}});
             const auto duplicate = std::any_of(it->candidates.cbegin(), it->candidates.cend(), [&](const QVariant& other) {
                 const auto existing = other.toMap();
                 return existing.value(QStringLiteral("provider")) == provider
@@ -427,8 +429,26 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     }
     // More than one record for a target is ambiguous. Do not use record
     // order to select an entity or combine unrelated field claims.
-    if (accepted.size() > 1) { it->ambiguous = true; return; }
+    if (accepted.size() > 1) {
+        it->ambiguous = true; it->entityAmbiguous = true;
+        if (it->feature == QStringLiteral("artwork")) for (const auto& value : accepted) {
+            const auto record = value.toMap();
+            auto source = provenance;
+            const auto credit = attribution(record.value(QStringLiteral("attribution")));
+            if (!credit.isEmpty()) source.insert(QStringLiteral("attribution"), credit);
+            for (const auto& field : missing(*it)) {
+                const auto claim = record.value(QStringLiteral("fields")).toMap().value(field);
+                if (!isArtwork(field) || !populated(claim) || it->ambiguousArtwork.size() >= 64) continue;
+                if (QJsonDocument::fromVariant(QVariantMap{{QStringLiteral("value"), claim}}).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) continue;
+                it->ambiguousArtwork.append(QVariantMap{{QStringLiteral("field"), field}, {QStringLiteral("value"), claim},
+                    {QStringLiteral("identity"), record.value(QStringLiteral("identity"))}, {QStringLiteral("provenance"), source}});
+            }
+        }
+        return;
+    }
     if (accepted.isEmpty()) return;
+    // A later provider cannot select an entity from an earlier ambiguous result.
+    if (it->entityAmbiguous) return;
     const auto record = accepted.first().toMap();
     const auto fields = record.value(QStringLiteral("fields")).toMap();
     auto fieldProvenance = provenance;
@@ -446,21 +466,32 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
 {
     auto found = m_consumers.find(consumerId);
     if (found == m_consumers.end()) return;
-    if (found->feature == QStringLiteral("artwork") && !found->labelArtwork.isEmpty()) {
+    if (found->feature == QStringLiteral("artwork") && !found->labelArtwork.isEmpty() && !found->entityAmbiguous) {
         const auto needed = missing(*found);
-        QVariantList remaining;
-        for (const auto& value : found->labelArtwork) {
-            const auto record = value.toMap();
-            if (needed.contains(record.value(QStringLiteral("field")).toString())) remaining.append(record);
+        QVariantList ambiguous;
+        for (const auto& field : needed) {
+            if (!isArtwork(field)) continue;
+            QVariantList preferred;
+            for (const auto& provider : found->providers) {
+                const auto id = provider.toMap().value(QStringLiteral("id")).toString();
+                for (const auto& value : found->labelArtwork) {
+                    const auto record = value.toMap();
+                    if (record.value(QStringLiteral("field")) == field
+                        && record.value(QStringLiteral("provenance")).toMap().value(QStringLiteral("provider")) == id) preferred.append(record);
+                }
+                if (!preferred.isEmpty()) break;
+            }
+            if (preferred.size() == 1) {
+                const auto record = preferred.first().toMap();
+                found->fields.insert(field, record.value(QStringLiteral("value")));
+                found->provenance.insert(field, record.value(QStringLiteral("provenance")));
+            } else if (!preferred.isEmpty()) {
+                found->ambiguous = true; ambiguous.append(preferred);
+            }
         }
-        if (remaining.size() == 1) {
-            const auto record = remaining.first().toMap();
-            const auto field = record.value(QStringLiteral("field")).toString();
-            found->fields.insert(field, record.value(QStringLiteral("value")));
-            found->provenance.insert(field, record.value(QStringLiteral("provenance")));
-        } else if (!remaining.isEmpty()) found->ambiguous = true;
-        found->labelArtwork = remaining;
+        found->labelArtwork = ambiguous;
     }
+    if (found->entityAmbiguous) found->labelArtwork = found->ambiguousArtwork;
     const auto consumer = *found;
     m_consumers.remove(consumerId);
     detach(consumerId, consumer.pending);

@@ -312,6 +312,16 @@ private slots:
         coordinator.searchAssets("subtitles", context()); QTRY_COMPARE(fake.calls.size(), 2);
     }
 
+    void artworkAssetSearchRetainsLabelEvidenceForUserSelection() {
+        FakeBackend fake; fake.providers = {registration("labels/art")};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.searchAssets("artwork", context()); QTRY_COMPARE(fake.calls.size(), 1);
+        auto candidate = asset(); candidate["evidence"] = QVariantMap{{"type", "label"}};
+        complete(coordinator, fake.calls[0], "match", assets(candidate)); QTRY_COMPARE(results.size(), 1);
+        const auto result = results[0][2].toMap().value("candidates").toList().first().toMap();
+        QVERIFY(result.value("hostMatch").toMap().value("requiresConfirmation").toBool());
+    }
+
     void artworkLabelFallbackWaitsForStrongProviders() {
         FakeBackend fake; fake.providers = {registration("labels/art"), registration("strong/art")};
         AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
@@ -356,23 +366,55 @@ private slots:
         }
     }
 
-    void differentLabelImagesNeedUserSelection() {
-        FakeBackend fake; fake.providers = {registration("a/art"), registration("b/art")};
-        for (auto& provider : fake.providers) {
-            auto descriptor = provider.toMap(); descriptor["mediaKinds"] = QStringList{"unknown"}; provider = descriptor;
+    void labelArtworkUsesThePreferredProviderAndPreservesItsAmbiguity() {
+        for (const bool ambiguous : {false, true}) {
+            FakeBackend fake; fake.providers = {registration("a/art"), registration("b/art")};
+            for (auto& provider : fake.providers) {
+                auto descriptor = provider.toMap(); descriptor["mediaKinds"] = QStringList{"unknown"}; provider = descriptor;
+            }
+            AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+            const QVariantMap target{{"kind", "unknown"}, {"title", "Channel One"}};
+            coordinator.enrich("artwork", {{"identity", target}}, {"artwork"}); QTRY_COMPARE(fake.calls.size(), 1);
+            for (int provider = 0; provider < 2; ++provider) {
+                QVariantList records;
+                const int count = provider == 0 && ambiguous ? 2 : 1;
+                for (int i = 0; i < count; ++i) {
+                    auto record = claims({{"artwork", QVariantMap{{"url", QStringLiteral("https://images.invalid/%1-%2.jpg").arg(provider).arg(i)}}}}, target);
+                    record["evidence"] = QVariantMap{{"type", "label"}}; records.append(record);
+                }
+                complete(coordinator, fake.calls[provider], "match", {{"records", records}});
+                if (!provider) QTRY_COMPARE(fake.calls.size(), 2);
+            }
+            QTRY_COMPARE(results.size(), 1);
+            const auto data = results[0][2].toMap();
+            if (ambiguous) {
+                QCOMPARE(results[0][1].toString(), "ambiguous"); QVERIFY(data.value("fields").toMap().isEmpty());
+                const auto choices = data.value("artworkCandidates").toList(); QCOMPARE(choices.size(), 2);
+                for (const auto& choice : choices) QCOMPARE(choice.toMap().value("provenance").toMap().value("provider").toString(), "a/art");
+            } else {
+                QCOMPARE(results[0][1].toString(), "match");
+                QCOMPARE(data.value("fields").toMap().value("artwork").toMap().value("url").toString(), "https://images.invalid/0-0.jpg");
+                QCOMPARE(data.value("provenance").toMap().value("artwork").toMap().value("provider").toString(), "a/art");
+            }
         }
-        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
-        const QVariantMap target{{"kind", "unknown"}, {"title", "Channel One"}};
-        coordinator.enrich("artwork", {{"identity", target}}, {"artwork"}); QTRY_COMPARE(fake.calls.size(), 1);
-        for (int i = 0; i < 2; ++i) {
-            auto record = claims({{"artwork", QVariantMap{{"url", QStringLiteral("https://images.invalid/%1.jpg").arg(i)}}}}, target);
-            record["evidence"] = QVariantMap{{"type", "label"}};
-            complete(coordinator, fake.calls[i], "match", record);
-            if (!i) QTRY_COMPARE(fake.calls.size(), 2);
+    }
+
+    void laterProvidersCannotSelectAnEarlierAmbiguousEntity() {
+        for (const bool label : {false, true}) {
+            FakeBackend fake; fake.providers = {registration("a/art"), registration("b/art")};
+            AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+            coordinator.enrich("artwork", context(), {"artwork"}); QTRY_COMPARE(fake.calls.size(), 1);
+            QVariantList first;
+            for (int i = 0; i < 2; ++i) first.append(claims({{"artwork", QVariantMap{{"url", QStringLiteral("https://images.invalid/first-%1.jpg").arg(i)}}}}));
+            complete(coordinator, fake.calls[0], "match", {{"records", first}}); QTRY_COMPARE(fake.calls.size(), 2);
+            auto later = claims({{"artwork", QVariantMap{{"url", "https://images.invalid/later.jpg"}}}});
+            if (label) later["evidence"] = QVariantMap{{"type", "label"}};
+            complete(coordinator, fake.calls[1], "match", later); QTRY_COMPARE(results.size(), 1);
+            QCOMPARE(results[0][1].toString(), "ambiguous");
+            const auto data = results[0][2].toMap(); QVERIFY(data.value("fields").toMap().isEmpty());
+            const auto choices = data.value("artworkCandidates").toList(); QCOMPARE(choices.size(), 2);
+            for (const auto& choice : choices) QCOMPARE(choice.toMap().value("provenance").toMap().value("provider").toString(), "a/art");
         }
-        QTRY_COMPARE(results.size(), 1); QCOMPARE(results[0][1].toString(), "ambiguous");
-        QVERIFY(results[0][2].toMap().value("fields").toMap().isEmpty());
-        QCOMPARE(results[0][2].toMap().value("artworkCandidates").toList().size(), 2);
     }
 
     void fieldProvenanceRetainsOnlyBoundedHttpsCredit() {
