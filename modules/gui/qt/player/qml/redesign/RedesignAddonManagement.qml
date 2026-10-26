@@ -18,6 +18,10 @@ ColumnLayout {
     readonly property var pendingPackage: backend.pendingPackage || ({})
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property var packages: { backend.revision; return backend.packages || [] }
+    readonly property var updateResult: backend.updateResult || ({})
+    readonly property var hostCapabilities: pendingPackage.hostCapabilities || backend.capabilities || ({})
+    readonly property bool updatingInstalledPackage: !!pendingPackage.id && packages.some(entry => entry.id === pendingPackage.id && entry.installed !== false)
+    readonly property bool candidateCanRun: pendingPackage.workerRequired !== true || hostCapabilities.workerAvailable !== false
     spacing: theme.dp(10)
     onPendingPackageChanged: { enableAfterInstall = false; showTechnicalDetails = false }
     readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background"]
@@ -90,6 +94,21 @@ ColumnLayout {
         configuration.packageId = id; configuration.packageName = entry.name
         configuration.open()
     }
+    function capabilityLimits(capabilities, permissions, workerRequired) {
+        const limits = []
+        if (workerRequired && capabilities.workerAvailable === false) limits.push(qsTr("This app cannot run add-on code."))
+        if (permissions["network.http"] && capabilities.networkHttpAvailable === false) limits.push(qsTr("This app cannot connect to online services for add-ons."))
+        if (permissions["storage.private"] && capabilities.privateStorageAvailable === false) limits.push(qsTr("This app does not support private add-on storage."))
+        if (permissions["network.websocket"] && capabilities.webSocketAvailable === false) limits.push(qsTr("This app cannot keep a live service connection for add-ons."))
+        const operations = capabilities.coreOperations
+        if (Array.isArray(operations)) {
+            if (permissions["library.read"] && !operations.includes("library.query")) limits.push(qsTr("This app cannot give add-ons access to the media library."))
+            if (permissions["queue.modify"] && !operations.includes("queue.apply")) limits.push(qsTr("This app cannot let add-ons change the play queue."))
+            if (permissions["playback.control"] && !operations.includes("playback.command")) limits.push(qsTr("This app cannot let add-ons control playback."))
+        }
+        if (capabilities.safeMode === true) limits.push(qsTr("Add-ons are temporarily disabled."))
+        return limits.join("\n")
+    }
     Text {
         Layout.fillWidth: true
         text: qsTr("Install an add-on"); textFormat: Text.PlainText; wrapMode: Text.Wrap
@@ -140,6 +159,21 @@ ColumnLayout {
             : /^https:\/\/[^\s/]+\/[^\s]+$/i.test(source.text.trim()) && tag.text.trim().length > 0 && typeof root.backend.stageRepository === "function")
         onClicked: root.developerSource ? root.backend.stageLocalPackage(directory.text.trim()) : root.backend.stageRepository(source.text.trim(), tag.text.trim())
     }
+    ActionButton {
+        objectName: "addonRepositoryCancel"
+        caption: qsTr("Cancel request"); visible: root.busy
+        onClicked: root.backend.discardPendingPackage()
+    }
+    Text {
+        objectName: "addonUpdateStatus"
+        Layout.fillWidth: true; visible: !!root.updateResult.packageId
+        text: root.updateResult.checking ? qsTr("Update search in progress.")
+            : root.updateResult.canceled ? qsTr("VLC canceled the update search.")
+            : root.backend.errorMessage ? root.backend.errorMessage
+            : root.updateResult.available ? qsTr("An update is ready for approval. VLC keeps the installed release until you give approval.")
+            : qsTr("No compatible stable update is available.")
+        textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+    }
     Rectangle {
         objectName: "addonInstallReview"
         Layout.fillWidth: true; visible: !!root.pendingPackage.id
@@ -151,7 +185,7 @@ ColumnLayout {
             spacing: root.theme.dp(8)
             Text {
                 Layout.fillWidth: true
-                text: qsTr("Installation approval: %1").arg(root.pendingPackage.name || root.pendingPackage.id || "")
+                text: (root.updatingInstalledPackage ? qsTr("Update approval: %1") : qsTr("Installation approval: %1")).arg(root.pendingPackage.name || root.pendingPackage.id || "")
                 textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.bright; font.pixelSize: root.theme.dp(16)
             }
             Text {
@@ -174,6 +208,12 @@ ColumnLayout {
                 text: root.permissionSummaries(root.pendingPackage.permissions || {})
                 textFormat: Text.PlainText; wrapMode: Text.Wrap
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+            }
+            Text {
+                objectName: "addonInstallCapabilityLimits"
+                Layout.fillWidth: true; visible: text.length > 0
+                text: root.capabilityLimits(root.hostCapabilities, root.pendingPackage.permissions || {}, root.pendingPackage.workerRequired === true)
+                textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
             }
             ActionButton {
                 objectName: "addonInstallTechnicalDetails"
@@ -207,8 +247,8 @@ ColumnLayout {
             RedesignSwitchRow {
                 objectName: "addonInstallEnable"
                 Layout.fillWidth: true
-                label: qsTr("Enable after installation"); checked: root.enableAfterInstall
-                enabled: !root.busy
+                label: root.updatingInstalledPackage ? qsTr("Enable if disabled") : qsTr("Enable after installation"); checked: root.enableAfterInstall
+                enabled: !root.busy && root.candidateCanRun && root.hostCapabilities.safeMode !== true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onToggled: checked => root.enableAfterInstall = checked
             }
@@ -217,7 +257,7 @@ ColumnLayout {
                 ActionButton {
                     objectName: "addonInstallApprove"
                     caption: qsTr("Give approval and install")
-                    enabled: !root.busy && root.permissionsKnown
+                    enabled: !root.busy && root.permissionsKnown && (!root.enableAfterInstall || root.candidateCanRun)
                     onClicked: root.backend.approvePendingPackage(root.enableAfterInstall)
                 }
                 ActionButton {
@@ -267,6 +307,14 @@ ColumnLayout {
                         caption: qsTr("Configure…"); text: qsTr("Configure %1").arg(row.modelData.name)
                         enabled: !root.busy
                         onClicked: root.configure(row.modelData.id)
+                    }
+                    ActionButton {
+                        objectName: "addonPackageFindUpdates_" + row.modelData.id
+                        caption: qsTr("Find updates")
+                        visible: row.modelData.installed !== false && row.modelData.developerSource !== true && row.modelData.distributionSource !== true
+                            && /^https:\/\//i.test(row.modelData.source || "") && typeof root.backend.checkRepositoryUpdates === "function"
+                        enabled: !root.busy && !root.pendingPackage.id
+                        onClicked: root.backend.checkRepositoryUpdates(row.modelData.id, "^" + row.modelData.version, false)
                     }
                     ActionButton {
                         objectName: "addonPackageRollback_" + row.modelData.id

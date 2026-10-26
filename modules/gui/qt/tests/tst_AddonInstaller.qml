@@ -15,6 +15,11 @@ TestCase {
         property string errorMessage: ""
         property var pendingPackage: ({})
         property var packages: []
+        property var updateResult: ({})
+        property var capabilities: ({workerAvailable: true, networkHttpAvailable: true, privateStorageAvailable: false, webSocketAvailable: false, coreOperations: []})
+        property int updateRequests: 0
+        property string lastRange: ""
+        property bool lastPrerelease: true
         property int stages: 0
         property int approvals: 0
         property int discards: 0
@@ -34,8 +39,15 @@ TestCase {
                 digest: "0123456789abcdef", developerSource: developer, publisherVerified: false, permissions: {"network.http": {origins: ["https://api.example.org"]}}}
             revision++
         }
-        function approvePendingPackage(enable) { approvals++; lastEnable = enable; pendingPackage = ({}); revision++; return true }
-        function discardPendingPackage() { discards++; pendingPackage = ({}); revision++ }
+        function approvePendingPackage(enable) { approvals++; lastEnable = enable; pendingPackage = ({}); updateResult = ({}); revision++; return true }
+        function discardPendingPackage() { discards++; pendingPackage = ({}); busy = false; updateResult = updateResult.packageId ? {packageId: updateResult.packageId, checking: false, canceled: true} : ({}); revision++ }
+        function checkRepositoryUpdates(id, range, prerelease) { updateRequests++; lastPackage = id; lastRange = range; lastPrerelease = prerelease; updateResult = {packageId: id, checking: true}; busy = true; revision++; return true }
+        function completeUpdate(available) {
+            busy = false; updateResult = {packageId: lastPackage, checking: false, available: available, canceled: false}
+            if (available) pendingPackage = {id: lastPackage, name: "Radio", version: "1.1.0", source: "https://git.example.org/radio.git", tag: "v1.1.0",
+                permissions: {}, hostCapabilities: capabilities, workerRequired: true}
+            revision++
+        }
         function setEnabled(id, enabled) { return true }
         function rollback(id) { rollbacks++; lastPackage = id; return true }
         function uninstall(id, removeData) { removals++; lastPackage = id; removedData = removeData; return true }
@@ -47,6 +59,7 @@ TestCase {
     function item(name) { return findChild(page, name) }
     function init() {
         manager.busy = false; manager.pendingPackage = ({}); manager.packages = []
+        manager.updateResult = ({}); manager.updateRequests = 0; manager.lastRange = ""; manager.lastPrerelease = true; manager.errorMessage = ""
         manager.stages = 0; manager.approvals = 0; manager.discards = 0; manager.rollbacks = 0; manager.removals = 0
         manager.lastSource = ""; manager.lastTag = ""; manager.lastDirectory = ""; manager.lastEnable = false
         page.developerSource = false; page.enableAfterInstall = false
@@ -156,5 +169,48 @@ TestCase {
             origins: ["https://coverartarchive.org"], assetRedirectProfiles: ["unknown-profile@1"]}}}
         wait(20)
         verify(!item("addonInstallApprove").enabled)
+    }
+    function test_updateUsesInstalledSourceAndStableCompatibleRange() {
+        manager.packages = [{id: "org.example.radio", name: "Radio", source: "https://git.example.org/radio.git", version: "1.0.0", enabled: true, configured: true}]
+        manager.revision++; wait(20)
+        mouseClick(item("addonPackageFindUpdates_org.example.radio"))
+        compare(manager.updateRequests, 1); compare(manager.lastPackage, "org.example.radio")
+        compare(manager.lastRange, "^1.0.0"); verify(!manager.lastPrerelease)
+        compare(manager.approvals, 0); verify(manager.packages[0].enabled)
+        manager.completeUpdate(true); wait(20)
+        verify(item("addonInstallReview").visible); verify(item("addonUpdateStatus").text.includes("approval"))
+        compare(item("addonInstallEnable").label, "Enable if disabled")
+        verify(!page.enableAfterInstall); compare(manager.approvals, 0)
+        mouseClick(item("addonInstallApprove")); compare(manager.approvals, 1); verify(!manager.lastEnable)
+        verify(manager.packages[0].enabled)
+    }
+    function test_updateCancelKeepsInstalledRelease() {
+        manager.packages = [{id: "org.example.radio", name: "Radio", source: "https://git.example.org/radio.git", version: "1.0.0", enabled: true}]
+        manager.revision++; wait(20)
+        mouseClick(item("addonPackageFindUpdates_org.example.radio"))
+        mouseClick(item("addonRepositoryCancel"))
+        compare(manager.discards, 1); compare(manager.approvals, 0)
+        verify(manager.packages[0].enabled); compare(manager.packages[0].version, "1.0.0")
+        verify(item("addonUpdateStatus").text.includes("canceled"))
+    }
+    function test_noUpdateAndHostLimitsUsePlainStatements() {
+        manager.lastPackage = "org.example.radio"; manager.completeUpdate(false); wait(20)
+        verify(item("addonUpdateStatus").text.includes("No compatible stable update"))
+        manager.pendingPackage = {id: "org.example.radio", name: "Radio", version: "1.1.0", workerRequired: true,
+            hostCapabilities: {workerAvailable: false, privateStorageAvailable: false, webSocketAvailable: false, coreOperations: []},
+            permissions: {"storage.private": {quotaBytes: 1024}, "network.websocket": {origins: ["wss://example.org"]}}}
+        wait(20)
+        const limits = item("addonInstallCapabilityLimits")
+        compare(limits.textFormat, Text.PlainText)
+        verify(limits.text.includes("cannot run add-on code")); verify(limits.text.includes("private add-on storage")); verify(limits.text.includes("live service connection"))
+        verify(!item("addonInstallEnable").enabled); verify(!page.enableAfterInstall)
+        verify(item("addonInstallApprove").enabled)
+    }
+    function test_localAndAppPackagesDoNotOfferRemoteUpdates() {
+        manager.packages = [{id: "org.example.local", name: "Local", source: "https://git.example.org/local.git", version: "1.0.0", developerSource: true},
+            {id: "org.example.bundled", name: "App", source: "https://git.example.org/app.git", version: "1.0.0", distributionSource: true}]
+        manager.revision++; wait(20)
+        verify(!item("addonPackageFindUpdates_org.example.local").visible)
+        verify(!item("addonPackageFindUpdates_org.example.bundled").visible)
     }
 }
