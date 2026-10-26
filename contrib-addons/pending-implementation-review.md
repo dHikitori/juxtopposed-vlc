@@ -6,7 +6,7 @@ Updated 27 October 2026. The user has approved code edits, fixes, builds, stagin
 
 - Guest storage: 18 cases pass. Package, runtime, broker, and host service regressions pass. The final host service cancellation test also passes.
 - SDK credential capacity: nine Rust cases and four real-worker cases pass. The SDK accepts the host's 64 credential presence fields. All four artwork packages have now been built with that SDK change. All five artwork worker fixtures pass.
-- Typed interface and recovery: nine native registry cases pass. The recovery repair passes 28 focused QML cases; the earlier broad repaired-source run passed 558 cases in 23 suites, with no failures or skips. The prior 548-pass/one-failure result remains historical evidence. The final normal app build still needs to include the complete repairs.
+- Typed interface and recovery: nine native registry cases pass. The normal app and QML runner builds pass. The compiled runner passes 707 cases in 27 suites, including all 28 typed-dialog cases, with no failures or skips. It used a committed-source snapshot to exclude the next image feature's edits. The prior 548-pass/one-failure result remains historical evidence.
 
 The [implementation record](IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) is now approved. No earlier rejected database change ran.
 
@@ -44,7 +44,7 @@ The audit confirmed plain text in package approval, generated settings, discover
 
 The repair sets an explicit plain-text format. Its 13 focused cases pass with no warnings or skips. Positive AutoText and RichText controls prove that the image provider, reserved HTTPS origin, and fixture-file read probes detect loads in WSL. All five repaired consumer cases retain literal text and report zero loads on these routes. The HTTPS test returns embedded image bytes without a connection. The file probe observes only its own temporary PNG. Other platforms retain literal-text assertions but do not claim the Linux file-read observation.
 
-The existing player, episodes, chrome, and library suites also pass all 249 cases. The normal app build with the final test helper remains pending.
+The existing player, episodes, chrome, and library suites also pass all 249 cases. The normal app build with the final test helper passes. The compiled QML run confirms these cases and the probes within its 707 total passes.
 
 ## Source owner retirement
 
@@ -85,8 +85,10 @@ The [stream contract](native-discovery-stream-contract.md) specifies the remaini
 
 ## Metadata handover
 
-The committed revision API supplies field and extra-tag tokens. The owned remote patch path must use them under the target lock. Validate all proposed field tokens before writes can change the metadata object. Keep user and local values protected.
+The native Apply path now uses field and extra-tag tokens under the target lock. It validates all proposed fields and the identity baseline before any write. It fills missing values by default; only a native caller can request an explicit replacement. Existing user and local values stay protected.
 
-Also compare the original native item URI and source scope. URI, option, and policy changes are outside the current metadata snapshot token contract. A snapshot of metadata tokens alone is insufficient to commit a result from an old source.
+Apply also compares the original native item URI and exact held policy, and refuses a revoked policy. A snapshot of metadata tokens alone cannot authorize a result from an old source. The backend and item locks define admission; a later cancellation or revocation does not reverse an admitted commit.
+
+The complete set of new field tokens is reserved before writes. A failed reservation changes no target value or revision. Limit tests run the actual Apply code with a private test sequence; they cover a failed range, preserved fields, exhaustion between writes, and concurrent non-overlapping ranges. Normal core commit, limit, backend, and revision tests pass. Focused sanitizer tests pass. No production fault-injection API was added.
 
 Keep the existing providers and local readers until the new consumer routes pass preservation tests. The artwork approval record, owner mount, preparser request list, and identity choice store still have integration work.

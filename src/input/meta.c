@@ -26,6 +26,7 @@
 #endif
 
 #include <assert.h>
+#include <stdatomic.h>
 
 #include <vlc_common.h>
 #include <vlc_url.h>
@@ -37,6 +38,31 @@
 #include <vlc_charset.h>
 #include <vlc_metadata_revision.h>
 #include "metadata_revision.h"
+
+static atomic_uint_fast64_t metadata_revision_sequence;
+static uint64_t vlc_metadata_revision_Next(void)
+{
+    uint_fast64_t current = atomic_load_explicit(&metadata_revision_sequence, memory_order_relaxed);
+    while (current < UINT64_MAX) {
+        if (atomic_compare_exchange_weak_explicit(&metadata_revision_sequence, &current, current + 1,
+                                                  memory_order_relaxed, memory_order_relaxed)) return current + 1;
+    }
+    return UINT64_MAX;
+}
+bool vlc_meta_ReserveRevisions(unsigned count, uint64_t *first)
+{
+    if (first == NULL || count > VLC_META_TYPE_COUNT) return false;
+    if (count == 0) { *first = 0; return true; }
+    uint_fast64_t current = atomic_load_explicit(&metadata_revision_sequence, memory_order_relaxed);
+    while (current < UINT64_MAX) {
+        if (count >= UINT64_MAX - current) return false;
+        if (atomic_compare_exchange_weak_explicit(&metadata_revision_sequence, &current, current + count,
+                                                  memory_order_relaxed, memory_order_relaxed)) {
+            *first = current + 1; return true;
+        }
+    }
+    return false;
+}
 
 struct vlc_meta_value
 {
@@ -165,6 +191,22 @@ void vlc_meta_SetWithPriority( vlc_meta_t *p_meta, vlc_meta_type_t meta_type, co
     p_meta->meta[meta_type].value = psz_val ? strdup( psz_val ) : NULL;
     p_meta->meta[meta_type].priority = priority;
     p_meta->revisions[meta_type] = vlc_metadata_revision_Next();
+}
+
+void vlc_meta_SetOwnedRevision(vlc_meta_t *meta, vlc_meta_type_t type, char *value, uint64_t revision)
+{
+    assert(value == NULL || IsUTF8(value));
+    assert(revision != 0 && revision != UINT64_MAX);
+    free(meta->meta[type].value);
+    meta->meta[type].value = value;
+    meta->meta[type].priority = VLC_META_PRIORITY_BASIC;
+    meta->revisions[type] = revision;
+}
+bool vlc_meta_TrySetOwned(vlc_meta_t *meta, vlc_meta_type_t type, char *value)
+{
+    uint64_t revision;
+    if (!vlc_meta_ReserveRevisions(1, &revision)) return false;
+    vlc_meta_SetOwnedRevision(meta, type, value, revision); return true;
 }
 
 uint64_t vlc_meta_FieldRevision(const vlc_meta_t *meta, vlc_meta_type_t type)

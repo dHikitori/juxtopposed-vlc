@@ -6,11 +6,16 @@
 #include <vlc_metadata_backend.h>
 #include <vlc_atomic.h>
 #include <vlc_input_item.h>
+#include <vlc_input_policy.h>
+#include <vlc_metadata_revision.h>
 #include <vlc_threads.h>
+#include "../input/item.h"
+#include "../input/metadata_revision.h"
 
 #define MAX_JSON (1024u * 1024u)
 #define MAX_FIELDS 64u
 #define MAX_ACTIVE 1024u
+_Static_assert(VLC_META_TYPE_COUNT < 32, "The native replacement mask must include every metadata field.");
 
 struct vlc_metadata_backend {
     vlc_atomic_rc_t refs;
@@ -26,7 +31,13 @@ struct vlc_metadata_job {
     vlc_metadata_backend_t *backend;
     vlc_metadata_job_t *next, *previous;
     bool started, terminal;
+    bool commit_cancelled;
+    int status;
     struct vlc_metadata_request request;
+    input_item_t *target;
+    char *uri;
+    vlc_input_policy_t *policy;
+    struct vlc_metadata_revisions baseline;
     struct vlc_metadata_result result;
     struct vlc_metadata_field_patch patches[VLC_META_TYPE_COUNT];
     vlc_metadata_ended_cb ended;
@@ -72,6 +83,9 @@ void vlc_metadata_job_Release(vlc_metadata_job_t *job)
     free((char **)job->request.fields);
     free((char *)job->request.context_json);
     if (job->request.item != NULL) input_item_Release(job->request.item);
+    if (job->target != NULL) input_item_Release(job->target);
+    free(job->uri);
+    vlc_input_policy_Release(job->policy);
     if (job->result.item != NULL) input_item_Release(job->result.item);
     for (size_t i = 0; i < job->result.field_count; ++i) {
         free((char *)job->patches[i].expected_value);
@@ -80,6 +94,52 @@ void vlc_metadata_job_Release(vlc_metadata_job_t *job)
     free((char *)job->result.provenance_json);
     free(job);
     vlc_metadata_backend_Release(backend);
+}
+
+static bool same_string(const char *a, const char *b)
+{ return a == NULL ? b == NULL : b != NULL && strcmp(a, b) == 0; }
+static bool revisions_locked(input_item_t *item, struct vlc_metadata_revisions *value)
+{
+    if (item->p_meta == NULL) return false;
+    for (int i = 0; i < VLC_META_TYPE_COUNT; ++i) {
+        value->fields[i] = vlc_meta_FieldRevision(item->p_meta, i);
+        if (value->fields[i] == UINT64_MAX) return false;
+    }
+    value->extra = vlc_meta_ExtraRevision(item->p_meta);
+    return value->extra != UINT64_MAX;
+}
+static bool capture_item(vlc_metadata_job_t *job, input_item_t *item)
+{
+    for (unsigned attempt = 0; attempt < 4; ++attempt) {
+        struct vlc_metadata_revisions before, after;
+        vlc_mutex_lock(&item->lock);
+        if (item->p_meta == NULL) item->p_meta = vlc_meta_New();
+        const bool available = revisions_locked(item, &before);
+        const bool has_uri = item->psz_uri != NULL;
+        char *uri = has_uri ? strdup(item->psz_uri) : NULL;
+        vlc_input_policy_t *policy = vlc_input_policy_Hold(item_owner(item)->input_policy);
+        vlc_mutex_unlock(&item->lock);
+        if (!available || (has_uri && uri == NULL) || vlc_input_policy_IsRevoked(policy)) {
+            free(uri); vlc_input_policy_Release(policy); return false;
+        }
+        input_item_t *copy = input_item_Copy(item);
+        if (copy == NULL) { free(uri); vlc_input_policy_Release(policy); return false; }
+        vlc_mutex_lock(&item->lock);
+        bool current = revisions_locked(item, &after)
+            && memcmp(&before, &after, sizeof(before)) == 0
+            && same_string(uri, item->psz_uri) && policy == item_owner(item)->input_policy
+            && !vlc_input_policy_IsRevoked(policy);
+        vlc_mutex_unlock(&item->lock);
+        vlc_mutex_lock(&copy->lock);
+        current = current && same_string(uri, copy->psz_uri) && policy == item_owner(copy)->input_policy;
+        vlc_mutex_unlock(&copy->lock);
+        if (current) {
+            job->request.item = copy; job->target = input_item_Hold(item);
+            job->uri = uri; job->policy = policy; job->baseline = before; return true;
+        }
+        input_item_Release(copy); free(uri); vlc_input_policy_Release(policy);
+    }
+    return false;
 }
 
 vlc_metadata_job_t *vlc_metadata_job_New(vlc_metadata_backend_t *backend,
@@ -119,8 +179,7 @@ vlc_metadata_job_t *vlc_metadata_job_New(vlc_metadata_backend_t *backend,
         }
     }
     if (request->item != NULL) {
-        job->request.item = input_item_Copy(request->item);
-        if (job->request.item == NULL) goto error;
+        if (!capture_item(job, request->item)) goto error;
     }
     return job;
 error:
@@ -176,6 +235,7 @@ static bool finish(vlc_metadata_job_t *job, int status, struct vlc_metadata_resu
         return false;
     }
     job->terminal = true;
+    job->status = status;
     if (job->previous != NULL) job->previous->next = job->next; else backend->head = job->next;
     if (job->next != NULL) job->next->previous = job->previous;
     --backend->active;
@@ -193,6 +253,9 @@ static bool finish(vlc_metadata_job_t *job, int status, struct vlc_metadata_resu
 bool vlc_metadata_job_Cancel(vlc_metadata_job_t *job)
 {
     vlc_metadata_job_Hold(job);
+    vlc_mutex_lock(&job->backend->lock);
+    if (job->started) job->commit_cancelled = true;
+    vlc_mutex_unlock(&job->backend->lock);
     struct vlc_metadata_result result = {0};
     const bool won = finish(job, -EINTR, &result, true);
     vlc_metadata_job_Release(job);
@@ -224,13 +287,82 @@ bool vlc_metadata_job_Complete(vlc_metadata_job_t *job, int status, input_item_t
             if ((before == NULL && next == NULL) || (before != NULL && next != NULL && strcmp(before, next) == 0)) {
                 free(before); free(next); continue;
             }
-            fields[value.field_count++] = (struct vlc_metadata_field_patch){i, before, next};
+            fields[value.field_count++] = (struct vlc_metadata_field_patch){i, before, next, job->baseline.fields[i]};
         }
     }
     if (status != VLC_SUCCESS) discard_result(&value);
     const bool won = finish(job, status, &value, false);
     vlc_metadata_job_Release(job);
     return won;
+}
+
+int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
+                           uint32_t replace_fields, size_t *applied)
+{
+    if (applied != NULL) *applied = 0;
+    if (job == NULL || target == NULL || target != job->target
+        || (replace_fields >> VLC_META_TYPE_COUNT) != 0) return VLC_EINVAL;
+    vlc_metadata_job_Hold(job);
+    char *values[VLC_META_TYPE_COUNT] = {0};
+    bool changes[VLC_META_TYPE_COUNT] = {0};
+    unsigned count = 0;
+    int status = VLC_SUCCESS;
+    vlc_mutex_lock(&job->backend->lock);
+    const bool ready = job->terminal && job->status == VLC_SUCCESS;
+    vlc_mutex_unlock(&job->backend->lock);
+    if (!ready) { status = VLC_EINVAL; goto out; }
+    size_t bytes = 0;
+    for (size_t i = 0; i < job->result.field_count; ++i) {
+        const struct vlc_metadata_field_patch *field = &job->patches[i];
+        const char *before = field->expected_value;
+        if (before != NULL && before[0] != '\0' && !(replace_fields & (UINT32_C(1) << field->type))) continue;
+        changes[i] = true; ++count;
+        const char *value = job->patches[i].value;
+        if (value == NULL) continue;
+        const size_t length = strnlen(value, MAX_JSON + 1);
+        if (length > MAX_JSON || bytes > MAX_JSON - length) { status = VLC_EINVAL; goto out; }
+        bytes += length;
+        values[i] = strdup(value);
+        if (values[i] == NULL) { status = VLC_ENOMEM; goto out; }
+    }
+
+    static const vlc_meta_type_t identity_fields[] = {
+        vlc_meta_Title, vlc_meta_Artist, vlc_meta_Album, vlc_meta_AlbumArtist,
+        vlc_meta_Date, vlc_meta_TrackID, vlc_meta_TrackNumber, vlc_meta_DiscNumber,
+        vlc_meta_ShowName, vlc_meta_Season, vlc_meta_Episode,
+    };
+    vlc_mutex_lock(&job->backend->lock);
+    vlc_mutex_lock(&target->lock);
+    if (job->backend->closed || job->commit_cancelled) status = -EINTR;
+    else if (target->p_meta == NULL || !same_string(job->uri, target->psz_uri)
+        || job->policy != item_owner(target)->input_policy
+        || vlc_meta_ExtraRevision(target->p_meta) != job->baseline.extra) status = -EAGAIN;
+    for (size_t i = 0; status == VLC_SUCCESS && i < ARRAY_SIZE(identity_fields); ++i) {
+        const vlc_meta_type_t type = identity_fields[i];
+        if (vlc_meta_FieldRevision(target->p_meta, type) != job->baseline.fields[type]) status = -EAGAIN;
+    }
+    for (size_t i = 0; status == VLC_SUCCESS && i < job->result.field_count; ++i) {
+        const struct vlc_metadata_field_patch *field = &job->patches[i];
+        if (field->expected_revision == UINT64_MAX
+            || vlc_meta_FieldRevision(target->p_meta, field->type) != field->expected_revision
+            || !same_string(field->expected_value, vlc_meta_Get(target->p_meta, field->type))) status = -EAGAIN;
+    }
+    uint64_t first = 0;
+    if (status == VLC_SUCCESS && !vlc_meta_ReserveRevisions(count, &first)) status = -EAGAIN;
+    if (status == VLC_SUCCESS && vlc_input_policy_IsRevoked(job->policy)) status = -EACCES;
+    if (status == VLC_SUCCESS) {
+        for (size_t i = 0; i < job->result.field_count; ++i) {
+            const struct vlc_metadata_field_patch *field = &job->patches[i];
+            if (!changes[i]) continue;
+            vlc_meta_SetOwnedRevision(target->p_meta, field->type, values[i], first++); values[i] = NULL;
+            if (applied != NULL) ++*applied;
+        }
+    }
+    vlc_mutex_unlock(&target->lock);
+    vlc_mutex_unlock(&job->backend->lock);
+out:
+    for (size_t i = 0; i < ARRAY_SIZE(values); ++i) free(values[i]);
+    vlc_metadata_job_Release(job); return status;
 }
 int vlc_metadata_job_Start(vlc_metadata_job_t *job)
 {

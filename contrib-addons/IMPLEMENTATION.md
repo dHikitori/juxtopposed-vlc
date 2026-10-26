@@ -20,9 +20,9 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Metadata coordinator | Ordered providers; partial field patches; provenance; strong identity checks; protected fields; bounded cache partitions; independent cancellation. Native tests pass. |
 | Episode consumer | Eleven real consumer parity cases pass. Host results retain their per-field source credit in a separate cache namespace. The old episode cache reader and local readers remain. |
 | Subtitle integration | Native OpenSubtitles and portable providers use one provider order. Host handles resolve through the normal Save path. The latest native suite passes 53 cases. |
-| Qt build and release | The normal Linux Qt target passed with discovery, native queue, metadata, themes, interface sessions, and visualizers. All 21 consolidated host suites passed without skips. The owned UI group passed 493 tests in 19 suites. The earlier release suite passed 98 tests with one existing skip; release validation of the latest complete scope remains open. |
+| Qt build and release | The normal Linux Qt target and QML runner build pass with the recorded typed-dialog, plain-text, and native metadata changes. The compiled runner passes 707 cases in 27 suites, with no failures or skips. It used a committed-source snapshot while the next UI image feature was edited. An earlier consolidated run passed 21 host suites. The earlier release suite passed 98 tests with one existing skip; release validation of the latest complete scope remains open. |
 | Settings and install UI | Host-rendered package approval; generated settings; secret keep, replace, and delete actions; tagged repository update review; provider order; subtitle preparation and cancellation. Required-key deletion saves correctly and revokes the key. Focused QML tests pass. |
-| Native metadata bridge | A Qt-free asynchronous bridge copies requests and native field patches. The C suite passes cancellation/result races, reentrant close, and callback lifetime cases. All 14 symbols have core exports. |
+| Native metadata bridge | A Qt-free asynchronous bridge copies requests and native field patches. The original 14 symbols and explicit Apply have core exports. Apply compares field/identity/extra tokens, original URI, exact policy, cancellation, and owner state before writes. It fills missing values by default. Only native code can request replacement. All needed tokens are reserved together. Normal commit, limit, backend, and revision suites pass; focused sanitizer runs pass. Consumer mounts remain open. |
 | Session authority | Exclusive control leases; typed observations; media and revision checks; duplicate rejection; deadlines; local user priority; owned rate restoration. Nine focused cases pass. Native player and relay integration remain open. |
 | Audio analysis | The callback copies bounded samples without allocation or locks. A separate worker calculates spectrum, waveform, and levels. Six cases pass for formats, time, media changes, and overload. |
 | Visual scenes | Trusted spectrum, waveform, spectrogram, particle, gradient, group, texture, and feedback primitives. Scene and controller suites pass. The normal app mounts the surface and selection UI. Real playback performance and device-loss tests remain open. |
@@ -31,12 +31,12 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Worker lifetime | Cancellation reaches the guest. Restart creates a new request-ID namespace. Reentrant native calls cannot restore a canceled invocation. The current broker suite passes 61 tests. Credential packets contain presence flags only. |
 | Account scope | Workers and assets keep captured credential references, release, grants, and settings revision. External state changes revoke old work. Opaque account references preserve display-only changes and code updates. Declared account fields and key changes require a new account reference. |
 | Artwork packages | MusicBrainz, Last.fm, French TV, and image search have portable packages. Eleven parser tests and five worker fixtures pass. Four public native image paths passed. Google and some old French URLs have incomplete live evidence; their core paths remain. See [the migration record](metadata-provider-migration.md). |
-| Themes and interfaces | Shared theme state reaches QML and native widgets. Contrast tests cover status text and accent surfaces. Known hooks support bounded JSON interface sessions, commands, home replacement, and typed subtitle/playlist selection shells. Nine native registry cases pass. Recovery and stale playlist target checks pass 28 focused QML cases; the earlier broad source run passed 558 cases in 23 suites. The normal app build of the final repairs remains pending. |
+| Themes and interfaces | Shared theme state reaches QML and native widgets. Contrast tests cover status text and accent surfaces. Known hooks support bounded JSON interface sessions, commands, home replacement, and typed subtitle/playlist selection shells. Nine native registry cases pass. The normal app build passes. Recovery and stale playlist target checks pass all 28 focused cases within the 707-case compiled UI run. |
 | Discovery browser | Roots, folders, search, page cursors, independent views, and stable source admissions are mounted. Real queue tests cover one-batch append, revisions, title refresh, export, and account changes. The production Play and Enqueue controls remain unavailable until the lazy resolver and contained transport are complete. |
 | Native input policy | Item copies and native children retain policy. URL, connection, HTTP, FFmpeg secondary I/O, AVIO, and Live555 paths have guards. Native policy, HTTP, and direct AVIO controls passed. Core source/proxy profile checks and atomic source-item policy creation pass the normal native suite, including 16 concurrent callers. Live555 is not configured in this build. |
 | Native source jobs | Bounded retained jobs and one-owner transport leases. Cancellation and Close revoke pending and issued transports without a Qt event. Ten C case groups pass, including cancel before Start; the suite includes 200 result races. The earlier nine-group version also passed sanitizers. All 19 backend/job exports remain. Access binding and stream proxy work remain open. |
 | Native source owner | One owner per native VLC instance; permanent retirement before interface shutdown; final release after native users. Seven normal C groups and 100 Set/Close races pass, including real Cleanup and Destroy. Only Set and Hold are public exports. The host source resolver still needs its mount. |
-| Provider text | Five core UI consumers use plain text for provider titles, artists, track names, filenames, and tooltips. All 13 load-probe cases and 249 existing affected UI cases pass. The final normal app build remains pending. |
+| Provider text | Five core UI consumers use plain text for provider titles, artists, track names, filenames, and tooltips. All 13 load-probe cases and 249 existing affected UI cases pass. The normal app build and compiled UI run also pass. |
 
 The standalone test build is in `modules/gui/qt/addons/CMakeLists.txt`. Set `VLC_BUILD_DIR` to add tests that need the native core library.
 
@@ -83,12 +83,14 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - `5c684f5a75`: core source-profile checks, atomic item policy creation, and idle source-job cancellation.
 - `d7165da888`: native source-owner retirement and real instance cleanup tests.
 - `816490fbea`: typed subtitle/playlist results, current-target checks, and core recovery.
+- `560aa4ba79`: plain provider text with positive and zero-load regression probes.
+- `d91755036c`: source-owner test definitions outside the Windows-only Automake condition.
 
 ## Open completion gates
 
 - Finish supported-platform app/runtime/package tests and repeat release checks after the remaining implementation changes.
 - Complete application-distribution upgrades, recovery UI, safe mode, and Git object-format negotiation. Keep publisher verification claims consistent with actual evidence.
-- Keep typed host result adapters as the only path from modal replacements to core state. Complete the final normal app build and UI checks after the current repairs.
+- Keep typed host result adapters as the only path from modal replacements to core state. Repeat the app checks after the remaining feature integrations.
 - Complete the owned metadata route for player, preparser, library, and artwork requests. Preserve each working provider as an add-on before removal.
 - Complete discovery subscriptions and the native lazy playback route. Enforce stream policy through redirects, nested manifests, segments, and keys before playback.
 - Keep the verified stable queue reference and append path. Implement media-library playlist CAS from [the approved database plan](native-playlist-cas.md).
@@ -96,8 +98,8 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Connect session authority to the native player, host consent UI, and outbound WSS. Exercise two-player drift correction and competing local input.
 - Complete host service adapters, author tooling, schemas, SDK text, and profile conformance tests.
 - Audit all new app English against the requested ASD-STE100 rules and technical terminology.
-- Verify the typed playlist recovery and target guards in the final normal app build. The repaired source passes its focused and broad QML checks; see [the review record](pending-implementation-review.md).
-- Verify the repaired metadata text consumers in the final normal app build. Mount UI image handles only after format, decode, and reference tests pass. The current host asset map is empty.
+- Retain the verified typed playlist recovery, target guards, and plain-text consumers. See [the review record](pending-implementation-review.md).
+- Mount UI image handles only after format, decode, and reference tests pass. The recorded UI repair group still has an empty host asset map; the image feature is separate work.
 - Use the verified source-owner retirement boundary when mounting native source access.
 - Compare the completed implementation with every requirement in the architecture documents.
 

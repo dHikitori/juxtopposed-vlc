@@ -13,6 +13,23 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_misc_metadata_commit',
+    'sources': files('misc/metadata_commit.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_commit_limit',
+    'sources': files('misc/metadata_commit_limit.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
     'name': 'test_src_misc_metadata_revision',
     'sources': files('misc/metadata_revision.c'),
     'suite': ['src', 'test_src', 'addons'],

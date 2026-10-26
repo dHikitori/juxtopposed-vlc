@@ -15,7 +15,8 @@ typedef struct vlc_metadata_job vlc_metadata_job_t;
 #define VLC_METADATA_REQUEST_AUTOMATIC 0x02u
 
 /** The host owns this request. New() copies all strings, context data, and the
- * input item. Do not send a native pointer, URI, or storage to an add-on.
+ * input item. It can create an empty metadata object for token capture.
+ * Do not send a native pointer, URI, or storage to an add-on.
  */
 struct vlc_metadata_request {
     const char *feature;
@@ -32,12 +33,13 @@ struct vlc_metadata_request {
 
 /** A native field patch. The job owns the values. Before a consumer writes a
  * target, it must compare expected_value and its user and field revisions.
- * Use the normal commit lock. This bridge does not write a live target.
+ * Completion does not write a live target. A native consumer can call Apply.
  */
 struct vlc_metadata_field_patch {
     vlc_meta_type_t type;
     const char *expected_value;
     const char *value;
+    uint64_t expected_revision;
 };
 struct vlc_metadata_result {
     input_item_t *item; /**< A separate native result copy. Do not change it. */
@@ -92,6 +94,24 @@ VLC_API const struct vlc_metadata_result *vlc_metadata_job_GetResult(vlc_metadat
  */
 VLC_API bool vlc_metadata_job_Complete(vlc_metadata_job_t *, int status, input_item_t *result,
                                     const char *provenance_json, size_t provenance_size);
+
+/** Commit a successful native result to its original submitted item. Fill
+ * missing fields only. A native host can set bits in replace_fields for an
+ * explicit correction; an add-on payload must not supply this mask.
+ *
+ * Before any write, compare every proposed field token, identity field token,
+ * extra-tag token, original URI, and exact item policy. Refuse a cancelled job,
+ * a closed backend, an exhausted token, or a revoked policy. Return -EAGAIN
+ * without writes when the target changed. applied can be NULL.
+ *
+ * Admission holds the backend lock and then the item lock. Reserve all new
+ * field tokens before any write. Preserved fields need no new token. The final
+ * policy revocation read is the linearization point. A later cancellation or policy
+ * revocation does not undo an admitted commit. No callback runs under these
+ * locks. Allocate all replacement values before admission.
+ */
+VLC_API int vlc_metadata_job_Apply(vlc_metadata_job_t *, input_item_t *,
+                                 uint32_t replace_fields, size_t *applied);
 
 #ifdef __cplusplus
 }

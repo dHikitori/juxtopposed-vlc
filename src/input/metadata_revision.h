@@ -2,18 +2,11 @@
 #ifndef VLC_METADATA_REVISION_INTERNAL_H
 #define VLC_METADATA_REVISION_INTERNAL_H 1
 #include <stdint.h>
-#include <stdatomic.h>
 
-// meta.c is the only caller. Tokens also distinguish different metadata objects.
-static inline uint64_t vlc_metadata_revision_Next(void)
-{
-    static atomic_uint_fast64_t sequence;
-    uint_fast64_t current = atomic_load_explicit(&sequence, memory_order_relaxed);
-    while (current < UINT64_MAX) {
-        if (atomic_compare_exchange_weak_explicit(&sequence, &current, current + 1,
-                                                  memory_order_relaxed, memory_order_relaxed))
-            return current + 1;
-    }
-    return UINT64_MAX;
-}
+/* Reserve a complete token range. No token can equal UINT64_MAX. */
+bool vlc_meta_ReserveRevisions(unsigned count, uint64_t *first);
+/* Take a preallocated value and a reserved token. The item lock is held. */
+void vlc_meta_SetOwnedRevision(vlc_meta_t *, vlc_meta_type_t, char *value, uint64_t revision);
+/* On failure, retain the caller's value and leave the metadata unchanged. */
+bool vlc_meta_TrySetOwned(vlc_meta_t *, vlc_meta_type_t, char *value);
 #endif
