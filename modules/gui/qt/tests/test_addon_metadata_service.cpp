@@ -12,6 +12,7 @@
 #include <vlc_input_item.h>
 #include <vlc_metadata_backend.h>
 #include "addons/addon_metadata_service.hpp"
+#include "util/media_identity_vlc.hpp"
 
 namespace {
 QVariantMap identity()
@@ -82,6 +83,20 @@ class TestAddonMetadataService : public QObject
 {
     Q_OBJECT
 private slots:
+    void nativeTagsKeepArtworkReleaseIdsAndListingType()
+    {
+        auto* item = input_item_New("file:///private/Song.flac", "Song"); QVERIFY(item);
+        input_item_SetMetaExtra(item, "MUSICBRAINZ_ALBUMID", "00000000-0000-0000-0000-000000000001");
+        input_item_SetMetaExtra(item, "MB_ALBUMID", "76df3287-6cda-33eb-8e9a-044b5e15ffdd");
+        input_item_SetMetaExtra(item, "Listing Type", "radio");
+        const auto tags = MediaIdentity::inputMetadata(item);
+        QCOMPARE(tags.value("musicBrainzAlbumId").toString(), "76df3287-6cda-33eb-8e9a-044b5e15ffdd");
+        QCOMPARE(tags.value("release").toMap().value("listingType").toString(), "radio");
+        const auto identity = MediaIdentity::identify(QUrl("file:///private/Song.flac"), tags);
+        QCOMPARE(identity.ids.value("musicBrainzAlbumId"), "76df3287-6cda-33eb-8e9a-044b5e15ffdd");
+        QCOMPARE(identity.release.value("listingType"), "radio"); input_item_Release(item);
+    }
+
     void nativeCallbackCanDestroyTheSharedOwner()
     {
         for (const bool closing : {false, true}) {

@@ -53,6 +53,11 @@ inline QVariantMap inputMetadata(input_item_t* item)
         const auto value = extra(field.first);
         if (!value.isEmpty()) metadata.insert(QLatin1String(field.second), value);
     }
+    const auto albumId = extra("MB_ALBUMID");
+    if (!albumId.isEmpty()) metadata.insert("musicBrainzAlbumId", albumId);
+    const auto listing = extra("Listing Type").toCaseFolded();
+    if (listing == QStringLiteral("radio") || listing == QStringLiteral("tv"))
+        metadata.insert("release", QVariantMap{{"listingType", listing}});
     char* uri = input_item_GetURI(item);
     const auto filename = uri ? QUrl(QString::fromUtf8(uri)).fileName() : QString(); free(uri);
     // An embedded movie date is useful; a TV episode date is not its series start year.

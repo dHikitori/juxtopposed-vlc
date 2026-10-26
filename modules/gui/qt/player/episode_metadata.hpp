@@ -42,7 +42,7 @@ private:
     void applyTitles();
     MediaIdentity::Identity identity(const QUrl& url) const;
     void get(const QUrl& url, quint64 generation, std::function<void(const QJsonDocument&)> completed);
-    void save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QUrl& source);
+    void save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QVariantMap& provenance = {});
     QPointer<MainCtx> m_ctx;
     QPointer<AddonMetadataService> m_sharedMetadata;
     bool m_ownedMetadataProfile = false;
@@ -55,7 +55,7 @@ private:
     QElapsedTimer m_lastRequest;
     QUrl m_current;
     QVariantMap m_metadata;
-    struct EpisodeTitle { QString title; QUrl source; };
+    struct EpisodeTitle { QString title; QUrl source; QVariantMap provenance; };
     QSet<QUrl> m_candidates;
     QSet<QUrl> m_resolved;
     QMap<int, QMap<int, EpisodeTitle>> m_titles;

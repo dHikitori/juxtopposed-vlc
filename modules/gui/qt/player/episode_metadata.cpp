@@ -3,6 +3,7 @@
 #include "maininterface/mainctx.hpp"
 #include "player_controller.hpp"
 #include "addons/addon_metadata_service.hpp"
+#include "util/episode_title_cache.hpp"
 #include "medialibrary/medialib.hpp"
 #include "medialibrary/mlhelper.hpp"
 #include <QJsonDocument>
@@ -13,7 +14,6 @@
 #include <vlc_cxx_helpers.hpp>
 
 namespace {
-const QByteArray prefix("vlc-episode-v1\n");
 struct Title { QUrl url; QString title; QUrl source; };
 
 Title cached(vlc_medialibrary_t* ml, const QUrl& url, const QVariantMap& metadata = {})
@@ -24,18 +24,12 @@ Title cached(vlc_medialibrary_t* ml, const QUrl& url, const QVariantMap& metadat
     char* value = nullptr;
     if (vlc_ml_media_get_playback_state(ml, media->i_id, VLC_ML_PLAYBACK_STATE_APP_SPECIFIC, &value) == VLC_SUCCESS && value) {
         const QByteArray bytes(value); free(value);
-        if (bytes.startsWith(prefix) && bytes.size() <= 16384) {
-            const auto record = QJsonDocument::fromJson(bytes.mid(prefix.size())).object();
-            const auto identity = SeriesDiscovery::identify(url, metadata);
-            if (record.value("series").toString() == MediaIdentity::normalize(identity.title)
-                && record.value("year").toInt(-1) == identity.year
-                && record.value("season").toInt(-1) == identity.season
-                && record.value("episodes").toArray() == QJsonArray::fromVariantList(MediaIdentity::toMap(identity).value("episodes").toList())) {
-                result.title = MediaIdentity::episodeTitle(url, {{"episodeTitle", record.value("title").toString()}}, false);
-                const QUrl source(record.value("source").toString());
-                if (source.scheme() == "https" && !source.host().isEmpty() && source.userInfo().isEmpty()
-                    && source.toEncoded().size() <= 2048) result.source = source;
-            }
+        const auto identity = SeriesDiscovery::identify(url, metadata);
+        const auto entry = HostMetadataCache::decode(bytes, url, identity);
+        result.title = entry.title; result.source = entry.source;
+        if (result.title.isEmpty()) {
+            const auto legacy = EpisodeTitleCache::decode(bytes, url, identity);
+            result.title = legacy.title; result.source = legacy.source;
         }
     }
     if (result.title.isEmpty())
@@ -182,17 +176,16 @@ void EpisodeMetadata::applyTitles()
         const auto title = m_titles.value(target.season).value(target.episodes.first());
         if (title.title.isEmpty()) continue;
         m_resolved.insert(url); emit titleReady(url, title.title, title.source);
-        save(url, metadata, title.title, title.source);
+        save(url, metadata, title.title, title.provenance);
     }
 }
-void EpisodeMetadata::save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QUrl& source)
+void EpisodeMetadata::save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QVariantMap& provenance)
 {
     if (!m_ctx || !m_ctx->getMediaLibrary()) return;
     const auto identity = SeriesDiscovery::identify(url, metadata);
-    const QJsonObject record {{"series", MediaIdentity::normalize(identity.title)}, {"year", identity.year}, {"season", identity.season},
-        {"episodes", QJsonArray::fromVariantList(MediaIdentity::toMap(identity).value("episodes").toList())},
-        {"title", title}, {"source", source.toString()}};
-    const QByteArray bytes = prefix + QJsonDocument(record).toJson(QJsonDocument::Compact);
+    const auto origin = provenance.isEmpty() ? QVariantMap{{"provider", "vlc.core.local"}, {"feature", "video.details"}} : provenance;
+    const auto bytes = HostMetadataCache::encode(identity, title, origin);
+    if (bytes.isEmpty()) return;
     m_ctx->getMediaLibrary()->runOnMLThread<bool>(this,
         [url, bytes](vlc_medialibrary_t* ml, bool& saved) {
             ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, url.toEncoded().constData()));
@@ -202,7 +195,7 @@ void EpisodeMetadata::save(const QUrl& url, const QVariantMap& metadata, const Q
             if (vlc_ml_media_get_playback_state(ml, media->i_id, VLC_ML_PLAYBACK_STATE_APP_SPECIFIC, &value) != VLC_SUCCESS) return;
             const QByteArray previous(value ? value : ""); free(value);
             // Do not replace podcast state or another application's data.
-            if (!previous.isEmpty() && !previous.startsWith(prefix)) return;
+            if (!previous.isEmpty() && !previous.startsWith(EpisodeTitleCache::prefix) && !previous.startsWith(HostMetadataCache::prefix)) return;
             if (previous == bytes) { saved = true; return; }
             saved = vlc_ml_media_set_playback_state(ml, media->i_id, VLC_ML_PLAYBACK_STATE_APP_SPECIFIC, bytes.constData()) == VLC_SUCCESS;
         }, [](quint64, bool) {}, "episode-metadata");
@@ -323,11 +316,11 @@ void EpisodeMetadata::providerFinished(const QString& consumer, const QString& s
     if (status == QStringLiteral("match") || status == QStringLiteral("partial")) {
         const auto fields = data.value(QStringLiteral("fields")).toMap();
         const auto title = MediaIdentity::episodeTitle(url, {{QStringLiteral("episodeTitle"), fields.value(QStringLiteral("episodeTitle"))}}, false);
-        const auto credit = data.value(QStringLiteral("provenance")).toMap().value(QStringLiteral("episodeTitle")).toMap()
-            .value(QStringLiteral("attribution")).toMap();
+        const auto provenance = data.value(QStringLiteral("provenance")).toMap().value(QStringLiteral("episodeTitle")).toMap();
+        const auto credit = provenance.value(QStringLiteral("attribution")).toMap();
         const QUrl source(credit.value(QStringLiteral("url")).toString());
         if (!title.isEmpty()) {
-            m_titles[target.season].insert(target.episodes.first(), {title, source});
+            m_titles[target.season].insert(target.episodes.first(), {title, source, provenance});
             applyTitles();
         }
     }
@@ -366,7 +359,8 @@ void EpisodeMetadata::fetchSeason(quint64 generation, int season)
                 const QUrl source(episode.value("url").toString());
                 if (name.isEmpty() || source.scheme() != "https" || source.host() != "www.tvmaze.com") continue;
                 if (titles.contains(number)) { titles.remove(number); duplicates.insert(number); }
-                else titles.insert(number, {name, source});
+                else titles.insert(number, {name, source, {{"provider", "vlc.legacy.tvmaze"}, {"feature", "video.details"},
+                    {"attribution", QVariantMap{{"name", "TVmaze"}, {"url", source.toString()}, {"license", "CC-BY-SA-4.0"}}}}});
             }
             m_titles.insert(season, titles); m_attemptedSeasons.insert(season); m_busy = false;
             applyTitles(); schedule();

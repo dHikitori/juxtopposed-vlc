@@ -602,6 +602,7 @@ qt_plugin_sources = files(
     'util/media_identity_ml.hpp',
     'util/media_fingerprint.hpp',
     'util/media_identity_vlc.hpp',
+    'util/episode_title_cache.hpp',
     'util/subtitle_matching.hpp',
     'util/local_file_url.hpp',
     'util/gettext_translator.cpp',
