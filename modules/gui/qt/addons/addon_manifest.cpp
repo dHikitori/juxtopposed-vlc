@@ -69,7 +69,7 @@ bool permissions(const QJsonObject& value, QString* error)
 {
     static const QMap<QString, QSet<QString>> fields = {
         {"metadata.context", {"fields"}}, {"media.fingerprint", {"algorithms"}},
-        {"network.http", {"origins", "methods"}}, {"network.websocket", {"origins"}},
+        {"network.http", {"origins", "methods", "minimumIntervalMs", "assetRedirectProfiles"}}, {"network.websocket", {"origins"}},
         {"credentials.use", {"bindings"}}, {"storage.private", {"quotaBytes"}},
         {"library.read", {"fields", "collections"}}, {"queue.read", {}},
         {"queue.modify", {"operations"}}, {"playback.observe", {"fields"}},
@@ -81,13 +81,20 @@ bool permissions(const QJsonObject& value, QString* error)
         const auto scope = it.value().toObject();
         if (!keys(scope, fields.value(it.key()), error, it.key())) return false;
         for (auto item = scope.begin(); item != scope.end(); ++item) {
-            if (item.key() == QStringLiteral("quotaBytes")) {
+            if (item.key() == QStringLiteral("minimumIntervalMs")) {
+                const auto interval = item.value().toDouble(-1);
+                if (!item.value().isDouble() || !std::isfinite(interval) || interval < 0 || interval > 60000 || std::floor(interval) != interval)
+                    return fail(error, QStringLiteral("The network minimum interval is invalid."));
+            } else if (item.key() == QStringLiteral("quotaBytes")) {
                 const auto n = item.value().toDouble(-1);
                 if (n < 0 || n > 100 * 1024 * 1024 || std::floor(n) != n) return fail(error, QStringLiteral("Invalid storage quota"));
             } else if (item.key() != QStringLiteral("bindings")) {
                 QStringList list;
                 if (!strings(item.value(), &list, error, it.key() + QLatin1Char('.') + item.key(), true)) return false;
-                if (item.key() == QStringLiteral("origins")) {
+                if (item.key() == QStringLiteral("assetRedirectProfiles")) {
+                    for (const auto& profile : list) if (profile != QStringLiteral("internet-archive-images@1"))
+                        return fail(error, QStringLiteral("The image redirect profile is not supported."));
+                } else if (item.key() == QStringLiteral("origins")) {
                     if (list.isEmpty()) return fail(error, QStringLiteral("Network permission needs explicit origins"));
                     for (const auto& origin : list) {
                         if (it.key() == QStringLiteral("network.websocket")) {
@@ -175,6 +182,8 @@ int SemanticVersion::compare(const SemanticVersion& other) const
     return a.size() < b.size() ? -1 : 1;
 }
 bool versionSatisfies(const QString& value, const QString& range)
+{ return versionSatisfies(value, range, false); }
+bool versionSatisfies(const QString& value, const QString& range, bool allowPrerelease)
 {
     SemanticVersion version;
     if (!SemanticVersion::parse(value, &version) || range.isEmpty() || range.size() > 256) return false;
@@ -206,7 +215,7 @@ bool versionSatisfies(const QString& value, const QString& range)
                 matches &= comparison >= 0 && version.compare(upper) < 0;
             } else matches &= comparison == 0;
         }
-        accepted |= matches && (version.prerelease.isEmpty() || permitsPrerelease);
+        accepted |= matches && (allowPrerelease || version.prerelease.isEmpty() || permitsPrerelease);
     }
     return accepted;
 }

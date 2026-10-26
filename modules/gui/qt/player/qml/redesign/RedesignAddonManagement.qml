@@ -21,7 +21,13 @@ ColumnLayout {
     spacing: theme.dp(10)
     onPendingPackageChanged: { enableAfterInstall = false; showTechnicalDetails = false }
     readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background"]
-    readonly property bool permissionsKnown: Object.keys(pendingPackage.permissions || {}).every(name => knownPermissions.includes(name))
+    readonly property bool permissionsKnown: {
+        const permissions = pendingPackage.permissions || {}
+        if (!Object.keys(permissions).every(name => knownPermissions.includes(name))) return false
+        const scope = permissions["network.http"] || {}
+        const profiles = scope.assetRedirectProfiles === undefined ? [] : scope.assetRedirectProfiles
+        return Array.isArray(profiles) && profiles.every(profile => profile === "internet-archive-images@1")
+    }
     function destinations(origins) { return (origins || []).map(origin => String(origin).replace(/^https?:\/\//, "").replace(/^wss:\/\//, "")).join(", ") }
     function permissionSummaries(permissions) {
         const summaries = []
@@ -44,7 +50,12 @@ ColumnLayout {
                 break
             }
             case "media.fingerprint": summaries.push(qsTr("Calculate a fingerprint for selected media.")); break
-            case "network.http": summaries.push(qsTr("Connect to these services: %1").arg(destinations(scope.origins))); break
+            case "network.http": {
+                summaries.push(qsTr("Connect to these services: %1").arg(destinations(scope.origins)))
+                if (Array.isArray(scope.assetRedirectProfiles) && scope.assetRedirectProfiles.includes("internet-archive-images@1"))
+                    summaries.push(qsTr("Image downloads can follow redirects to archive.org and its subdomains. These redirects use HTTPS on port 443 and do not use credentials."))
+                break
+            }
             case "network.websocket": summaries.push(qsTr("Maintain a live connection with: %1").arg(destinations(scope.origins))); break
             case "credentials.use": summaries.push(qsTr("Use saved credentials only for these services: %1").arg(destinations([...new Set((scope.bindings || []).map(binding => binding.origin))]))); break
             case "storage.private": summaries.push(qsTr("Store a maximum of %1 MB of add-on data.").arg(Math.ceil(Number(scope.quotaBytes || 0) / (1024 * 1024)))); break

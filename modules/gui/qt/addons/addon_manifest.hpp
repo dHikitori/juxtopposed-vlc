@@ -21,6 +21,7 @@ struct SemanticVersion
 };
 
 bool versionSatisfies(const QString& version, const QString& range);
+bool versionSatisfies(const QString& version, const QString& range, bool allowPrerelease);
 bool portablePackagePath(const QString& path);
 bool validateUiSchema(const QJsonObject& schema);
 bool validateUiValue(const QJsonObject& schema, const QJsonValue& value);

@@ -141,4 +141,20 @@ TestCase {
         verify(!item("addonStagePackage").enabled)
         compare(manager.stages, 0)
     }
+    function test_imageRedirectScopeIsVisibleAndUnknownProfileBlocksApproval() {
+        manager.pendingPackage = {id: "org.example.images", name: "Images", permissions: {"network.http": {
+            origins: ["https://coverartarchive.org"], assetRedirectProfiles: ["internet-archive-images@1"]}}}
+        wait(20)
+        const summary = item("addonInstallPermissionSummary")
+        compare(summary.textFormat, Text.PlainText)
+        verify(summary.text.includes("coverartarchive.org"))
+        verify(summary.text.includes("archive.org and its subdomains"))
+        verify(summary.text.includes("HTTPS on port 443"))
+        verify(summary.text.includes("do not use credentials"))
+        verify(item("addonInstallApprove").enabled)
+        manager.pendingPackage = {id: "org.example.images", name: "Images", permissions: {"network.http": {
+            origins: ["https://coverartarchive.org"], assetRedirectProfiles: ["unknown-profile@1"]}}}
+        wait(20)
+        verify(!item("addonInstallApprove").enabled)
+    }
 }

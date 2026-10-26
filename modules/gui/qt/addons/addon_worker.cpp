@@ -157,9 +157,10 @@ void AddonWorker::message(const QJsonObject& object)
             send({{QStringLiteral("type"), QStringLiteral("host-result")}, {QStringLiteral("id"), id},
                 {QStringLiteral("invocation"), invocation}, {QStringLiteral("status"), response.error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error")},
                 {QStringLiteral("response"), QJsonObject{{QStringLiteral("status"), response.status},
-                    {QStringLiteral("body"), QString::fromUtf8(response.body)}, {QStringLiteral("headers"), response.headers}}},
+                    {QStringLiteral("body"), QString::fromUtf8(response.body)}, {QStringLiteral("headers"), response.headers},
+                    {QStringLiteral("truncated"), response.truncated}}},
                 {QStringLiteral("error"), response.error}});
-        });
+        }, 512 * 1024, NetworkBroker::RequestKind::Document);
     m_invocations[invocation].jobs.insert(job);
 }
 

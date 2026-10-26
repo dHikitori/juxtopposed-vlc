@@ -6,6 +6,11 @@
 #include <QFile>
 #include <QDir>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QBuffer>
+#include <atomic>
+#include <thread>
+#include <cstring>
 #include "addons/addon_network.hpp"
 #include "addons/addon_worker.hpp"
 
@@ -61,6 +66,151 @@ class TestAddonBroker : public QObject
 #endif
     }
 private slots:
+    void manifestLimitsPacingAndRedirectProfiles()
+    {
+        QFile file(QFINDTESTDATA("../../../../contrib-addons/examples/thesubtitledb/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto original = QJsonDocument::fromJson(file.readAll()).object();
+        for (const auto& interval : {QJsonValue(0), QJsonValue(1000), QJsonValue(60000), QJsonValue(-1), QJsonValue(60001), QJsonValue(1.5), QJsonValue(true)}) {
+            auto document = original; auto permissions = document.value("permissions").toObject(); auto required = permissions.value("required").toObject();
+            auto network = required.value("network.http").toObject(); network.insert("minimumIntervalMs", interval);
+            network.insert("assetRedirectProfiles", QJsonArray{"internet-archive-images@1"});
+            required.insert("network.http", network); permissions.insert("required", required); document.insert("permissions", permissions);
+            const bool valid = interval.isDouble() && interval.toDouble() >= 0 && interval.toDouble() <= 60000 && interval.toDouble() == int(interval.toDouble());
+            Manifest parsed; QString error;
+            QCOMPARE(Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error), valid);
+            if (valid) {
+                network.insert("assetRedirectProfiles", QJsonArray{"arbitrary-redirects@1"}); required.insert("network.http", network);
+                permissions.insert("required", required); document.insert("permissions", permissions);
+                QVERIFY(!Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error));
+            }
+        }
+    }
+
+    void originPacingCoversParallelPackagesAndReloads()
+    {
+        OriginRequestPacer pacer;
+        QVERIFY(pacer.enqueue(101, "https://API.example.org:443", 1000, 100));
+        QVERIFY(pacer.enqueue(201, "https://api.example.org", 0, 100));
+        QVERIFY(pacer.admit(101, 100).valid); QCOMPARE(pacer.admit(201, 100).delayMs, qint64(1000));
+        pacer.release(101, 200);
+        QCOMPARE(pacer.admit(201, 200).delayMs, qint64(900));
+        QCOMPARE(pacer.admit(201, 1100).delayMs, qint64(0));
+        QVERIFY(pacer.enqueue(202, "https://api.example.org", 0, 1100));
+        QCOMPARE(pacer.admit(202, 1100).delayMs, qint64(1000));
+        pacer.release(201, 1100); pacer.release(202, 1100);
+        QVERIFY(!pacer.admit(202, 1200).valid);
+        QVERIFY(pacer.enqueue(301, "https://api.example.org", 0, 1200));
+        QCOMPARE(pacer.admit(301, 1200).delayMs, qint64(900));
+        QVERIFY(pacer.enqueue(401, "https://files.example.org", 0, 1200));
+        QCOMPARE(pacer.admit(401, 1200).delayMs, qint64(0));
+    }
+    void originPacingHasNoConcurrentBurst()
+    {
+        OriginRequestPacer pacer;
+        for (quint64 ticket = 1; ticket <= 16; ++ticket) QVERIFY(pacer.enqueue(ticket, "https://api.example.org", 1000, 0));
+        std::atomic_int admitted{0}; std::thread threads[16];
+        for (quint64 ticket = 1; ticket <= 16; ++ticket) threads[ticket - 1] = std::thread([&, ticket] {
+            const auto admission = pacer.admit(ticket, 0);
+            if (admission.valid && admission.delayMs == 0) ++admitted;
+        });
+        for (auto& thread : threads) thread.join();
+        QCOMPARE(admitted.load(), 1);
+        for (quint64 ticket = 1; ticket <= 16; ++ticket) pacer.release(ticket, 1);
+        QVERIFY(pacer.enqueue(17, "https://api.example.org", 1000, 500));
+        QCOMPARE(pacer.admit(17, 500).delayMs, qint64(500));
+    }
+    void originPacingCancellationRetainsQueuedLimitsAndHasBounds()
+    {
+        OriginRequestPacer pacer;
+        QVERIFY(pacer.enqueue(1, "https://api.example.org", 60000, 0));
+        QVERIFY(pacer.enqueue(2, "https://api.example.org", 100, 0));
+        QCOMPARE(pacer.admit(1, 0).delayMs, qint64(0)); pacer.release(1, 1);
+        QCOMPARE(pacer.admit(2, 1).delayMs, qint64(59999)); pacer.release(2, 1);
+        QVERIFY(!pacer.admit(2, 60000).valid);
+        QVERIFY(!pacer.enqueue(0, "https://api.example.org", 100, 0));
+        QVERIFY(!pacer.enqueue(3, "http://api.example.org", 100, 0));
+        QVERIFY(!pacer.enqueue(3, "https://api.example.org", 60001, 0));
+        OriginRequestPacer bounded;
+        for (quint64 ticket = 1; ticket <= 1024; ++ticket)
+            QVERIFY(bounded.enqueue(ticket, QStringLiteral("https://host-%1.example.org").arg(ticket), 1000, 0));
+        QVERIFY(!bounded.enqueue(1025, "https://extra.example.org", 1000, 0));
+        bounded.release(1, 0); QVERIFY(bounded.enqueue(1025, "https://extra.example.org", 1000, 0));
+    }
+    void bodyPrefixUsesOnlyTheByteBudget()
+    {
+        QBuffer large; large.setData(QByteArray(200000, 'x')); QVERIFY(large.open(QIODevice::ReadOnly));
+        QByteArray output;
+        QCOMPARE(NetworkBroker::readBody(&large, output, 4096, true), NetworkBroker::BodyRead::PrefixComplete);
+        QCOMPARE(output.size(), 4096); QCOMPARE(large.pos(), qint64(4096));
+        QBuffer shortResponse; shortResponse.setData("short"); QVERIFY(shortResponse.open(QIODevice::ReadOnly)); output.clear();
+        QCOMPARE(NetworkBroker::readBody(&shortResponse, output, 4096, true), NetworkBroker::BodyRead::More);
+        QCOMPARE(output, QByteArray("short")); QVERIFY(shortResponse.atEnd());
+        large.seek(0); output.clear();
+        QCOMPARE(NetworkBroker::readBody(&large, output, 4096, false), NetworkBroker::BodyRead::TooLarge);
+        QCOMPARE(output.size(), 4097);
+    }
+    void bodyPrefixStopsAnEndlessSource()
+    {
+        class Endless : public QIODevice {
+        public:
+            qint64 readBytes = 0, maximumRead = 0;
+            bool isSequential() const override { return true; }
+            qint64 bytesAvailable() const override { return 1024 * 1024; }
+            qint64 readData(char* data, qint64 size) override { maximumRead = std::max(maximumRead, size); readBytes += size; std::memset(data, 'x', size); return size; }
+            qint64 writeData(const char*, qint64) override { return -1; }
+        } source;
+        QVERIFY(source.open(QIODevice::ReadOnly | QIODevice::Unbuffered)); QByteArray output;
+        QCOMPARE(NetworkBroker::readBody(&source, output, 512 * 1024, true), NetworkBroker::BodyRead::PrefixComplete);
+        QCOMPARE(output.size(), 512 * 1024); QCOMPARE(source.readBytes, qint64(512 * 1024));
+        QVERIFY(source.maximumRead <= 64 * 1024);
+        QVERIFY(NetworkBroker::textPrefixContentType("Text/HTML; charset=utf-8"));
+        QVERIFY(NetworkBroker::textPrefixContentType("text/plain"));
+        for (const auto* type : {"application/json", "image/png", "video/mp4", "application/octet-stream", ""})
+            QVERIFY(!NetworkBroker::textPrefixContentType(QString::fromLatin1(type)));
+    }
+    void prefixOptionsRejectInvalidLimitsBinaryAssetsAndCancellation()
+    {
+        NetworkBroker broker; const auto declaration = manifest();
+        for (const auto& limit : {QJsonValue(0), QJsonValue(-1), QJsonValue(524289), QJsonValue(1.5), QJsonValue(true), QJsonValue("64")}) {
+            bool finished = false; QString error;
+            broker.fetch(declaration, declaration.requiredPermissions, {{"url", "https://api.example.org"}, {"responseBytes", limit}, {"allowTruncated", true}}, {},
+                [&](const NetworkBroker::Response& response) { finished = true; error = response.error; }, 512 * 1024, NetworkBroker::RequestKind::Document);
+            QTRY_VERIFY(finished); QVERIFY(!error.isEmpty());
+        }
+        for (const auto kind : {NetworkBroker::RequestKind::BinaryAsset, NetworkBroker::RequestKind::ImageAsset}) {
+            bool finished = false;
+            broker.fetch(declaration, declaration.requiredPermissions, {{"url", "https://api.example.org"}, {"responseBytes", 64}, {"allowTruncated", true}}, {},
+                [&](const NetworkBroker::Response& response) { finished = !response.error.isEmpty(); }, 512 * 1024, kind);
+            QTRY_VERIFY(finished);
+        }
+        bool finished = false;
+        const auto ticket = broker.fetch(declaration, declaration.requiredPermissions, {{"url", "https://api.example.org"}, {"responseBytes", 64}, {"allowTruncated", true}}, {},
+            [&](const NetworkBroker::Response&) { finished = true; }, 512 * 1024, NetworkBroker::RequestKind::Document);
+        broker.cancel(ticket); QTest::qWait(50); QVERIFY(!finished);
+    }
+    void archiveProfileAppliesOnlyToApprovedImageRedirects()
+    {
+        auto declaration = manifest(); auto scope = declaration.requiredPermissions.value("network.http").toObject();
+        scope.insert("assetRedirectProfiles", QJsonArray{"internet-archive-images@1"}); declaration.requiredPermissions.insert("network.http", scope);
+        auto grants = declaration.requiredPermissions;
+        for (const auto* address : {"https://archive.org/image.jpg", "https://dn711103.ca.archive.org/image.jpg"}) {
+            const QUrl url(QString::fromLatin1(address));
+            const auto image = NetworkBroker::authorize(declaration, grants, url, NetworkBroker::RequestKind::ImageAsset, 1);
+            QVERIFY(image.permitted); QVERIFY(image.stripCredentials);
+            QVERIFY(!NetworkBroker::authorize(declaration, grants, url, NetworkBroker::RequestKind::ImageAsset, 0).permitted);
+            QVERIFY(!NetworkBroker::authorize(declaration, grants, url, NetworkBroker::RequestKind::Document, 1).permitted);
+            QVERIFY(!NetworkBroker::authorize(declaration, grants, url, NetworkBroker::RequestKind::BinaryAsset, 1).permitted);
+        }
+        for (const auto* address : {"http://archive.org/image.jpg", "https://archive.org:444/image.jpg", "https://archive.org.attacker.invalid/image.jpg",
+                 "https://evilarchive.org/image.jpg", "https://archive.org@127.0.0.1/image.jpg", "https://archive.org/image.jpg#fragment"})
+            QVERIFY(!NetworkBroker::permittedImageRedirect(declaration, grants, QUrl(QString::fromLatin1(address))));
+        QVERIFY(!NetworkBroker::permittedImageRedirect(declaration, {}, QUrl("https://archive.org/image.jpg")));
+        scope.remove("assetRedirectProfiles"); grants.insert("network.http", scope);
+        QVERIFY(!NetworkBroker::permittedImageRedirect(declaration, grants, QUrl("https://archive.org/image.jpg")));
+        QVERIFY(!NetworkBroker::publicAddress(QHostAddress("127.0.0.1")));
+        QVERIFY(!NetworkBroker::publicAddress(QHostAddress("192.168.1.1")));
+    }
+
     void workerUsesTrustedHostContextAndCancelsPendingServices()
     {
 #ifndef Q_OS_UNIX

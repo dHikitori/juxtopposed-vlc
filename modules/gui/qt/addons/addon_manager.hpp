@@ -63,6 +63,7 @@ public:
     QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context);
     void cancel(const QString& invocation);
     quint64 fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
+    quint64 fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
     void cancelAsset(quint64 job) { m_network.cancel(job); }
     NetworkBroker* networkBroker() { return &m_network; }
     AddonHostServices* hostServices() { return &m_hostServices; }
