@@ -705,6 +705,8 @@ vlc_meta_SetExtraWithPriority
 vlc_meta_CopyExtraNames
 vlc_meta_Delete
 vlc_meta_GetWithPriority
+vlc_meta_FieldRevision
+vlc_meta_ExtraRevision
 vlc_meta_GetExtraWithPriority
 vlc_meta_GetExtraCount
 vlc_meta_GetStatus
@@ -728,6 +730,7 @@ vlc_metadata_job_IsPending
 vlc_metadata_job_GetRequest
 vlc_metadata_job_GetResult
 vlc_metadata_job_Complete
+vlc_metadata_item_Snapshot
 vlc_mime_Ext2Mime
 vlc_mutex_init
 vlc_mutex_init_recursive

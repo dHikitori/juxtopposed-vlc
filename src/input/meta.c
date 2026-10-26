@@ -35,6 +35,8 @@
 #include "input_internal.h"
 #include "../preparser/art.h"
 #include <vlc_charset.h>
+#include <vlc_metadata_revision.h>
+#include "metadata_revision.h"
 
 struct vlc_meta_value
 {
@@ -45,6 +47,8 @@ struct vlc_meta_value
 struct vlc_meta_t
 {
     struct vlc_meta_value meta[VLC_META_TYPE_COUNT];
+    uint64_t revisions[VLC_META_TYPE_COUNT];
+    uint64_t extra_revision;
 
     vlc_dictionary_t extra_tags;
 
@@ -106,10 +110,13 @@ vlc_meta_t *vlc_meta_New( void )
     vlc_meta_t *m = (vlc_meta_t*)malloc( sizeof(*m) );
     if( !m )
         return NULL;
+    const uint64_t initial_revision = vlc_metadata_revision_Next();
+    m->extra_revision = initial_revision;
     for( int i = 0; i < VLC_META_TYPE_COUNT ; i++ )
     {
         m->meta[i].value = NULL;
         m->meta[i].priority = VLC_META_PRIORITY_BASIC;
+        m->revisions[i] = initial_revision;
     }
     m->i_status = 0;
     vlc_dictionary_init( &m->extra_tags, 0 );
@@ -157,7 +164,16 @@ void vlc_meta_SetWithPriority( vlc_meta_t *p_meta, vlc_meta_type_t meta_type, co
     assert( psz_val == NULL || IsUTF8( psz_val ) );
     p_meta->meta[meta_type].value = psz_val ? strdup( psz_val ) : NULL;
     p_meta->meta[meta_type].priority = priority;
+    p_meta->revisions[meta_type] = vlc_metadata_revision_Next();
 }
+
+uint64_t vlc_meta_FieldRevision(const vlc_meta_t *meta, vlc_meta_type_t type)
+{
+    assert(type >= 0 && type < VLC_META_TYPE_COUNT);
+    return meta != NULL ? meta->revisions[type] : 0;
+}
+uint64_t vlc_meta_ExtraRevision(const vlc_meta_t *meta)
+{ return meta != NULL ? meta->extra_revision : 0; }
 
 const char *vlc_meta_GetWithPriority(const vlc_meta_t *meta, vlc_meta_type_t meta_type, vlc_meta_priority_t *restrict priority)
 {
@@ -174,6 +190,7 @@ const char *vlc_meta_GetWithPriority(const vlc_meta_t *meta, vlc_meta_type_t met
 void vlc_meta_SetExtraWithPriority( vlc_meta_t *m, const char *psz_name, const char *psz_value, vlc_meta_priority_t priority )
 {
     assert( psz_name );
+    m->extra_revision = vlc_metadata_revision_Next();
     struct vlc_meta_value *old_meta_value = vlc_dictionary_value_for_key( &m->extra_tags, psz_name );
     if( old_meta_value != kVLCDictionaryNotFound )
         vlc_dictionary_remove_value_for_key( &m->extra_tags, psz_name,
@@ -238,6 +255,7 @@ void vlc_meta_Merge( vlc_meta_t *dst, const vlc_meta_t *src )
             free( dst->meta[i].value );
             dst->meta[i].value = strdup( src->meta[i].value );
             dst->meta[i].priority = src->meta[i].priority;
+            dst->revisions[i] = vlc_metadata_revision_Next();
         }
     }
 
@@ -259,6 +277,7 @@ void vlc_meta_Merge( vlc_meta_t *dst, const vlc_meta_t *src )
         }
 
         vlc_meta_InsertExtra( dst, ppsz_all_keys[i], src_meta_value->value, src_meta_value->priority );
+        dst->extra_revision = vlc_metadata_revision_Next();
 
         free( ppsz_all_keys[i] );
     }

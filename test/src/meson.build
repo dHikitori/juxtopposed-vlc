@@ -13,6 +13,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_misc_metadata_revision',
+    'sources': files('misc/metadata_revision.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_input_policy',
     'sources': files('input/input_policy.c'),
     'suite': ['src', 'test_src', 'addons'],

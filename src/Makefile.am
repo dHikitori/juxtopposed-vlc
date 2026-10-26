@@ -80,6 +80,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_meta.h \
 	../include/vlc_meta_fetcher.h \
 	../include/vlc_metadata_backend.h \
+	../include/vlc_metadata_revision.h \
 	../include/vlc_mime.h \
 	../include/vlc_modules.h \
 	../include/vlc_mouse.h \
@@ -287,6 +288,7 @@ libvlccore_la_SOURCES = \
 	preparser/ipc.c \
 	preparser/internal.c \
 	preparser/metadata_backend.c \
+	preparser/metadata_snapshot.c \
 	preparser/preparser.c \
 	preparser/preparser.h \
 	preparser/external.c \
@@ -310,6 +312,7 @@ libvlccore_la_SOURCES = \
 	input/input.c \
 	input/info.h \
 	input/meta.c \
+	input/metadata_revision.h \
 	input/attachment.c \
 	input/parse.c \
 	input/replay_gain.c \

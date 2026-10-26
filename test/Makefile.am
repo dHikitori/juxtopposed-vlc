@@ -36,6 +36,7 @@ noinst_PROGRAMS =
 check_PROGRAMS = \
     test_src_misc_configured_proxy \
     test_src_misc_metadata_backend \
+    test_src_misc_metadata_revision \
     test_src_input_policy \
     test_src_input_source_backend \
     test_src_misc_media_library_startup \
@@ -239,6 +240,9 @@ test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c
 test_src_misc_metadata_backend_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_revision_SOURCES = src/misc/metadata_revision.c
+test_src_misc_metadata_revision_LDADD = $(LIBVLCCORE)
 
 test_src_input_policy_SOURCES = src/input/input_policy.c
 test_src_input_policy_LDADD = $(LIBVLCCORE)
