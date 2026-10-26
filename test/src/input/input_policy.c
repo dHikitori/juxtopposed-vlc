@@ -118,8 +118,54 @@ static void callbacks_keep_their_state(void)
     assert(first.destroyed == 0); vlc_sem_post(&first.resume); vlc_join(thread, NULL); assert(first.destroyed == 1);
     vlc_input_policy_Release(b); vlc_object_delete(obj); assert(second.destroyed == 1);
 }
+struct bootstrap { input_item_t *item; vlc_input_policy_t *policy; };
+static void *hold_source_thread(void *opaque)
+{
+    struct bootstrap *state = opaque;
+    state->policy = vlc_input_policy_HoldSourceItem(state->item, "vlc-addon-source:v1:admitted");
+    return NULL;
+}
+static void concurrent_source_bootstrap(void)
+{
+    const char *uri = "vlc-addon-source:v1:admitted";
+    input_item_t *item = input_item_New(uri, "Source scope"); assert(item != NULL);
+    struct bootstrap contexts[16]; vlc_thread_t threads[16];
+    for (unsigned i = 0; i < ARRAY_SIZE(threads); ++i) {
+        contexts[i] = (struct bootstrap){.item=item}; assert(vlc_clone(&threads[i], hold_source_thread, &contexts[i]) == 0);
+    }
+    for (unsigned i = 0; i < ARRAY_SIZE(threads); ++i) vlc_join(threads[i], NULL);
+    for (unsigned i = 0; i < ARRAY_SIZE(threads); ++i) {
+        assert(contexts[i].policy != NULL && contexts[i].policy == contexts[0].policy);
+        assert(vlc_input_policy_IsSource(contexts[i].policy, uri));
+    }
+    assert(vlc_input_policy_HoldSourceItem(item, "vlc-addon-source:v1:other") == NULL);
+    assert(!vlc_input_policy_IsRevoked(NULL)); assert(!vlc_input_policy_IsRevoked(contexts[0].policy));
+    vlc_input_policy_Revoke(contexts[0].policy); assert(vlc_input_policy_IsRevoked(contexts[0].policy));
+    assert(vlc_input_policy_HoldSourceItem(item, uri) == NULL);
+    for (unsigned i = 0; i < ARRAY_SIZE(threads); ++i) vlc_input_policy_Release(contexts[i].policy);
+    input_item_Release(item);
+    struct state state = {0}; vlc_input_policy_t *other = policy_new(&state);
+    item = input_item_New(uri, "Restricted source"); assert(item != NULL);
+    assert(vlc_input_policy_AttachItem(item, other) == VLC_SUCCESS);
+    assert(vlc_input_policy_HoldSourceItem(item, uri) == NULL);
+    vlc_input_policy_t *held = vlc_input_policy_HoldItem(item); assert(held == other); vlc_input_policy_Release(held);
+    input_item_Release(item); vlc_input_policy_Release(other); assert(state.destroyed == 1);
+}
+static void sealed_profile_checks(void)
+{
+    const char *uri = "http://127.0.0.1:9876/token/resource";
+    vlc_input_policy_t *policy = vlc_input_policy_NewProxy(9876, "/token/", NULL, false); assert(policy != NULL);
+    assert(vlc_input_policy_IsProxy(policy, uri)); assert(!vlc_input_policy_IsSource(policy, "vlc-addon-source:v1:admitted"));
+    assert(!vlc_input_policy_IsProxy(policy, "http://127.0.0.1:9876/other/resource"));
+    vlc_input_policy_Revoke(policy); assert(!vlc_input_policy_IsProxy(policy, uri)); vlc_input_policy_Release(policy);
+    policy = vlc_input_policy_NewProxy(9876, "/token/", NULL, true); assert(policy != NULL);
+    assert(!vlc_input_policy_IsProxy(policy, uri)); vlc_input_policy_Release(policy);
+    policy = vlc_input_policy_NewProxy(9876, "/token/", "vlc-addon-source:v1:admitted", false); assert(policy != NULL);
+    assert(!vlc_input_policy_IsProxy(policy, uri)); vlc_input_policy_Release(policy);
+}
 int main(void)
 {
     inheritance_and_revocation(); copied_items_keep_policy(); conflicts_and_native_cas();
-    text_options_do_not_set_policy(); proxy_profile(); callbacks_keep_their_state(); return 0;
+    text_options_do_not_set_policy(); proxy_profile(); callbacks_keep_their_state();
+    concurrent_source_bootstrap(); sealed_profile_checks(); return 0;
 }

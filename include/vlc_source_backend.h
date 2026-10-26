@@ -62,13 +62,15 @@ VLC_API void vlc_source_job_Release(vlc_source_job_t *);
  * That callback can run before Start returns. A failed Start adds none.
  */
 VLC_API int vlc_source_job_Start(vlc_source_job_t *);
+/** Idle cancellation prevents Start and adds no terminal callback. */
 VLC_API bool vlc_source_job_Cancel(vlc_source_job_t *);
 VLC_API bool vlc_source_job_IsPending(vlc_source_job_t *);
 /** Register transport ownership before its first I/O operation. A lease can
  * belong to one job only. Cancellation closes it without a UI event. A
  * successful result transfers this registration to the backend until Stop
  * cancels the lease, or Close revokes all issued policies and transports.
- * Access Close and EOF must cancel the lease before their final release.
+ * Input Stop and the end of playback must cancel the lease before final release.
+ * An individual manifest or segment EOF must keep the input's lease active.
  */
 VLC_API bool vlc_source_job_AttachTransport(vlc_source_job_t *, vlc_input_policy_t *, vlc_source_lease_t *);
 VLC_API const struct vlc_source_request *vlc_source_job_GetRequest(const vlc_source_job_t *);

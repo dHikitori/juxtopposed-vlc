@@ -75,7 +75,7 @@ Before mounting package images, define the permitted formats, decode limits, and
 
 The source-only item policy must have an atomic get-or-create path. Concurrent inputs must use the same policy. Reject an unrelated or revoked policy. Accept a loopback result only through the core proxy profile, without source or attachment access.
 
-The current helper drafts have a read-only review, but their new exports and native tests still need integration. Idle source-job cancellation must prevent Start without a terminal callback. This closes the interrupt-before-Start gap in the native waiter.
+The core helper exports and normal native tests now pass, including 16 concurrent source-policy callers. Idle source-job cancellation prevents Start without a terminal callback. This closes the interrupt-before-Start gap for the planned native waiter. The access bridge itself is not yet mounted.
 
 The native input owns the transport lease. Stop and playback end cancel it. A manifest, segment, or key EOF keeps it active. Keep the queue item's source-only policy intact for replay.
 

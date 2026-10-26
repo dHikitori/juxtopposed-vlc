@@ -40,7 +40,7 @@ struct vlc_source_job {
     vlc_atomic_rc_t refs;
     vlc_source_backend_t *backend;
     vlc_source_job_t *next, *previous;
-    bool started, terminal;
+    bool started, terminal, cancelled;
     struct vlc_source_request request;
     struct vlc_source_result result;
     struct transport *transport;
@@ -225,6 +225,12 @@ static bool finish(vlc_source_job_t *job, int status, struct vlc_source_result *
 bool vlc_source_job_Cancel(vlc_source_job_t *job)
 {
     vlc_source_job_Hold(job);
+    vlc_mutex_lock(&job->backend->lock);
+    if (!job->started) {
+        const bool won = !job->cancelled; job->cancelled = true;
+        vlc_mutex_unlock(&job->backend->lock); vlc_source_job_Release(job); return won;
+    }
+    vlc_mutex_unlock(&job->backend->lock);
     struct vlc_source_result result = {0};
     const bool won = finish(job, -EINTR, &result, true);
     vlc_source_job_Release(job); return won;
@@ -273,8 +279,8 @@ int vlc_source_job_Start(vlc_source_job_t *job)
     vlc_source_job_Hold(job);
     vlc_source_backend_t *backend = job->backend;
     vlc_mutex_lock(&backend->lock);
-    if (backend->closed || job->started || backend->active >= MAX_ACTIVE) {
-        const int error = backend->closed ? -EINTR : VLC_EGENERIC;
+    if (backend->closed || job->cancelled || job->started || backend->active >= MAX_ACTIVE) {
+        const int error = backend->closed || job->cancelled ? -EINTR : VLC_EGENERIC;
         vlc_mutex_unlock(&backend->lock); vlc_source_job_Release(job); return error;
     }
     job->started = true; job->next = backend->head;

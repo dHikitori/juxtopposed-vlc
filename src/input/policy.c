@@ -46,6 +46,25 @@ static bool proxy_connection(void *opaque, const char *host, unsigned port, bool
 }
 static void proxy_destroy(void *opaque)
 { struct proxy_scope *scope = opaque; free(scope->prefix); free(scope->source); free(scope); }
+static bool core_proxy(vlc_input_policy_t *policy)
+{
+    return policy != NULL && !atomic_load_explicit(&policy->revoked, memory_order_acquire)
+        && policy->ops.allow_url == proxy_url && policy->ops.allow_connection == proxy_connection
+        && policy->ops.destroy == proxy_destroy;
+}
+bool vlc_input_policy_IsSource(vlc_input_policy_t *policy, const char *source)
+{
+    if (!core_proxy(policy) || source == NULL || strnlen(source, 12001) > 12000
+        || strncmp(source, "vlc-addon-source:v1:", 20)) return false;
+    const struct proxy_scope *scope = policy->opaque;
+    return scope->port == 0 && !scope->attachments && scope->source != NULL && !strcmp(scope->source, source);
+}
+bool vlc_input_policy_IsProxy(vlc_input_policy_t *policy, const char *uri)
+{
+    if (!core_proxy(policy) || uri == NULL || strnlen(uri, 1025) > 1024) return false;
+    const struct proxy_scope *scope = policy->opaque;
+    return scope->port != 0 && !scope->attachments && scope->source == NULL && proxy_url(policy->opaque, uri);
+}
 vlc_input_policy_t *vlc_input_policy_NewProxy(unsigned port, const char *path, const char *source, bool attachments)
 {
     if (port > 65535 || (source != NULL && strnlen(source, 16385) > 16384)) return NULL;
@@ -84,6 +103,8 @@ void vlc_input_policy_Release(vlc_input_policy_t *policy)
 }
 void vlc_input_policy_Revoke(vlc_input_policy_t *policy)
 { if (policy != NULL) atomic_store_explicit(&policy->revoked, true, memory_order_release); }
+bool vlc_input_policy_IsRevoked(const vlc_input_policy_t *policy)
+{ return policy != NULL && atomic_load_explicit(&policy->revoked, memory_order_acquire); }
 vlc_input_policy_t *vlc_input_policy_HoldObject(vlc_object_t *obj)
 {
     if (obj == NULL) return NULL;

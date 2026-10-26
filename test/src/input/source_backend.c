@@ -10,7 +10,7 @@
 #include <stdatomic.h>
 
 struct state {
-    atomic_uint ended, cancelled, destroyed, lease_cancelled, lease_destroyed;
+    atomic_uint ended, cancelled, destroyed, lease_cancelled, lease_destroyed, dispatched;
     int status, dispatch_error;
     bool reentrant;
     bool lease_reentrant;
@@ -19,7 +19,7 @@ struct state {
     vlc_source_lease_t *lease;
 };
 static int dispatch(void *opaque, vlc_source_job_t *job)
-{ (void)job; return ((struct state *)opaque)->dispatch_error; }
+{ (void)job; struct state *state = opaque; ++state->dispatched; return state->dispatch_error; }
 static void cancel(void *opaque, vlc_source_job_t *job)
 { (void)job; ++((struct state *)opaque)->cancelled; }
 static void destroy(void *opaque) { ++((struct state *)opaque)->destroyed; }
@@ -72,7 +72,7 @@ static void final_lease_release_can_reenter_cancel(void)
 static void success_and_lifetimes(void)
 {
     struct state state = { .lease_reentrant = true }; vlc_source_backend_t *backend = backend_new(&state);
-    vlc_source_job_t *job = job_new(&state); assert(!vlc_source_job_Cancel(job));
+    vlc_source_job_t *job = job_new(&state); assert(!vlc_source_job_IsPending(job));
     assert(vlc_source_job_GetResult(job) == NULL); assert(vlc_source_job_Start(job) == VLC_SUCCESS);
     struct vlc_source_result result = result_new(&state);
     assert(vlc_source_job_AttachTransport(job, result.policy, result.lease));
@@ -157,6 +157,13 @@ static void transport_has_one_job_owner(void)
     vlc_source_job_Release(a); vlc_source_job_Release(b); vlc_source_backend_Release(backend);
     assert(state.ended == 2 && state.destroyed == 1 && state.lease_destroyed == 1);
 }
+static void idle_cancel_prevents_dispatch(void)
+{
+    struct state state = {0}; vlc_source_backend_t *backend = backend_new(&state); vlc_source_job_t *job = job_new(&state);
+    assert(vlc_source_job_Cancel(job)); assert(!vlc_source_job_Cancel(job));
+    assert(vlc_source_job_Start(job) == -EINTR); assert(state.dispatched == 0 && state.ended == 0);
+    vlc_source_job_Release(job); vlc_source_backend_Release(backend); assert(state.destroyed == 1);
+}
 static void close_revokes_issued_and_pending_transports(void)
 {
     for (unsigned complete = 0; complete < 2; ++complete) {
@@ -184,5 +191,5 @@ int main(void)
 {
     success_and_lifetimes(); cancellation_and_close(); errors_and_reentrant_close();
     invalid_results_and_requests(); result_cancel_races(); active_limit(); close_revokes_issued_and_pending_transports();
-    final_lease_release_can_reenter_cancel(); transport_has_one_job_owner(); return 0;
+    final_lease_release_can_reenter_cancel(); transport_has_one_job_owner(); idle_cancel_prevents_dispatch(); return 0;
 }

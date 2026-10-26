@@ -586,6 +586,22 @@ vlc_input_policy_t *vlc_input_policy_HoldItem(input_item_t *item)
     vlc_mutex_lock(&item->lock); vlc_input_policy_t *policy = vlc_input_policy_Hold(item_owner(item)->input_policy); vlc_mutex_unlock(&item->lock);
     return policy;
 }
+vlc_input_policy_t *vlc_input_policy_HoldSourceItem(input_item_t *item, const char *source)
+{
+    if (item == NULL || source == NULL || strnlen(source, 12001) > 12000 || strncmp(source, "vlc-addon-source:v1:", 20)) return NULL;
+    vlc_input_policy_t *candidate = vlc_input_policy_NewProxy(0, NULL, source, false);
+    if (candidate == NULL) return NULL;
+    vlc_mutex_lock(&item->lock);
+    vlc_input_policy_t *policy = NULL;
+    if (item->psz_uri != NULL && !strcmp(item->psz_uri, source)) {
+        input_item_owner_t *owner = item_owner(item);
+        if (owner->input_policy == NULL) { owner->input_policy = candidate; candidate = NULL; }
+        policy = vlc_input_policy_Hold(owner->input_policy);
+    }
+    vlc_mutex_unlock(&item->lock); vlc_input_policy_Release(candidate);
+    if (!vlc_input_policy_IsSource(policy, source)) { vlc_input_policy_Release(policy); return NULL; }
+    return policy;
+}
 
 static int bsearch_strcmp_cb(const void *a, const void *b)
 {
