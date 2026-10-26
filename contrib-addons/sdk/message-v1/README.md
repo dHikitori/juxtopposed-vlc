@@ -8,7 +8,7 @@ Call `export_addon!(YourState, YourState::new())` once in a `cdylib` crate. Buil
 
 The buffer registry accepts exact pointer and length pairs. It rejects unknown pointers, offsets, wrong lengths, and repeated release. Each buffer is at most 1 MiB. At most 32 buffers can exist. A dispatch can emit at most 64 objects. The complete IPC envelope must fit in 1 MiB. The full batch must fit before the first message is sent.
 
-The credential view contains only `{ "present": true }` or `{ "present": false }`. Select a credential by its manifest name in a host request. The host inserts its value after permission and destination checks.
+The credential view contains only `{ "present": true }` or `{ "present": false }`. It supports the host limit of 64 declared fields. Select a credential by its manifest name in a host request. The host inserts its value after permission and destination checks.
 
 The SDK does not grant authority. The native host validates each effect, the installed release, the account, and the active invocation. The worker also applies memory, fuel, and message limits.
 

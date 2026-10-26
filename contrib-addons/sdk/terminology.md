@@ -37,6 +37,8 @@ The terms in this document apply to computer processes and applications.
 | save | Write data to the applicable settings store. |
 | store | Keep data in a data store. |
 | validate | Do a check of data against its declared rules. |
+| recover | Select a saved add-on package that passes validation. Keep the add-on disabled. |
+| restore | Install an app package again from its registered app distribution. |
 | highlight | Change the visual state of an interface item to identify it. |
 
 Keep API identifiers, protocol values, and product names unchanged.

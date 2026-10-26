@@ -112,6 +112,6 @@ The `parameters`, `stateSchema`, and `resultSchema` fields use a fixed schema su
 
 A modal contribution can declare `resultSchema`. The host supplies Confirm and Cancel outside the package view. A package can put a draft result in `state.result`. Confirm returns this result only if it agrees with `resultSchema`. Cancel returns no result. A modal with no result schema can return only an empty object.
 
-A generic modal result does not change a queue, playlist, or track assignment. Each core dialog needs a separate adapter for its accepted result and permitted handles. The built-in subtitle search and playlist selection bodies remain available until those adapters pass their tests.
+A generic modal result does not change a queue, playlist, or track assignment. The working tree has separate [typed adapters](typed-ui-selections.md) for subtitle and playlist dialogs. They accept only current offered host references. The built-in bodies remain available through core recovery controls. A playlist recovery regression remains open.
 
 The implementation is in [AddonUi.js](../../modules/gui/qt/player/qml/redesign/AddonUi.js), [RedesignAddonView.qml](../../modules/gui/qt/player/qml/redesign/RedesignAddonView.qml), and [RedesignAddonNode.qml](../../modules/gui/qt/player/qml/redesign/RedesignAddonNode.qml). The [UI tests](../../modules/gui/qt/tests/tst_AddonUi.qml) cover the contract and the protected settings form.
