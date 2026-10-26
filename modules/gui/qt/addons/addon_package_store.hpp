@@ -58,6 +58,8 @@ public:
     bool uninstall(const QString& id, bool removeData, QString* error = nullptr);
     // Versioned nonsecret settings live in the same state pointer as the release.
     bool settings(const QString& id, QJsonObject*, quint64* revision = nullptr, QString* error = nullptr) const;
+    bool networkConfiguration(const InstalledPackage&, QJsonObject*, quint64* revision = nullptr) const;
+    bool networkConfigurationMatches(const InstalledPackage&, const QJsonObject&, quint64 revision) const;
     bool saveSettings(const QString& id, const QJsonObject&, quint64 expectedRevision, QString* error = nullptr);
     QJsonArray retainedGenerations(const QString& id, QString* error = nullptr) const;
     bool recover(const QString& id, QString* error = nullptr);

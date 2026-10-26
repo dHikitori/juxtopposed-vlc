@@ -84,7 +84,7 @@ bool permissions(const QJsonObject& value, QString* error)
             if (item.key() == QStringLiteral("minimumIntervalMs")) {
                 const auto interval = item.value().toDouble(-1);
                 if (!item.value().isDouble() || !std::isfinite(interval) || interval < 0 || interval > 60000 || std::floor(interval) != interval)
-                    return fail(error, QStringLiteral("The network minimum interval is invalid."));
+                    return fail(error, QStringLiteral("The network minimum interval is not correct."));
             } else if (item.key() == QStringLiteral("quotaBytes")) {
                 const auto n = item.value().toDouble(-1);
                 if (n < 0 || n > 100 * 1024 * 1024 || std::floor(n) != n) return fail(error, QStringLiteral("Invalid storage quota"));
@@ -331,10 +331,21 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     if (root.contains("settings")) {
         if (!root.value("settings").isObject()) return fail(error, QStringLiteral("Invalid settings declaration"));
         const auto settings = root.value("settings").toObject();
-        if (!keys(settings,{"version","schema","ui","migrations"},error,"settings") || !positiveInteger(settings.value("version"),&result.settingsVersion)
+        if (!keys(settings,{"version","schema","ui","migrations","accountFields"},error,"settings") || !positiveInteger(settings.value("version"),&result.settingsVersion)
             || !text(settings,"schema",&result.settingsSchema,error) || !text(settings,"ui",&result.settingsUi,error,false)
             || !requiredResource(result.settingsSchema,result.files,error) || !requiredResource(result.settingsUi,result.files,error)
             || !contracts.contains("settings")) return fail(error, QStringLiteral("Invalid settings resources"));
+        if (settings.contains("accountFields")) {
+            const auto fields = settings.value("accountFields");
+            static const QRegularExpression fieldName(QStringLiteral("^[A-Za-z][A-Za-z0-9_]{0,63}$"));
+            if (!fields.isArray() || fields.toArray().size() > 16)
+                return fail(error, QStringLiteral("The account field list exceeds its limit or is not correct."));
+            for (const auto& field : fields.toArray()) {
+                if (!field.isString() || !fieldName.match(field.toString()).hasMatch() || result.accountFields.contains(field.toString()))
+                    return fail(error, QStringLiteral("An account field name is not correct or occurs more than once."));
+                result.accountFields.append(field.toString());
+            }
+        }
     }
     if (root.contains("locales")) {
         if (!root.value("locales").isObject()) return fail(error, QStringLiteral("Invalid locales"));
@@ -396,6 +407,14 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
         if (schemaError.error != QJsonParseError::NoError || !schema.isObject() || schema.object().value("type") != QStringLiteral("object"))
             return fail(error,QStringLiteral("Invalid settings schema"));
         const auto properties = schema.object().value("properties").toObject();
+        for (const auto& name : manifest.accountFields) {
+            const auto property = properties.value(name).toObject();
+            if (property.isEmpty() || property.value("x-vlc-secret").toBool() || property.value("writeOnly").toBool()
+                || property.value("format").toString() == QLatin1String("password")
+                || !QStringList{QStringLiteral("string"), QStringLiteral("number"), QStringLiteral("integer"), QStringLiteral("boolean")}
+                    .contains(property.value("type").toString()))
+                return fail(error, QStringLiteral("An account field must be a declared nonsecret scalar setting."));
+        }
         for (const auto& binding : manifest.permissionScope("credentials.use").value("bindings").toArray()) {
             const auto property = properties.value(binding.toObject().value("field").toString()).toObject();
             if (!property.value("x-vlc-secret").toBool() || property.value("type") != QStringLiteral("string"))

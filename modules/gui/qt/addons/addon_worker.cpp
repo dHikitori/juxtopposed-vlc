@@ -49,6 +49,10 @@ QString AddonWorker::invoke(const QString& contribution, const QString& operatio
 {
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const auto registration = m_package.manifest.contribution(contribution);
+    if (!configurationCurrent()) {
+        QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("denied"), {}, tr("The add-on release, account, or settings changed.")); });
+        return id;
+    }
     if (!registration || !registration->operations.contains(operation) || !m_package.enabled || m_invocations.size() >= 32) {
         QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("unsupported"), {}, tr("This add-on operation is not available.")); });
         return id;
@@ -113,6 +117,7 @@ void AddonWorker::read()
 
 void AddonWorker::message(const QJsonObject& object)
 {
+    if (!configurationCurrent()) { fail(tr("The add-on release, account, or settings changed.")); return; }
     const auto type = object.value(QStringLiteral("type")).toString();
     const auto id = object.value(QStringLiteral("id")).toString();
     if (type == QLatin1String("result")) {
@@ -161,7 +166,7 @@ void AddonWorker::message(const QJsonObject& object)
                     {QStringLiteral("body"), QString::fromUtf8(response.body)}, {QStringLiteral("headers"), response.headers},
                     {QStringLiteral("truncated"), response.truncated}}},
                 {QStringLiteral("error"), response.error}});
-        }, 512 * 1024, NetworkBroker::RequestKind::Document);
+        }, 512 * 1024, NetworkBroker::RequestKind::Document, m_requestGuard);
     m_invocations[invocation].jobs.insert(job);
 }
 

@@ -51,6 +51,7 @@ struct Manifest
     QList<Contribution> contributions;
     QJsonObject requiredPermissions, optionalPermissions;
     QString settingsSchema, settingsUi;
+    QStringList accountFields;
     int settingsVersion = 0;
     QJsonObject document;
 

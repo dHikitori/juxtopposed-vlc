@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -138,6 +139,37 @@ QJsonObject AddonManager::schema(const InstalledPackage& package) const
 }
 QJsonObject AddonManager::savedSettings(const QString& id) const
 { QJsonObject values; m_store.settings(id, &values); return values; }
+QString AddonManager::accountReference(const InstalledPackage& package) const
+{
+    const auto saved = savedSettings(package.manifest.id);
+    const auto storedReferences = saved.value(QStringLiteral("_credentials")).toObject();
+    QJsonObject references, account;
+    const auto properties = schema(package).value("properties").toObject();
+    bool connected = true, protectedAccount = false;
+    const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
+    for (const auto& binding : package.manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray()) {
+        if (!approved.contains(binding)) continue;
+        protectedAccount = true;
+        const auto name = binding.toObject().value(QStringLiteral("field")).toString();
+        const auto reference = storedReferences.value(name).toString();
+        references.insert(name, reference);
+        connected &= m_secrets.present(package.manifest.id, reference);
+    }
+    for (const auto& name : package.manifest.accountFields) {
+        const auto field = properties.value(name).toObject();
+        if (!field.isEmpty() && !secretField(field)) {
+            const auto value = saved.contains(name) ? saved.value(name) : field.value(QStringLiteral("default"));
+            account.insert(name, value.isUndefined() ? QJsonValue(QJsonValue::Null) : value);
+        }
+    }
+    const QJsonObject identity{{"package", package.manifest.id}, {"source", package.identity.source},
+        {"references", references}, {"account", account}};
+    const QByteArray canonical = QByteArray("vlc-addon-account-v1\n") + QJsonDocument(identity).toJson(QJsonDocument::Compact);
+    const QString digest = QString::fromLatin1(QCryptographicHash::hash(canonical, QCryptographicHash::Sha256).toHex());
+    if (!connected && protectedAccount)
+        return QStringLiteral("disconnected:") + digest;
+    return (!protectedAccount && account.isEmpty() ? QStringLiteral("public:") : QStringLiteral("account:")) + digest;
+}
 QVariantMap AddonManager::settingsSchema(const QString& id) const
 { InstalledPackage package; return m_store.installed(id, &package) ? schema(package).toVariantMap() : QVariantMap{}; }
 QVariantMap AddonManager::settingsMessages(const QString& id) const
@@ -166,6 +198,25 @@ QVariantMap AddonManager::settingsValues(const QString& id) const
 }
 QByteArray AddonManager::credential(const QString& id, const QString& field) const
 { return m_secrets.read(id, savedSettings(id).value("_credentials").toObject().value(field).toString()); }
+NetworkBroker::CredentialResolver AddonManager::credentialResolver(const InstalledPackage& package, NetworkBroker::RequestGuard* current) const
+{
+    QJsonObject settings; quint64 revision = 0;
+    const bool captured = m_store.networkConfiguration(package, &settings, &revision);
+    const auto references = settings.value("_credentials").toObject();
+    const auto bindings = package.manifest.permissionScope(QStringLiteral("credentials.use")).value("bindings").toArray();
+    QSet<QString> fields;
+    const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value("bindings").toArray();
+    for (const auto& value : bindings) if (approved.contains(value)) fields.insert(value.toObject().value("field").toString());
+    const QPointer<AddonManager> owner(const_cast<AddonManager*>(this));
+    NetworkBroker::RequestGuard guard = [owner, package, settings, revision, captured] {
+        return captured && owner && owner->m_store.networkConfigurationMatches(package, settings, revision);
+    };
+    if (current) *current = guard;
+    return [owner, guard, references, fields, id = package.manifest.id](const QString& field) {
+        if (!guard() || !fields.contains(field)) return QByteArray{};
+        return owner->m_secrets.read(id, references.value(field).toString());
+    };
+}
 QVariantMap AddonManager::settingsSecretStatus(const QString& id) const
 {
     InstalledPackage package; if (!m_store.installed(id, &package)) return {};
@@ -255,6 +306,7 @@ QVariantList AddonManager::packages() const
             {"source", package.identity.source}, {"tag", package.identity.tag},
             {"commit", package.identity.distributionSource ? QString{} : package.identity.commitId},
             {"distributionSource", package.identity.distributionSource}, {"publisherVerified", false},
+            {"developerSource", package.identity.developerSource},
             {"digest", QString::fromLatin1(package.digest)}, {"enabled", package.enabled},
             {"configured", configured(package)}, {"hasPrevious", !package.previousDigest.isEmpty()},
             {"installed", true}, {"recoveryRequired", package.recoveryRequired}});
@@ -273,11 +325,13 @@ QVariantList AddonManager::contributionsOfType(const QString& type, bool include
     QVariantList result;
     for (const auto& id : m_store.installedIds()) {
         InstalledPackage package; if (!m_store.installed(id, &package) || (!includeDisabled && !package.enabled)) continue;
+        const auto account = accountReference(package);
         for (const auto& contribution : package.manifest.contributions) {
             if (contribution.type != type) continue;
             result.append(QVariantMap{{"id", QString(id + '/' + contribution.id)}, {"packageId", id},
                 {"name", contribution.document.value("name").toString(package.manifest.name)}, {"enabled", package.enabled},
                 {"document", contribution.document.toVariantMap()},
+                {"accountReference", account}, {"configured", configured(package)},
                 {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation))}});
         }
     }
@@ -312,10 +366,12 @@ QVariantList AddonManager::providersForFeature(const QString& feature) const
     for (const auto& id : m_store.installedIds()) {
         InstalledPackage package; if (!m_store.installed(id, &package)) continue;
         quint64 settingsRevision = 0; QJsonObject settings; m_store.settings(id, &settings, &settingsRevision);
+        const auto account = accountReference(package);
         for (const auto& contribution : package.manifest.contributions) {
             if (contribution.type != QLatin1String("metadata.provider") || !contribution.features.contains(feature)) continue;
             result.append(QVariantMap{{"id", QString(id + '/' + contribution.id)}, {"packageId", id}, {"name", package.manifest.name},
                 {"enabled", package.enabled}, {"configured", configured(package)}, {"features", contribution.features},
+                {"accountReference", account},
                 {"mediaKinds", contribution.mediaKinds}, {"status", !package.enabled ? tr("Disabled") : configured(package) ? tr("Ready") : tr("Setup required")},
                 {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + ':' + QString::number(settingsRevision))}});
         }
@@ -380,7 +436,7 @@ bool AddonManager::stageLocalPackage(const QString& directory)
     identity.developerSource = true;
     auto candidate = std::make_shared<PackageCandidate>();
     if (!PackageStore::inspectDirectory(directory, identity, candidate.get(), &error)) return changed(false, error);
-    m_pendingPackage = std::move(candidate); return changed(true);
+    m_pendingPackage = std::move(candidate); m_updateResult.clear(); return changed(true);
 }
 bool AddonManager::ensureDistributionPackage(const QString& directory, const QString& expectedPackageId)
 {
@@ -419,6 +475,7 @@ bool AddonManager::stageRepository(const QString& source, const QString& tag)
     if (busy()) return changed(false, tr("A repository request is already active."));
     if (source.size() > 8192 || tag.size() > 128) return changed(false, tr("The repository address or tag is too long."));
     m_pendingPackage.reset();
+    m_updateResult.clear();
     auto candidate = std::make_shared<PackageCandidate>();
     auto error = std::make_shared<QString>();
     auto success = std::make_shared<bool>(false);
@@ -467,13 +524,14 @@ bool AddonManager::approvePendingPackage(bool enable)
     withdraw(candidate->manifest.id);
     if (!m_store.install(*candidate, candidate->manifest.requiredPermissions, &error)) return changed(false, error);
     m_pendingPackage.reset();
+    m_updateResult.clear();
     if (enable && !m_store.setEnabled(candidate->manifest.id, true, &error)) return changed(false, error);
     return changed(true);
 }
 void AddonManager::discardPendingPackage()
 {
     if (m_repositoryThread) m_repositoryThread->requestInterruption();
-    m_pendingPackage.reset(); changed(true);
+    m_pendingPackage.reset(); m_updateResult.clear(); changed(true);
 }
 bool AddonManager::installLocalPackage(const QString& directory, bool approve)
 {
@@ -529,12 +587,17 @@ bool AddonManager::uninstall(const QString& id, bool removeData)
 
 AddonWorker* AddonManager::worker(const InstalledPackage& package)
 {
-    if (m_workers.contains(package.manifest.id)) return m_workers.value(package.manifest.id);
+    if (auto* previous = m_workers.value(package.manifest.id)) {
+        if (previous->configurationCurrent()) return previous;
+        withdraw(package.manifest.id);
+    }
     auto* instance = new AddonWorker(package, &m_network, this); instance->setExecutable(m_workerExecutable);
     instance->setHostServices(&m_hostServices);
     const auto id = package.manifest.id;
-    instance->setConfiguration(QJsonObject::fromVariantMap(settingsValues(id)), QJsonObject::fromVariantMap(settingsSecretStatus(id)),
-        [this, id](const QString& field) { return credential(id, field); });
+    NetworkBroker::RequestGuard current;
+    auto resolver = credentialResolver(package, &current);
+    instance->setConfiguration(QJsonObject::fromVariantMap(settingsValues(id)), QJsonObject::fromVariantMap(settingsSecretStatus(id)), std::move(resolver));
+    instance->setRequestGuard(std::move(current));
     connect(instance, &AddonWorker::completed, this, [this](const QString& request, const QString& status, const QJsonObject& data, const QString& error) {
         const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);
         if (!contribution.isEmpty()) emit operationFinished(request, contribution, status, data.toVariantMap(), error);
@@ -577,8 +640,9 @@ quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObjec
     if (!m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
         QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
     }
+    NetworkBroker::RequestGuard current; auto resolver = credentialResolver(package, &current);
     return m_network.fetch(package.manifest, package.grants, descriptor,
-        [this, id](const QString& field) { return credential(id, field); }, std::move(callback), 16 * 1024 * 1024);
+        std::move(resolver), std::move(callback), 16 * 1024 * 1024, NetworkBroker::RequestKind::BinaryAsset, std::move(current));
 }
 quint64 AddonManager::fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback callback)
 {
@@ -587,9 +651,9 @@ quint64 AddonManager::fetchImageAsset(const QString& contributionId, const QJson
         QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
     }
     auto request = descriptor; request.insert("method", "GET"); request.remove("body");
+    NetworkBroker::RequestGuard current; auto resolver = credentialResolver(package, &current);
     return m_network.fetch(package.manifest, package.grants, request,
-        [this, id](const QString& field) { return credential(id, field); }, std::move(callback),
-        1024 * 1024, NetworkBroker::RequestKind::ImageAsset);
+        std::move(resolver), std::move(callback), 1024 * 1024, NetworkBroker::RequestKind::ImageAsset, std::move(current));
 }
 void AddonManager::withdraw(const QString& id)
 {

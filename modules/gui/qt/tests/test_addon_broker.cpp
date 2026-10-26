@@ -107,15 +107,17 @@ private slots:
     void originPacingHasNoConcurrentBurst()
     {
         OriginRequestPacer pacer;
-        for (quint64 ticket = 1; ticket <= 16; ++ticket) QVERIFY(pacer.enqueue(ticket, "https://api.example.org", 1000, 0));
-        std::atomic_int admitted{0}; std::thread threads[16];
+        std::atomic_int registered{0}, admitted{0}; std::thread threads[16];
         for (quint64 ticket = 1; ticket <= 16; ++ticket) threads[ticket - 1] = std::thread([&, ticket] {
+            if (!pacer.enqueue(ticket, "https://api.example.org", 1000, 0)) return;
+            ++registered;
             const auto admission = pacer.admit(ticket, 0);
             if (admission.valid && admission.delayMs == 0) ++admitted;
+            pacer.release(ticket, 1);
         });
         for (auto& thread : threads) thread.join();
+        QCOMPARE(registered.load(), 16);
         QCOMPARE(admitted.load(), 1);
-        for (quint64 ticket = 1; ticket <= 16; ++ticket) pacer.release(ticket, 1);
         QVERIFY(pacer.enqueue(17, "https://api.example.org", 1000, 500));
         QCOMPARE(pacer.admit(17, 500).delayMs, qint64(500));
     }

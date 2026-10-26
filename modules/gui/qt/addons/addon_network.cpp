@@ -81,6 +81,7 @@ struct NetworkBroker::Job {
     Manifest manifest;
     QJsonObject grants, request;
     CredentialResolver credential;
+    RequestGuard current;
     Callback callback;
     QUrl url;
     QPointer<QNetworkReply> reply;
@@ -193,9 +194,15 @@ quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants
 quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants, const QJsonObject& request,
                             CredentialResolver credential, Callback callback, qint64 maximumBytes, RequestKind kind)
 {
+    return fetch(manifest, grants, request, std::move(credential), std::move(callback), maximumBytes, kind, {});
+}
+quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants, const QJsonObject& request,
+                            CredentialResolver credential, Callback callback, qint64 maximumBytes, RequestKind kind, RequestGuard current)
+{
     auto job = std::make_shared<Job>();
     job->id = ++m_sequence; job->manifest = manifest; job->grants = grants;
     job->request = request; job->credential = std::move(credential); job->callback = std::move(callback);
+    job->current = std::move(current);
     job->url = QUrl(request.value(QStringLiteral("url")).toString(), QUrl::StrictMode);
     job->kind = kind;
     const auto declaredInterval = minimumInterval(manifest.permissionScope(QStringLiteral("network.http")));
@@ -206,11 +213,11 @@ quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants
     if (!requested.isUndefined()) {
         const auto limit = requested.toDouble(-1);
         if (!requested.isDouble() || !std::isfinite(limit) || limit < 1 || limit > 512 * 1024 || std::floor(limit) != limit)
-            job->optionError = tr("The response byte limit is invalid.");
+            job->optionError = tr("The response byte limit is not correct.");
         else job->limit = std::min(job->limit, qint64(limit));
     }
     const auto truncated = request.value(QStringLiteral("allowTruncated"));
-    if (!truncated.isUndefined() && !truncated.isBool()) job->optionError = tr("The response prefix option is invalid.");
+    if (!truncated.isUndefined() && !truncated.isBool()) job->optionError = tr("The response prefix option is not correct.");
     job->prefix = truncated.toBool();
     if (job->prefix && (kind != RequestKind::Document || requested.isUndefined()
         || request.value(QStringLiteral("method")).toString(QStringLiteral("GET")) != QStringLiteral("GET")))
@@ -233,6 +240,7 @@ quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants
 void NetworkBroker::begin(const std::shared_ptr<Job>& job)
 {
     if (!m_jobs.contains(job->id)) return;
+    if (job->current && !job->current()) { finish(job, tr("The add-on release, account, or settings changed.")); return; }
     const auto authorization = authorize(job->manifest, job->grants, job->url, job->kind, job->redirects);
     if (!authorization.permitted) {
         finish(job, tr("VLC does not have permission to use this network address.")); return;
@@ -253,7 +261,7 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
     if (!job->paceTicket) {
         const auto ticket = ++paceSequence;
         if (job->minimumIntervalMs < 0 || !appPacer().enqueue(ticket, originFor(job->url), job->minimumIntervalMs, monotonicMs())) {
-            finish(job, tr("The network origin request limit or interval is invalid.")); return;
+            finish(job, tr("The network origin request limit or interval is not correct.")); return;
         }
         job->paceTicket = ticket;
     }
@@ -269,6 +277,7 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
 void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostAddress>& addresses)
 {
     if (!m_jobs.contains(job->id)) return;
+    if (job->current && !job->current()) { finish(job, tr("The add-on release, account, or settings changed.")); return; }
     if (addresses.isEmpty()) { finish(job, tr("VLC cannot connect to the add-on service.")); return; }
     for (const auto& address : addresses)
         if (!publicAddress(address)) { finish(job, tr("VLC does not have permission to use a private network address.")); return; }
@@ -284,7 +293,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
     request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
     const QByteArray host = job->url.host().toUtf8() + (job->url.port(443) == 443 ? QByteArray{} : ':' + QByteArray::number(job->url.port()));
     request.setRawHeader("Host", host);
-    request.setRawHeader("User-Agent", "VLC-Addon/1.0");
+    request.setRawHeader("User-Agent", "VLC-Addon/1.0 (+https://www.videolan.org/)");
     request.setRawHeader("Accept", "application/json");
     request.setRawHeader("Accept-Encoding", "identity");
     const auto headers = job->request.value(QStringLiteral("headers")).toObject();
@@ -327,7 +336,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
     const auto body = job->request.value(QStringLiteral("body")).toString().toUtf8();
     if (body.size() > 128 * 1024) { finish(job, tr("The add-on request is too large.")); return; }
     const auto admission = appPacer().admit(job->paceTicket, monotonicMs());
-    if (!admission.valid) { finish(job, tr("The network origin request is no longer valid.")); return; }
+    if (!admission.valid) { finish(job, tr("The network origin request is no longer available.")); return; }
     if (admission.delayMs > 0) {
         job->paceTimer = new QTimer(this); job->paceTimer->setSingleShot(true);
         connect(job->paceTimer, &QTimer::timeout, this, [this, job, addresses] {
@@ -375,6 +384,7 @@ void NetworkBroker::responseHeaders(const std::shared_ptr<Job>& job)
 bool NetworkBroker::readResponse(const std::shared_ptr<Job>& job)
 {
     if (!job->reply || !m_jobs.contains(job->id)) return false;
+    if (job->current && !job->current()) { finish(job, tr("The add-on release, account, or settings changed.")); return false; }
     const auto reply = job->reply;
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     responseHeaders(job);
@@ -406,6 +416,10 @@ void NetworkBroker::finish(const std::shared_ptr<Job>& job, const QString& error
     if (job->paceTimer) { job->paceTimer->stop(); job->paceTimer->deleteLater(); }
     if (job->reply) { disconnect(job->reply, nullptr, this, nullptr); job->reply->abort(); job->reply->deleteLater(); }
     job->response.error = error;
+    if (job->callback && job->current && !job->current()) {
+        job->response.body.clear();
+        job->response.error = tr("The add-on release, account, or settings changed.");
+    }
     const auto callback = std::move(job->callback);
     if (callback) callback(job->response);
 }

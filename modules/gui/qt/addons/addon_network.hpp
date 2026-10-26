@@ -37,12 +37,15 @@ public:
     struct Response { int status = 0; QByteArray body; QJsonObject headers; QString error; bool truncated = false; };
     using Callback = std::function<void(const Response&)>;
     using CredentialResolver = std::function<QByteArray(const QString& field)>;
+    using RequestGuard = std::function<bool()>;
     explicit NetworkBroker(QObject* parent = nullptr);
     ~NetworkBroker() override;
     quint64 fetch(const Manifest&, const QJsonObject& grants, const QJsonObject& request,
                   CredentialResolver, Callback, qint64 maximumBytes = 512 * 1024);
     quint64 fetch(const Manifest&, const QJsonObject& grants, const QJsonObject& request,
                   CredentialResolver, Callback, qint64 maximumBytes, RequestKind kind);
+    quint64 fetch(const Manifest&, const QJsonObject& grants, const QJsonObject& request,
+                  CredentialResolver, Callback, qint64 maximumBytes, RequestKind kind, RequestGuard);
     void cancel(quint64 job);
     void cancelPackage(const QString& packageId);
     static bool publicAddress(const QHostAddress&);

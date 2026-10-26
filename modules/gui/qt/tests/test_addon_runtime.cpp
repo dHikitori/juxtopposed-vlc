@@ -32,6 +32,82 @@ class TestAddonRuntime : public QObject
         return {{"apiKey", QVariantMap{{"operation", "replace"}, {"value", key}, {"sessionOnly", true}}}};
     }
 private slots:
+    void accountReferencesBindCredentialsButNotDisplaySettingsOrReleaseBytes() {
+        QTemporaryDir storage, update; AddonManager manager(storage.path());
+        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        const auto account = [&] {
+            return manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap()
+                .value("accountReference").toString();
+        };
+        const auto disconnected = account(); QVERIFY(disconnected.startsWith(QStringLiteral("disconnected:")));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("unit-account-key"))));
+        const auto first = account(); QVERIFY(first.startsWith(QStringLiteral("account:"))); QVERIFY(first != disconnected);
+        QVERIFY(!first.contains(QStringLiteral("unit-account-key")));
+        Manifest original; QMap<QString, QByteArray> contents; QString error;
+        QVERIFY(Manifest::loadDirectory(reference(), &original, &contents, &error));
+        auto document = original.document; document.insert("version", "1.0.1");
+        contents.insert(QStringLiteral("addon.json"), QJsonDocument(document).toJson());
+        for (auto it = contents.begin(); it != contents.end(); ++it) {
+            const auto path = update.filePath(it.key()); QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+            QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(it.value()), it.value().size());
+        }
+        QVERIFY2(manager.installLocalPackage(update.path(), true), qPrintable(manager.errorMessage())); QCOMPARE(account(), first);
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("unit-account-key"))));
+        const auto rotated = account(); QVERIFY(rotated != first);
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "fr"}}, {})); const auto settingsChanged = account(); QCOMPARE(settingsChanged, rotated);
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "fr"}}, {{"apiKey", QVariantMap{{"operation", "delete"}}}}));
+        QVERIFY(account() != settingsChanged); QVERIFY(account().startsWith(QStringLiteral("disconnected:")));
+    }
+
+    void namedAccountFieldsChangeIdentityWhileDisplayFieldsDoNot() {
+        QTemporaryDir storage, source; AddonManager manager(storage.path());
+        Manifest original; QMap<QString, QByteArray> contents; QString error;
+        QVERIFY(Manifest::loadDirectory(reference(), &original, &contents, &error));
+        auto document = original.document; auto settings = document.value("settings").toObject();
+        settings.insert("accountFields", QJsonArray{QStringLiteral("username")}); document.insert("settings", settings);
+        auto schema = QJsonDocument::fromJson(contents.value(original.settingsSchema)).object();
+        auto properties = schema.value("properties").toObject();
+        properties.insert("username", QJsonObject{{"type", "string"}, {"maxLength", 128}, {"default", "guest"}}); schema.insert("properties", properties);
+        contents.insert(original.settingsSchema, QJsonDocument(schema).toJson());
+        contents.insert(QStringLiteral("addon.json"), QJsonDocument(document).toJson());
+        const auto write = [&] {
+            for (auto it = contents.begin(); it != contents.end(); ++it) {
+                const auto path = source.filePath(it.key()); if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
+                QFile file(path); if (!file.open(QIODevice::WriteOnly) || file.write(it.value()) != it.value().size()) return false;
+            }
+            return true;
+        };
+        QVERIFY(write()); QVERIFY2(manager.installLocalPackage(source.path(), true), qPrintable(manager.errorMessage()));
+        const QString id = original.id;
+        const auto account = [&] { return manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap().value("accountReference").toString(); };
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}, {"username", "alice"}}, replace(QStringLiteral("unit-account"))));
+        const auto alice = account();
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "fr"}, {"username", "alice"}}, {})); QCOMPARE(account(), alice);
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "fr"}, {"username", "bob"}}, {})); QVERIFY(account() != alice);
+        const auto bob = account();
+        document.insert("version", "1.0.1"); contents.insert(QStringLiteral("addon.json"), QJsonDocument(document).toJson());
+        QVERIFY(write()); QVERIFY2(manager.installLocalPackage(source.path(), true), qPrintable(manager.errorMessage())); QCOMPARE(account(), bob);
+        for (const auto& fields : {QJsonArray{QStringLiteral("apiKey")}, QJsonArray{QStringLiteral("missing")},
+                QJsonArray{QStringLiteral("username"), QStringLiteral("username")}, QJsonArray{1}}) {
+            settings.insert("accountFields", fields); document.insert("settings", settings);
+            contents.insert(QStringLiteral("addon.json"), QJsonDocument(document).toJson()); QVERIFY(write());
+            Manifest rejected; QVERIFY(!Manifest::loadDirectory(source.path(), &rejected));
+        }
+        QJsonArray tooMany; for (int i = 0; i < 17; ++i) tooMany.append(QStringLiteral("field%1").arg(i));
+        settings.insert("accountFields", tooMany); document.insert("settings", settings);
+        QVERIFY(!Manifest::parse(QJsonDocument(document).toJson(), &original));
+    }
+    void publicAccountMarkersRemainStableWithoutAccountSettings() {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        const QString directory = QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/tvmaze");
+        QVERIFY(manager.installLocalPackage(directory, true));
+        const auto descriptor = manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap();
+        const auto account = descriptor.value("accountReference").toString(); QVERIFY(account.startsWith(QStringLiteral("public:")));
+        QVERIFY(manager.saveAddonSettings(QStringLiteral("org.videolan.tvmaze"), {}, {}));
+        QCOMPARE(manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap().value("accountReference").toString(), account);
+    }
+
     void capabilitiesOnlyExposeRegisteredApisAndBoundedMediaState() {
         QTemporaryDir storage; AddonManager manager(storage.path()); manager.setWorkerExecutable({});
         auto view = manager.capabilities(); QVERIFY(!view.value("workerAvailable").toBool());
@@ -131,6 +207,55 @@ private slots:
         store.remove(QStringLiteral("org.example.one"), secret.reference);
         QVERIFY(!store.present(QStringLiteral("org.example.one"), secret.reference));
     }
+    void capturedCredentialsCannotFollowAChangedAccountOrRelease() {
+        QTemporaryDir storage; auto manager = std::make_unique<AddonManager>(storage.path());
+        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        QVERIFY(manager->installLocalPackage(reference(), true));
+        QVERIFY(manager->saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("first-unit-secret"))));
+        QVERIFY(manager->setEnabled(id, true));
+        PackageStore store(storage.path()); InstalledPackage package; QVERIFY(store.installed(id, &package));
+        NetworkBroker::RequestGuard firstCurrent;
+        const auto first = manager->credentialResolver(package, &firstCurrent);
+        QVERIFY(firstCurrent()); QCOMPARE(first(QStringLiteral("apiKey")), QByteArray("first-unit-secret"));
+        QVERIFY(first(QStringLiteral("otherField")).isEmpty());
+        QJsonObject original; quint64 revision = 0; QVERIFY(store.settings(id, &original, &revision));
+        QVERIFY(manager->saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("second-unit-secret"))));
+        QVERIFY(!firstCurrent()); QVERIFY(first(QStringLiteral("apiKey")).isEmpty());
+        QVERIFY(store.installed(id, &package));
+        NetworkBroker::RequestGuard secondCurrent;
+        const auto second = manager->credentialResolver(package, &secondCurrent);
+        QVERIFY(secondCurrent()); QCOMPARE(second(QStringLiteral("apiKey")), QByteArray("second-unit-secret"));
+        QJsonObject secondSettings; QVERIFY(store.settings(id, &secondSettings, &revision));
+        // Another app instance can change the state file without this manager's signals.
+        QVERIFY(store.saveSettings(id, original, revision));
+        QVERIFY(!secondCurrent()); QVERIFY(second(QStringLiteral("apiKey")).isEmpty());
+        QVERIFY(!firstCurrent()); QVERIFY(first(QStringLiteral("apiKey")).isEmpty());
+        QVERIFY(store.installed(id, &package));
+        NetworkBroker::RequestGuard releaseCurrent;
+        const auto release = manager->credentialResolver(package, &releaseCurrent);
+        QVERIFY(releaseCurrent());
+        QVERIFY(store.setEnabled(id, false)); QVERIFY(!releaseCurrent()); QVERIFY(release(QStringLiteral("apiKey")).isEmpty());
+        QVERIFY(store.setEnabled(id, true)); QVERIFY(!releaseCurrent());
+        manager.reset(); QVERIFY(!firstCurrent()); QVERIFY(first(QStringLiteral("apiKey")).isEmpty());
+    }
+    void nativeAssetRequestsRejectAnExternalConfigurationChange() {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("unit-secret"))));
+        QVERIFY(manager.setEnabled(id, true));
+        int completed = 0;
+        const auto callback = [&](const NetworkBroker::Response& response) {
+            ++completed; QVERIFY(!response.error.isEmpty()); QVERIFY(response.body.isEmpty());
+            QVERIFY(response.error.contains(QStringLiteral("changed")));
+        };
+        const QJsonObject request{{"url", "https://api.thesubtitledb.com/subtitles"}, {"credential", "apiKey"}};
+        manager.fetchAsset(id + QStringLiteral("/search"), request, callback);
+        manager.fetchImageAsset(id + QStringLiteral("/search"), request, callback);
+        PackageStore store(storage.path()); QJsonObject settings; quint64 revision = 0;
+        QVERIFY(store.settings(id, &settings, &revision)); settings.insert("language", "fr");
+        QVERIFY(store.saveSettings(id, settings, revision)); QTRY_COMPARE(completed, 2);
+    }
     void fullRemovalRevokesAllCredentialGenerations() {
         QTemporaryDir storage; AddonManager manager(storage.path());
         const QString id = QStringLiteral("org.videolan.thesubtitledb");
@@ -159,6 +284,15 @@ private slots:
         const auto request = worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {{"query", "Film"}});
         QVERIFY(done.wait(15000)); QCOMPARE(done.last()[0].toString(), request);
         QCOMPARE(done.last()[1].toString(), QStringLiteral("auth_required"));
+    }
+    void workerRejectsAnExpiredConfigurationBeforeStartup() {
+        Manifest manifest; QVERIFY(Manifest::loadDirectory(reference(), &manifest));
+        InstalledPackage package; package.manifest = manifest; package.enabled = true; package.directory = reference();
+        package.grants = manifest.requiredPermissions;
+        NetworkBroker network; AddonWorker worker(package, &network); worker.setRequestGuard([] { return false; });
+        QSignalSpy done(&worker, &AddonWorker::completed);
+        worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {{"query", "Film"}});
+        QTRY_COMPARE(done.size(), 1); QCOMPARE(done[0][1].toString(), QStringLiteral("denied"));
     }
 };
 QTEST_GUILESS_MAIN(TestAddonRuntime)

@@ -672,6 +672,25 @@ bool PackageStore::settings(const QString& id, QJsonObject* output, quint64* rev
     if (revision) *revision = quint64(current.value("settingsRevision").toDouble());
     return true;
 }
+bool PackageStore::networkConfiguration(const InstalledPackage& package, QJsonObject* settings, quint64* revision) const
+{
+    QJsonObject state;
+    if (!package.enabled || !loadState(package.manifest.id, &state, nullptr) || !state.value("enabled").toBool()
+        || state.value("recoveryRequired").toBool() || safeMode()
+        || quint64(state.value("generation").toDouble()) != package.generation) return false;
+    const auto current = state.value("current").toObject();
+    if (current.value("digest").toString().toLatin1() != package.digest
+        || identityJson(readIdentity(current.value("identity").toObject())) != identityJson(package.identity)
+        || current.value("grants").toObject() != package.grants) return false;
+    if (settings) *settings = current.value("settings").toObject();
+    if (revision) *revision = quint64(current.value("settingsRevision").toDouble());
+    return true;
+}
+bool PackageStore::networkConfigurationMatches(const InstalledPackage& package, const QJsonObject& settings, quint64 revision) const
+{
+    QJsonObject current; quint64 currentRevision = 0;
+    return networkConfiguration(package, &current, &currentRevision) && currentRevision == revision && current == settings;
+}
 bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, quint64 revision, QString* error)
 {
     if (QJsonDocument(settings).toJson(QJsonDocument::Compact).size() > 256 * 1024)

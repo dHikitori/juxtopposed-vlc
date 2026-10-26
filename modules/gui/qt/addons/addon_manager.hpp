@@ -72,6 +72,8 @@ public:
     quint64 fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
     void cancelAsset(quint64 job) { m_network.cancel(job); }
     NetworkBroker* networkBroker() { return &m_network; }
+    // C++ only. The resolver keeps the release, permission, and account scope.
+    NetworkBroker::CredentialResolver credentialResolver(const InstalledPackage&, NetworkBroker::RequestGuard* current = nullptr) const;
     AddonHostServices* hostServices() { return &m_hostServices; }
 signals:
     void revisionChanged();
@@ -82,6 +84,7 @@ signals:
 private:
     QJsonObject schema(const InstalledPackage&) const;
     QJsonObject savedSettings(const QString&) const;
+    QString accountReference(const InstalledPackage&) const;
     bool configured(const InstalledPackage&) const;
     QByteArray credential(const QString& package, const QString& field) const;
     AddonWorker* worker(const InstalledPackage&);

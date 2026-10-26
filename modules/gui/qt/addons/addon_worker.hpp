@@ -21,6 +21,8 @@ public:
     void setHostCapabilities(const QJsonObject& capabilities) { m_hostCapabilities = capabilities; }
     void setConfiguration(const QJsonObject& nonsecretSettings, const QJsonObject& credentialStatus,
                           NetworkBroker::CredentialResolver);
+    void setRequestGuard(NetworkBroker::RequestGuard guard) { m_requestGuard = std::move(guard); }
+    bool configurationCurrent() const { return !m_requestGuard || m_requestGuard(); }
     QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context);
     void cancel(const QString& invocation);
     void stop();
@@ -46,6 +48,7 @@ private:
     QSet<QString> m_hostCalls;
     QJsonObject m_settings, m_credentials, m_hostCapabilities;
     NetworkBroker::CredentialResolver m_resolver;
+    NetworkBroker::RequestGuard m_requestGuard;
     QString m_executable;
     bool m_ready = false, m_stopping = false;
 };
