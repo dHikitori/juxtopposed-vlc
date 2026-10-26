@@ -86,10 +86,10 @@ quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants
     for (const auto& active : m_jobs) if (active->manifest.id == manifest.id) ++packageJobs;
     m_jobs.insert(job->id, job);
     job->deadline = new QTimer(this); job->deadline->setSingleShot(true);
-    connect(job->deadline, &QTimer::timeout, this, [this, job] { finish(job, tr("The add-on request timed out.")); });
+    connect(job->deadline, &QTimer::timeout, this, [this, job] { finish(job, tr("The add-on service did not send a response in time.")); });
     job->deadline->start(20000);
     QTimer::singleShot(0, this, [this, job, packageJobs] {
-        if (packageJobs >= 4 || m_jobs.size() > 64) finish(job, tr("The add-on request limit was reached."));
+        if (packageJobs >= 4 || m_jobs.size() > 64) finish(job, tr("The add-on sent too many requests."));
         else begin(job);
     });
     return job->id;
@@ -98,7 +98,7 @@ quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants
 void NetworkBroker::begin(const std::shared_ptr<Job>& job)
 {
     if (!m_jobs.contains(job->id)) return;
-    if (!permittedUrl(job->manifest, job->grants, job->url)) { finish(job, tr("This network destination is not approved.")); return; }
+    if (!permittedUrl(job->manifest, job->grants, job->url)) { finish(job, tr("VLC does not have permission to use this network address.")); return; }
     const auto method = job->request.value(QStringLiteral("method")).toString(QStringLiteral("GET"));
     const auto scope = job->manifest.permissionScope(QStringLiteral("network.http"));
     const auto approved = job->grants.value(QStringLiteral("network.http")).toObject();
@@ -108,13 +108,13 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
     };
     if (!methodAllowed(scope) || !methodAllowed(approved)
         || (method != QLatin1String("GET") && method != QLatin1String("POST"))) {
-        finish(job, tr("This network operation is not approved.")); return;
+        finish(job, tr("VLC does not have permission to do this network operation.")); return;
     }
     const QHostAddress literal(job->url.host());
     if (!literal.isNull()) { resolved(job, {literal}); return; }
     job->lookup = QHostInfo::lookupHost(job->url.host(), this, [this, job](const QHostInfo& info) {
         job->lookup = -1;
-        if (info.error() != QHostInfo::NoError) finish(job, tr("The add-on service could not be reached."));
+        if (info.error() != QHostInfo::NoError) finish(job, tr("VLC cannot connect to the add-on service."));
         else resolved(job, info.addresses());
     });
 }
@@ -122,9 +122,9 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
 void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostAddress>& addresses)
 {
     if (!m_jobs.contains(job->id)) return;
-    if (addresses.isEmpty()) { finish(job, tr("The add-on service could not be reached.")); return; }
+    if (addresses.isEmpty()) { finish(job, tr("VLC cannot connect to the add-on service.")); return; }
     for (const auto& address : addresses)
-        if (!publicAddress(address)) { finish(job, tr("Private network destinations are not approved.")); return; }
+        if (!publicAddress(address)) { finish(job, tr("VLC does not have permission to use a private network address.")); return; }
     auto selected = addresses.first();
     for (const auto& address : addresses) if (address.protocol() == QAbstractSocket::IPv4Protocol) { selected = address; break; }
     auto pinned = job->url; pinned.setHost(selected.toString());
@@ -146,7 +146,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
         const auto value = it.value().toString().toUtf8();
         if ((name != QLatin1String("accept") && name != QLatin1String("content-type"))
             || value.size() > 512 || value.contains('\r') || value.contains('\n')) {
-            finish(job, tr("The add-on supplied an unsupported request header.")); return;
+            finish(job, tr("VLC cannot use the request header from this add-on.")); return;
         }
         request.setRawHeader(name.toUtf8(), value);
     }
@@ -166,11 +166,11 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
             static const QRegularExpression headerPattern(QStringLiteral("^[A-Za-z][A-Za-z0-9-]{0,63}$"));
             if (secret.isEmpty() || secret.size() > 4096 || secret.contains('\r') || secret.contains('\n')
                 || !headerPattern.match(QString::fromLatin1(header)).hasMatch()) {
-                finish(job, tr("Set up this add-on's account or API key first.")); return;
+                finish(job, tr("Enter the account data or API key for this add-on.")); return;
             }
             const auto prefix = binding.value(QStringLiteral("prefix")).toString().toUtf8();
             if (prefix.contains('\r') || prefix.contains('\n') || prefix.size() > 32) {
-                finish(job, tr("The credential binding is invalid.")); return;
+                finish(job, tr("The credential binding is not correct.")); return;
             }
             request.setRawHeader(header, prefix + secret);
         }
@@ -195,7 +195,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
         job->response.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const auto redirect = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
         if (!redirect.isEmpty()) {
-            if (++job->redirects > 5) { finish(job, tr("The add-on service redirected too many times.")); return; }
+            if (++job->redirects > 5) { finish(job, tr("The add-on service sent too many redirects.")); return; }
             job->url = job->url.resolved(redirect); job->response = {};
             disconnect(reply, nullptr, this, nullptr); reply->deleteLater(); job->reply = nullptr;
             begin(job); return;
@@ -203,7 +203,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
         for (const auto& header : {QByteArray("content-type"), QByteArray("retry-after")})
             job->response.headers.insert(QString::fromLatin1(header), QString::fromLatin1(reply->rawHeader(header).left(512)));
         if (job->response.status == 0 || (reply->error() != QNetworkReply::NoError && job->response.status < 400))
-            finish(job, tr("The add-on service could not be reached securely."));
+            finish(job, tr("VLC cannot make a secure connection to this add-on service."));
         else finish(job);
     });
 }
