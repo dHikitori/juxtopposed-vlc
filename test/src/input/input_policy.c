@@ -7,6 +7,7 @@
 #include <vlc_input_policy.h>
 #include <vlc_input_item.h>
 #include <vlc_tls.h>
+#include <vlc_network.h>
 #include <vlc_threads.h>
 #include <assert.h>
 #include <stdatomic.h>
@@ -97,6 +98,7 @@ static void proxy_profile(void)
     assert(!vlc_input_policy_CheckConnection(obj, "127.0.0.1", 9877, false));
     assert(!vlc_input_policy_CheckConnection(obj, "127.0.0.1", 9876, true));
     assert(vlc_tls_SocketOpenTCP(obj, "127.0.0.1", 9877) == NULL);
+    assert((net_Connect)(obj, "127.0.0.1", 9877, SOCK_STREAM, IPPROTO_TCP) == -1);
     vlc_object_delete(obj);
     assert(vlc_input_policy_NewProxy(9876, "/../", NULL, false) == NULL);
     assert(vlc_input_policy_NewProxy(0, NULL, NULL, false) == NULL);
