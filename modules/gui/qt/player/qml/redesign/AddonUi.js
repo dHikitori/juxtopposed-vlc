@@ -273,7 +273,7 @@ function settingsErrors(schema, values, secrets, operations, credentialPersisten
             else if (operation.operation === "replace") {
                 if (fieldError(field, operation.value, true)) errors[name] = "Enter a correct replacement credential."
                 else if (credentialPersistenceAvailable === false && operation.sessionOnly !== true) errors[name] = "Select storage for this session. The secure credential store is not available."
-            } else if (required.includes(name) && (operation.operation === "delete" || !(secrets[name] && secrets[name].present))) errors[name] = "Enter a credential, or keep the saved credential."
+            } else if (operation.operation === "keep" && required.includes(name) && !(secrets[name] && secrets[name].present)) errors[name] = "Enter a credential, or keep the saved credential."
         } else {
             var error = fieldError(field, values[name], required.includes(name))
             if (error) errors[name] = error

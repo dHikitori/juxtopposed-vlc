@@ -77,12 +77,30 @@ TestCase {
         compare(Object.keys(backend.lastOperations).length, 0)
         compare(backend.saveCount, 1); verify(!settings.dirty)
     }
-    function test_requiredSecretDeletionCannotSave() {
+    function test_requiredSecretDeletionRevokesAndRefreshesStatus() {
         settings.editSecret("apiKey", "delete", "")
+        verify(settings.save()); compare(backend.saveCount, 1)
+        compare(backend.lastOperations.apiKey.operation, "delete")
+        verify(!backend.secrets.apiKey.present)
+        compare(field("addonSecretStatus_apiKey").text, "The app does not have a saved credential.")
+        compare(Object.keys(settings.secretOperations).length, 0)
+        settings.setValue("count", 4)
+        verify(!settings.save()); verify(settings.fieldErrors.apiKey.length > 0)
+    }
+    function test_cancelSecretDeletionKeepsTheSavedKey() {
+        settings.editSecret("apiKey", "delete", "")
+        settings.discard()
+        verify(backend.secrets.apiKey.present); compare(backend.saveCount, 0)
+        compare(Object.keys(settings.secretOperations).length, 0)
+    }
+    function test_missingRequiredSecretKeepFailsAndOptionalDeletionSucceeds() {
+        backend.secrets = {apiKey: {present: false}, optionalKey: {present: true}}
+        backend.revision++; settings.reload()
+        settings.setValue("count", 4)
         verify(!settings.save()); compare(backend.saveCount, 0)
         verify(settings.fieldErrors.apiKey.length > 0)
-        settings.editSecret("apiKey", "keep", "")
-        compare(Object.keys(settings.secretOperations).length, 0)
+        backend.secrets = {apiKey: {present: true}, optionalKey: {present: true}}
+        backend.revision++; settings.reload()
         settings.editSecret("optionalKey", "delete", "")
         verify(settings.save()); compare(backend.lastOperations.optionalKey.operation, "delete")
     }
