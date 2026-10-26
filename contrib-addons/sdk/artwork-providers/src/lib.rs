@@ -4,9 +4,10 @@
 pub use serde_json;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+pub use vlc_addon_message_v1 as message_v1;
 mod musicbrainz;
 
-pub const MAX_INPUT: usize = 1024 * 1024;
+pub const MAX_INPUT: usize = message_v1::MAX_MESSAGE;
 const MAX_PENDING: usize = 8;
 const MAX_ISSUED: usize = 2048;
 #[derive(Clone, Copy)]
@@ -534,37 +535,16 @@ impl Provider {
     }
 }
 
+impl message_v1::Addon for Provider {
+    fn handle(&mut self, message: message_v1::Incoming<'_>) -> Vec<Value> {
+        Provider::handle(self, message.value())
+    }
+}
 #[macro_export]
 macro_rules! export_provider {
     ($kind:expr) => {
-        #[cfg(target_arch = "wasm32")]
-        #[link(wasm_import_module = "vlc")]
-        extern "C" { fn host_send(ptr: i32, len: i32) -> i32; }
-        #[cfg(target_arch = "wasm32")]
-        std::thread_local! { static PROVIDER: std::cell::RefCell<$crate::Provider> = std::cell::RefCell::new($crate::Provider::new($kind)); }
-        #[no_mangle]
-        pub extern "C" fn vlc_alloc(len: i32) -> i32 {
-            if len <= 0 || len as usize > $crate::MAX_INPUT { return 0; }
-            Box::into_raw(vec![0_u8; len as usize].into_boxed_slice()) as *mut u8 as usize as i32
-        }
-        #[no_mangle]
-        pub unsafe extern "C" fn vlc_dealloc(ptr: i32, len: i32) {
-            if ptr == 0 || len <= 0 || len as usize > $crate::MAX_INPUT { return; }
-            drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr as u32 as usize as *mut u8, len as usize)));
-        }
-        #[cfg(target_arch = "wasm32")]
-        #[no_mangle]
-        pub unsafe extern "C" fn vlc_dispatch(ptr: i32, len: i32) {
-            if ptr == 0 || len <= 0 || len as usize > $crate::MAX_INPUT { return; }
-            let input = std::slice::from_raw_parts(ptr as u32 as usize as *const u8, len as usize);
-            let Ok(message) = $crate::serde_json::from_slice::<$crate::serde_json::Value>(input) else { return; };
-            for reply in PROVIDER.with(|provider| provider.borrow_mut().handle(&message)) {
-                if let Ok(bytes) = $crate::serde_json::to_vec(&reply) {
-                    if bytes.len() <= $crate::MAX_INPUT && host_send(bytes.as_ptr() as usize as i32, bytes.len() as i32) != 0 { break; }
-                }
-            }
-        }
-    }
+        $crate::message_v1::export_addon!($crate::Provider, $crate::Provider::new($kind));
+    };
 }
 
 #[cfg(test)]

@@ -99,10 +99,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "vlc-addon-message-v1"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "vlc-artwork-providers"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "vlc-addon-message-v1",
 ]
 
 [[package]]

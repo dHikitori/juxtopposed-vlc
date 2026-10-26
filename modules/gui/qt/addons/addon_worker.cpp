@@ -24,12 +24,17 @@ AddonWorker::AddonWorker(const InstalledPackage& package, NetworkBroker* network
 AddonWorker::~AddonWorker() { stop(); }
 void AddonWorker::setExecutable(const QString& executable) { m_executable = executable; }
 void AddonWorker::setConfiguration(const QJsonObject& settings, const QJsonObject& status, NetworkBroker::CredentialResolver resolver)
-{ m_settings = settings; m_credentials = status; m_resolver = std::move(resolver); }
+{
+    m_settings = settings; m_credentials = {}; m_resolver = std::move(resolver);
+    for (auto it = status.begin(); it != status.end(); ++it)
+        m_credentials.insert(it.key(), QJsonObject{{QStringLiteral("present"), it.value().toObject().value(QStringLiteral("present")).toBool()}});
+}
 
 void AddonWorker::start()
 {
     if (m_process.state() != QProcess::NotRunning) return;
     m_stopping = false; m_ready = false; m_buffer.clear();
+    m_hostCalls.clear(); m_cancelled.clear(); m_cancelledOrder.clear();
     auto executable = m_executable;
     if (executable.isEmpty()) executable = QStandardPaths::findExecutable(QStringLiteral("vlc-addon-worker"));
     if (executable.isEmpty()) { QTimer::singleShot(0, this, [this] { fail(tr("Install the add-on worker to use this add-on.")); }); return; }
@@ -132,6 +137,8 @@ void AddonWorker::message(const QJsonObject& object)
         return;
     }
     const auto invocation = object.value(QStringLiteral("invocation")).toString();
+    // A request already in transit can arrive after host cancellation.
+    if (type == QLatin1String("host-call") && m_cancelled.contains(invocation)) return;
     if (type != QLatin1String("host-call") || id.isEmpty() || id.size() > 128 || m_hostCalls.contains(id)
         || !m_invocations.contains(invocation)) { fail(tr("The add-on used a request ID that is not correct.")); return; }
     if (m_hostCalls.size() >= 4096) { fail(tr("The add-on sent too many requests.")); return; }
@@ -141,12 +148,18 @@ void AddonWorker::message(const QJsonObject& object)
         if (!object.value(QStringLiteral("request")).isObject()) { fail(tr("The add-on sent a host request that is not correct.")); return; }
         const auto contribution = QString(m_package.manifest.id + '/' + m_invocations.value(invocation).contribution);
         const auto weak = QPointer<AddonWorker>(this);
-        const auto job = m_services->dispatch({m_package.manifest.id, contribution, invocation, m_package.grants}, operation,
+        const auto services = m_services;
+        const auto job = services->dispatch({m_package.manifest.id, contribution, invocation, m_package.grants}, operation,
             object.value(QStringLiteral("request")).toObject(), [weak, invocation, id](AddonHostServices::Result result) {
                 if (!weak || weak->m_stopping || !weak->m_invocations.contains(invocation)) return;
                 weak->send({{"type", "host-result"}, {"id", id}, {"invocation", invocation},
                     {"status", result.error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error")}, {"response", result.response}, {"error", result.error}});
             });
+        // A native handler can cancel this invocation during dispatch.
+        if (!weak || weak->m_stopping || !weak->m_invocations.contains(invocation)) {
+            if (job && services) services->cancel(job);
+            return;
+        }
         if (job) m_invocations[invocation].serviceJobs.insert(job);
         else send({{"type", "host-result"}, {"id", id}, {"invocation", invocation}, {"status", "error"}, {"error", tr("The add-on sent too many host requests.")}});
         return;
@@ -157,16 +170,22 @@ void AddonWorker::message(const QJsonObject& object)
             {QStringLiteral("error"), tr("This host capability is not available or needs permission.")}});
         return;
     }
-    const auto job = m_network->fetch(m_package.manifest, m_package.grants, object.value(QStringLiteral("request")).toObject(), m_resolver,
-        [this, invocation, id](const NetworkBroker::Response& response) {
-            if (!m_invocations.contains(invocation) || m_stopping) return;
-            send({{QStringLiteral("type"), QStringLiteral("host-result")}, {QStringLiteral("id"), id},
+    const auto weak = QPointer<AddonWorker>(this);
+    const auto network = QPointer<NetworkBroker>(m_network);
+    const auto job = network->fetch(m_package.manifest, m_package.grants, object.value(QStringLiteral("request")).toObject(), m_resolver,
+        [weak, invocation, id](const NetworkBroker::Response& response) {
+            if (!weak || !weak->m_invocations.contains(invocation) || weak->m_stopping) return;
+            weak->send({{QStringLiteral("type"), QStringLiteral("host-result")}, {QStringLiteral("id"), id},
                 {QStringLiteral("invocation"), invocation}, {QStringLiteral("status"), response.error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error")},
                 {QStringLiteral("response"), QJsonObject{{QStringLiteral("status"), response.status},
                     {QStringLiteral("body"), QString::fromUtf8(response.body)}, {QStringLiteral("headers"), response.headers},
                     {QStringLiteral("truncated"), response.truncated}}},
                 {QStringLiteral("error"), response.error}});
         }, 512 * 1024, NetworkBroker::RequestKind::Document, m_requestGuard);
+    if (!weak || weak->m_stopping || !weak->m_invocations.contains(invocation)) {
+        if (network) network->cancel(job);
+        return;
+    }
     m_invocations[invocation].jobs.insert(job);
 }
 
@@ -181,6 +200,8 @@ void AddonWorker::finish(const QString& id, const QString& status, const QJsonOb
 void AddonWorker::cancel(const QString& id)
 {
     if (!m_invocations.contains(id)) return;
+    m_cancelled.insert(id); m_cancelledOrder.enqueue(id);
+    while (m_cancelledOrder.size() > 2048) m_cancelled.remove(m_cancelledOrder.dequeue());
     const auto invocation = m_invocations.take(id);
     if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
     for (auto job : invocation.jobs) m_network->cancel(job);
@@ -188,6 +209,8 @@ void AddonWorker::cancel(const QString& id)
     QQueue<QJsonObject> retained;
     while (!m_queued.isEmpty()) { const auto message = m_queued.dequeue(); if (message.value(QStringLiteral("id")).toString() != id) retained.enqueue(message); }
     m_queued = retained;
+    if (m_ready && !m_stopping && m_process.state() == QProcess::Running)
+        send({{QStringLiteral("type"), QStringLiteral("cancel")}, {QStringLiteral("id"), id}});
 }
 void AddonWorker::fail(const QString& error)
 {

@@ -37,6 +37,8 @@ class Worker:
         return json.loads(line)
 
     def dispatch(self, message):
+        if message.get("type") == "invoke":
+            message = {"settings": {}, "credentials": {}, "hostCapabilities": {}, **message}
         self.process.stdin.write(json.dumps(message) + "\n")
         self.process.stdin.flush()
         reply = self.read()
@@ -116,6 +118,17 @@ class PortableArtworkTests(unittest.TestCase):
                 self.assertEqual(record["evidence"]["type"], "identifier")
                 self.assertTrue(record["fields"]["artwork"]["url"].startswith(
                     "https://coverartarchive.org/" if front else "https://images-na.ssl-images-amazon.com/"))
+
+    def test_cancel_releases_pending_state_and_omits_late_results(self):
+        identity = {"kind": "musicTrack", "title": "Song", "artist": "Artist", "album": "Album"}
+        for package in ["lastfm", "musicbrainz"]:
+            with Worker(package) as worker:
+                for number in range(10):
+                    id = f"request-{number}"
+                    call = worker.dispatch(invoke(identity, id=id))[0]
+                    self.assertEqual(call["type"], "host-call")
+                    self.assertEqual(worker.dispatch({"type": "cancel", "id": id}), [])
+                    self.assertEqual(complete(worker, call, "{}"), [])
 
 
 if __name__ == "__main__":

@@ -237,11 +237,65 @@ private slots:
         QCOMPARE(completed.first()[0].toString(), invocation);
         QCOMPARE(completed.first()[2].toJsonObject().value("response").toObject().value("positionUs").toInt(), 123);
         completed.clear(); worker.stop();
-        // The next process has a new host-call ID namespace.
-        AddonWorker pending(installed, &broker); pending.setExecutable(executable); pending.setHostServices(&services);
-        QSignalSpy canceled(&pending, &AddonWorker::completed);
-        invocation = pending.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {}); QTRY_COMPARE(calls, 2);
-        pending.cancel(invocation); QCOMPARE(aborts, 1); late({{{"positionUs", 999}}, {}}); QTest::qWait(50); QVERIFY(canceled.isEmpty());
+        // The same worker object starts a new host-call ID namespace.
+        invocation = worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {}); QTRY_COMPARE(calls, 2);
+        worker.cancel(invocation); QCOMPARE(aborts, 1); late({{{"positionUs", 999}}, {}}); QTest::qWait(50); QVERIFY(completed.isEmpty());
+#endif
+    }
+    void workerSendsCancelAndIgnoresOnlyKnownLateCalls()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("The process fixture needs the Unix test interpreter.");
+#else
+        QTemporaryDir directory; auto installed = package(directory.path(), QStringLiteral("cancel-late"));
+        installed.grants.insert("playback.observe", QJsonObject{});
+        NetworkBroker broker; AddonHostServices services; QObject owner; int calls = 0, aborts = 0;
+        QVERIFY(services.registerOperation(QStringLiteral("playback.observe"), &owner,
+            [&](const AddonHostServices::Context&, const QJsonObject&, auto) -> AddonHostServices::Cancel {
+                ++calls; return [&] { ++aborts; };
+            }));
+        AddonWorker worker(installed, &broker); worker.setExecutable(fixture(directory.path())); worker.setHostServices(&services);
+        QSignalSpy completed(&worker, &AddonWorker::completed), unavailable(&worker, &AddonWorker::unavailable);
+        const auto first = worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {});
+        QTRY_COMPARE(calls, 1); worker.cancel(first); QCOMPARE(aborts, 1);
+        QTRY_VERIFY(QFileInfo::exists(directory.filePath(QStringLiteral("cancel-late.cancelled"))));
+        const auto next = worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {{"fast", true}});
+        QTRY_COMPARE(completed.size(), 1); QCOMPARE(completed.first()[0].toString(), next);
+        QCOMPARE(completed.first()[1].toString(), QStringLiteral("match"));
+        QCOMPARE(calls, 1); QVERIFY(unavailable.isEmpty());
+#endif
+    }
+    void workerProjectsCredentialPresenceOnly()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("The process fixture needs the Unix test interpreter.");
+#else
+        QTemporaryDir directory; NetworkBroker broker;
+        AddonWorker worker(package(directory.path(), QStringLiteral("credential-status")), &broker);
+        worker.setExecutable(fixture(directory.path()));
+        worker.setConfiguration({}, {{"apiKey", QJsonObject{{"present", true}, {"sessionOnly", true}, {"value", "do-not-forward"}}}}, {});
+        QSignalSpy completed(&worker, &AddonWorker::completed);
+        worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {}); QTRY_COMPARE(completed.size(), 1);
+        QCOMPARE(completed.first()[2].toJsonObject().value("credentials").toObject(), QJsonObject({{"apiKey", QJsonObject{{"present", true}}}}));
+#endif
+    }
+    void nativeHandlerCanCancelDuringDispatch()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("The process fixture needs the Unix test interpreter.");
+#else
+        QTemporaryDir directory; auto installed = package(directory.path(), QStringLiteral("host-service"));
+        installed.grants.insert("playback.observe", QJsonObject{});
+        NetworkBroker broker; AddonHostServices services; QObject owner; int calls = 0, aborts = 0;
+        AddonWorker worker(installed, &broker); worker.setExecutable(fixture(directory.path())); worker.setHostServices(&services);
+        QVERIFY(services.registerOperation(QStringLiteral("playback.observe"), &owner,
+            [&](const AddonHostServices::Context& context, const QJsonObject&, auto) -> AddonHostServices::Cancel {
+                ++calls; worker.cancel(context.invocation); return [&] { ++aborts; };
+            }));
+        QSignalSpy completed(&worker, &AddonWorker::completed), unavailable(&worker, &AddonWorker::unavailable);
+        worker.invoke(QStringLiteral("search"), QStringLiteral("searchAssets"), {});
+        QTRY_COMPARE(calls, 1); QTRY_COMPARE(aborts, 1);
+        worker.stop(); QCOMPARE(aborts, 1); QVERIFY(completed.isEmpty()); QVERIFY(unavailable.isEmpty());
 #endif
     }
     void publicAddressClassification_data()

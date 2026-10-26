@@ -9,3 +9,4 @@ publish = false
 
 [dependencies]
 serde_json = "=1.0.152"
+vlc-addon-message-v1 = { path = "../message-v1" }

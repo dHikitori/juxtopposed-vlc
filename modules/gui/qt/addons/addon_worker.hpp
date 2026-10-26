@@ -46,6 +46,8 @@ private:
     QQueue<QJsonObject> m_queued;
     QHash<QString, Invocation> m_invocations;
     QSet<QString> m_hostCalls;
+    QSet<QString> m_cancelled;
+    QQueue<QString> m_cancelledOrder;
     QJsonObject m_settings, m_credentials, m_hostCapabilities;
     NetworkBroker::CredentialResolver m_resolver;
     NetworkBroker::RequestGuard m_requestGuard;
