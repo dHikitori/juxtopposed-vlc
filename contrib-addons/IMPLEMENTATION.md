@@ -89,7 +89,9 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Connect session authority to the native player, host consent UI, and outbound WSS. Exercise two-player drift correction and competing local input.
 - Complete host service adapters, author tooling, schemas, SDK text, and profile conformance tests.
 - Audit all new app English against the requested ASD-STE100 rules and technical terminology.
-- Repair the typed playlist recovery test failure and the metadata AutoText consumers listed in [the pending review](pending-implementation-review.md). The latest broad UI run has 548 passes and one failure; the earlier 493-case regression group passed.
+- Repair the typed playlist recovery test precondition and built-in target guards listed in [the pending review](pending-implementation-review.md). The latest broad UI run has 548 passes and one failure; the earlier 493-case regression group passed. The possible old-delegate timing cause still needs test evidence.
+- Repair the metadata AutoText consumers. Mount UI image handles only after format, decode, and reference tests pass. The current host asset map is empty.
+- Complete source-owner retirement with a private instance flag before mounting native source access. The isolated owner tests need real native instances for that private state.
 - Compare the completed implementation with every requirement in the architecture documents.
 
 Successful subtitle tests do not close the other gates. The full implementation remains active while these items are open.

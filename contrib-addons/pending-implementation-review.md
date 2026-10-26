@@ -10,6 +10,22 @@ Updated 27 October 2026. Code, build, and staging actions are on hold for direct
 
 The [implementation record](IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) remains a separate approval item. No rejected database change ran.
 
+## Playlist recovery: test and submission guards
+
+The read-only trace found two separate repair needs. No new test ran during this review.
+
+The earlier test changes the second row from `playlist-23` to `playlist-24`. Test setup then clears and fills the model with `playlist-23`. The recovery test waits for a non-null delegate and calls its `clicked()` signal directly. It does not first confirm the delegate's current key.
+
+In Qt 6.8.3, `itemAtIndex()` reads the visible-item cache. Non-reset model changes schedule a later layout; `forceLayout()` applies pending changes. This supports a possible old-delegate timing cause. The model and delegate values at the failure were not captured, so this cause is still an inference. See the [Qt item-view source](https://raw.githubusercontent.com/qt/qtdeclarative/v6.8.3/src/quick/items/qquickitemview.cpp).
+
+Repair the test precondition: apply pending layout, confirm that the model ID and delegate key are both `playlist-23`, then use a mouse event to select the row. Keep the final saved-ID assertion. Do not close the regression from a longer wait alone.
+
+The product also needs a guard. The built-in delegate copies its key to `selectedKey`; `submitCore()` emits that key without a current model or revision comparison. Model signals invalidate add-on choices but leave the built-in selection intact. The native save path rejects a missing or read-only playlist. It can still accept a different writable playlist that exists.
+
+Clear the built-in selection when its model revision changes. Reject a delegate selection that no longer agrees with the current row. Before submission, confirm the selected target and captured revision again. Add a separate regression that changes or removes a selected target before submission. Require a fresh selection and no save from the old target. The native [playlist transaction plan](native-playlist-cas.md) covers the separate change between UI validation and database append.
+
+The recovery path does not supply an add-on result. This failure does not establish a defect in opaque choice-reference resolution.
+
 ## Plain-text metadata rendering
 
 Untrusted provider text must remain plain text in labels, captions, choices, and tooltips. Qt AutoText can interpret image markup outside the add-on network broker. The narrow repair is an explicit plain-text format at each consumer.
@@ -35,13 +51,25 @@ The isolated `source_owner` draft passes its initial ownership and cleanup tests
 1. `Close` on an instance with no owner must still prevent a later `Set` during cleanup.
 2. `Forget` must keep the retirement state through the final backend release. A destroy callback must not create another owner or drain the same entry twice.
 
-Use a native retirement flag that belongs to the VLC instance and needs no registry-entry allocation. `Set` and the cleanup transition must use one consistent lock order. Keep the flag until the native instance ends, including after the registry entry is removed.
+Use a private `source_owner_retiring` flag in `libvlc_priv_t`. Initialize it to false in `libvlc_InternalCreate`, before the instance is published. No existing exit, interface, or playlist field supplies this state. Protect the new flag with the existing source `owner_lock`.
 
-During `Forget`, keep a retiring entry with a detach flag while the final backend reference is released outside the registry lock. `Hold` must return NULL after detachment. Reentrant `Set` must fail. Reentrant `Forget` must return without another release. Remove the entry only after that release completes.
+`Close` sets the flag before it looks for a registry entry. `Set` tests the flag before it allocates or attaches an entry. Never clear it for that instance. This works without an allocation when the registry is full or no owner was installed.
 
-The private cleanup functions run on the instance cleanup thread. `Close` must run before interface destruction can wait for an input. `Forget` follows the native input and player users. These two calls are not a concurrent callback drain. Host callback state must remain valid until an active callback returns.
+The persistent flag permits a simpler `Forget` path than the earlier entry-retention proposal: unlink the entry once under `owner_lock`, then release the detached backend outside that lock. During its destroy callback, `Set` fails from the instance flag; `Forget` finds no entry; `Hold` returns NULL. No separate tombstone allocation is required. Before `Forget`, `Hold` can still return the closed owner for an active completion callback.
 
-Add tests for an unbound Close followed by Set, destroy followed by Set/Forget, repeated cleanup, and a new instance after the previous one ends.
+The private cleanup functions run on the instance cleanup thread. Mount `Close` before `intf_DestroyAll` in `src/libvlc.c`. Mount `Forget` after the VLM, playlist, media-library, and media-source users end, before dialog, key-store, logger, and module cleanup. An idempotent `Forget` before final object deletion supplies a last guard. These calls are not a concurrent callback drain. Host callback state must remain valid until an active callback returns.
+
+The current isolated tests create generic object roots. Change them to real `libvlc_InternalCreate`/`libvlc_InternalDestroy` instances before the code reads private instance fields. Cover an unbound Close followed by Set, allocation failure, full registry, destroy followed by Set/Forget/Hold, concurrent Set/Close, repeated cleanup, and a fresh instance after the previous one ends.
+
+## Package images and theme resources
+
+The read-only audit found no active package-image path that can load external image references. Themes accept hex colors and bounded numeric shape and effect tokens. UI icon names select fixed host SVG strings.
+
+`RedesignAddonView.assetFor()` accepts only a key from the host asset map. The native registry currently supplies an empty map. A worker update changes the descriptor state; it cannot fill that map. Thus, declared UI Image and MediaCard artwork still need a mounted asset route.
+
+The manifest permits package and contribution icon resource paths without an image-format restriction. The review found no current reader or renderer for those fields. Treat this as unfinished image support, rather than evidence of a current load outside the broker.
+
+Before mounting package images, define the permitted formats, decode limits, and host-owned asset handles. Test an image with an external reference and confirm that no network or local-file load occurs. Also test account, release, and permission changes against old asset handles. Keep these tests separate from the metadata plain-text repairs above.
 
 ## Native open prerequisites
 
