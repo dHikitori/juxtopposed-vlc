@@ -36,6 +36,7 @@ noinst_PROGRAMS =
 check_PROGRAMS = \
     test_src_misc_configured_proxy \
     test_src_misc_metadata_backend \
+    test_src_input_policy \
     test_src_misc_media_library_startup \
 	test_src_misc_iso_language \
 	test_libvlc_core \
@@ -238,6 +239,9 @@ test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c
 test_src_misc_metadata_backend_LDADD = $(LIBVLCCORE)
 
+test_src_input_policy_SOURCES = src/input/input_policy.c
+test_src_input_policy_LDADD = $(LIBVLCCORE)
+
 if HAVE_WIN32
 check_PROGRAMS += test_src_config_dirs_win32
 test_src_config_dirs_win32_SOURCES = src/config/dirs_win32.c
@@ -354,7 +358,7 @@ test_src_playlist_preparse_depth_SOURCES = src/playlist/preparse_depth.c
 test_src_playlist_preparse_depth_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_preparser_fetcher_shutdown_SOURCES = src/preparser/fetcher_shutdown.c \
     ../src/preparser/art.c ../src/misc/interrupt.c ../src/misc/objects.c \
-    ../src/misc/variables.c ../src/input/item.c ../src/text/strings.c
+    ../src/misc/variables.c ../src/input/item.c ../src/input/policy.c ../src/text/strings.c
 test_src_preparser_fetcher_shutdown_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_preparser_fetcher_shutdown_LDADD = $(LIBVLCCORE) $(LIBVLC) ../compat/libcompat.la $(SOCKET_LIBS)
 test_src_preparser_artwork_fallback_SOURCES = src/preparser/artwork_fallback.c

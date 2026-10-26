@@ -34,6 +34,8 @@
 #include <vlc_strings.h>
 
 #include "item.h"
+#include <vlc_input_policy.h>
+#include "policy.h"
 #include "info.h"
 #include "input_internal.h"
 
@@ -116,6 +118,7 @@ void input_item_CopyOptions( input_item_t *p_child,
     uint8_t *flagv_realloc = NULL;
 
     vlc_mutex_lock( &p_parent->lock );
+    vlc_input_policy_t *policy = vlc_input_policy_Hold(item_owner(p_parent)->input_policy);
 
     if( p_parent->i_options > 0 )
     {
@@ -138,6 +141,8 @@ void input_item_CopyOptions( input_item_t *p_child,
     }
 
     vlc_mutex_unlock( &p_parent->lock );
+
+    if (policy != NULL) { vlc_input_policy_AttachItem(p_child, policy); vlc_input_policy_Release(policy); }
 
     if( likely(optv && flagv && optc ) )
     {
@@ -434,6 +439,8 @@ void input_item_Release( input_item_t *p_item )
     if( owner->libvlc_owner_release != NULL )
         owner->libvlc_owner_release( owner->libvlc_owner );
 
+    vlc_input_policy_Release(owner->input_policy);
+
     free( p_item->psz_name );
     free( p_item->psz_uri );
     free( p_item->p_stats );
@@ -558,7 +565,26 @@ void input_item_ApplyOptions(vlc_object_t *obj, input_item_t *item)
         var_SetAddress(obj, o->name, o->value);
     }
 
+    if (item_owner(item)->input_policy != NULL)
+        vlc_input_policy_AttachObject(obj, item_owner(item)->input_policy);
+
     vlc_mutex_unlock(&item->lock);
+}
+
+int vlc_input_policy_AttachItem(input_item_t *item, vlc_input_policy_t *policy)
+{
+    if (item == NULL || policy == NULL) return VLC_EGENERIC;
+    vlc_mutex_lock(&item->lock); input_item_owner_t *owner = item_owner(item);
+    vlc_input_policy_t *old = owner->input_policy; const bool conflict = old != NULL && old != policy;
+    owner->input_policy = vlc_input_policy_Hold(conflict ? vlc_input_policy_Denied() : policy);
+    vlc_mutex_unlock(&item->lock); vlc_input_policy_Release(old);
+    return conflict ? VLC_EGENERIC : VLC_SUCCESS;
+}
+vlc_input_policy_t *vlc_input_policy_HoldItem(input_item_t *item)
+{
+    if (item == NULL) return NULL;
+    vlc_mutex_lock(&item->lock); vlc_input_policy_t *policy = vlc_input_policy_Hold(item_owner(item)->input_policy); vlc_mutex_unlock(&item->lock);
+    return policy;
 }
 
 static int bsearch_strcmp_cb(const void *a, const void *b)

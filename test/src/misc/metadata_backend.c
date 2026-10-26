@@ -2,6 +2,7 @@
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
+#undef NDEBUG
 #include <vlc_common.h>
 #include <vlc_metadata_backend.h>
 #include <vlc_input_item.h>

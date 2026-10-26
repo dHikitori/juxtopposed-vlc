@@ -13,6 +13,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_input_policy',
+    'sources': files('input/input_policy.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_misc_file_logger',
     'sources': files('misc/file_logger.c'),
     'suite': ['src', 'test_src'],
@@ -263,7 +270,7 @@ vlc_tests += {
     'sources' : files('preparser/fetcher_shutdown.c',
         '../../src/preparser/art.c', '../../src/misc/interrupt.c',
         '../../src/misc/objects.c', '../../src/misc/variables.c',
-        '../../src/input/item.c', '../../src/text/strings.c'),
+        '../../src/input/item.c', '../../src/input/policy.c', '../../src/text/strings.c'),
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
     'include_directories' : include_directories('../../src'),

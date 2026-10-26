@@ -48,6 +48,7 @@
 #include "vlc_codec.h"
 
 #include "variables.h"
+#include <vlc_input_policy.h>
 
 #ifdef HAVE_SEARCH_H
 # include <search.h>
@@ -71,6 +72,7 @@ int vlc_object_init(vlc_object_t *restrict obj, vlc_object_t *parent,
     priv->var_root = NULL;
     vlc_mutex_init (&priv->var_lock);
     priv->resources = NULL;
+    priv->input_policy = vlc_input_policy_HoldObject(parent);
 
     obj->priv = priv;
     obj->force = false;
@@ -134,6 +136,9 @@ void vlc_object_deinit(vlc_object_t *obj)
     int canc = vlc_savecancel();
     var_DestroyAll(obj);
     vlc_restorecancel(canc);
+
+    vlc_input_policy_t *policy = priv->input_policy; priv->input_policy = NULL;
+    vlc_input_policy_Release(policy);
 
     free(priv);
 }

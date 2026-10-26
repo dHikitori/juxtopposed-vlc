@@ -62,6 +62,7 @@ install_headers(
     'vlc_inhibit.h',
     'vlc_input.h',
     'vlc_input_item.h',
+    'vlc_input_policy.h',
     'vlc_interface.h',
     'vlc_interrupt.h',
     'vlc_keystore.h',

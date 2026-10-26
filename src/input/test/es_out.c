@@ -287,6 +287,11 @@ void input_resource_StopFreeVout(input_resource_t *p_resource)
 {
     (void)p_resource;
 }
+void input_resource_CloseFreeVout(input_resource_t *p_resource);
+void input_resource_CloseFreeVout(input_resource_t *p_resource)
+{
+    input_resource_StopFreeVout(p_resource);
+}
 
 void input_rate_Add(input_rate_t *counter, uintmax_t val)
 {

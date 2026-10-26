@@ -36,6 +36,7 @@
 #include <assert.h>
 
 #include <vlc_network.h>
+#include <vlc_input_policy.h>
 
 #ifdef _WIN32
 #   include <iphlpapi.h>
@@ -522,6 +523,7 @@ static int net_SetDSCP( int fd, uint8_t dscp )
 int net_ConnectDgram( vlc_object_t *p_this, const char *psz_host, unsigned i_port,
                       int i_hlim, int proto )
 {
+    if (!vlc_input_policy_CheckConnection(p_this, psz_host, i_port, true)) { errno = EACCES; return -1; }
     struct addrinfo hints = {
         .ai_socktype = SOCK_DGRAM,
         .ai_protocol = proto,
@@ -607,6 +609,8 @@ int net_ConnectDgram( vlc_object_t *p_this, const char *psz_host, unsigned i_por
 int net_OpenDgram( vlc_object_t *obj, const char *psz_bind, unsigned i_bind,
                    const char *psz_server, unsigned i_server, int protocol )
 {
+    if (vlc_input_policy_Has(obj) && (psz_server == NULL || psz_server[0] == '\0'
+        || !vlc_input_policy_CheckConnection(obj, psz_server, i_server, true))) { errno = EACCES; return -1; }
     if ((psz_server == NULL) || (psz_server[0] == '\0'))
         return net_ListenSingle (obj, psz_bind, i_bind, protocol);
 

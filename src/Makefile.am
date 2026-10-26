@@ -65,6 +65,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_inhibit.h \
 	../include/vlc_input.h \
 	../include/vlc_input_item.h \
+	../include/vlc_input_policy.h \
 	../include/vlc_interface.h \
 	../include/vlc_interrupt.h \
 	../include/vlc_keystore.h \
@@ -289,6 +290,8 @@ libvlccore_la_SOURCES = \
 	preparser/preparser.h \
 	preparser/external.c \
 	input/item.c \
+	input/policy.c \
+	input/policy.h \
 	input/access.c \
 	clock/clock_internal.c \
 	clock/input_clock.c \
@@ -744,6 +747,7 @@ test_input_es_out_SOURCES = input/test/es_out.c \
 	input/es_out.c input/es_out.h \
 	input/source.c input/source.h \
 	input/item.c input/item.h \
+	input/policy.c input/policy.h \
 	clock/clock.c clock/clock.h \
 	text/strings.c \
 	clock/clock_internal.c clock/clock_internal.h \

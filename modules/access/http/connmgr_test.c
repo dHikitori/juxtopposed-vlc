@@ -7,15 +7,17 @@
 #include <vlc_common.h>
 #include <vlc_network.h>
 #include <vlc_tls.h>
+#include <vlc_objects.h>
+#include <vlc_input_policy.h>
 
 static struct vlc_logger logger;
-static vlc_object_t owner = {.logger = &logger};
+static vlc_object_t *owner;
 static vlc_tls_client_t credentials;
 static unsigned lookups, opens, creates, destroys;
 
 static char *test_proxy(vlc_object_t *obj, const char *url)
 {
-    assert(obj == &owner);
+    assert(obj == owner);
     assert(!strcmp(url, "https://media.invalid/test.wav"));
     lookups++;
     return strdup("http://user:password@proxy.invalid:8123/");
@@ -23,7 +25,7 @@ static char *test_proxy(vlc_object_t *obj, const char *url)
 
 static vlc_tls_client_t *test_credentials_create(vlc_object_t *obj)
 {
-    assert(obj == &owner);
+    assert(obj == owner);
     creates++;
     return &credentials;
 }
@@ -61,7 +63,10 @@ static vlc_tls_t *test_connect_proxy(void *ctx, vlc_tls_client_t *creds,
 
 int main(void)
 {
-    struct vlc_http_mgr *mgr = vlc_http_mgr_create(&owner, NULL);
+    owner = vlc_object_create((vlc_object_t *)NULL, sizeof (*owner));
+    assert(owner != NULL);
+    owner->logger = &logger;
+    struct vlc_http_mgr *mgr = vlc_http_mgr_create(owner, NULL);
     assert(mgr);
     struct vlc_http_msg *request = vlc_http_req_create("GET", "https",
         "media.invalid", "/test.wav");
@@ -70,8 +75,17 @@ int main(void)
         assert(vlc_http_mgr_request(mgr, true, "media.invalid", 443, request,
                                     true, false) == NULL);
     assert(lookups == 2 && opens == 2 && creates == 1);
+    vlc_input_policy_t *policy = vlc_input_policy_NewProxy(12345,
+        "/admitted/", "vlc-addon-source://example/item", false);
+    assert(policy != NULL);
+    assert(vlc_input_policy_AttachObject(owner, policy) == VLC_SUCCESS);
+    vlc_input_policy_Release(policy);
+    assert(vlc_http_mgr_request(mgr, true, "media.invalid", 443, request,
+                                true, false) == NULL);
+    assert(lookups == 2 && opens == 2 && creates == 1);
     vlc_http_msg_destroy(request);
     vlc_http_mgr_destroy(mgr);
     assert(destroys == 1);
+    vlc_object_delete(owner);
     return 0;
 }

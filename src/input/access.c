@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include <vlc_common.h>
+#include <vlc_input_policy.h>
 #include <vlc_url.h>
 #include <vlc_modules.h>
 #include <vlc_interrupt.h>
@@ -92,6 +93,8 @@ static stream_t *access_New(vlc_object_t *parent, input_thread_t *input,
     char *redirv[MAX_REDIR];
     unsigned redirc = 0;
 
+    if (!vlc_input_policy_CheckURL(parent, mrl)) { errno = EACCES; return NULL; }
+
     if (strncmp(mrl, "attachment://", 13) == 0)
         return accessNewAttachment(parent, input, mrl);
 
@@ -114,7 +117,9 @@ static stream_t *access_New(vlc_object_t *parent, input_thread_t *input,
     while (redirc < MAX_REDIR)
     {
         char *url = access->psz_url;
-        msg_Dbg(access, "creating access: %s", url);
+        if (!vlc_input_policy_CheckURL(VLC_OBJECT(access), url)) { errno = EACCES; goto error; }
+        if (vlc_input_policy_Has(VLC_OBJECT(access))) msg_Dbg(access, "Creating access under the input policy.");
+        else msg_Dbg(access, "creating access: %s", url);
 
         const char *p = strchr(url, ':');
         if (p == NULL)
@@ -152,7 +157,7 @@ static stream_t *access_New(vlc_object_t *parent, input_thread_t *input,
             goto error;
 
         /* redirection */
-        msg_Dbg(access, "redirecting to: %s", access->psz_url);
+        if (!vlc_input_policy_Has(VLC_OBJECT(access))) msg_Dbg(access, "redirecting to: %s", access->psz_url);
         redirv[redirc++] = url;
 
         for (unsigned j = 0; j < redirc; j++)
