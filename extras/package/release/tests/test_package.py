@@ -82,7 +82,7 @@ class PackageTests(unittest.TestCase):
                 root = Path(temp)
                 stage, output, qt, sources = [root / p for p in ('stage', 'output', 'qt', 'sources')]
                 output.mkdir()
-                for name in ('bin/vlc', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
+                for name in ('bin/vlc', 'bin/vlc-addon-worker', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
                              'libexec/vlc/vlc-qt-check', 'lib/libvlc.dylib',
                              'lib/vlc/plugins/gui/libqt_plugin.dylib'):
                     path = stage / name
@@ -99,6 +99,7 @@ class PackageTests(unittest.TestCase):
                 app = output / f'macos-{arch}/VLC Juxtopposed.app'
                 verified = False
                 sealed_info = None
+                signed_paths = []
 
                 def query(*args):
                     if args[0] == 'uname':
@@ -114,6 +115,10 @@ class PackageTests(unittest.TestCase):
                 def execute(args, **kwargs):
                     nonlocal verified, sealed_info
                     self.assertTrue(kwargs['check'])
+                    if str(args[0]).endswith('/macdeployqt'):
+                        worker = app / 'Contents/MacOS/vlc-addon-worker'
+                        self.assertTrue(worker.is_file())
+                        self.assertIn(f'-executable={worker}', args)
                     if args[0] == 'codesign':
                         info = (app / 'Contents/Info.plist').read_bytes()
                         self.assertEqual(plistlib.loads(info)['LSMinimumSystemVersion'], '13.5')
@@ -123,6 +128,7 @@ class PackageTests(unittest.TestCase):
                         else:
                             self.assertFalse(verified)
                             sealed_info = info
+                            signed_paths.append(Path(args[-1]))
                     if args[0] == 'ditto':
                         self.assertTrue(verified)
                         self.assertEqual((app / 'Contents/Info.plist').read_bytes(), sealed_info)
@@ -134,6 +140,10 @@ class PackageTests(unittest.TestCase):
                         mock.patch.object(package.subprocess, 'run', side_effect=execute):
                     archive = package.macos(stage, output, package.validate_tag(None)['version'], 'a' * 40)
                 self.assertTrue(archive.exists())
+                self.assertIn(app / 'Contents/MacOS/vlc-addon-worker', signed_paths)
+                self.assertLess(signed_paths.index(app / 'Contents/MacOS/vlc-addon-worker'), signed_paths.index(app))
+                audit = json.loads((output / f'macos-{arch}-dependency-audit.json').read_text())
+                self.assertIn('Contents/MacOS/vlc-addon-worker', audit)
                 metadata = json.loads((output / f'macos-{arch}-build.json').read_text())
                 self.assertEqual(metadata['signing'], 'ad-hoc; no Developer ID or notarization')
 
@@ -143,7 +153,7 @@ class PackageTests(unittest.TestCase):
             root = Path(temp)
             stage = root / 'stage'
             stage.mkdir()
-            for name in ('vlc.exe', 'libvlc.dll', 'libvlccore.dll'):
+            for name in ('vlc.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll'):
                 (stage / name).write_bytes(b'fixture')
             (stage / 'plugins').mkdir()
             output = root / 'output'
@@ -164,6 +174,7 @@ class PackageTests(unittest.TestCase):
             self.assertTrue(archive.is_file())
             with zipfile.ZipFile(archive) as bundled:
                 self.assertIn('vlc-win64/portable/', bundled.namelist())
+                self.assertIn('vlc-win64/vlc-addon-worker.exe', bundled.namelist())
                 self.assertEqual(bundled.read('vlc-win64/SOURCE_COMMIT.txt'), ('a' * 40 + '\n').encode())
             metadata = json.loads((output / 'windows-build.json').read_text())
             self.assertEqual(metadata['version'], tag)

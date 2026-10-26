@@ -76,6 +76,67 @@ Further notes:
 Other distributions are unverified; install the equivalents
 of the packages above.
 
+## Portable add-on runtime
+
+Qt builds include `vlc-addon-worker`. This program runs executable Wasm add-ons
+in a separate process. Use Rust 1.97 or later and Cargo to build the worker.
+The `-Drust` option controls experimental native VLC modules. It does not
+control this worker.
+
+The worker build uses an installed `stable` Rust toolchain. Set
+`RUSTUP_TOOLCHAIN` to use a different installed toolchain. The build does not
+use the nightly toolchain from `rust-toolchain.toml`. The build does not
+install toolchains or targets. Users use the worker program from the
+application package without Rust or Cargo.
+
+Cargo uses the versions in `Cargo.lock` and the `--locked --release` options.
+The install step puts the worker next to VLC. The build-tree UI uses the
+configured worker path. The add-on manager does not run Cargo or repository
+build scripts during an add-on install.
+
+For HTTPS Git installs, install a Git program on `PATH`. If Git is missing, the manager
+shows an error. TheSubtitleDB reference package installs at
+`share/vlc/addons/reference/thesubtitledb`. Each user must supply a separate API
+key. The package does not contain a global TheSubtitleDB key.
+
+Set `-Daddon-runtime=disabled` to omit the worker. Package checks, settings and
+data-only UI resources operate without the worker. Executable providers cannot run
+without the worker. The manager does not use Lua, QML or native libraries as a
+worker replacement.
+
+The current code has package installs, settings and subtitle providers.
+[The architecture proposal](../contrib-addons/README.md) also specifies other
+contracts. These contracts are not complete. More code and tests are necessary.
+
+For a cross build, install the Rust target before you build VLC. Meson maps
+Linux, Windows and macOS x86_64/aarch64 targets. Use
+`-Daddon-runtime-target=<triple>` to set a different target. Use
+`-Daddon-runtime-linker=<program>` to set a different linker. The build stops
+if the target or linker is not available.
+
+To set a free-space limit for the worker build, use these optional environment settings:
+
+```sh
+export VLC_ADDON_MIN_FREE_BYTES=7500000000
+export VLC_ADDON_BUILD_RESERVE_BYTES=1500000000
+```
+
+The build starts only if the free space is at least the sum of these values.
+The script does not remove files. The default values are zero, which omits this check.
+
+Do these tests from a configured native build:
+
+```sh
+meson test -C build-linux test_qt_addon_packages test_qt_addon_runtime \
+    test_qt_addon_metadata test_qt_addon_broker test_qt_subtitle_sources \
+    --print-errorlogs
+```
+
+Meson supplies the worker to the runtime test. The QML tests include
+`tst_AddonUi`, `tst_AddonTheme`, `tst_AddonIntegration`, `tst_AddonInstaller` and
+`tst_AddonTrackPreparation`. Also do the full Qt tests and the release checks
+for each target platform.
+
 ## Configure and build
 
 Always use a **separate build directory** and a **private

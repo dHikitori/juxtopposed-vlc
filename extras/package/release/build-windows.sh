@@ -9,6 +9,13 @@ work="$root/contrib/contrib-release-win64"
 cache="$root/extras/package/release/dependency-cache.py"
 mode=${1:-build}
 [[ "$mode" == build || "$mode" == --dependencies-only ]] || { echo 'Expected --dependencies-only or no arguments' >&2; exit 1; }
+if [[ "$mode" == build ]]; then
+    source "$root/extras/package/release/setup-addon-rust.sh"
+    vlc_setup_addon_rust x86_64-pc-windows-gnu
+    addon_linker=${ADDON_RUST_LINKER:-x86_64-w64-mingw32-gcc}
+    command -v "$addon_linker" >/dev/null || { echo 'The Windows worker target linker is not available.' >&2; exit 1; }
+    export MCONFIGFLAGS="${MCONFIGFLAGS:-} -Daddon-runtime=enabled -Daddon-runtime-target=x86_64-pc-windows-gnu -Daddon-runtime-linker=$addon_linker"
+fi
 mkdir -p "$work"
 cd "$work"
 # Avoid -i: upstream also makes installers, whereas this release is portable.

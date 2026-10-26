@@ -17,6 +17,8 @@ class NativeBuildTests(unittest.TestCase):
             scripts = root / 'extras/package/release'
             scripts.mkdir(parents=True)
             shutil.copyfile(SCRIPTS / 'build-native.sh', scripts / 'build-native.sh')
+            shutil.copyfile(SCRIPTS / 'setup-addon-rust.sh', scripts / 'setup-addon-rust.sh')
+            shutil.copyfile(SCRIPTS / 'addon-rust-version.txt', scripts / 'addon-rust-version.txt')
             (scripts / 'version.py').write_text('print("4.0.0-beta.4")\n')
             (scripts / 'build-medialibrary.sh').write_text('exit 0\n')
             record = '''import json, os, sys
@@ -29,6 +31,8 @@ with Path(os.environ['NATIVE_TEST_LOG']).open('a') as stream:
             commands.mkdir()
             fixtures = {
                 'uname': 'import os\nprint(os.environ["NATIVE_TEST_PLATFORM"])\n',
+                'rustup': record,
+                'cargo': record,
                 'brew': ('import os, sys\nfrom pathlib import Path\n'
                          'print(Path(os.environ["NATIVE_TEST_ROOT"]) / "brew" / '
                          '(sys.argv[2] if len(sys.argv) > 2 else ""))\n'),
@@ -50,7 +54,8 @@ if sys.argv[1] == 'test' and os.environ.get('NATIVE_TEST_FAIL_PROXY') == '1':
             env = dict(os.environ, PATH=str(commands) + os.pathsep + os.environ['PATH'],
                        NATIVE_TEST_PLATFORM=platform, NATIVE_TEST_ROOT=str(root),
                        NATIVE_TEST_LOG=str(log), NATIVE_TEST_FAIL_PROXY=str(int(fail_proxy)),
-                       QT_ROOT_DIR=str(root / 'Qt SDK'), JOBS='2')
+                       QT_ROOT_DIR=str(root / 'Qt SDK'), JOBS='2', CARGO_HOME=str(root / 'cargo'))
+            env.pop('RUSTUP_TOOLCHAIN', None)
             result = subprocess.run(['bash', str(scripts / 'build-native.sh')],
                                     env=env, text=True, capture_output=True, timeout=20)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
@@ -61,6 +66,8 @@ if sys.argv[1] == 'test' and os.environ.get('NATIVE_TEST_FAIL_PROXY') == '1':
         self.assertEqual(result.returncode, 0, result.stderr)
         setup = next(call for call in calls if call[:2] == ['meson', 'setup'])
         self.assertIn('-Dtests=enabled', setup)
+        self.assertIn('-Daddon-runtime=enabled', setup)
+        self.assertTrue(any(call[:3] == ['rustup', 'toolchain', 'install'] for call in calls))
         self.assertEqual('--reconfigure' in setup, existing)
         proxy_compile = next(i for i, call in enumerate(calls)
                              if call[:2] == ['meson', 'compile']

@@ -15,6 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmatroska-dev libebml-dev libtag1-dev libarchive-dev libdvbpsi-dev \
     libgudev-1.0-dev libx11-xcb-dev xvfb ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+# Provision the worker toolchain at image build time, never addon installation.
+COPY extras/package/release/setup-addon-rust.sh extras/package/release/addon-rust-version.txt /tmp/vlc-addon-rust/
+RUN bash -c 'source /tmp/vlc-addon-rust/setup-addon-rust.sh && vlc_setup_addon_rust' \
+    && rm -rf /tmp/vlc-addon-rust
+ENV PATH=/root/.cargo/bin:$PATH
 RUN pip3 install --no-cache-dir meson==1.12.1 aqtinstall==3.3.0 \
     && aqt install-qt linux desktop 6.8.3 linux_gcc_64 \
        -O /opt/qt -m qtshadertools qtwaylandcompositor

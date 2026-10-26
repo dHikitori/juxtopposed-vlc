@@ -11,9 +11,17 @@ from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
+import addon_runtime_check
 
 
 class VerifyTests(unittest.TestCase):
+    def setUp(self):
+        # Worker protocol/staging has dedicated tests. These cases exercise
+        # playback/diagnostic handling without pretending to launch a Mac app.
+        check = mock.patch.object(addon_runtime_check, 'verify_installation', return_value='worker fixture checked')
+        check.start()
+        self.addCleanup(check.stop)
+
     def test_reported_banner_reaches_playback_checks(self):
         def command(args, **kwargs):
             if '--version' in args:

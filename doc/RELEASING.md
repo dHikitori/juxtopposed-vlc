@@ -89,8 +89,16 @@ distributed application and can be extracted from it.
 Local builds do not receive GitHub repository secrets: supply the environment
 variable or `OPENSUBTITLES_API_KEY_FILE` locally to include a key. Without a key,
 the build still succeeds and users can configure their own key in settings.
+Named assignment files and `.env` files must contain that exact variable.
+The script rejects other user keys and does not print their values.
+A raw key file can contain one value on one line. This value cannot be a named assignment.
 
 ## Review before pushing
+
+Keep each suitable core feature available until its separate add-on replacement passes the tests.
+Before core removal, move the feature into its own add-on. Do the replacement tests before core removal.
+Do not remove a provider as part of a build change.
+Record each feature move and its test results in the release notes.
 
 Review [the 4.0.0-beta.5 notes](releases/4.0.0-beta.5.md), the packaging scripts in
 `extras/package/release`, and `.github/workflows/beta-release.yml`. Keep release
@@ -352,6 +360,45 @@ Do not move a tag that has already been pushed. If a release source change is
 needed after that point, increment the version and add new release notes. The
 workflow derives artifact names and prerelease status from the validated version.
 Stable tags create draft stable releases; prerelease tags create draft prereleases.
+
+## Isolated add-on worker in release builds
+
+Release builds include `vlc-addon-worker` next to VLC. The release also
+contains the TheSubtitleDB reference package. The release setup script uses
+`addon-rust-version.txt`. This file selects
+[Rust 1.99.1](https://blog.rust-lang.org/releases/). Use Rust 1.97
+or later for the worker. Cargo uses the versions in the committed lockfile.
+
+The `setup-addon-rust.sh` script installs the Rust toolchain on the build
+machine. The script downloads the official rustup installer. The script compares
+the published checksum with the installer checksum before it starts the installer. An end-user add-on
+install does not install Rust or run Cargo.
+
+The native release script and macOS CI job install the selected toolchain.
+The Linux dependency image includes this toolchain. The Windows build step
+also installs `x86_64-pc-windows-gnu` and selects the MinGW linker.
+The dependency-only cache step does not use the worker compiler.
+Set `RUSTUP_TOOLCHAIN` to select a different toolchain. A normal developer build
+uses an installed `stable` toolchain and does not install one automatically.
+The worker does not use the experimental module's nightly setting.
+
+The macOS package script copies the worker into `Contents/MacOS` before the
+dependency checks and code signature. The Linux package script supplies the
+worker to `linuxdeploy` for a dependency check. The Windows package script
+examines the worker and its imported DLLs. The package step stops if the
+worker is missing.
+
+The release check starts the worker with the reference Wasm file. The check
+supplies no API key. The add-on must return `auth_required`. The check rejects
+host operations and stops after 20 seconds. The test uses no network request.
+The tests for file paths and command order do not prove platform operation.
+Do the release check on each target platform.
+
+For HTTPS Git installs, install a Git program on `PATH`. TheSubtitleDB add-on uses
+each user's own API key through protected settings. Do not put a TheSubtitleDB
+user key in a CI secret, package artifact or worker environment. Data-only
+resources and settings operate without the worker. Executable providers cannot
+run without the worker.
 
 ## Local macOS build
 

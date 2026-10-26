@@ -41,6 +41,33 @@ pacman -S --needed git wget bzip2 file unzip libtool pkg-config \
 ```
 <!-- pacman -S ant autopoint nsis python3-requests jq openjdk-11-jdk-headless -->
 
+# Isolated add-on worker
+
+Qt builds include the add-on worker. Install Rust 1.97 or later, Cargo and the
+Windows Rust target on the build machine. The worker build does not install
+toolchains or targets. This worker is separate from experimental Rust VLC
+modules. This worker does not use `--enable-rust`. Users use the worker
+program and Wasm add-ons without a Rust compiler.
+
+For an x86_64 MinGW cross build, use `x86_64-pc-windows-gnu`.
+Autotools accepts `ADDON_RUST_TARGET` and `ADDON_RUST_LINKER`. If the C compiler
+command uses a wrapper, set the MinGW linker in `ADDON_RUST_LINKER`.
+The Meson options are `-Daddon-runtime-target=...` and
+`-Daddon-runtime-linker=...`. The worker target options do not add MSVC support
+to the VLC build.
+
+The worker installs next to VLC. For HTTPS Git installs, install a Git program on the
+runtime machine. If Git is missing, the manager shows an error. Each user must
+supply a separate TheSubtitleDB API key. The host uses Windows Credential
+Manager for credentials. The add-on manager does not run repository build
+scripts. The package does not contain a global TheSubtitleDB key.
+
+Set `--disable-addon-runtime` or `-Daddon-runtime=disabled` to omit the worker.
+Package checks, settings and data-only resources operate without the worker.
+Executable providers cannot run without the worker. Do the worker and
+credential-store checks on Windows. Linux tests do not prove Windows runtime
+operation.
+
 # Toolchains
 
 There are 2 toolchains supported to build VLC for Windows:

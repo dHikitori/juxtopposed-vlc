@@ -147,7 +147,7 @@ class DependencyCacheTests(unittest.TestCase):
             upstream = root / 'extras/package/win32/build.sh'
             release.mkdir(parents=True)
             upstream.parent.mkdir(parents=True)
-            for name in ('dependency-cache.py', 'build-windows.sh'):
+            for name in ('dependency-cache.py', 'build-windows.sh', 'setup-addon-rust.sh', 'addon-rust-version.txt'):
                 shutil.copy2(SCRIPT.parent / name, release / name)
             (release / 'version.py').write_text("print('4.0.0-beta.4')\n")
             (release / 'package.py').write_text('')
@@ -174,15 +174,27 @@ else:
     key.write_text(os.getenv('OPENSUBTITLES_API_KEY', ''))
 ''')
             upstream.chmod(0o755)
-            env = dict(os.environ, RELEASE_DEPS_CACHE_KEY='fixture-key')
+            commands = root / 'commands'
+            commands.mkdir()
+            for name in ('rustup', 'cargo', 'x86_64-w64-mingw32-gcc'):
+                command_fixture = commands / name
+                command_fixture.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$TOOLCHAIN_SETUP_LOG"\n')
+                command_fixture.chmod(0o755)
+            setup_log = root / 'toolchain.log'
+            env = dict(os.environ, RELEASE_DEPS_CACHE_KEY='fixture-key',
+                       CARGO_HOME=str(root / 'cargo'), TOOLCHAIN_SETUP_LOG=str(setup_log),
+                       PATH=str(commands) + os.pathsep + os.environ['PATH'])
+            env.pop('RUSTUP_TOOLCHAIN', None)
             env.pop('OPENSUBTITLES_API_KEY', None)
             command = ['bash', str(release / 'build-windows.sh')]
             subprocess.run([*command, '--dependencies-only'], env=env, check=True, capture_output=True)
             self.assertTrue(cache.check('fixture-key', root))
             # A second dependency phase must take the validated fast path.
             subprocess.run([*command, '--dependencies-only'], env=env, check=True, capture_output=True)
+            self.assertFalse(setup_log.exists())  # No worker compiler in dependency-only cache phases.
             subprocess.run(command, env=dict(env, OPENSUBTITLES_API_KEY='dummy-app-key'),
                            check=True, capture_output=True)
+            self.assertIn('x86_64-pc-windows-gnu', setup_log.read_text())
             calls = [json.loads(line) for line in (root / 'calls.jsonl').read_text().splitlines()]
             self.assertEqual(calls, [dict(dependencies_only='1', cached=None),
                                      dict(dependencies_only=None, cached='1')])

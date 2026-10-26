@@ -94,6 +94,8 @@ def macos(stage, output, tag, commit, reuse_qt=False):
         if existing_qt != run(qt / 'bin/qmake', '-query', 'QT_VERSION'):
             raise SystemExit('Cannot reuse a deployment from a different Qt version')
     copy(stage / 'bin/vlc', binaries / 'vlc')
+    # Copy the worker before the dependency checks, Qt deployment and code signature.
+    copy(stage / 'bin/vlc-addon-worker', binaries / 'vlc-addon-worker')
     for helper in ('vlc-preparser', 'vlc-cache-gen', 'vlc-qt-check'):
         copy(stage / 'libexec/vlc' / helper, binaries / helper)
     # Deploy Qt before adding hundreds of unrelated VLC modules: macdeployqt
@@ -254,7 +256,7 @@ def windows(stage, output, tag, commit):
     if target.exists():
         raise SystemExit(f'Remove the old package before rebuilding: {target}')
     copy(stage, target)
-    for required in ('vlc.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
+    for required in ('vlc.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
         if not (target / required).exists():
             raise RuntimeError(f'Windows installation missing {required}')
     # MinGW's compiler runtimes are not part of a stock Windows installation.
