@@ -35,6 +35,7 @@ player_programs = \
 noinst_PROGRAMS =
 check_PROGRAMS = \
     test_src_misc_configured_proxy \
+    test_src_misc_metadata_backend \
     test_src_misc_media_library_startup \
 	test_src_misc_iso_language \
 	test_libvlc_core \
@@ -233,6 +234,9 @@ endif
 
 test_src_misc_configured_proxy_SOURCES = src/misc/configured_proxy.c
 test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c
+test_src_misc_metadata_backend_LDADD = $(LIBVLCCORE)
 
 if HAVE_WIN32
 check_PROGRAMS += test_src_config_dirs_win32

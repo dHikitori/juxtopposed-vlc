@@ -1,0 +1,272 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+#include <vlc_common.h>
+#include <vlc_metadata_backend.h>
+#include <vlc_atomic.h>
+#include <vlc_input_item.h>
+#include <vlc_threads.h>
+
+#define MAX_JSON (1024u * 1024u)
+#define MAX_FIELDS 64u
+#define MAX_ACTIVE 1024u
+
+struct vlc_metadata_backend {
+    vlc_atomic_rc_t refs;
+    vlc_mutex_t lock;
+    bool closed;
+    size_t active;
+    vlc_metadata_job_t *head;
+    struct vlc_metadata_backend_operations ops;
+    void *opaque;
+};
+struct vlc_metadata_job {
+    vlc_atomic_rc_t refs;
+    vlc_metadata_backend_t *backend;
+    vlc_metadata_job_t *next, *previous;
+    bool started, terminal;
+    struct vlc_metadata_request request;
+    struct vlc_metadata_result result;
+    struct vlc_metadata_field_patch patches[VLC_META_TYPE_COUNT];
+    vlc_metadata_ended_cb ended;
+    void *userdata;
+};
+
+vlc_metadata_backend_t *vlc_metadata_backend_New(const struct vlc_metadata_backend_operations *ops, void *opaque)
+{
+    if (ops == NULL || ops->dispatch == NULL) return NULL;
+    vlc_metadata_backend_t *backend = calloc(1, sizeof(*backend));
+    if (backend == NULL) return NULL;
+    vlc_atomic_rc_init(&backend->refs);
+    vlc_mutex_init(&backend->lock);
+    backend->ops = *ops;
+    backend->opaque = opaque;
+    return backend;
+}
+vlc_metadata_backend_t *vlc_metadata_backend_Hold(vlc_metadata_backend_t *backend)
+{ vlc_atomic_rc_inc(&backend->refs); return backend; }
+void vlc_metadata_backend_Release(vlc_metadata_backend_t *backend)
+{
+    if (!vlc_atomic_rc_dec(&backend->refs)) return;
+    vlc_assert(backend->head == NULL);
+    if (backend->ops.destroy != NULL) backend->ops.destroy(backend->opaque);
+    free(backend);
+}
+bool vlc_metadata_backend_IsClosed(vlc_metadata_backend_t *backend)
+{
+    vlc_mutex_lock(&backend->lock);
+    const bool closed = backend->closed;
+    vlc_mutex_unlock(&backend->lock);
+    return closed;
+}
+vlc_metadata_job_t *vlc_metadata_job_Hold(vlc_metadata_job_t *job)
+{ vlc_atomic_rc_inc(&job->refs); return job; }
+void vlc_metadata_job_Release(vlc_metadata_job_t *job)
+{
+    if (!vlc_atomic_rc_dec(&job->refs)) return;
+    vlc_metadata_backend_t *backend = job->backend;
+    free((char *)job->request.feature);
+    free((char *)job->request.operation);
+    for (size_t i = 0; i < job->request.field_count; ++i) free((char *)job->request.fields[i]);
+    free((char **)job->request.fields);
+    free((char *)job->request.context_json);
+    if (job->request.item != NULL) input_item_Release(job->request.item);
+    if (job->result.item != NULL) input_item_Release(job->result.item);
+    for (size_t i = 0; i < job->result.field_count; ++i) {
+        free((char *)job->patches[i].expected_value);
+        free((char *)job->patches[i].value);
+    }
+    free((char *)job->result.provenance_json);
+    free(job);
+    vlc_metadata_backend_Release(backend);
+}
+
+vlc_metadata_job_t *vlc_metadata_job_New(vlc_metadata_backend_t *backend,
+    const struct vlc_metadata_request *request, vlc_metadata_ended_cb ended, void *userdata)
+{
+    if (backend == NULL || request == NULL || ended == NULL || request->feature == NULL
+        || request->operation == NULL || strlen(request->feature) > 128 || strlen(request->operation) > 128
+        || request->field_count > MAX_FIELDS || (request->field_count > 0 && request->fields == NULL)
+        || request->context_size > MAX_JSON || (request->context_size > 0 && request->context_json == NULL)) return NULL;
+    vlc_metadata_job_t *job = calloc(1, sizeof(*job));
+    if (job == NULL) return NULL;
+    vlc_atomic_rc_init(&job->refs);
+    job->backend = vlc_metadata_backend_Hold(backend);
+    job->ended = ended; job->userdata = userdata;
+    job->request.generation = request->generation;
+    job->request.target_revision = request->target_revision;
+    job->request.flags = request->flags;
+    job->request.feature = strdup(request->feature);
+    job->request.operation = strdup(request->operation);
+    if (job->request.feature == NULL || job->request.operation == NULL) goto error;
+    if (request->context_size > 0) {
+        char *context = malloc(request->context_size + 1);
+        if (context == NULL) goto error;
+        memcpy(context, request->context_json, request->context_size); context[request->context_size] = '\0';
+        job->request.context_json = context;
+        job->request.context_size = request->context_size;
+    }
+    if (request->field_count > 0) {
+        char **fields = calloc(request->field_count, sizeof(*fields));
+        if (fields == NULL) goto error;
+        job->request.fields = (const char *const *)fields;
+        for (size_t i = 0; i < request->field_count; ++i) {
+            if (request->fields[i] == NULL || strlen(request->fields[i]) > 128) goto error;
+            fields[i] = strdup(request->fields[i]);
+            if (fields[i] == NULL) goto error;
+            ++job->request.field_count;
+        }
+    }
+    if (request->item != NULL) {
+        job->request.item = input_item_Copy(request->item);
+        if (job->request.item == NULL) goto error;
+    }
+    return job;
+error:
+    vlc_metadata_job_Release(job);
+    return NULL;
+}
+
+const struct vlc_metadata_request *vlc_metadata_job_GetRequest(const vlc_metadata_job_t *job)
+{ return &job->request; }
+const struct vlc_metadata_result *vlc_metadata_job_GetResult(vlc_metadata_job_t *job)
+{
+    vlc_mutex_lock(&job->backend->lock);
+    const struct vlc_metadata_result *result = job->terminal ? &job->result : NULL;
+    vlc_mutex_unlock(&job->backend->lock);
+    return result;
+}
+bool vlc_metadata_job_IsPending(vlc_metadata_job_t *job)
+{
+    vlc_mutex_lock(&job->backend->lock);
+    const bool pending = job->started && !job->terminal;
+    vlc_mutex_unlock(&job->backend->lock);
+    return pending;
+}
+
+static void discard_result(struct vlc_metadata_result *result)
+{
+    if (result->item != NULL) input_item_Release(result->item);
+    for (size_t i = 0; i < result->field_count; ++i) {
+        free((char *)result->fields[i].expected_value);
+        free((char *)result->fields[i].value);
+    }
+    free((char *)result->provenance_json);
+    memset(result, 0, sizeof(*result));
+}
+static bool copy_field(input_item_t *item, vlc_meta_type_t type, char **value)
+{
+    *value = NULL;
+    if (item == NULL) return true;
+    vlc_mutex_lock(&item->lock);
+    const char *raw = item->p_meta != NULL ? vlc_meta_Get(item->p_meta, type) : NULL;
+    if (raw != NULL) *value = strdup(raw);
+    const bool success = raw == NULL || *value != NULL;
+    vlc_mutex_unlock(&item->lock);
+    return success;
+}
+static bool finish(vlc_metadata_job_t *job, int status, struct vlc_metadata_result *result, bool cancel)
+{
+    vlc_metadata_backend_t *backend = job->backend;
+    vlc_mutex_lock(&backend->lock);
+    if (!job->started || job->terminal) {
+        vlc_mutex_unlock(&backend->lock);
+        discard_result(result);
+        return false;
+    }
+    job->terminal = true;
+    if (job->previous != NULL) job->previous->next = job->next; else backend->head = job->next;
+    if (job->next != NULL) job->next->previous = job->previous;
+    --backend->active;
+    job->result = *result;
+    if (result->field_count > 0) memcpy(job->patches, result->fields, result->field_count * sizeof(*job->patches));
+    job->result.fields = job->patches;
+    vlc_mutex_unlock(&backend->lock);
+    // The active list keeps job and backend valid if the callback releases
+    // its caller reference or calls Close or Cancel again.
+    job->ended(job, status, job->userdata);
+    if (cancel && backend->ops.cancel != NULL) backend->ops.cancel(backend->opaque, job);
+    vlc_metadata_job_Release(job); // active-list reference
+    return true;
+}
+bool vlc_metadata_job_Cancel(vlc_metadata_job_t *job)
+{
+    vlc_metadata_job_Hold(job);
+    struct vlc_metadata_result result = {0};
+    const bool won = finish(job, -EINTR, &result, true);
+    vlc_metadata_job_Release(job);
+    return won;
+}
+bool vlc_metadata_job_Complete(vlc_metadata_job_t *job, int status, input_item_t *result,
+                              const char *provenance_json, size_t provenance_size)
+{
+    vlc_metadata_job_Hold(job);
+    if (!vlc_metadata_job_IsPending(job)) { vlc_metadata_job_Release(job); return false; }
+    struct vlc_metadata_field_patch fields[VLC_META_TYPE_COUNT];
+    struct vlc_metadata_result value = {.fields = fields};
+    if (provenance_size > MAX_JSON || (provenance_size > 0 && provenance_json == NULL)) status = VLC_EINVAL;
+    if (status == VLC_SUCCESS && result != NULL && (value.item = input_item_Copy(result)) == NULL) status = VLC_ENOMEM;
+    if (status == VLC_SUCCESS && provenance_size > 0) {
+        char *provenance = malloc(provenance_size + 1);
+        if (provenance == NULL) status = VLC_ENOMEM;
+        else {
+            memcpy(provenance, provenance_json, provenance_size); provenance[provenance_size] = '\0';
+            value.provenance_json = provenance; value.provenance_size = provenance_size;
+        }
+    }
+    if (status == VLC_SUCCESS && value.item != NULL) {
+        for (int i = 0; i < VLC_META_TYPE_COUNT; ++i) {
+            char *before = NULL, *next = NULL;
+            if (!copy_field(job->request.item, i, &before) || !copy_field(value.item, i, &next)) {
+                free(before); free(next); status = VLC_ENOMEM; break;
+            }
+            if ((before == NULL && next == NULL) || (before != NULL && next != NULL && strcmp(before, next) == 0)) {
+                free(before); free(next); continue;
+            }
+            fields[value.field_count++] = (struct vlc_metadata_field_patch){i, before, next};
+        }
+    }
+    if (status != VLC_SUCCESS) discard_result(&value);
+    const bool won = finish(job, status, &value, false);
+    vlc_metadata_job_Release(job);
+    return won;
+}
+int vlc_metadata_job_Start(vlc_metadata_job_t *job)
+{
+    vlc_metadata_job_Hold(job);
+    vlc_metadata_backend_t *backend = job->backend;
+    vlc_mutex_lock(&backend->lock);
+    if (backend->closed || job->started || backend->active >= MAX_ACTIVE) {
+        const int error = backend->closed ? -EINTR : VLC_EGENERIC;
+        vlc_mutex_unlock(&backend->lock); vlc_metadata_job_Release(job); return error;
+    }
+    job->started = true;
+    job->next = backend->head;
+    if (backend->head != NULL) backend->head->previous = job;
+    backend->head = job;
+    ++backend->active;
+    vlc_metadata_job_Hold(job); // active-list reference
+    vlc_mutex_unlock(&backend->lock);
+    if (vlc_metadata_job_IsPending(job)) {
+        const int status = backend->ops.dispatch(backend->opaque, job);
+        if (status != VLC_SUCCESS) vlc_metadata_job_Complete(job, status, NULL, NULL, 0);
+    }
+    vlc_metadata_job_Release(job);
+    return VLC_SUCCESS;
+}
+void vlc_metadata_backend_Close(vlc_metadata_backend_t *backend)
+{
+    vlc_metadata_backend_Hold(backend);
+    vlc_mutex_lock(&backend->lock);
+    backend->closed = true;
+    while (backend->head != NULL) {
+        vlc_metadata_job_t *job = vlc_metadata_job_Hold(backend->head);
+        vlc_mutex_unlock(&backend->lock);
+        vlc_metadata_job_Cancel(job);
+        vlc_metadata_job_Release(job);
+        vlc_mutex_lock(&backend->lock);
+    }
+    vlc_mutex_unlock(&backend->lock);
+    vlc_metadata_backend_Release(backend);
+}

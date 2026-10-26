@@ -75,6 +75,7 @@ install_headers(
     'vlc_log_observer.h',
     'vlc_meta.h',
     'vlc_meta_fetcher.h',
+    'vlc_metadata_backend.h',
     'vlc_mime.h',
     'vlc_modules.h',
     'vlc_mouse.h',

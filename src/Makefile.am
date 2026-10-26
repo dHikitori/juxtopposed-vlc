@@ -77,6 +77,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_tracer.h \
 	../include/vlc_meta.h \
 	../include/vlc_meta_fetcher.h \
+	../include/vlc_metadata_backend.h \
 	../include/vlc_mime.h \
 	../include/vlc_modules.h \
 	../include/vlc_mouse.h \
@@ -283,6 +284,7 @@ libvlccore_la_SOURCES = \
 	preparser/fetcher.h \
 	preparser/ipc.c \
 	preparser/internal.c \
+	preparser/metadata_backend.c \
 	preparser/preparser.c \
 	preparser/preparser.h \
 	preparser/external.c \
