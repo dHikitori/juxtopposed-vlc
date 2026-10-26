@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QTimer>
+#include <QStringList>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -28,6 +29,9 @@ public:
     void cancelPackage(const QString&);
     void close();
     static QString capability(const QString& operation);
+    QStringList availableOperations() const;
+signals:
+    void availabilityChanged();
 private:
     struct Registration { QPointer<QObject> lifetime; Handler handler; };
     struct Job { QString package, operation; QPointer<QObject> lifetime; QPointer<QTimer> deadline; Completion completion; Cancel cancel; };

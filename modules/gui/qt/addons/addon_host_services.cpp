@@ -46,7 +46,16 @@ bool AddonHostServices::registerOperation(const QString& operation, QObject* lif
 {
     if (m_closing || !lifetime || !handler || capability(operation).isEmpty() || m_handlers.contains(operation)) return false;
     m_handlers.insert(operation, {lifetime, std::move(handler)});
-    connect(lifetime, &QObject::destroyed, this, [this, operation] { unregisterOperation(operation); }); return true;
+    connect(lifetime, &QObject::destroyed, this, [this, operation] { unregisterOperation(operation); });
+    emit availabilityChanged(); return true;
+}
+QStringList AddonHostServices::availableOperations() const
+{
+    QStringList result;
+    if (m_closing) return result;
+    for (auto it = m_handlers.begin(); it != m_handlers.end(); ++it)
+        if (it.value().lifetime) result.append(it.key());
+    result.sort(); return result;
 }
 quint64 AddonHostServices::dispatch(const Context& context, const QString& operation, const QJsonObject& request, Completion completion, int timeoutMs)
 {
@@ -94,15 +103,22 @@ void AddonHostServices::cancelPackage(const QString& package)
 { const auto ids = m_jobs.keys(); for (const auto id : ids) if (m_jobs.value(id).package == package) cancel(id); }
 void AddonHostServices::unregisterOperation(const QString& operation)
 {
+    QPointer<AddonHostServices> guard(this);
     m_handlers.remove(operation); const auto ids = m_jobs.keys();
-    for (const auto id : ids) if (m_jobs.value(id).operation == operation) finish(id, {{}, tr("This host operation is not available.")}, true);
+    for (const auto id : ids) {
+        if (m_jobs.value(id).operation == operation) finish(id, {{}, tr("This host operation is not available.")}, true);
+        if (!guard) return;
+    }
+    emit availabilityChanged();
 }
 void AddonHostServices::close()
 {
     if (m_closing) return;
+    QPointer<AddonHostServices> guard(this);
     m_closing = true;
     { std::lock_guard<std::mutex> lock(m_gate->mutex); m_gate->owner = nullptr; }
-    const auto ids = m_jobs.keys(); for (const auto id : ids) cancel(id);
+    const auto ids = m_jobs.keys(); for (const auto id : ids) { cancel(id); if (!guard) return; }
     m_handlers.clear();
+    emit availabilityChanged();
 }
 }

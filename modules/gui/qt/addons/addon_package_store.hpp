@@ -47,6 +47,9 @@ public:
     static bool fetchGitTag(const QString& source, const QString& tag, PackageCandidate*,
                             QString* error = nullptr, bool developerLocalSource = false,
                             int timeoutMs = 30000);
+    bool fetchRepositoryUpdate(const QString& id, const QString& versionRange, bool allowPrerelease,
+                               PackageCandidate*, QString* error = nullptr,
+                               bool developerLocalSource = false, int timeoutMs = 30000) const;
     bool install(const PackageCandidate&, const QJsonObject& approvedGrants, QString* error = nullptr);
     bool installed(const QString& id, InstalledPackage*, QString* error = nullptr) const;
     QStringList installedIds() const;

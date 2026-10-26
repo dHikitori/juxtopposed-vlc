@@ -362,6 +362,7 @@ void MainUI::registerQMLTypes()
         AddonMetadataService* metadataService = nullptr;
         if (!dataDirectory.isEmpty()) {
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
+            addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
             const auto installedReference = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference/tvmaze")) : QString();

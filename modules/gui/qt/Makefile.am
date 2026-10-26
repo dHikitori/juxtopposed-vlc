@@ -147,6 +147,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_settings_migrations.cpp \
 	addons/addon_settings_migrations.hpp \
 	addons/addon_host_services.cpp \
+	addons/addon_repository_updates.cpp \
+	addons/addon_repository_updates.hpp \
 	addons/addon_host_services.hpp
 QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
@@ -2225,6 +2227,17 @@ test_qt_addon_host_services_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd)
 test_qt_addon_host_services_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_host_services
 TESTS += test_qt_addon_host_services
+
+test_qt_addon_repository_updates_SOURCES = tests/test_addon_repository_updates.cpp
+nodist_test_qt_addon_repository_updates_SOURCES = tests/test_addon_repository_updates.moc
+BUILT_SOURCES += tests/test_addon_repository_updates.moc
+CLEANFILES += tests/test_addon_repository_updates.moc
+test_qt_addon_repository_updates_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_repository_updates_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_repository_updates_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_repository_updates_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_repository_updates
+TESTS += test_qt_addon_repository_updates
 
 
 LIBVLC = ../../../lib/libvlc.la

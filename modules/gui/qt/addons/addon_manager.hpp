@@ -19,6 +19,8 @@ class AddonManager : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY revisionChanged FINAL)
     Q_PROPERTY(QVariantMap pendingPackage READ pendingPackage NOTIFY revisionChanged FINAL)
     Q_PROPERTY(bool safeMode READ safeMode NOTIFY revisionChanged FINAL)
+    Q_PROPERTY(QVariantMap capabilities READ capabilities NOTIFY capabilitiesChanged FINAL)
+    Q_PROPERTY(QVariantMap updateResult READ updateResult NOTIFY revisionChanged FINAL)
 public:
     explicit AddonManager(const QString& storageDirectory, QObject* parent = nullptr);
     ~AddonManager() override;
@@ -34,6 +36,9 @@ public:
     bool busy() const { return m_repositoryThread != nullptr; }
     bool safeMode() const { return m_store.safeMode(); }
     QVariantMap pendingPackage() const;
+    QVariantMap capabilities() const;
+    QVariantMap updateResult() const { return m_updateResult; }
+    void setMediaCapabilitiesSource(QObject*);
     void setWorkerExecutable(const QString&);
     Q_INVOKABLE QVariantList providersForFeature(const QString& feature) const;
     Q_INVOKABLE QStringList providerOrder(const QString& feature) const;
@@ -52,6 +57,7 @@ public:
     Q_INVOKABLE bool restoreDistributionPackage(const QString& packageId);
     Q_INVOKABLE bool stageLocalPackage(const QString& directory);
     Q_INVOKABLE bool stageRepository(const QString& source, const QString& tag);
+    Q_INVOKABLE bool checkRepositoryUpdates(const QString& packageId, const QString& versionRange, bool allowPrerelease = false);
     Q_INVOKABLE bool approvePendingPackage(bool enableAfterInstall = false);
     Q_INVOKABLE void discardPendingPackage();
     Q_INVOKABLE bool setEnabled(const QString& packageId, bool enabled);
@@ -69,6 +75,7 @@ public:
     AddonHostServices* hostServices() { return &m_hostServices; }
 signals:
     void revisionChanged();
+    void capabilitiesChanged();
     void packageWithdrawn(const QString& packageId);
     void operationFinished(const QString& invocation, const QString& contribution, const QString& status,
                            const QVariantMap& data, const QString& error);
@@ -93,5 +100,8 @@ private:
     QThread* m_repositoryThread = nullptr;
     QString m_workerExecutable, m_error;
     int m_revision = 0;
+    QPointer<QObject> m_mediaCapabilitiesSource;
+    QList<QMetaObject::Connection> m_mediaCapabilityConnections;
+    QVariantMap m_updateResult;
 };
 }

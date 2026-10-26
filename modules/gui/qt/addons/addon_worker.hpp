@@ -18,6 +18,7 @@ public:
     ~AddonWorker() override;
     void setExecutable(const QString&);
     void setHostServices(AddonHostServices* services) { m_services = services; }
+    void setHostCapabilities(const QJsonObject& capabilities) { m_hostCapabilities = capabilities; }
     void setConfiguration(const QJsonObject& nonsecretSettings, const QJsonObject& credentialStatus,
                           NetworkBroker::CredentialResolver);
     QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context);
@@ -43,7 +44,7 @@ private:
     QQueue<QJsonObject> m_queued;
     QHash<QString, Invocation> m_invocations;
     QSet<QString> m_hostCalls;
-    QJsonObject m_settings, m_credentials;
+    QJsonObject m_settings, m_credentials, m_hostCapabilities;
     NetworkBroker::CredentialResolver m_resolver;
     QString m_executable;
     bool m_ready = false, m_stopping = false;

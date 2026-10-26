@@ -8,6 +8,8 @@
 #include <QLocale>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSslSocket>
+#include <QMetaProperty>
 #include <QTimer>
 #include <QUuid>
 #include <algorithm>
@@ -64,6 +66,8 @@ QString packagePart(const QString& global) { return global.section('/', 0, 0); }
 AddonManager::AddonManager(const QString& directory, QObject* parent)
     : QObject(parent), m_store(directory), m_network(this), m_hostServices(this)
 {
+    connect(&m_hostServices, &AddonHostServices::availabilityChanged, this, &AddonManager::capabilitiesChanged);
+    connect(this, &AddonManager::revisionChanged, this, &AddonManager::capabilitiesChanged);
     m_providerOrder = readObject(QDir(directory).filePath(QStringLiteral("provider-order.json")));
     const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vlc-addon-worker")
 #ifdef Q_OS_WIN
@@ -78,13 +82,55 @@ AddonManager::AddonManager(const QString& directory, QObject* parent)
 }
 AddonManager::~AddonManager()
 {
+    disconnect(&m_hostServices, nullptr, this, nullptr);
+    for (const auto& connection : m_mediaCapabilityConnections) disconnect(connection);
     if (m_repositoryThread) {
         disconnect(m_repositoryThread, nullptr, this, nullptr);
         m_repositoryThread->requestInterruption(); m_repositoryThread->wait(); delete m_repositoryThread;
     }
     const auto workers = m_workers; for (auto* worker : workers) worker->stop(); m_secrets.clearSession();
 }
-void AddonManager::setWorkerExecutable(const QString& value) { m_workerExecutable = value; }
+void AddonManager::setWorkerExecutable(const QString& value)
+{ m_workerExecutable = value; emit capabilitiesChanged(); }
+QVariantMap AddonManager::capabilities() const
+{
+    const auto operations = m_hostServices.availableOperations();
+    const auto all = [&operations](const QStringList& required) {
+        for (const auto& operation : required) if (!operations.contains(operation)) return false;
+        return true;
+    };
+    const bool mediaKnown = m_mediaCapabilitiesSource && m_mediaCapabilitiesSource->thread() == QThread::currentThread()
+        && m_mediaCapabilitiesSource->property("isStarted").isValid();
+    QVariantMap media{{"known", mediaKnown}};
+    const std::pair<const char*, const char*> fields[] = {{"isStarted", "loaded"}, {"seekable", "seekable"},
+        {"pausable", "pausable"}, {"ratechangable", "rateChange"}, {"hasVideoOutput", "videoOutput"}};
+    for (const auto& field : fields)
+        media.insert(QString::fromLatin1(field.second), mediaKnown && m_mediaCapabilitiesSource->property(field.first).toBool());
+    const QFileInfo worker(m_workerExecutable);
+    return {{"workerAvailable", worker.isFile() && worker.isExecutable()}, {"workerProtocol", "wasm-message-v1"},
+        {"safeMode", safeMode()}, {"coreOperations", operations}, {"networkHttpAvailable", QSslSocket::supportsSsl()},
+        {"privateStorageAvailable", all({QStringLiteral("storage.get"), QStringLiteral("storage.set"), QStringLiteral("storage.remove")})},
+        {"webSocketAvailable", all({QStringLiteral("network.websocket.open"), QStringLiteral("network.websocket.send"), QStringLiteral("network.websocket.close")})},
+        {"media", media}};
+}
+void AddonManager::setMediaCapabilitiesSource(QObject* source)
+{
+    for (const auto& connection : m_mediaCapabilityConnections) disconnect(connection);
+    m_mediaCapabilityConnections.clear();
+    m_mediaCapabilitiesSource = source && source->thread() == thread() ? source : nullptr;
+    if (m_mediaCapabilitiesSource) {
+        const auto notify = QMetaMethod::fromSignal(&AddonManager::capabilitiesChanged);
+        for (const auto* name : {"isStarted", "seekable", "pausable", "ratechangable", "hasVideoOutput"}) {
+            const int index = m_mediaCapabilitiesSource->metaObject()->indexOfProperty(name);
+            if (index < 0) continue;
+            const auto property = m_mediaCapabilitiesSource->metaObject()->property(index);
+            if (property.hasNotifySignal()) m_mediaCapabilityConnections.append(
+                connect(m_mediaCapabilitiesSource, property.notifySignal(), this, notify));
+        }
+        m_mediaCapabilityConnections.append(connect(m_mediaCapabilitiesSource, &QObject::destroyed, this, &AddonManager::capabilitiesChanged));
+    }
+    emit capabilitiesChanged();
+}
 QJsonObject AddonManager::schema(const InstalledPackage& package) const
 {
     if (package.manifest.settingsSchema.isEmpty()) return {{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}};
@@ -322,7 +368,8 @@ QVariantMap AddonManager::pendingPackage() const
     return {{"id", candidate.manifest.id}, {"name", candidate.manifest.name}, {"version", candidate.manifest.version},
         {"source", candidate.identity.source}, {"tag", candidate.identity.tag}, {"digest", QString::fromLatin1(candidate.digest)},
         {"permissions", candidate.manifest.requiredPermissions.toVariantMap()},
-        {"developerSource", candidate.identity.developerSource}, {"publisherVerified", false}};
+        {"developerSource", candidate.identity.developerSource}, {"publisherVerified", false},
+        {"hostCapabilities", capabilities()}, {"workerRequired", !candidate.manifest.runtimeEntry.isEmpty()}};
 }
 bool AddonManager::stageLocalPackage(const QString& directory)
 {
@@ -387,6 +434,32 @@ bool AddonManager::stageRepository(const QString& source, const QString& tag)
     });
     thread->start(); return changed(true);
 }
+bool AddonManager::checkRepositoryUpdates(const QString& id, const QString& range, bool allowPrerelease)
+{
+    if (busy()) return changed(false, tr("A repository request is already active."));
+    if (id.size() > 128 || range.size() > 256) return changed(false, tr("The package ID or version range is too long."));
+    m_pendingPackage.reset(); m_updateResult = {{"packageId", id}, {"checking", true}};
+    auto candidate = std::make_shared<PackageCandidate>();
+    auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
+    const auto directory = m_store.storageDirectory();
+    m_repositoryThread = QThread::create([candidate, error, success, directory, id, range, allowPrerelease] {
+        PackageStore store(directory);
+        *success = store.fetchRepositoryUpdate(id, range, allowPrerelease, candidate.get(), error.get());
+    });
+    auto* thread = m_repositoryThread;
+    connect(thread, &QThread::finished, this, [this, thread, candidate, error, success, id] {
+        if (m_repositoryThread == thread) m_repositoryThread = nullptr;
+        const bool canceled = thread->isInterruptionRequested();
+        const bool available = *success && !canceled && !candidate->manifest.id.isEmpty();
+        if (available) m_pendingPackage = candidate;
+        m_updateResult = {{"packageId", id}, {"checking", false}, {"available", available}, {"canceled", canceled},
+            {"tag", available ? candidate->identity.tag : QString{}}, {"publisherVerified", false}};
+        changed(*success && !canceled, canceled ? tr("VLC canceled the repository request.") : *error);
+        thread->deleteLater();
+    });
+    thread->start(); return changed(true);
+}
+
 bool AddonManager::approvePendingPackage(bool enable)
 {
     if (busy() || !m_pendingPackage) return changed(false, tr("Select an add-on package first."));
@@ -488,6 +561,7 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
     // Local paths and consumer state never enter the portable provider projection.
     for (const auto& name : {QStringLiteral("url"), QStringLiteral("targets"), QStringLiteral("existingFields"), QStringLiteral("protectedFields"), QStringLiteral("fieldRevisions")}) projected.remove(name);
     auto* instance = worker(package);
+    instance->setHostCapabilities(QJsonObject::fromVariantMap(capabilities()));
     const auto request = instance->invoke(localPart(contributionId), operation, projected);
     m_invocationPackages.insert(request, packageId); m_invocationContributions.insert(request, contributionId);
     return request;

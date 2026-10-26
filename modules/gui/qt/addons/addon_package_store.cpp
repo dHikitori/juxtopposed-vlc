@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_package_store.hpp"
 #include "addon_settings_migrations.hpp"
+#include "addon_repository_updates.hpp"
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -147,7 +148,8 @@ public:
         return run({QStringLiteral("init"), QStringLiteral("--bare"), QStringLiteral("--template="), m_repo},
                    nullptr, error, false);
     }
-    bool run(QStringList arguments, QByteArray* output, QString* error, bool repository = true)
+    bool run(QStringList arguments, QByteArray* output, QString* error, bool repository = true,
+             qint64 maximumOutput = Manifest::MaximumPackageBytes)
     {
         if (QThread::currentThread()->isInterruptionRequested())
             return fail(error, QStringLiteral("Git transport was cancelled"));
@@ -200,7 +202,7 @@ public:
             data += process.readAllStandardOutput();
             diagnostic += process.readAllStandardError();
             const bool interrupted = QThread::currentThread()->isInterruptionRequested();
-            if (interrupted || data.size() > Manifest::MaximumPackageBytes || diagnostic.size() > 256 * 1024
+            if (interrupted || data.size() > maximumOutput || diagnostic.size() > 256 * 1024
                 || m_elapsed.elapsed() > m_timeout || directoryBytes(m_temporary.path()) > 128 * 1024 * 1024) {
 #ifdef Q_OS_UNIX
                 const auto pid = process.processId();
@@ -216,7 +218,7 @@ public:
         diagnostic += process.readAllStandardError();
         if (QThread::currentThread()->isInterruptionRequested())
             return fail(error, QStringLiteral("Git transport was cancelled"));
-        if (data.size() > Manifest::MaximumPackageBytes || diagnostic.size() > 256 * 1024
+        if (data.size() > maximumOutput || diagnostic.size() > 256 * 1024
             || m_elapsed.elapsed() > m_timeout)
             return fail(error, QStringLiteral("Git transport exceeded its time or size budget"));
         if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
@@ -391,6 +393,64 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
     if (output) *output = candidate;
     return true;
 }
+bool PackageStore::fetchRepositoryUpdate(const QString& id, const QString& range, bool allowPrerelease,
+                                        PackageCandidate* output, QString* error,
+                                        bool developerLocalSource, int timeoutMs) const
+{
+    if (output) *output = {};
+    InstalledPackage active;
+    if (!installed(id, &active, error)) return false;
+    RepositoryTag rangeCheck;
+    if (!selectRepositoryUpdate({}, active.manifest.version, range, allowPrerelease, &rangeCheck, error)) return false;
+    if (active.recoveryRequired) return fail(error, QStringLiteral("Restore the package before an update check."));
+    if (active.identity.developerSource && !developerLocalSource)
+        return fail(error, QStringLiteral("Developer packages use explicit release selection."));
+    const auto source = active.identity.source;
+    const QUrl url(source, QUrl::StrictMode);
+    if (!developerLocalSource && (url.scheme() != QStringLiteral("https") || url.host().isEmpty()
+        || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()))
+        return fail(error, QStringLiteral("Only HTTPS Git sources are accepted."));
+    if (developerLocalSource && (!QFileInfo(source).isDir() || QFileInfo(source).isSymLink()))
+        return fail(error, QStringLiteral("The developer repository directory is not available."));
+    QElapsedTimer elapsed; elapsed.start();
+    const int budget = std::clamp(timeoutMs, 1000, 120000);
+    GitObjects git(budget); git.developer = developerLocalSource;
+    QByteArray advertisement;
+    if (!git.initialize(error) || !git.run({QStringLiteral("ls-remote"), QStringLiteral("--tags"),
+        QStringLiteral("--refs"), QStringLiteral("--"), source}, &advertisement, error, false, 1024 * 1024)) return false;
+    QList<RepositoryTag> tags; RepositoryTag selected;
+    if (!parseRepositoryTags(advertisement, &tags, error)
+        || !selectRepositoryUpdate(tags, active.manifest.version, range, allowPrerelease, &selected, error)) return false;
+    if (selected.name.isEmpty()) return true;
+    const int remaining = budget - int(elapsed.elapsed());
+    if (remaining < 1000) return fail(error, QStringLiteral("The repository update check exceeded its time limit."));
+    PackageCandidate candidate;
+    if (!fetchGitTag(source, selected.name, &candidate, error, developerLocalSource, remaining)) return false;
+    if (candidate.identity.tagObjectId != selected.objectId)
+        return fail(error, QStringLiteral("The release tag changed during the update check. Select a new release tag."));
+    if (candidate.manifest.id != id)
+        return fail(error, QStringLiteral("The release has a different package ID."));
+    QJsonObject state;
+    if (!loadState(id, &state, error)) return false;
+    const auto current = state.value("current").toObject();
+    if (current.value("identity").toObject().value("source") != source)
+        return fail(error, QStringLiteral("The installed source changed during the update check."));
+    SemanticVersion currentVersion;
+    if (!SemanticVersion::parse(current.value("version").toString(), &currentVersion))
+        return fail(error, QStringLiteral("The installed version is not correct."));
+    if (selected.parsedVersion.compare(currentVersion) <= 0) return true;
+    const auto locked = state.value("lockedTags").toObject().value(selected.name).toObject();
+    if ((!locked.isEmpty() && (locked.value("commitId") != candidate.identity.commitId
+            || locked.value("tagObjectId") != candidate.identity.tagObjectId
+            || locked.value("digest") != QString::fromLatin1(candidate.digest)))
+        || (state.value("lockedVersions").toObject().contains(candidate.manifest.version)
+            && state.value("lockedVersions").toObject().value(candidate.manifest.version) != QString::fromLatin1(candidate.digest)))
+        return fail(error, QStringLiteral("The selected release changed its locked identity or contents."));
+    if (output) *output = candidate;
+    if (error) error->clear();
+    return true;
+}
+
 bool PackageStore::loadState(const QString& id, QJsonObject* output, QString* error) const
 {
     if (!packageId(id)) return fail(error, QStringLiteral("Invalid package ID"));

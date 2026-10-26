@@ -64,6 +64,7 @@ QString AddonWorker::invoke(const QString& contribution, const QString& operatio
     send({{QStringLiteral("type"), QStringLiteral("invoke")}, {QStringLiteral("id"), id},
         {QStringLiteral("contribution"), contribution}, {QStringLiteral("operation"), operation},
         {QStringLiteral("context"), context}, {QStringLiteral("settings"), m_settings},
+        {QStringLiteral("hostCapabilities"), m_hostCapabilities},
         {QStringLiteral("credentials"), m_credentials}});
     return id;
 }

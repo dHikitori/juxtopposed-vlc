@@ -84,6 +84,39 @@ class TestAddonPackages : public QObject
         return process.waitForFinished(10000) && process.exitCode() == 0;
     }
 private slots:
+    void repositoryUpdateSelectsACompatibleTagWithoutActivation()
+    {
+        QTemporaryDir repository, storage; QString error;
+        QVERIFY(git(repository.path(), {"init", "--template="}));
+        QVERIFY(populate(repository.path(), manifest()));
+        QVERIFY(git(repository.path(), {"add", "--all"})); QVERIFY(git(repository.path(), {"commit", "-m", "initial"}));
+        QVERIFY(git(repository.path(), {"tag", "v1.0.0"}));
+        PackageCandidate initial, candidate;
+        QVERIFY(PackageStore::fetchGitTag(repository.path(), "v1.0.0", &initial, &error, true));
+        PackageStore store(storage.path()); QVERIFY(store.install(initial, {}));
+        for (const auto* value : {"1.9.0", "1.10.0", "2.0.0", "1.11.0-beta.1"}) {
+            const auto version = QString::fromLatin1(value);
+            QVERIFY(populate(repository.path(), manifest(version)));
+            QVERIFY(git(repository.path(), {"add", "--all"})); QVERIFY(git(repository.path(), {"commit", "-m", version}));
+            QVERIFY(git(repository.path(), {"tag", QStringLiteral("v") + version}));
+        }
+        QVERIFY(!store.fetchRepositoryUpdate(initial.manifest.id, QStringLiteral("^1.0.0"), false, &candidate, &error));
+        QVERIFY2(store.fetchRepositoryUpdate(initial.manifest.id, QStringLiteral("^1.0.0"), false, &candidate, &error, true), qPrintable(error));
+        QCOMPARE(candidate.manifest.version, QStringLiteral("1.10.0"));
+        InstalledPackage active; QVERIFY(store.installed(initial.manifest.id, &active)); QCOMPARE(active.digest, initial.digest);
+        QVERIFY(store.install(candidate, {}));
+        QVERIFY(store.fetchRepositoryUpdate(initial.manifest.id, QStringLiteral("^1.0.0"), false, &candidate, &error, true));
+        QVERIFY(candidate.manifest.id.isEmpty());
+        QVERIFY(store.fetchRepositoryUpdate(initial.manifest.id, QStringLiteral("^1.0.0"), true, &candidate, &error, true));
+        QCOMPARE(candidate.manifest.version, QStringLiteral("1.11.0-beta.1"));
+        auto wrong = manifest(QStringLiteral("1.12.0")); wrong.insert("id", "org.example.other");
+        QVERIFY(populate(repository.path(), wrong)); QVERIFY(git(repository.path(), {"add", "--all"}));
+        QVERIFY(git(repository.path(), {"commit", "-m", "wrong package"})); QVERIFY(git(repository.path(), {"tag", "v1.12.0"}));
+        QVERIFY(!store.fetchRepositoryUpdate(initial.manifest.id, QStringLiteral("^1.0.0"), false, &candidate, &error, true));
+        QVERIFY(error.contains(QStringLiteral("different package ID")));
+        QVERIFY(store.installed(initial.manifest.id, &active)); QCOMPARE(active.manifest.version, QStringLiteral("1.10.0"));
+    }
+
     void removedDistributionPackageNeedsExplicitHostRestore()
     {
         QTemporaryDir source, storage; const QString id = QStringLiteral("org.example.package");

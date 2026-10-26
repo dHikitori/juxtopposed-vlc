@@ -4,9 +4,25 @@
 #include <QTemporaryDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QJsonDocument>
+#include <memory>
 #include "addons/addon_manager.hpp"
 
 using namespace vlc::addons;
+
+class RuntimeMediaCapabilities : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool isStarted MEMBER loaded NOTIFY changed)
+    Q_PROPERTY(bool seekable MEMBER seekable NOTIFY changed)
+    Q_PROPERTY(bool pausable MEMBER pausable NOTIFY changed)
+    Q_PROPERTY(bool ratechangable MEMBER rateChange NOTIFY changed)
+    Q_PROPERTY(bool hasVideoOutput MEMBER video NOTIFY changed)
+public:
+    bool loaded = true, seekable = true, pausable = true, rateChange = false, video = true;
+signals:
+    void changed();
+};
 
 class TestAddonRuntime : public QObject
 {
@@ -16,6 +32,31 @@ class TestAddonRuntime : public QObject
         return {{"apiKey", QVariantMap{{"operation", "replace"}, {"value", key}, {"sessionOnly", true}}}};
     }
 private slots:
+    void capabilitiesOnlyExposeRegisteredApisAndBoundedMediaState() {
+        QTemporaryDir storage; AddonManager manager(storage.path()); manager.setWorkerExecutable({});
+        auto view = manager.capabilities(); QVERIFY(!view.value("workerAvailable").toBool());
+        QVERIFY(!view.value("privateStorageAvailable").toBool()); QVERIFY(!view.value("webSocketAvailable").toBool());
+        QVERIFY(view.value("coreOperations").toStringList().isEmpty());
+        QVERIFY(!view.value("media").toMap().value("known").toBool());
+        auto media = std::make_unique<RuntimeMediaCapabilities>();
+        media->setProperty("url", QStringLiteral("file:///private/test-media.mkv"));
+        manager.setMediaCapabilitiesSource(media.get()); QSignalSpy changed(&manager, &AddonManager::capabilitiesChanged);
+        view = manager.capabilities(); QVERIFY(view.value("media").toMap().value("loaded").toBool());
+        QVERIFY(view.value("media").toMap().value("seekable").toBool());
+        QVERIFY(!QJsonDocument::fromVariant(view).toJson().contains("private/test-media"));
+        media->loaded = false; emit media->changed(); QVERIFY(!changed.isEmpty());
+        QVERIFY(!manager.capabilities().value("media").toMap().value("loaded").toBool());
+        auto lifetime = std::make_unique<QObject>();
+        const auto handler = [](const auto&, const auto&, auto) -> AddonHostServices::Cancel { return {}; };
+        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("storage.get"), lifetime.get(), handler));
+        QVERIFY(!manager.capabilities().value("privateStorageAvailable").toBool());
+        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("storage.set"), lifetime.get(), handler));
+        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("storage.remove"), lifetime.get(), handler));
+        QVERIFY(manager.capabilities().value("privateStorageAvailable").toBool());
+        lifetime.reset(); QVERIFY(!manager.capabilities().value("privateStorageAvailable").toBool());
+        media.reset(); QVERIFY(!manager.capabilities().value("media").toMap().value("known").toBool());
+    }
+
     void reviewCapturesPackageAndCancellationDoesNotInstall() {
         QTemporaryDir storage; AddonManager manager(storage.path());
         QVERIFY(manager.stageLocalPackage(reference()));
