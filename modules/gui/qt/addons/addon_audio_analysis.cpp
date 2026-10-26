@@ -24,6 +24,7 @@ void AddonAudioAnalysis::reset(std::uint64_t epoch)
 bool AddonAudioAnalysis::append(std::uint64_t epoch, Format format, const void* data, std::size_t bytes, std::size_t frames,
                                unsigned channels, unsigned sampleRate, std::int64_t timeUs, double rate)
 {
+    if (!m_read.is_lock_free() || !m_write.is_lock_free() || !m_epoch.is_lock_free() || !m_dropped.is_lock_free()) return false;
     if (!m_active.load(std::memory_order_acquire) || epoch != m_epoch.load(std::memory_order_acquire)) return false;
     const std::size_t sampleBytes = format == Format::Signed16 ? 2 : 4;
     if (!data || !frames || !channels || channels > 32 || sampleRate < 8000 || sampleRate > 384000

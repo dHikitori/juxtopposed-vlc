@@ -1,0 +1,32 @@
+{
+  "contract": "visualizer.scene@1",
+  "background": "theme.background",
+  "nodes": [
+    {
+      "type": "gradient",
+      "vertical": true,
+      "stops": [
+        [
+          0,
+          "theme.background"
+        ],
+        [
+          1,
+          "#101820"
+        ]
+      ]
+    },
+    {
+      "type": "spectrum",
+      "count": 64,
+      "color": "theme.accent",
+      "rect": [
+        0.05,
+        0.1,
+        0.9,
+        0.8
+      ],
+      "gain": 2
+    }
+  ]
+}

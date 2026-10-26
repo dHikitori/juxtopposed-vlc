@@ -9,8 +9,10 @@ enable_testing()
 get_filename_component(VLC_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
 add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_credentials.cpp
-    addon_network.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_host_services.cpp addon_settings_migrations.cpp addon_discovery_coordinator.cpp addon_theme_service.cpp)
-target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network)
+    addon_network.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp
+    addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
+    addon_visual_scene.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_host_services.cpp)
+target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network Threads::Threads)
 target_compile_definitions(vlc_addon_host PUBLIC QT_USE_QSTRINGBUILDER QT_NO_CAST_TO_ASCII QT_NO_CAST_FROM_BYTEARRAY QT_STRICT_ITERATORS)
 target_include_directories(vlc_addon_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
 if(WIN32)
@@ -18,7 +20,7 @@ if(WIN32)
 elseif(APPLE)
     target_link_libraries(vlc_addon_host PRIVATE "-framework Security")
 endif()
-foreach(name packages runtime metadata broker ui_registry host_services discovery theme)
+foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizers host_services)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
