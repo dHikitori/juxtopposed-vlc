@@ -30,19 +30,21 @@ The recovery path does not supply an add-on result. This failure does not establ
 
 Untrusted provider text must remain plain text in labels, captions, choices, and tooltips. Qt AutoText can interpret image markup outside the add-on network broker. The narrow repair is an explicit plain-text format at each consumer.
 
-The read-only audit found these consumers under `modules/gui/qt/player/qml/redesign/`:
+The repair covers these consumers under `modules/gui/qt/player/qml/redesign/`:
 
 | File | Consumer |
 | --- | --- |
-| `RedesignPlayerView.qml` | Audio title at line 401, artist at line 410, and header title at line 717 |
-| `RedesignMiniPlayer.qml` | Title at line 176 and artist caption through the button at line 97 |
-| `RedesignEpisodesView.qml` | Episode title tooltip at line 215 and filename choices at line 271 |
-| `RedesignTracks.qml` | Track names and tooltips at lines 78 and 84 |
-| `RedesignLibraryView.qml` | Title tooltip at line 593 |
+| `RedesignPlayerView.qml` | Audio title, artist, and header title |
+| `RedesignMiniPlayer.qml` | Title, artist caption, and folder label |
+| `RedesignEpisodesView.qml` | Show and episode title tooltips, and filename choices |
+| `RedesignTracks.qml` | Track names and tooltips |
+| `RedesignLibraryView.qml` | Title tooltip |
 
 The audit confirmed plain text in package approval, generated settings, discovery, queue, provider names, selectors, and visible episode titles. Native media-info text uses plain controls or escapes its text. The audit found no current artwork attribution-text renderer; that is still an integration requirement.
 
-Repair tests must use title, artist, and filename text with image markup. Confirm that the text displays literally and that no image, file, or network request starts. Keep normal text, keyboard behavior, and layout intact.
+The repair sets an explicit plain-text format. Its 13 focused cases pass with no warnings or skips. Positive AutoText and RichText controls prove that the image provider, reserved HTTPS origin, and fixture-file read probes detect loads in WSL. All five repaired consumer cases retain literal text and report zero loads on these routes. The HTTPS test returns embedded image bytes without a connection. The file probe observes only its own temporary PNG. Other platforms retain literal-text assertions but do not claim the Linux file-read observation.
+
+The existing player, episodes, chrome, and library suites also pass all 249 cases. The normal app build with the final test helper remains pending.
 
 ## Source owner retirement
 

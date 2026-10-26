@@ -1259,6 +1259,7 @@ qml_tests = {
     'tst_AddonSelectionSurface': files('tests/tst_AddonSelectionSurface.qml'),
     'tst_AddonRecovery': files('tests/tst_AddonRecovery.qml'),
     'tst_AddonTypedDialogs': files('tests/tst_AddonTypedDialogs.qml'),
+    'tst_AddonPlainText': files('tests/tst_AddonPlainText.qml'),
     'tst_AddonDiscovery': files('tests/tst_AddonDiscovery.qml'),
     'tst_AddonInstaller': files('tests/tst_AddonInstaller.qml'),
     'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),

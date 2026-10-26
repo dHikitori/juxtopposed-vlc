@@ -591,6 +591,7 @@ Item {
                     anchors.leftMargin: root.playlistEditing && !root.grid ? theme.dp(28) : 0
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     text: delegate.displayTitle
+                    tooltipTextFormat: Text.PlainText
                     // Mouse focus left after navigation is not a keyboard selection.
                     selected: mediaView.currentIndex === delegate.index && (root.pointerSelection || root.playlistEditing || mediaButton.visualFocus)
                     onActiveFocusChanged: if (activeFocus) mediaView.currentIndex = delegate.index

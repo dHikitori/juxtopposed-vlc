@@ -24,6 +24,36 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QTemporaryDir>
+#include <memory>
+
+class QQmlNetworkAccessManagerFactory;
+struct TestTextResourceState;
+
+class TestTextResources : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int imageRequests READ imageRequests)
+    Q_PROPERTY(int networkRequests READ networkRequests)
+    Q_PROPERTY(int fileRequests READ fileRequests)
+    Q_PROPERTY(bool fileObservationAvailable READ fileObservationAvailable CONSTANT)
+    Q_PROPERTY(QString fileUrl READ fileUrl CONSTANT)
+
+public:
+    explicit TestTextResources(QQmlEngine *engine);
+    ~TestTextResources() override;
+    int imageRequests() const;
+    int networkRequests() const;
+    int fileRequests() const;
+    bool fileObservationAvailable() const;
+    QString fileUrl() const;
+    Q_INVOKABLE void reset();
+
+private:
+    std::shared_ptr<TestTextResourceState> m_state;
+    QTemporaryDir m_directory;
+    std::unique_ptr<QQmlNetworkAccessManagerFactory> m_factory;
+};
 
 // Keep the presented window's physical pixels. Qt Quick Test's grabImage()
 // crops with local item coordinates and can lose the DPR on the software path.

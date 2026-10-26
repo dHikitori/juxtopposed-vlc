@@ -76,12 +76,13 @@ ColumnLayout {
                 anchors.right: parent.right; anchors.rightMargin: root.theme.dp(20)
                 anchors.verticalCenter: parent.verticalCenter
                 text: choice.text
+                textFormat: Text.PlainText
                 color: root.theme.foreground
                 font.pixelSize: root.theme.dp(14)
                 elide: Text.ElideRight
             }
         }
-        RedesignToolTip { theme: root.theme; text: parent.description; visible: (parent.hovered || parent.visualFocus) && parent.description.length > 0 }
+        RedesignToolTip { theme: root.theme; text: parent.description; contentTextFormat: Text.PlainText; visible: (parent.hovered || parent.visualFocus) && parent.description.length > 0 }
     }
     RowLayout {
         Layout.fillWidth: true

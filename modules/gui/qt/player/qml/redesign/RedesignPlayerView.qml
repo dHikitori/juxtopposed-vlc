@@ -399,6 +399,7 @@ FocusScope {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.max(0, viewport.width - theme.dp(40))
                 text: root.mediaTitle
+                textFormat: Text.PlainText
                 visible: !root.libraryExpanded
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
@@ -407,7 +408,7 @@ FocusScope {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.artist; color: "#8f8f8f"; font.pixelSize: theme.dp(14)
+                text: root.artist; textFormat: Text.PlainText; color: "#8f8f8f"; font.pixelSize: theme.dp(14)
                 visible: !root.libraryExpanded
             }
         }
@@ -715,6 +716,7 @@ FocusScope {
                 leftPadding: titleControl.inHeader ? 0 : theme.dp(6)
                 verticalAlignment: Text.AlignVCenter
                 text: root.mediaTitle
+                textFormat: Text.PlainText
                 font.pixelSize: theme.dp(14)
                 elide: Text.ElideRight; color: theme.foreground
             }

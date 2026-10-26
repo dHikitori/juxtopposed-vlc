@@ -36,6 +36,7 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Native input policy | Item copies and native children retain policy. URL, connection, HTTP, FFmpeg secondary I/O, AVIO, and Live555 paths have guards. Native policy, HTTP, and direct AVIO controls passed. Core source/proxy profile checks and atomic source-item policy creation pass the normal native suite, including 16 concurrent callers. Live555 is not configured in this build. |
 | Native source jobs | Bounded retained jobs and one-owner transport leases. Cancellation and Close revoke pending and issued transports without a Qt event. Ten C case groups pass, including cancel before Start; the suite includes 200 result races. The earlier nine-group version also passed sanitizers. All 19 backend/job exports remain. Access binding and stream proxy work remain open. |
 | Native source owner | One owner per native VLC instance; permanent retirement before interface shutdown; final release after native users. Seven normal C groups and 100 Set/Close races pass, including real Cleanup and Destroy. Only Set and Hold are public exports. The host source resolver still needs its mount. |
+| Provider text | Five core UI consumers use plain text for provider titles, artists, track names, filenames, and tooltips. All 13 load-probe cases and 249 existing affected UI cases pass. The final normal app build remains pending. |
 
 The standalone test build is in `modules/gui/qt/addons/CMakeLists.txt`. Set `VLC_BUILD_DIR` to add tests that need the native core library.
 
@@ -80,6 +81,8 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - `65e46b727a`: mounted private storage, account partitions, pure migrations, and recovery snapshots.
 - `1065f63935`: SDK credential capacity and four matching artwork artifacts.
 - `5c684f5a75`: core source-profile checks, atomic item policy creation, and idle source-job cancellation.
+- `d7165da888`: native source-owner retirement and real instance cleanup tests.
+- `816490fbea`: typed subtitle/playlist results, current-target checks, and core recovery.
 
 ## Open completion gates
 
@@ -94,7 +97,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Complete host service adapters, author tooling, schemas, SDK text, and profile conformance tests.
 - Audit all new app English against the requested ASD-STE100 rules and technical terminology.
 - Verify the typed playlist recovery and target guards in the final normal app build. The repaired source passes its focused and broad QML checks; see [the review record](pending-implementation-review.md).
-- Repair the metadata AutoText consumers. Mount UI image handles only after format, decode, and reference tests pass. The current host asset map is empty.
+- Verify the repaired metadata text consumers in the final normal app build. Mount UI image handles only after format, decode, and reference tests pass. The current host asset map is empty.
 - Use the verified source-owner retirement boundary when mounting native source access.
 - Compare the completed implementation with every requirement in the architecture documents.
 

@@ -9,7 +9,7 @@ Use these guides for the current host contracts. The [architecture documents](..
 | [Visualizer scene](visualizer-scene.md) | The host renders data-only music scenes. Core supplies bounded audio analysis and playback timing. |
 | [Discovery source](discovery-sources.md) | Browse, search, and pages use host references. The default application gate keeps Play and Enqueue disabled. |
 | [Typed UI selections](typed-ui-selections.md) | Typed subtitle and playlist bodies, core confirmation, and recovery. Focused and broad source tests pass; the final normal app build remains pending. Core keeps the built-in bodies available. |
-| [Guest private storage](../guest-storage-contract.md) | The working tree passes 18 focused tests. Staging waits for scope approval. |
+| [Guest private storage](../guest-storage-contract.md) | Mounted private storage, account partitions, pure migrations, and recovery snapshots. All 18 focused tests pass. |
 | [Terminology](terminology.md) | Technical terms and English text rules for this project. |
 
 Declare each contract and operation that the package uses. A declared permission does not mean that the host has a handler for that function. The host capability view reports the available functions. Unsupported functions fail before a core operation starts.

@@ -92,6 +92,7 @@ FocusScope {
                 Layout.fillWidth: true; Layout.preferredHeight: theme.dp(44)
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 text: [root.showTitle, root.seasonLabel(root.selectedSeason), qsTr("Seasons")].filter(value => !!value).join(", ")
+                tooltipTextFormat: Text.PlainText
                 enabled: root.seasons.length > 1
                 onClicked: root.showingSeasons = !root.showingSeasons
                 contentItem: RowLayout {
@@ -213,6 +214,7 @@ FocusScope {
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     cornerRadius: 0
                     text: row.entry.title + (row.entry.current ? ", " + qsTr("Now playing") : "")
+                    tooltipTextFormat: Text.PlainText
                     selected: row.entry.current
                     onClicked: row.toggle()
                     contentItem: RowLayout {
@@ -269,6 +271,7 @@ FocusScope {
                         Layout.fillWidth: true; visible: !root.podcast && row.entry.urls.length > 1
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                         model: row.entry.urls.map(url => root.fileLabel(url))
+                        labelTextFormat: Text.PlainText
                         currentIndex: row.version
                         onActivated: index => row.version = index
                         Accessible.name: qsTr("Episode version")
