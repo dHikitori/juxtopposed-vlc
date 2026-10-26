@@ -72,7 +72,9 @@
 #include "dialogs/firstrun/firstrunwizard.hpp"
 #include "util/redesign_folder_model.hpp"
 #include "util/subtitle_source_service.hpp"
+#include "addons/addon_manager.hpp"
 #include <QDir>
+#include <QStandardPaths>
 #include <vlc_configuration.h>
 #include <QQmlContext>
 #include "dialogs/dialogs/dialogmodel.hpp"
@@ -341,10 +343,18 @@ void MainUI::registerQMLTypes()
         assert(m_intf->p_mainPlayerController);
         qmlRegisterSingletonInstance<PlayerController>(uri, versionMajor, versionMinor, "Player", m_intf->p_mainPlayerController);
         qmlRegisterTypesAndRevisions<TimedText>(uri, versionMajor);
-        auto* subtitleSources = new SubtitleSourceService(this);
         char* userDirectory = config_GetUserDir(VLC_USERDATA_DIR);
-        if (userDirectory) subtitleSources->setStorageDirectory(QDir(qfu(userDirectory)).filePath(QStringLiteral("subtitles")));
+        const QString dataDirectory = userDirectory ? qfu(userDirectory)
+            : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
         free(userDirectory);
+        vlc::addons::AddonManager* addonManager = nullptr;
+        if (!dataDirectory.isEmpty()) {
+            addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
+            qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
+        }
+        auto* subtitleSources = new SubtitleSourceService(this);
+        subtitleSources->setAddonManager(addonManager);
+        if (!dataDirectory.isEmpty()) subtitleSources->setStorageDirectory(QDir(dataDirectory).filePath(QStringLiteral("subtitles")));
         qmlRegisterSingletonInstance<SubtitleSourceService>(uri, versionMajor, versionMinor, "SubtitleSources", subtitleSources);
         qmlRegisterType<PlayerHighResolutionTimeUpdater>(uri, versionMajor, versionMinor, "HighResolutionTimeUpdater");
         qmlRegisterUncreatableMetaObject(VLCTickForeign::staticMetaObject, uri, versionMajor, versionMinor, "VLCTick", "Not Instantiable" );

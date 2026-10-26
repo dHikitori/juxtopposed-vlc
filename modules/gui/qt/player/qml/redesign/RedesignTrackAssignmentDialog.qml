@@ -88,7 +88,7 @@ C.Dialog {
     readonly property var folderRuleTarget: scopeIndex === 1
         ? {folder:targetFolder,source:sourceFolder,urls:rows.map(row => row.url),remove:removeFolderRule} : pendingFolderRule
     readonly property bool folderRuleNeedsPreparation: !!folderRuleTarget.folder
-        && (folderRuleTarget.urls || []).some(url => tracks(url).some(track => /^(?:opensubtitles|subtitlelink):/.test(String(track))))
+        && (folderRuleTarget.urls || []).some(url => tracks(url).some(track => /^(?:opensubtitles|subtitlelink|addon-subtitle):/.test(String(track))))
     readonly property bool folderRuleChanged: !!folderRuleTarget.folder
         && ((folderRuleTarget.remove && folderRuleBaseline.length > 0) || folderRuleNeedsPreparation || folderRuleDefinition !== folderRuleBaseline)
     readonly property bool fileMode: scopeIndex === 0
@@ -142,7 +142,7 @@ C.Dialog {
     }
     function sourceKind(url) {
         if (String(url).startsWith("subtitlelink:") || linkSources.some(item => item.url === url)) return 2
-        if (String(url).startsWith("opensubtitles:") || onlineSources.some(item => item.url === url)) return 1
+        if (/^(?:opensubtitles|addon-subtitle):/.test(String(url)) || onlineSources.some(item => item.url === url)) return 1
         return sourceKinds[url] || 0
     }
     function parentFolder(url) { return String(url).startsWith("file:") ? String(url).substring(0, String(url).lastIndexOf("/") + 1) : "" }

@@ -15,6 +15,7 @@
 #include <QTranslator>
 #include <QEvent>
 #include "util/subtitle_source_service.hpp"
+#include "addons/addon_manager.hpp"
 
 #if defined(Q_OS_WIN) && defined(QT_STATIC)
 Q_IMPORT_PLUGIN(QSchannelBackend)
@@ -59,6 +60,105 @@ class TestSubtitleSources : public QObject {
     static QVariantList search(SubtitleSourceService& client) { QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);client.search("The Wand S01E04","en");return result(spy).value("sources").toList(); }
     static QVariantList row(const QStringList& tracks) { return {QVariantMap{{"url","file:///movie.mkv"},{"baseline",QStringList{}},{"initialTracks",QStringList{}},{"tracks",tracks}}}; }
 private slots:
+    void providerCoordinatorNativeAdapterUsesOpaqueSourcesAndNormalPreparation() {
+        QTemporaryDir directory;
+        Server server;
+        server.respond = [&](const HttpRequest& request, QTcpSocket* socket) {
+            if (request.url.path().endsWith("/subtitles")) Server::send(socket, results());
+            else if (request.url.path().endsWith("/download"))
+                Server::send(socket, QJsonDocument(QJsonObject{{"link", server.base().resolved(QUrl("file.srt")).toString()}}).toJson());
+            else Server::send(socket, captions());
+        };
+        vlc::addons::AddonManager manager(directory.filePath("addons"));
+        SubtitleSourceService client(options(server));
+        client.setAddonManager(&manager);
+        client.setStorageDirectory(directory.filePath("subtitles"));
+        QVERIFY(client.setApiKey("unit-only-native-key"));
+        QVERIFY(client.configured());
+        const auto providers = manager.providersForFeature("subtitles");
+        QCOMPARE(providers.size(), 1);
+        QCOMPARE(providers[0].toMap().value("id").toString(), "vlc.builtin.opensubtitles/search");
+        const auto sources = search(client);
+        QCOMPARE(sources.size(), 2);
+        const auto selected = sources[0].toMap().value("url").toString();
+        QCOMPARE(QUrl(selected).scheme(), "addon-subtitle");
+        QVERIFY(!selected.contains("unit-only-native-key"));
+        QCOMPARE(server.requests.size(), 1); // One native request through the coordinator, no duplicate old path.
+        QSignalSpy prepared(&client, &SubtitleSourceService::preparationFinished);
+        client.prepareRows(row({selected}));
+        const auto answer = result(prepared);
+        QVERIFY2(answer.value("success").toBool(), qPrintable(answer.value("error").toString()));
+        const auto track = answer.value("rows").toList()[0].toMap().value("tracks").toStringList()[0];
+        QVERIFY(QUrl(track).isLocalFile());
+        QFile file(QUrl(track).toLocalFile()); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), captions());
+        QCOMPARE(server.requests.size(), 3);
+        QCOMPARE(server.requests[0].headers.value("api-key"), QByteArray("unit-only-native-key"));
+        QVERIFY(server.requests[2].headers.value("api-key").isEmpty());
+    }
+
+    void providerCoordinatorRejectsForgedReferencesAndHonorsDisable() {
+        QTemporaryDir directory;
+        Server server;
+        vlc::addons::AddonManager manager(directory.filePath("addons"));
+        SubtitleSourceService client(options(server));
+        client.setAddonManager(&manager);
+        client.setStorageDirectory(directory.filePath("subtitles"));
+        QVERIFY(client.setApiKey("unit-only-native-key"));
+        QSignalSpy prepared(&client, &SubtitleSourceService::preparationFinished);
+        client.prepareRows(row({"addon-subtitle:/forged/not-issued.srt"}));
+        QVERIFY(!result(prepared).value("success").toBool());
+        QVERIFY(server.requests.isEmpty());
+        QVERIFY(manager.setEnabled("vlc.builtin.opensubtitles", false));
+        QVERIFY(!client.configured());
+        // Refreshing the existing key/configuration must not re-enable it.
+        QVERIFY(client.setApiKey("unit-only-native-key"));
+        QVERIFY(!client.configured());
+        QVERIFY(!manager.providersForFeature("subtitles")[0].toMap().value("enabled").toBool());
+    }
+
+    void providerCoordinatorFallbackDoesNotDuplicateNativeSearch() {
+        QTemporaryDir directory;
+        Server server;
+        server.respond = [](const HttpRequest&, QTcpSocket* socket) { Server::send(socket, results()); };
+        vlc::addons::AddonManager manager(directory.filePath("addons"));
+        SubtitleSourceService client(options(server));
+        client.setAddonManager(&manager);
+        client.setStorageDirectory(directory.filePath("subtitles"));
+        QVERIFY(client.setApiKey("unit-only-native-key"));
+        manager.registerBuiltinProvider("subtitles", {{"id", "vlc.builtin.unavailable/search"},
+            {"packageId", "vlc.builtin.unavailable"}, {"name", "Unavailable fixture"}, {"enabled", true},
+            {"configured", true}, {"mediaKinds", QStringList{"episode"}}, {"cachePartition", "fixture-1"}});
+        QVERIFY(manager.setProviderOrder("subtitles", {"vlc.builtin.unavailable/search", "vlc.builtin.opensubtitles/search"}));
+        const auto sources = search(client);
+        QCOMPARE(sources.size(), 2);
+        QCOMPARE(server.requests.size(), 1);
+    }
+    void retainedProviderLimitPreservesAlreadySelectedHandles() {
+        QTemporaryDir directory;
+        Server server;
+        server.respond = [&](const HttpRequest& request, QTcpSocket* socket) {
+            if (request.url.path().endsWith("/subtitles")) Server::send(socket, results());
+            else if (request.url.path().endsWith("/download"))
+                Server::send(socket, QJsonDocument(QJsonObject{{"link", server.base().resolved(QUrl("file.srt")).toString()}}).toJson());
+            else Server::send(socket, captions());
+        };
+        vlc::addons::AddonManager manager(directory.filePath("addons"));
+        auto limited = options(server); limited.maxAddonRecords = 1;
+        SubtitleSourceService client(limited); client.setAddonManager(&manager);
+        client.setStorageDirectory(directory.filePath("subtitles")); QVERIFY(client.setApiKey("unit-only-native-key"));
+        QSignalSpy searched(&client, &SubtitleSourceService::searchFinished);
+        client.search("The Wand S01E04", "en");
+        auto answer = result(searched); const auto sources = answer.value("sources").toList();
+        QCOMPARE(sources.size(), 1); QVERIFY(!answer.value("warning").toString().isEmpty());
+        const auto selected = sources[0].toMap().value("url").toString();
+        searched.clear(); client.search("The Wand S01E04", "en");
+        answer = result(searched); QVERIFY(answer.value("sources").toList().isEmpty());
+        QVERIFY(!answer.value("warning").toString().isEmpty());
+        QSignalSpy prepared(&client, &SubtitleSourceService::preparationFinished);
+        client.prepareRows(row({selected})); answer = result(prepared);
+        QVERIFY2(answer.value("success").toBool(), qPrintable(answer.value("error").toString()));
+        QVERIFY(QUrl(answer.value("rows").toList()[0].toMap().value("tracks").toStringList()[0]).isLocalFile());
+    }
     void languageLabelsChangeWithoutReloadingSources() {
         Server server;SubtitleSourceService client(options(server));
         QCOMPARE(client.languages().first().toMap().value("text").toString(),QStringLiteral("English"));

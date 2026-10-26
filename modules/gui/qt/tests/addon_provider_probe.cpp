@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QTextStream>
 #include "addons/addon_manager.hpp"
+#include "util/subtitle_source_service.hpp"
 
 using namespace vlc::addons;
 int main(int argc, char** argv)
@@ -22,7 +23,7 @@ int main(int argc, char** argv)
         QTextStream(stdout) << "Provider probe failed at " << stage << ".\n";
         app.exit(1);
     };
-    const QString package = QStringLiteral("org.videolan.thesubtitledb"), provider = package + QStringLiteral("/search");
+    const QString package = QStringLiteral("org.videolan.thesubtitledb");
     if (!manager.installLocalPackage(app.arguments()[1], true)) {
         QTextStream(stdout) << "Package setup failed: " << manager.errorMessage() << '\n'; return 1;
     }
@@ -32,31 +33,33 @@ int main(int argc, char** argv)
     if (!saved || !manager.setEnabled(package, true)) {
         QTextStream(stdout) << "Account setup failed.\n"; return 1;
     }
-    QString searchRequest, resolveRequest;
+    SubtitleSourceService service; service.setStorageDirectory(directory.filePath(QStringLiteral("subtitles")));
+    service.setAddonManager(&manager);
+    const QString mediaUrl = QStringLiteral("https://example.com/public-domain-film.mkv");
     int count = 0;
-    QObject::connect(&manager, &AddonManager::operationFinished, &app,
-        [&](const QString& request, const QString&, const QString& status, const QVariantMap& data, const QString&) {
-            if (request != searchRequest && request != resolveRequest) return;
-            if (status != QLatin1String("match") && status != QLatin1String("partial")) { fail(QStringLiteral("lookup/resolve")); return; }
-            if (request == searchRequest) {
-                const auto candidates = data.value("candidates").toList(); count = candidates.size();
-                if (candidates.isEmpty()) { fail(QStringLiteral("candidate lookup")); return; }
-                resolveRequest = manager.invoke(provider, QStringLiteral("resolveAsset"), {{"candidate", candidates.first()}});
-            } else {
-                manager.fetchAsset(provider, QJsonObject::fromVariantMap(data), [&](const NetworkBroker::Response& response) {
-                    if (!response.error.isEmpty() || response.status != 200 || response.body.isEmpty()
-                        || (!response.body.contains("-->") && !response.body.contains("Dialogue:"))) {
-                        fail(QStringLiteral("asset download")); return;
-                    }
-                    QTextStream(stdout) << "Authenticated portable provider lookup: " << count
-                        << " candidates. Validated subtitle download: " << response.body.size() << " bytes.\n";
-                    app.exit(0);
-                });
-            }
+    QObject::connect(&service, &SubtitleSourceService::searchFinished, &app, [&](quint64, const QVariantMap& result) {
+        const auto candidates = result.value("sources").toList(); count = candidates.size();
+        if (!result.value("success").toBool() || candidates.isEmpty()) { fail(QStringLiteral("subtitle search")); return; }
+        const auto selected = candidates.first().toMap().value("url").toString();
+        if (!selected.startsWith(QLatin1String("addon-subtitle:"))) { fail(QStringLiteral("host candidate handle")); return; }
+        service.prepareRows({QVariantMap{{"url", mediaUrl}, {"tracks", QStringList{selected}},
+            {"baseline", QStringList{}}, {"initialTracks", QStringList{}}}});
+    });
+    QObject::connect(&service, &SubtitleSourceService::preparationFinished, &app, [&](quint64, const QVariantMap& result) {
+        const auto rows = result.value("rows").toList();
+        if (!result.value("success").toBool() || rows.isEmpty()) { fail(QStringLiteral("subtitle Save preparation")); return; }
+        const auto tracks = rows.first().toMap().value("tracks").toStringList();
+        if (tracks.size() != 1 || !QUrl(tracks.first()).isLocalFile()) { fail(QStringLiteral("local track resolution")); return; }
+        QFile subtitle(QUrl(tracks.first()).toLocalFile());
+        if (!subtitle.open(QIODevice::ReadOnly)) { fail(QStringLiteral("managed subtitle file")); return; }
+        const auto bytes = subtitle.readAll();
+        if (bytes.isEmpty() || (!bytes.contains("-->") && !bytes.contains("Dialogue:"))) { fail(QStringLiteral("subtitle validation")); return; }
+        QTextStream(stdout) << "Authenticated subtitle search: " << count << " candidates. Save resolved a host handle to "
+            << bytes.size() << " validated local subtitle bytes.\n";
+        app.exit(0);
         });
     QTimer::singleShot(90000, &app, [&] { fail(QStringLiteral("deadline")); });
-    searchRequest = manager.invoke(provider, QStringLiteral("searchAssets"),
-        {{"identity", QVariantMap{{"kind", "movie"}, {"type", "movie"}, {"ids", QVariantMap{{"imdb", "tt0028119"}}}}},
-         {"language", "en"}});
+    service.searchMedia({{"url", mediaUrl},
+        {"identity", QVariantMap{{"type", "movie"}, {"ids", QVariantMap{{"imdb", "tt0028119"}}}}}}, QStringLiteral("en"));
     return app.exec();
 }

@@ -73,12 +73,12 @@ libqt_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) $(CPPFLAGS_qt) \
 	-I$(builddir)/dialogs/vlm
 
 libqt_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(QT_CFLAGS) $(CXXFLAGS_qt) -fPIC
-libqt_plugin_la_LIBADD = $(vlc_qt_libs)
+libqt_plugin_la_LIBADD = $(vlc_qt_libs) $(ADDON_PLATFORM_LIBS)
 if HAVE_LIBATOMIC
 libqt_plugin_la_CXXFLAGS += -DQT_HAS_LIBATOMIC
 libqt_plugin_la_LIBADD += -latomic
 endif
-libqt_plugin_la_LDFLAGS = $(AM_LDFLAGS) $(QT_LDFLAGS) $(GC_SECTIONS_LDFLAGS)
+libqt_plugin_la_LDFLAGS = $(AM_LDFLAGS) $(QT_LDFLAGS) $(GC_SECTIONS_LDFLAGS) $(ADDON_PLATFORM_LDFLAGS) $(QT_LOW_MEMORY_LDFLAGS)
 if HAVE_OSX
 libqt_plugin_la_LDFLAGS += -Wl,-framework,Cocoa
 endif
@@ -105,7 +105,50 @@ if HAVE_QT_GTK
 libqt_plugin_la_CPPFLAGS += -DQT_HAS_GTK
 endif
 
-libqt_plugin_la_SOURCES = \
+QT_ADDON_HOST_SOURCES = \
+	addons/addon_manifest.cpp \
+	addons/addon_manifest.hpp \
+	addons/addon_package_store.cpp \
+	addons/addon_package_store.hpp \
+	addons/addon_credentials.cpp \
+	addons/addon_credentials.hpp \
+	addons/addon_manager.cpp \
+	addons/addon_manager.hpp \
+	addons/addon_network.cpp \
+	addons/addon_network.hpp \
+	addons/addon_worker.cpp \
+	addons/addon_worker.hpp \
+	addons/addon_metadata_coordinator.cpp \
+	addons/addon_metadata_coordinator.hpp
+QT_ADDON_HOST_MOC = \
+	addons/addon_manager.moc.cpp \
+	addons/addon_network.moc.cpp \
+	addons/addon_worker.moc.cpp \
+	addons/addon_metadata_coordinator.moc.cpp
+ADDON_PLATFORM_LIBS =
+ADDON_PLATFORM_LDFLAGS =
+if HAVE_WIN32
+ADDON_PLATFORM_LIBS += -ladvapi32
+endif
+if HAVE_OSX
+ADDON_PLATFORM_LDFLAGS += -framework Security
+endif
+
+EXTRA_DIST += addons/worker/Cargo.toml addons/worker/Cargo.lock addons/worker/src/main.rs \
+	tests/fixtures/addon-worker-fixture.py
+bin_SCRIPTS =
+if BUILD_ADDON_RUNTIME
+bin_SCRIPTS += vlc-addon-worker$(EXEEXT)
+CLEANFILES += vlc-addon-worker$(EXEEXT)
+vlc-addon-worker$(EXEEXT): $(srcdir)/addons/worker/Cargo.toml $(srcdir)/addons/worker/Cargo.lock $(srcdir)/addons/worker/src/main.rs $(srcdir)/scripts/build-addon-worker.py
+	$(AM_V_GEN)$(PYTHON3) $(srcdir)/scripts/build-addon-worker.py \
+		--cargo "$(ADDON_CARGO)" --manifest "$(abs_srcdir)/addons/worker/Cargo.toml" \
+		--output "$@" --target "$(ADDON_RUST_TARGET)" --linker "$(ADDON_RUST_LINKER)" \
+		--system "$(ADDON_RUNTIME_HOST_OS)" --cpu "$(ADDON_RUNTIME_HOST_CPU)" $(ADDON_RUNTIME_CROSS)
+libqt_plugin_la_CPPFLAGS += -DVLC_ADDON_WORKER_BUILD_PATH='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"'
+endif
+
+libqt_plugin_la_SOURCES = $(QT_ADDON_HOST_SOURCES) \
 	qt.cpp qt.hpp plugins.hpp \
 	dialogs/bookmarks/bookmarks.cpp dialogs/bookmarks/bookmarks.hpp \
 	dialogs/dialogs/dialogmodel.cpp \
@@ -452,7 +495,7 @@ moc_verbose__0 = $(moc_verbose_0)
 # These MOC files depend on the configure settings:
 dialogs/dialogs_provider.moc.cpp dialogs/vlm/vlm.moc.cpp: $(top_builddir)/config.h
 
-nodist_libqt_plugin_la_SOURCES = \
+nodist_libqt_plugin_la_SOURCES = $(QT_ADDON_HOST_MOC) \
 	dialogs/bookmarks/bookmarks.moc.cpp \
 	dialogs/dialogs/dialogmodel.moc.cpp \
 	dialogs/dialogs_provider.moc.cpp \
@@ -1306,6 +1349,18 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignSubtitleProviderSetup.qml \
 	player/qml/redesign/RedesignSubtitleSourcePreferences.qml \
 	player/qml/redesign/RedesignAddons.qml \
+	player/qml/redesign/RedesignAddonChild.qml \
+	player/qml/redesign/RedesignAddonField.qml \
+	player/qml/redesign/RedesignAddonManagement.qml \
+	player/qml/redesign/RedesignAddonNode.qml \
+	player/qml/redesign/RedesignAddonProviders.qml \
+	player/qml/redesign/RedesignAddonSettings.qml \
+	player/qml/redesign/RedesignAddonSettingsDialog.qml \
+	player/qml/redesign/RedesignAddonTheme.qml \
+	player/qml/redesign/RedesignAddonTrackPreparation.qml \
+	player/qml/redesign/RedesignAddonView.qml \
+	player/qml/redesign/AddonUi.js \
+	player/qml/redesign/AddonTheme.js \
 	player/qml/redesign/RedesignPlugins.qml \
 	player/qml/redesign/RedesignTrackAssignments.qml \
 	player/qml/redesign/RedesignFolderInfo.qml \
@@ -1967,6 +2022,51 @@ endif
 
 if HAVE_QT_QTEST
 
+test_qt_addon_packages_SOURCES = tests/test_addon_packages.cpp $(QT_ADDON_HOST_SOURCES)
+nodist_test_qt_addon_packages_SOURCES = tests/test_addon_packages.moc $(QT_ADDON_HOST_MOC)
+BUILT_SOURCES += tests/test_addon_packages.moc
+CLEANFILES += tests/test_addon_packages.moc
+test_qt_addon_packages_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_packages_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_packages_LDADD = $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_packages_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_packages
+TESTS += test_qt_addon_packages
+
+test_qt_addon_runtime_SOURCES = tests/test_addon_runtime.cpp $(QT_ADDON_HOST_SOURCES)
+nodist_test_qt_addon_runtime_SOURCES = tests/test_addon_runtime.moc $(QT_ADDON_HOST_MOC)
+BUILT_SOURCES += tests/test_addon_runtime.moc
+CLEANFILES += tests/test_addon_runtime.moc
+test_qt_addon_runtime_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_runtime_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_runtime_LDADD = $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_runtime_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_runtime
+TESTS += test_qt_addon_runtime
+
+test_qt_addon_metadata_SOURCES = tests/test_addon_metadata.cpp $(QT_ADDON_HOST_SOURCES)
+nodist_test_qt_addon_metadata_SOURCES = tests/test_addon_metadata.moc $(QT_ADDON_HOST_MOC)
+BUILT_SOURCES += tests/test_addon_metadata.moc
+CLEANFILES += tests/test_addon_metadata.moc
+test_qt_addon_metadata_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_metadata_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_metadata_LDADD = $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_metadata_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_metadata
+TESTS += test_qt_addon_metadata
+
+test_qt_addon_broker_SOURCES = tests/test_addon_broker.cpp $(QT_ADDON_HOST_SOURCES)
+nodist_test_qt_addon_broker_SOURCES = tests/test_addon_broker.moc $(QT_ADDON_HOST_MOC)
+BUILT_SOURCES += tests/test_addon_broker.moc
+CLEANFILES += tests/test_addon_broker.moc
+test_qt_addon_broker_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_broker_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_broker_LDADD = $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_broker_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_broker
+TESTS += test_qt_addon_broker
+
+
 LIBVLC = ../../../lib/libvlc.la
 QT_QTEST_COMMON_cppflags = $(libqt_plugin_la_CPPFLAGS) -I$(builddir)/tests -DTOP_BUILDDIR=\"$(abs_top_builddir)\"
 QT_QTEST_COMMON_cxxflags = $(AM_CXXFLAGS) $(QT_CFLAGS) $(QT_QTEST_CFLAGS) -fPIC $(CXXFLAGS_qt)
@@ -2502,26 +2602,15 @@ check_PROGRAMS += test_qt_media_identity
 TESTS += test_qt_media_identity
 
 test_qt_subtitle_sources_SOURCES = \
-	tests/test_subtitle_sources.cpp util/subtitle_source_service.cpp util/subtitle_source_service.hpp
-nodist_test_qt_media_identity_SOURCES = tests/test_media_identity.cpp util/media_identity.hpp util/media_fingerprint.hpp util/track_matching.hpp
-nodist_test_qt_media_identity_SOURCES = tests/test_media_identity.moc
-BUILT_SOURCES += tests/test_media_identity.moc
-CLEANFILES += tests/test_media_identity.moc
-test_qt_media_identity_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
-test_qt_media_identity_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
-test_qt_media_identity_LDADD = $(QT_QTEST_COMMON_ldadd)
-test_qt_media_identity_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
-check_PROGRAMS += test_qt_media_identity
-TESTS += test_qt_media_identity
-
-test_qt_subtitle_sources_SOURCES = \
-	tests/test_subtitle_sources.moc util/subtitle_source_service.moc.cpp
+	tests/test_subtitle_sources.cpp util/subtitle_source_service.cpp util/subtitle_source_service.hpp $(QT_ADDON_HOST_SOURCES)
+nodist_test_qt_subtitle_sources_SOURCES = \
+	tests/test_subtitle_sources.moc util/subtitle_source_service.moc.cpp $(QT_ADDON_HOST_MOC)
 BUILT_SOURCES += tests/test_subtitle_sources.moc
 CLEANFILES += tests/test_subtitle_sources.moc
 test_qt_subtitle_sources_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
 test_qt_subtitle_sources_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
-test_qt_subtitle_sources_LDADD = $(QT_QTEST_COMMON_ldadd)
-test_qt_subtitle_sources_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+test_qt_subtitle_sources_LDADD = $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_subtitle_sources_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_subtitle_sources
 TESTS += test_qt_subtitle_sources
 
@@ -2598,6 +2687,10 @@ endif
 QML_LOG_COMPILER = $(builddir)/qml_test -input
 
 if HAVE_QT_QUICK_TEST
+EXTRA_DIST += tests/tst_AddonInstaller.qml
+TESTS += tests/tst_AddonInstaller.qml
+EXTRA_DIST += tests/tst_AddonUi.qml tests/tst_AddonTheme.qml tests/tst_AddonIntegration.qml tests/tst_AddonTrackPreparation.qml
+TESTS += tests/tst_AddonUi.qml tests/tst_AddonTheme.qml tests/tst_AddonIntegration.qml tests/tst_AddonTrackPreparation.qml
 EXTRA_DIST += tests/tst_RedesignCapture.qml
 TESTS += tests/tst_RedesignCapture.qml
 EXTRA_DIST += tests/tst_RedesignGotoTime.qml
@@ -2673,3 +2766,16 @@ TESTS += tests/tst_RedesignSubtitleTimeline.qml
 TESTS += tests/tst_FSM.qml tests/tst_Redesign.qml tests/tst_RedesignPreferences.qml tests/tst_RedesignPlayback.qml tests/tst_RedesignWaveform.qml tests/tst_RedesignAudio.qml tests/tst_RedesignVideo.qml tests/tst_RedesignOnboarding.qml tests/tst_RedesignMenu.qml
 endif
 endif
+
+if ENABLE_QT
+addon_referencedir = $(datadir)/vlc/addons/reference/thesubtitledb
+addon_reference_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/addon.json $(top_srcdir)/contrib-addons/examples/thesubtitledb/LICENSE
+addon_reference_distdir = $(datadir)/vlc/addons/reference/thesubtitledb/dist
+addon_reference_dist_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/dist/addon.wasm
+addon_reference_settingsdir = $(datadir)/vlc/addons/reference/thesubtitledb/settings
+addon_reference_settings_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/settings/schema.json $(top_srcdir)/contrib-addons/examples/thesubtitledb/settings/ui.json
+addon_reference_localesdir = $(datadir)/vlc/addons/reference/thesubtitledb/locales
+addon_reference_locales_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/locales/en.json
+endif
+
+EXTRA_DIST += $(addon_reference_DATA) $(addon_reference_dist_DATA) $(addon_reference_settings_DATA) $(addon_reference_locales_DATA)

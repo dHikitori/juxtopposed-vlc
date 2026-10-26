@@ -300,12 +300,11 @@ RedesignSettingsDialog {
                 spacing: theme.dp(root.category === "general" || root.usesReferenceSpacing ? 5 : 6)
                 Loader {
                     width: parent.width
-                    active: root.addonsVisited
+                    active: root.addonsVisited && typeof AddonManager !== "undefined"
                     visible: root.category === "extensions" && !root.search.length
-                    sourceComponent: RedesignAddons {
-                        backend: ServicesDiscoveryModel { ctx: MainCtx }
+                    sourceComponent: RedesignAddonManagement {
+                        backend: typeof AddonManager !== "undefined" ? AddonManager : null
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                        onWebsiteRequested: url => Qt.openUrlExternally(url)
                     }
                 }
                 Column {
@@ -514,8 +513,9 @@ RedesignSettingsDialog {
                         }
                     }
                     width: parent.width
-                    visible: root.search.length ? [qsTr("Online Subtitles"), "OpenSubtitles", qsTr("API key")].some(text => text.toLowerCase().includes(root.search.toLowerCase())) : root.category === "subtitles"
+                    visible: root.search.length ? [qsTr("Online Subtitles"), qsTr("Add-on subtitle providers"), "OpenSubtitles", qsTr("API key")].some(text => text.toLowerCase().includes(root.search.toLowerCase())) : root.category === "subtitles"
                     sourceService: SubtitleSources
+                    addonManager: typeof AddonManager !== "undefined" ? AddonManager : null
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 }
                 RedesignButton {

@@ -3,8 +3,33 @@
 #
 
 qt6 = import('qt6')
+fs = import('fs')
 
 qt_include_dir = include_directories('.')
+
+addon_host_sources = files(
+    'addons/addon_manifest.cpp',
+    'addons/addon_manifest.hpp',
+    'addons/addon_package_store.cpp',
+    'addons/addon_package_store.hpp',
+    'addons/addon_credentials.cpp',
+    'addons/addon_credentials.hpp',
+    'addons/addon_manager.cpp',
+    'addons/addon_manager.hpp',
+    'addons/addon_network.cpp',
+    'addons/addon_network.hpp',
+    'addons/addon_worker.cpp',
+    'addons/addon_worker.hpp',
+    'addons/addon_metadata_coordinator.cpp',
+    'addons/addon_metadata_coordinator.hpp',
+)
+addon_host_moc_headers = files(
+    'addons/addon_manager.hpp',
+    'addons/addon_network.hpp',
+    'addons/addon_worker.hpp',
+    'addons/addon_metadata_coordinator.hpp',
+)
+
 
 subtitle_consumer_key = custom_target('subtitle_consumer_key',
     output: 'subtitle_consumer_key.hpp',
@@ -15,6 +40,10 @@ qt_extra_deps = []
 qt_extra_flags = ['-DQT_STRICT_ITERATORS','-DQT_USE_QSTRINGBUILDER','-DQT_NO_CAST_TO_ASCII','-DQT_NO_CAST_FROM_BYTEARRAY']
 qt_cppargs = []
 qt_link_args = [gc_sections_linkargs]
+if cpp.get_linker_id() == 'ld.bfd' and cpp.has_link_argument('-Wl,--no-keep-memory')
+    # Reduce GNU ld memory use for the large Qt plugin.
+    qt_link_args += '-Wl,--no-keep-memory'
+endif
 
 qt_dependency_method = host_machine.system() == 'darwin' ? 'config-tool' : 'auto'
 qt6_dep = dependency('qt6',
@@ -44,7 +73,7 @@ if host_machine.system() == 'darwin' and qt6_dep.found()
     qt_link_args += '-lobjc'
 endif
 
-moc_headers = files(
+moc_headers = addon_host_moc_headers + files(
     'dialogs/bookmarks/bookmarks.hpp',
     'dialogs/dialogs/dialogmodel.hpp',
     'dialogs/dialogs_provider.hpp',
@@ -227,7 +256,7 @@ if have_wayland and cpp.has_header('qpa/qplatformnativeinterface.h', dependencie
     moc_headers += files('maininterface/compositor_wayland.hpp')
 endif
 
-qt_plugin_sources = files(
+qt_plugin_sources = addon_host_sources + files(
     'qt.cpp',
     'qt.hpp',
     'plugins.hpp',
@@ -863,6 +892,18 @@ qml_modules += {
        'player/qml/redesign/RedesignSubtitleProviderSetup.qml',
        'player/qml/redesign/RedesignSubtitleSourcePreferences.qml',
        'player/qml/redesign/RedesignAddons.qml',
+       'player/qml/redesign/RedesignAddonChild.qml',
+       'player/qml/redesign/RedesignAddonField.qml',
+       'player/qml/redesign/RedesignAddonManagement.qml',
+       'player/qml/redesign/RedesignAddonNode.qml',
+       'player/qml/redesign/RedesignAddonProviders.qml',
+       'player/qml/redesign/RedesignAddonSettings.qml',
+       'player/qml/redesign/RedesignAddonSettingsDialog.qml',
+       'player/qml/redesign/RedesignAddonTheme.qml',
+       'player/qml/redesign/RedesignAddonView.qml',
+       'player/qml/redesign/RedesignAddonTrackPreparation.qml',
+       'player/qml/redesign/AddonUi.js',
+       'player/qml/redesign/AddonTheme.js',
        'player/qml/redesign/RedesignPlugins.qml',
        'player/qml/redesign/RedesignTrackAssignments.qml',
        'player/qml/redesign/RedesignFolderInfo.qml',
@@ -1144,6 +1185,11 @@ qml_modules += {
 }
 
 qml_tests = {
+    'tst_AddonInstaller': files('tests/tst_AddonInstaller.qml'),
+    'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),
+    'tst_AddonUi': files('tests/tst_AddonUi.qml'),
+    'tst_AddonTheme': files('tests/tst_AddonTheme.qml'),
+    'tst_AddonIntegration': files('tests/tst_AddonIntegration.qml'),
     'tst_FSM': files('tests/tst_FSM.qml'),
     'tst_Redesign': files('tests/tst_Redesign.qml'),
     'tst_RedesignMediaFavorite': files('tests/tst_RedesignMediaFavorite.qml'),
@@ -1217,6 +1263,54 @@ if qt6_dep.found()
     endif
 
     prog_python = find_program('python3')
+    # Build the application worker separately from experimental Rust VLC modules.
+    addon_worker_dependencies = []
+    addon_worker_environment = []
+    if not get_option('addon-runtime').disabled()
+        addon_cargo = find_program('cargo', native: true, required: get_option('addon-runtime'))
+        if addon_cargo.found()
+            addon_worker_name = host_system == 'windows' ? 'vlc-addon-worker.exe' : 'vlc-addon-worker'
+            addon_worker_command = [prog_python, files('scripts/build-addon-worker.py'),
+                '--cargo', addon_cargo.full_path(), '--manifest', '@INPUT0@', '--output', '@OUTPUT@',
+                '--system', host_system, '--cpu', host_machine.cpu_family(),
+                '--abi', cc.get_argument_syntax() == 'msvc' ? 'msvc' : 'gnu']
+            if get_option('addon-runtime-target') != ''
+                addon_worker_command += ['--target', get_option('addon-runtime-target')]
+            endif
+            if meson.is_cross_build()
+                addon_worker_command += '--cross'
+                addon_linker = get_option('addon-runtime-linker')
+                if addon_linker == ''
+                    addon_cc_command = cc.cmd_array()
+                    if addon_cc_command.length() != 1
+                        error('If the C compiler uses a wrapper, set addon-runtime-linker to the target linker.')
+                    endif
+                    addon_linker = addon_cc_command[0]
+                endif
+                addon_worker_command += ['--linker', addon_linker]
+            endif
+            addon_worker_target = custom_target('vlc-addon-worker',
+                input: files('addons/worker/Cargo.toml', 'addons/worker/Cargo.lock', 'addons/worker/src/main.rs'),
+                output: addon_worker_name, command: addon_worker_command,
+                build_by_default: true, install: true, install_dir: bindir_path)
+            addon_worker_dependencies += addon_worker_target
+            addon_worker_environment = {'VLC_ADDON_WORKER': addon_worker_target.full_path()}
+            qt_cppargs += '-DVLC_ADDON_WORKER_BUILD_PATH="' + addon_worker_target.full_path() + '"'
+        endif
+    endif
+    # The host stores credentials. Add-on packages do not contain credential-store code.
+    if host_system == 'windows'
+        qt_extra_deps += cc.find_library('advapi32')
+    elif host_system == 'darwin'
+        qt_extra_deps += dependency('appleframeworks', modules: ['Security'])
+    endif
+    # Install the reference Wasm file without a source build.
+    addon_reference_root = meson.project_source_root() / 'contrib-addons/examples/thesubtitledb'
+    foreach addon_resource : ['addon.json', 'LICENSE', 'dist/addon.wasm', 'settings/schema.json', 'settings/ui.json', 'locales/en.json']
+        addon_resource_directory = fs.parent(addon_resource)
+        install_data(addon_reference_root / addon_resource,
+            install_dir: get_option('datadir') / 'vlc/addons/reference/thesubtitledb' / addon_resource_directory)
+    endforeach
     modules_qrc = []
     foreach module : qml_modules
         #generates 'res.qrc', 'qmldir.qrc', 'qmldir',
@@ -1559,6 +1653,21 @@ if qt6_dep.found()
 
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
+        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker']
+            vlc_tests += {
+                'name': 'test_qt_addon_' + addon_test,
+                'sources': files('tests/test_addon_' + addon_test + '.cpp') + addon_host_sources,
+                'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                'moc_headers': addon_host_moc_headers,
+                'suite': ['qt', 'addons'],
+                'include_directories': qt_include_dir,
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"'],
+                'link_args': qt_link_args,
+                'depends': addon_worker_dependencies,
+                'env': addon_worker_environment,
+            }
+        endforeach
         if host_system == 'windows'
             vlc_tests += {
                 'name': 'test_qt_window_fullscreen',
@@ -1686,9 +1795,9 @@ if qt6_dep.found()
         }
         vlc_tests += {
             'name': 'test_qt_subtitle_sources',
-            'sources': files('tests/test_subtitle_sources.cpp', 'util/subtitle_source_service.cpp'),
+            'sources': files('tests/test_subtitle_sources.cpp', 'util/subtitle_source_service.cpp') + addon_host_sources,
             'moc_sources': files('tests/test_subtitle_sources.cpp'),
-            'moc_headers': files('util/subtitle_source_service.hpp'),
+            'moc_headers': files('util/subtitle_source_service.hpp') + addon_host_moc_headers,
             'suite': ['qt'],
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],

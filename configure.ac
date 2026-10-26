@@ -4585,6 +4585,46 @@ AS_IF([test "${enable_qt}" != "no"], [
 ])
 AC_SUBST([QT_INDIRECT_LIBS])
 AM_CONDITIONAL([ENABLE_QT], [test "$enable_qt" != "no"])
+
+dnl The isolated portable add-on worker is separate from experimental Rust modules.
+QT_LOW_MEMORY_LDFLAGS=
+AS_IF([test "$enable_qt" != "no"], [
+  AC_MSG_CHECKING([for the GNU ld memory option])
+  qt_linker_version=`$CXX $CXXFLAGS $LDFLAGS -Wl,--version 2>/dev/null`
+  AS_CASE([$qt_linker_version], [GNU\ ld*], [
+    VLC_SAVE_FLAGS
+    AC_LANG_PUSH([C++])
+    AX_APPEND_FLAG([-Wl,--no-keep-memory], [LDFLAGS])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([], [])], [QT_LOW_MEMORY_LDFLAGS=-Wl,--no-keep-memory], [])
+    AC_LANG_POP([C++])
+    VLC_RESTORE_FLAGS
+  ])
+  AS_IF([test -n "$QT_LOW_MEMORY_LDFLAGS"], [AC_MSG_RESULT([$QT_LOW_MEMORY_LDFLAGS])], [AC_MSG_RESULT([none])])
+])
+AC_SUBST([QT_LOW_MEMORY_LDFLAGS])
+
+AC_ARG_ENABLE([addon-runtime],
+  AS_HELP_STRING([--disable-addon-runtime], [omit the add-on worker (default enabled with Qt)]))
+AC_ARG_VAR([ADDON_CARGO], [Cargo executable for the add-on worker build])
+AC_ARG_VAR([ADDON_RUST_TARGET], [Rust target triple for the add-on worker])
+AC_ARG_VAR([ADDON_RUST_LINKER], [Target linker for the add-on worker cross build])
+ADDON_RUNTIME_CROSS=
+AS_IF([test "$enable_qt" != "no" && test "$enable_addon_runtime" != "no"], [
+  AC_PATH_PROGS([ADDON_CARGO], [cargo], [no], [${HOME}/.cargo/bin:${PATH}])
+  AS_IF([test "$ADDON_CARGO" = "no"], [
+    AC_MSG_ERROR([Install Rust and Cargo, or use --disable-addon-runtime.])
+  ])
+  AS_IF([test "$cross_compiling" = "yes"], [
+    ADDON_RUNTIME_CROSS=--cross
+    AS_IF([test -z "$ADDON_RUST_LINKER"], [
+      AS_CASE([$CC], [*\ *], [AC_MSG_ERROR([If the cross compiler uses a wrapper, set ADDON_RUST_LINKER.])], [ADDON_RUST_LINKER=$CC])
+    ])
+  ])
+])
+AC_SUBST([ADDON_RUNTIME_CROSS])
+AC_SUBST([ADDON_RUNTIME_HOST_OS], [$host_os])
+AC_SUBST([ADDON_RUNTIME_HOST_CPU], [$host_cpu])
+AM_CONDITIONAL([BUILD_ADDON_RUNTIME], [test "$enable_qt" != "no" && test "$enable_addon_runtime" != "no"])
 AM_CONDITIONAL([HAVE_QT_GTK], [test "${have_qt_gtk}" = "yes"])
 AM_CONDITIONAL([HAVE_QT_QTEST], [test "${have_qt_qtest}" = "yes"])
 AM_CONDITIONAL([HAVE_QT_QUICK_TEST], [test "${have_qt_quick_test}" = "yes"])

@@ -40,6 +40,21 @@ option('addon_manager',
     value : true,
     description : 'Build the VLC add-on manager modules')
 
+option('addon-runtime',
+    type : 'feature',
+    value : 'enabled',
+    description : 'Build the add-on worker with Rust and Cargo.')
+
+option('addon-runtime-target',
+    type : 'string',
+    value : '',
+    description : 'Rust target triple for the add-on worker.')
+
+option('addon-runtime-linker',
+    type : 'string',
+    value : '',
+    description : 'Target linker for the add-on worker cross build.')
+
 option('run_as_root',
     type : 'boolean',
     value : false,

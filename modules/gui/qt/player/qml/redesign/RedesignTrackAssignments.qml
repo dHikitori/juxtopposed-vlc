@@ -56,13 +56,21 @@ RedesignTrackAssignmentDialog {
         function onSearchFinished(request, result) {
             if (request === root.pendingSearch) root.loadSearch(root.pendingSearchRequest, result)
         }
-        function onPreparationFinished(request, result) {
-            if (request !== root.pendingPreparation || !root.visible || root.pendingSaveRequest !== root.requestId) return
+    }
+    RedesignAddonTrackPreparation {
+        id: preparation
+        sourceService: SubtitleSources
+        onPrepared: (rows, subtitles, request, resolved) => {
+            if (!root.visible || request !== root.requestId) return
             root.cancelableSave = false
-            root.resolveSources(result.resolved)
-            const saveRequest = root.pendingSaveRequest
-            if (result.success) root.saveNative(result.rows, root.subtitles, saveRequest)
-            else root.finish(root.pendingSaveRequest, {success:false,error:result.error,saved:[]})
+            root.resolveSources(resolved)
+            root.saveNative(rows, subtitles, request)
+        }
+        onFailed: (request, error, resolved) => {
+            if (!root.visible || request !== root.requestId) return
+            root.cancelableSave = false
+            root.resolveSources(resolved)
+            root.finish(request, {success:false,error:error,saved:[]})
         }
     }
     scaleFactor: VLCStyle.scale
@@ -77,7 +85,7 @@ RedesignTrackAssignmentDialog {
         searchPreferences.refresh()
         preferredSearchLanguages = searchPreferences.subtitleSearchLanguages()
     }
-    onClosed: { pendingSaveRule = ({}); SubtitleSources.resetSession() }
+    onClosed: { pendingSaveRule = ({}); preparation.cancel(); SubtitleSources.resetSession() }
     onSearchRequested: (query, language, request) => {
         pendingSearchRequest = request
         pendingSearch = SubtitleSources.searchMedia({query:query, manual:root.manualSearch,
@@ -117,11 +125,9 @@ RedesignTrackAssignmentDialog {
     }
     onSaveRequested: (rows, subtitles, request) => {
         pendingSaveRule = root.folderRuleChanged ? Object.assign({}, root.folderRuleTarget, {urls:(root.folderRuleTarget.urls || []).slice()}) : ({})
-        if (rows.some(row => row.tracks.some(url => /^(?:opensubtitles|subtitlelink):/.test(String(url))))) {
-            root.cancelableSave = true
-            root.pendingSaveRequest = request
-            root.pendingPreparation = SubtitleSources.prepareRows(rows)
-        } else root.saveNative(rows, subtitles, request)
+        root.cancelableSave = preparation.requiresPreparation(rows)
+        root.pendingSaveRequest = request
+        root.pendingPreparation = preparation.prepare(rows, subtitles, request)
     }
     onSaved: (rows, subtitles) => restartNeeded = DialogsProvider.applySavedTrackAssignments(rows, subtitles) || restartNeeded
     onAccepted: if (restartNeeded) DialogsProvider.messageDialog(qsTr("Tracks saved. Stop and play this file to use all changes."), qsTr("VLC Media Player"))
