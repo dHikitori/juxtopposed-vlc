@@ -1,0 +1,184 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#include "addon_worker.hpp"
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QProcessEnvironment>
+#include <QStandardPaths>
+#include <QUuid>
+
+namespace vlc::addons {
+AddonWorker::AddonWorker(const InstalledPackage& package, NetworkBroker* network, QObject* parent)
+    : QObject(parent), m_package(package), m_network(network)
+{
+    m_startup.setSingleShot(true);
+    connect(&m_startup, &QTimer::timeout, this, [this] { fail(tr("The add-on could not start in time.")); });
+    connect(&m_process, &QProcess::readyReadStandardOutput, this, &AddonWorker::read);
+    connect(&m_process, &QProcess::readyReadStandardError, this, [this] { m_process.readAllStandardError(); });
+    connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
+        if (!m_stopping) fail(tr("The isolated add-on worker is unavailable."));
+    });
+    connect(&m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
+        [this](int, QProcess::ExitStatus) { if (!m_stopping) fail(tr("The add-on stopped unexpectedly.")); });
+}
+AddonWorker::~AddonWorker() { stop(); }
+void AddonWorker::setExecutable(const QString& executable) { m_executable = executable; }
+void AddonWorker::setConfiguration(const QJsonObject& settings, const QJsonObject& status, NetworkBroker::CredentialResolver resolver)
+{ m_settings = settings; m_credentials = status; m_resolver = std::move(resolver); }
+
+void AddonWorker::start()
+{
+    if (m_process.state() != QProcess::NotRunning) return;
+    m_stopping = false; m_ready = false; m_buffer.clear();
+    auto executable = m_executable;
+    if (executable.isEmpty()) executable = QStandardPaths::findExecutable(QStringLiteral("vlc-addon-worker"));
+    if (executable.isEmpty()) { QTimer::singleShot(0, this, [this] { fail(tr("Install the isolated add-on worker to use this add-on.")); }); return; }
+    QProcessEnvironment environment;
+#ifdef Q_OS_WIN
+    environment.insert(QStringLiteral("SystemRoot"), qEnvironmentVariable("SystemRoot"));
+#endif
+    m_process.setProcessEnvironment(environment);
+    m_process.setWorkingDirectory(m_package.directory);
+    m_process.setProgram(executable);
+    m_process.setArguments({QDir(m_package.directory).filePath(m_package.manifest.runtimeEntry)});
+    m_startup.start(15000);
+    m_process.start();
+}
+
+QString AddonWorker::invoke(const QString& contribution, const QString& operation, const QJsonObject& context)
+{
+    const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto registration = m_package.manifest.contribution(contribution);
+    if (!registration || !registration->operations.contains(operation) || !m_package.enabled || m_invocations.size() >= 32) {
+        QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("unsupported"), {}, tr("This add-on operation is unavailable.")); });
+        return id;
+    }
+    for (const auto& permission : registration->requires) if (!m_package.grants.contains(permission)) {
+        QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("denied"), {}, tr("This add-on operation needs permission.")); });
+        return id;
+    }
+    auto* deadline = new QTimer(this); deadline->setSingleShot(true);
+    m_invocations.insert(id, {contribution, deadline, {}});
+    connect(deadline, &QTimer::timeout, this, [this] { fail(tr("The add-on exceeded its execution deadline.")); });
+    deadline->start(30000);
+    send({{QStringLiteral("type"), QStringLiteral("invoke")}, {QStringLiteral("id"), id},
+        {QStringLiteral("contribution"), contribution}, {QStringLiteral("operation"), operation},
+        {QStringLiteral("context"), context}, {QStringLiteral("settings"), m_settings},
+        {QStringLiteral("credentials"), m_credentials}});
+    return id;
+}
+
+void AddonWorker::send(const QJsonObject& message)
+{
+    const auto bytes = QJsonDocument(message).toJson(QJsonDocument::Compact);
+    if (bytes.size() > 1024 * 1024) { fail(tr("The add-on message is too large.")); return; }
+    if (!m_ready) { m_queued.enqueue(message); start(); return; }
+    if (m_process.bytesToWrite() > 2 * 1024 * 1024) { fail(tr("The add-on is not keeping up with requests.")); return; }
+    m_process.write(bytes + '\n');
+}
+
+void AddonWorker::read()
+{
+    m_buffer += m_process.readAllStandardOutput();
+    if (m_buffer.size() > 2 * 1024 * 1024) { fail(tr("The add-on returned too much data.")); return; }
+    while (m_buffer.contains('\n')) {
+        const auto end = m_buffer.indexOf('\n'); const auto line = m_buffer.left(end); m_buffer.remove(0, end + 1);
+        if (line.size() > 1024 * 1024) { fail(tr("The add-on returned too much data.")); return; }
+        QJsonParseError error; const auto document = QJsonDocument::fromJson(line, &error);
+        if (error.error != QJsonParseError::NoError || !document.isObject()) { fail(tr("The add-on returned an invalid message.")); return; }
+        const auto object = document.object();
+        if (!m_ready) {
+            if (object.value(QStringLiteral("type")).toString() != QLatin1String("ready")
+                || object.value(QStringLiteral("protocol")).toString() != QLatin1String("wasm-message-v1")) {
+                fail(tr("The add-on worker protocol is incompatible.")); return;
+            }
+            m_ready = true; m_startup.stop();
+            const auto pending = std::move(m_queued); m_queued.clear();
+            for (const auto& message : pending) send(message);
+            continue;
+        }
+        if (object.value(QStringLiteral("type")).toString() != QLatin1String("messages")
+            || !object.value(QStringLiteral("messages")).isArray()
+            || object.value(QStringLiteral("messages")).toArray().size() > 64) {
+            fail(tr("The add-on returned an invalid message.")); return;
+        }
+        for (const auto& value : object.value(QStringLiteral("messages")).toArray()) {
+            if (!value.isObject()) { fail(tr("The add-on returned an invalid message.")); return; }
+            message(value.toObject());
+            if (m_stopping) return;
+        }
+    }
+}
+
+void AddonWorker::message(const QJsonObject& object)
+{
+    const auto type = object.value(QStringLiteral("type")).toString();
+    const auto id = object.value(QStringLiteral("id")).toString();
+    if (type == QLatin1String("result")) {
+        if (!m_invocations.contains(id)) return; // Cancelled/stale terminal result.
+        static const QSet<QString> statuses = {QStringLiteral("match"), QStringLiteral("partial"), QStringLiteral("no_match"),
+            QStringLiteral("auth_required"), QStringLiteral("rate_limited"), QStringLiteral("offline"), QStringLiteral("ambiguous"),
+            QStringLiteral("unsupported"), QStringLiteral("error")};
+        const auto status = object.value(QStringLiteral("status")).toString();
+        if (!statuses.contains(status) || !object.value(QStringLiteral("data")).isObject()) { fail(tr("The add-on returned an invalid result.")); return; }
+        // Guest errors are untrusted strings: only a bounded plain-text value is exposed.
+        finish(id, status, object.value(QStringLiteral("data")).toObject(), object.value(QStringLiteral("error")).toString().left(512));
+        return;
+    }
+    const auto invocation = object.value(QStringLiteral("invocation")).toString();
+    if (type != QLatin1String("host-call") || id.isEmpty() || id.size() > 128 || m_hostCalls.contains(id)
+        || !m_invocations.contains(invocation)) { fail(tr("The add-on used an invalid request handle.")); return; }
+    if (m_hostCalls.size() >= 4096) { fail(tr("The add-on request quota was reached.")); return; }
+    m_hostCalls.insert(id);
+    const auto operation = object.value(QStringLiteral("operation")).toString();
+    if (operation != QLatin1String("network.http") || !m_package.grants.contains(operation)) {
+        send({{QStringLiteral("type"), QStringLiteral("host-result")}, {QStringLiteral("id"), id},
+            {QStringLiteral("invocation"), invocation}, {QStringLiteral("status"), QStringLiteral("error")},
+            {QStringLiteral("error"), tr("This host capability is unavailable or not approved.")}});
+        return;
+    }
+    const auto job = m_network->fetch(m_package.manifest, m_package.grants, object.value(QStringLiteral("request")).toObject(), m_resolver,
+        [this, invocation, id](const NetworkBroker::Response& response) {
+            if (!m_invocations.contains(invocation) || m_stopping) return;
+            send({{QStringLiteral("type"), QStringLiteral("host-result")}, {QStringLiteral("id"), id},
+                {QStringLiteral("invocation"), invocation}, {QStringLiteral("status"), response.error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error")},
+                {QStringLiteral("response"), QJsonObject{{QStringLiteral("status"), response.status},
+                    {QStringLiteral("body"), QString::fromUtf8(response.body)}, {QStringLiteral("headers"), response.headers}}},
+                {QStringLiteral("error"), response.error}});
+        });
+    m_invocations[invocation].jobs.insert(job);
+}
+
+void AddonWorker::finish(const QString& id, const QString& status, const QJsonObject& data, const QString& error)
+{
+    const auto invocation = m_invocations.take(id);
+    if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
+    for (auto job : invocation.jobs) m_network->cancel(job);
+    emit completed(id, status, data, error);
+}
+void AddonWorker::cancel(const QString& id)
+{
+    if (!m_invocations.contains(id)) return;
+    const auto invocation = m_invocations.take(id);
+    if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
+    for (auto job : invocation.jobs) m_network->cancel(job);
+    QQueue<QJsonObject> retained;
+    while (!m_queued.isEmpty()) { const auto message = m_queued.dequeue(); if (message.value(QStringLiteral("id")).toString() != id) retained.enqueue(message); }
+    m_queued = retained;
+}
+void AddonWorker::fail(const QString& error)
+{
+    if (m_stopping) return;
+    m_stopping = true; m_ready = false; m_startup.stop(); m_queued.clear();
+    if (m_process.state() != QProcess::NotRunning) m_process.kill();
+    const auto ids = m_invocations.keys();
+    for (const auto& id : ids) finish(id, QStringLiteral("error"), {}, error);
+    emit unavailable(error);
+}
+void AddonWorker::stop()
+{
+    m_stopping = true; m_startup.stop(); m_ready = false; m_queued.clear();
+    const auto ids = m_invocations.keys(); for (const auto& id : ids) cancel(id);
+    if (m_process.state() != QProcess::NotRunning) { m_process.kill(); m_process.waitForFinished(1000); }
+}
+}
