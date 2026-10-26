@@ -540,7 +540,7 @@ bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
         if (!QDir().mkpath(retained) || !writeJson(QDir(retained).filePath(id + QStringLiteral(".json")),
                 state.value("current").toObject().value("settings").toObject(), error)) return false;
     }
-    const auto tombstone = folder + QStringLiteral(".removing-") + QUuid::createUuid().toString(QUuid::Id128);
+    const QString tombstone = folder + QStringLiteral(".removing-") + QUuid::createUuid().toString(QUuid::Id128);
     if (!QDir().rename(folder, tombstone)) return fail(error, QStringLiteral("Cannot withdraw installed package"));
     // The manager withdraws active registrations and workers before this call.
     if (!QDir(tombstone).removeRecursively())

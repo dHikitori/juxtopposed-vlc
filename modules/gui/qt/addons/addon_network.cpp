@@ -135,7 +135,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
     request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
     request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
     request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
-    const auto host = job->url.host().toUtf8() + (job->url.port(443) == 443 ? QByteArray{} : ':' + QByteArray::number(job->url.port()));
+    const QByteArray host = job->url.host().toUtf8() + (job->url.port(443) == 443 ? QByteArray{} : ':' + QByteArray::number(job->url.port()));
     request.setRawHeader("Host", host);
     request.setRawHeader("User-Agent", "VLC-Addon/1.0");
     request.setRawHeader("Accept", "application/json");

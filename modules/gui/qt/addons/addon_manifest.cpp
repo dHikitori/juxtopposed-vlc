@@ -352,7 +352,7 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
     Manifest manifest;
     if (!parse(manifestFile.readAll(),&manifest,error)) return false;
     QMap<QString,QByteArray> data; qint64 total = 0;
-    const auto rootPath = root.canonicalFilePath() + QDir::separator();
+    const QString rootPath = root.canonicalFilePath() + QDir::separator();
     for (const auto& path : manifest.files) {
         QString checked = directory;
         for (const auto& component : path.split(QLatin1Char('/'))) {
@@ -405,7 +405,9 @@ QByteArray packageDigest(const QMap<QString,QByteArray>& files)
     hash.addData(QByteArrayLiteral("vlc-addon-package-v1\n"));
     for (auto it = files.begin(); it != files.end(); ++it) {
         const auto path = it.key().toUtf8();
-        hash.addData(QByteArray::number(path.size()) + ':' + path + ':' + QByteArray::number(it.value().size()) + ':');
+        const QByteArray framing = QByteArray::number(path.size()) + ':' + path + ':'
+            + QByteArray::number(it.value().size()) + ':';
+        hash.addData(framing);
         hash.addData(QCryptographicHash::hash(it.value(),QCryptographicHash::Sha256));
         hash.addData(QByteArrayLiteral("\n"));
     }

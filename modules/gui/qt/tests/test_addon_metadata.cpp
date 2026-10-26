@@ -25,8 +25,9 @@ struct FakeBackend {
 };
 
 QVariantMap registration(const QString& id) {
+    const QString cachePartition = id + QStringLiteral(":release-1:account-1:settings-1");
     return {{"id", id}, {"packageId", id.section('/', 0, 0)}, {"name", id}, {"enabled", true},
-        {"configured", true}, {"cachePartition", id + ":release-1:account-1:settings-1"},
+        {"configured", true}, {"cachePartition", cachePartition},
         {"mediaKinds", QStringList{"movie", "episode"}}, {"features", QStringList{"subtitles", "video.details"}}};
 }
 QVariantMap identity(const QString& imdb = QStringLiteral("tt1234567")) {
@@ -282,6 +283,33 @@ private slots:
         QTRY_COMPARE(results.size(), 1);
         const auto candidate = results[0][2].toMap().value("candidates").toList()[0].toMap();
         QVERIFY(candidate.value("hostMatch").toMap().value("requiresConfirmation").toBool());
+    }
+
+    void explicitAssetSearchRetainsAmbiguousAlternativesForAChoice() {
+        FakeBackend fake;
+        fake.providers = {registration("a/search")};
+        AddonMetadataCoordinator coordinator(fake.backend());
+        QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        auto request = context(); request["interactive"] = true;
+        coordinator.searchAssets("subtitles", request);
+        QTRY_COMPARE(fake.calls.size(), 1);
+        complete(coordinator, fake.calls[0], "ambiguous", assets());
+        QTRY_COMPARE(results.size(), 1);
+        const auto candidates = results[0][2].toMap().value("candidates").toList();
+        QCOMPARE(candidates.size(), 1);
+        QVERIFY(candidates[0].toMap().value("hostMatch").toMap().value("requiresConfirmation").toBool());
+    }
+    void oversizedCandidatesAreNotRetainedOrCached() {
+        FakeBackend fake;
+        fake.providers = {registration("a/search")};
+        AddonMetadataCoordinator coordinator(fake.backend());
+        QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.searchAssets("subtitles", context()); QTRY_COMPARE(fake.calls.size(), 1);
+        auto oversized = asset(); oversized["unexpectedPayload"] = QString(9000, QLatin1Char('x'));
+        complete(coordinator, fake.calls[0], "match", assets(oversized)); QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(results[0][1].toString(), "error");
+        QVERIFY(results[0][2].toMap().value("candidates").toList().isEmpty());
+        coordinator.searchAssets("subtitles", context()); QTRY_COMPARE(fake.calls.size(), 2);
     }
 
     void timeoutPreservesPartialSuccessAndCancelsThePendingProvider() {

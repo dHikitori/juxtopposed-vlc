@@ -108,7 +108,7 @@ private slots:
         NetworkBroker broker;
         bool finished = false;
         QString error;
-        broker.fetch(declaration, declaration.requiredPermissions, {{"url", origin + "/private"}}, {},
+        broker.fetch(declaration, declaration.requiredPermissions, {{"url", QString(origin + "/private")}}, {},
             [&](const NetworkBroker::Response& response) { finished = true; error = response.error; });
         QTRY_VERIFY(finished);
         QVERIFY(!error.isEmpty());

@@ -12,6 +12,7 @@ namespace {
 constexpr int MaxConsumers = 64;
 constexpr int MaxProviders = 16;
 constexpr int MaxCandidates = 500;
+constexpr qsizetype MaxCandidateBytes = 8192;
 constexpr int MaxCache = 128;
 
 bool populated(const QVariant& value)
@@ -296,7 +297,7 @@ void AddonMetadataCoordinator::complete(const QString& invocation, const QString
     m_invocations.remove(invocation);
     m_jobs.remove(key);
     const auto partition = job.registration.value(QStringLiteral("cachePartition")).toString();
-    const auto backoffKey = job.provider + '\n' + partition;
+    const QString backoffKey = job.provider + '\n' + partition;
     if (!partition.isEmpty() && (status == QStringLiteral("rate_limited") || status == QStringLiteral("auth_required")
             || status == QStringLiteral("error") || status == QStringLiteral("offline"))) {
         const int seconds = status == QStringLiteral("rate_limited")
@@ -305,7 +306,14 @@ void AddonMetadataCoordinator::complete(const QString& invocation, const QString
         if (m_backoff.size() >= MaxCache) m_backoff.clear();
         m_backoff.insert(backoffKey, {status, data, error.left(512), m_clock.elapsed() + qint64(seconds) * 1000});
     }
-    if (status == QStringLiteral("match") || status == QStringLiteral("partial") || status == QStringLiteral("no_match")) {
+    bool cacheable = true;
+    if (job.operation == QStringLiteral("searchAssets")) {
+        const auto candidates = data.value(QStringLiteral("candidates")).toList();
+        cacheable = candidates.size() <= MaxCandidates;
+        for (const auto& candidate : candidates)
+            if (QJsonDocument(QJsonObject::fromVariantMap(candidate.toMap())).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) { cacheable = false; break; }
+    }
+    if (cacheable && (status == QStringLiteral("match") || status == QStringLiteral("partial") || status == QStringLiteral("no_match"))) {
         m_backoff.remove(backoffKey);
         if (m_cache.size() >= MaxCache) m_cache.clear();
         m_cache.insert(key, {status, data, {}, m_clock.elapsed() + (status == QStringLiteral("no_match") ? 15000 : 60000)});
@@ -326,10 +334,12 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     if (it == m_consumers.end()) return;
     if (statusWeight(status) > statusWeight(it->status)) { it->status = status; it->error = error.left(512); }
     if (status == QStringLiteral("ambiguous")) it->ambiguous = true;
-    if (status != QStringLiteral("match") && status != QStringLiteral("partial")) return;
-    const auto target = it->context.value(QStringLiteral("identity")).toMap();
     const bool manual = it->context.value(QStringLiteral("manual")).toBool()
         || (it->operation == QStringLiteral("searchAssets") && it->context.value(QStringLiteral("interactive")).toBool());
+    const bool explicitAlternatives = status == QStringLiteral("ambiguous") && manual
+        && it->operation == QStringLiteral("searchAssets");
+    if (status != QStringLiteral("match") && status != QStringLiteral("partial") && !explicitAlternatives) return;
+    const auto target = it->context.value(QStringLiteral("identity")).toMap();
     const auto provider = registration.value(QStringLiteral("id")).toString();
     const QVariantMap provenance{{QStringLiteral("provider"), provider}, {QStringLiteral("feature"), it->feature},
         {QStringLiteral("cachePartition"), registration.value(QStringLiteral("cachePartition"))}};
@@ -338,13 +348,18 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
             if (it->candidates.size() >= MaxCandidates) break;
             auto candidate = value.toMap();
             if (candidate.value(QStringLiteral("id")).toString().isEmpty()) continue;
+            if (QJsonDocument(QJsonObject::fromVariantMap(candidate)).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) {
+                it->status = QStringLiteral("error");
+                it->error = tr("A subtitle provider returned an oversized candidate.");
+                continue;
+            }
             const auto match = compare(target, candidate.value(QStringLiteral("identity")).toMap());
             if (!manual && (match.conflict || !match.strong)) { if (!match.conflict) it->ambiguous = true; continue; }
             candidate.insert(QStringLiteral("provider"), provider);
             candidate.insert(QStringLiteral("provenance"), provenance);
             candidate.insert(QStringLiteral("hostMatch"), QVariantMap{{QStringLiteral("score"), match.score},
                 {QStringLiteral("strong"), match.strong}, {QStringLiteral("conflicts"), match.conflicts},
-                {QStringLiteral("requiresConfirmation"), match.conflict || !match.strong}});
+                {QStringLiteral("requiresConfirmation"), explicitAlternatives || match.conflict || !match.strong}});
             const auto duplicate = std::any_of(it->candidates.cbegin(), it->candidates.cend(), [&](const QVariant& other) {
                 const auto existing = other.toMap();
                 return existing.value(QStringLiteral("provider")) == provider
