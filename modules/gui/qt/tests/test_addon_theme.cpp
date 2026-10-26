@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
+#include <cmath>
 #include "addons/addon_manager.hpp"
 #include "addons/addon_theme_service.hpp"
 
@@ -47,6 +48,14 @@ class TestAddonTheme : public QObject
     }
     static QString color(const QVariantMap& tokens, const char* name)
     { return tokens.value("colors").toMap().value(QString::fromLatin1(name)).toString(); }
+    static double contrast(const QString& first, const QString& second)
+    {
+        const auto luminance = [](const QString& color) {
+            const auto channel = [&](int offset) { const auto value = color.mid(offset, 2).toInt(nullptr, 16) / 255.; return value <= .04045 ? value / 12.92 : std::pow((value + .055) / 1.055, 2.4); };
+            return .2126 * channel(1) + .7152 * channel(3) + .0722 * channel(5);
+        };
+        const auto a = luminance(first), b = luminance(second); return (std::max(a, b) + .05) / (std::min(a, b) + .05);
+    }
 private slots:
     void referenceAndBounds()
     {
@@ -62,6 +71,7 @@ private slots:
         QVERIFY(!AddonThemeService::validate(variant(document, "colors", "focus.ring", "#171923"), &error));
         QVERIFY(!AddonThemeService::validate(variant(document, "colors", "surface.hover", "#ffffff"), &error));
         QVERIFY(!AddonThemeService::validate(variant(document, "colors", "surface.selected", "#ffffff"), &error));
+        QVERIFY(!AddonThemeService::validate(variant(document, "colors", "status.danger", "#171923"), &error));
     }
     void overridesAndMissingVariants()
     {
@@ -150,6 +160,21 @@ private slots:
         platform.set("HighContrast"); QVERIFY(themes.highContrast()); QVERIFY(themes.platformHighContrast());
         QVERIFY(themes.setHighContrast(false)); QVERIFY(themes.highContrast());
         platform.set("NoPreference"); QVERIFY(!themes.highContrast());
+    }
+    void textualStatusRolesHaveContrastAcrossCoreAndAddonSurfaces()
+    {
+        for (const auto light : {false, true}) for (const auto highContrast : {false, true}) {
+            for (const auto& document : {QJsonObject{}, reference()}) {
+                const auto snapshot = AddonThemeService::resolve(document, light, QString(), highContrast);
+                for (const auto& surface : {"surface.base", "surface.panel", "surface.field", "surface.hover", "surface.selected", "surface.menu", "status.dangerBackground"})
+                    QVERIFY2(contrast(color(snapshot, "status.danger"), color(snapshot, surface)) >= 4.5, surface);
+                QVERIFY(contrast(color(snapshot, "text.onAccent"), color(snapshot, "accent.primary")) >= 4.5);
+                if (!highContrast) continue;
+                for (const auto& text : {"text.primary", "text.secondary", "text.muted", "text.disabled", "text.heading", "text.playerHeading", "accent.primary", "status.danger"})
+                    for (const auto& surface : {"surface.base", "surface.panel", "surface.field", "surface.hover", "surface.selected", "surface.menu"})
+                        QVERIFY2(contrast(color(snapshot, text), color(snapshot, surface)) >= 4.5, text);
+            }
+        }
     }
 };
 QTEST_GUILESS_MAIN(TestAddonTheme)

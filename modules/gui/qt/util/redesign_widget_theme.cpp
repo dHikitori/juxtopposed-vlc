@@ -43,7 +43,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
         const auto foreground = color("text.secondary"), bright = color("text.primary");
         const auto border = color("border.default"), hover = color("surface.hover");
         const auto accent = color("accent.primary"), focus = color("focus.ring");
-        const auto onAccent = snapshot.value(QStringLiteral("customized")).toBool() ? color("text.onAccent") : QStringLiteral("#161616");
+        const auto onAccent = color("text.onAccent");
         const auto dp = [ctx](int value) { return qRound(value * ctx->getIntfScaleFactor()); };
         // Stylesheet heights exclude padding and the two one-pixel borders.
         const int compactButtonContentHeight = std::max(0, dp(32) - 2 * dp(6) - 2);

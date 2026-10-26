@@ -46,6 +46,12 @@ double luminance(const QString& color)
 }
 double contrast(const QString& first, const QString& second)
 { const auto a = luminance(first), b = luminance(second); return (std::max(a, b) + .05) / (std::min(a, b) + .05); }
+bool readableStatus(const QString& foreground, const QVariantMap& colors)
+{
+    for (const auto& surface : {QStringLiteral("surface.base"), QStringLiteral("surface.panel"), QStringLiteral("surface.field"), QStringLiteral("surface.hover"), QStringLiteral("surface.selected")})
+        if (contrast(foreground, colors.value(surface).toString()) < 4.5) return false;
+    return true;
+}
 QVariantMap merged(const QJsonObject& variant, bool light)
 {
     auto result = defaults(light);
@@ -131,6 +137,8 @@ bool AddonThemeService::validate(const QJsonObject& document, QString* error)
             || !std::isfinite(effects.value("panelOpacity").toDouble()) || effects.value("panelOpacity").toDouble() < .85
             || effects.value("panelOpacity").toDouble() > 1)) return fail(error, tr("The theme opacity is not within the permitted limits."));
         const auto resolved = merged(variant, it.key() == QLatin1String("light")).value("colors").toMap();
+        if (colors.contains("status.danger") && !readableStatus(resolved.value("status.danger").toString(), resolved))
+            return fail(error, tr("The theme status text contrast is less than the minimum."));
         for (const auto& surface : {QStringLiteral("surface.base"), QStringLiteral("surface.panel"), QStringLiteral("surface.field"), QStringLiteral("surface.hover"), QStringLiteral("surface.selected")}) {
             if ((surface == QLatin1String("surface.hover") || surface == QLatin1String("surface.selected"))
                 && !colors.contains(surface) && !colors.contains("text.primary") && !colors.contains("text.secondary") && !colors.contains("focus.ring")) continue;
@@ -156,14 +164,19 @@ QVariantMap AddonThemeService::resolve(const QJsonObject& document, bool light, 
         colors.insert(QStringLiteral("surface.hover"), light ? "#dddddd" : "#333333");
         colors.insert(QStringLiteral("surface.selected"), light ? "#cccccc" : "#444444");
         colors.insert(QStringLiteral("text.primary"), foreground); colors.insert(QStringLiteral("text.secondary"), foreground);
-        colors.insert(QStringLiteral("accent.primary"), light ? "#005fcc" : "#ffff00");
+        colors.insert(QStringLiteral("accent.primary"), light ? "#00428f" : "#ffff00");
+        colors.insert(QStringLiteral("status.danger"), foreground);
         colors.insert(QStringLiteral("focus.ring"), colors.value("accent.primary")); colors.insert(QStringLiteral("border.default"), foreground);
         effects.insert(QStringLiteral("panelOpacity"), 1);
     }
     if (reducedTransparency) effects.insert(QStringLiteral("panelOpacity"), 1);
+    if (!readableStatus(colors.value(QStringLiteral("status.danger")).toString(), colors)) {
+        const auto fallback = light ? QStringLiteral("#681409") : QStringLiteral("#ffb4a6");
+        colors.insert(QStringLiteral("status.danger"), readableStatus(fallback, colors) ? fallback : colors.value(QStringLiteral("text.primary")));
+    }
     const auto resolvedAccent = colors.value(QStringLiteral("accent.primary")).toString();
-    colors.insert(QStringLiteral("text.onAccent"), contrast(resolvedAccent, QStringLiteral("#000000"))
-        >= contrast(resolvedAccent, QStringLiteral("#ffffff")) ? QStringLiteral("#000000") : QStringLiteral("#ffffff"));
+    colors.insert(QStringLiteral("text.onAccent"), contrast(resolvedAccent, QStringLiteral("#161616")) >= 4.5 ? QStringLiteral("#161616")
+        : contrast(resolvedAccent, QStringLiteral("#000000")) >= contrast(resolvedAccent, QStringLiteral("#ffffff")) ? QStringLiteral("#000000") : QStringLiteral("#ffffff"));
     // Read-only host roles preserve the redesigned built-in palette while mapping
     // a selected theme consistently onto QML, native dialog and menu surfaces.
     const bool customized = !variant.isEmpty() || highContrast;
