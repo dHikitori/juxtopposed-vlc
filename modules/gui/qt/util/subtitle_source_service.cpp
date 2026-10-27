@@ -78,7 +78,7 @@ void mergeSources(QVariantList& sources, const QVariantList& additions)
     }
 }
 
-const QString builtinSubtitles = QStringLiteral("vlc.builtin.opensubtitles/search");
+const QString builtinSubtitles = QStringLiteral("hakone.builtin.opensubtitles/search");
 
 QString sourceUrl(qint64 id, const QString& name)
 {
@@ -280,7 +280,7 @@ void SubtitleSourceService::refreshBuiltinRegistration()
     ++m_nativeRevision;
     if (!m_addonManager) return;
     const QVariantMap descriptor{
-        {"id", builtinSubtitles}, {"packageId", "vlc.builtin.opensubtitles"}, {"name", "OpenSubtitles"},
+        {"id", builtinSubtitles}, {"packageId", "hakone.builtin.opensubtitles"}, {"name", "OpenSubtitles"},
         {"builtin", true}, {"configured", !m_apiKey.isEmpty()}, {"enabled", true},
         {"features", QStringList{"subtitles"}}, {"mediaKinds", QStringList{"movie", "episode", "unknown"}},
         {"cachePartition", QStringLiteral("native-opensubtitles:%1").arg(m_nativeRevision)}};

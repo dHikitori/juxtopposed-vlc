@@ -100,10 +100,10 @@ TestCase {
         confirmation.accept(); compare(manager.recoveries, 1)
     }
     function test_builtinAndRemovedPackagesHaveNoRepositoryActions() {
-        manager.packages = [{id: "vlc.builtin.opensubtitles", name: "OpenSubtitles", builtin: true, installed: true},
+        manager.packages = [{id: "hakone.builtin.opensubtitles", name: "OpenSubtitles", builtin: true, installed: true},
             {id: "org.example.app", name: "App package", distributionSource: true, suppressed: true, installed: false}]; manager.revision++
         compare(page.managedPackages.length, 0)
-        verify(item("addonPackage_vlc.builtin.opensubtitles") === null)
+        verify(item("addonPackage_hakone.builtin.opensubtitles") === null)
         verify(item("addonPackage_org.example.app") === null)
         tryVerify(() => item("addonRestore_org.example.app") !== null)
     }

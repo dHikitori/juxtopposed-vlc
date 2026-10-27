@@ -431,19 +431,85 @@ private slots:
     }
     void builtinProvidersShareOrderingAndKeepDisabledPreference() {
         QTemporaryDir storage; AddonManager manager(storage.path());
-        const QVariantMap descriptor{{"id", "vlc.builtin.example/search"}, {"packageId", "vlc.builtin.example"},
+        const QVariantMap descriptor{{"id", "hakone.builtin.example/search"}, {"packageId", "hakone.builtin.example"},
             {"name", "Built-in provider"}, {"enabled", true}, {"configured", true}, {"features", QStringList{QStringLiteral("subtitles")}}};
         manager.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor);
         QCOMPARE(manager.providersForFeature(QStringLiteral("subtitles")).size(), 1);
-        QVERIFY(manager.setEnabled(QStringLiteral("vlc.builtin.example"), false));
+        QVERIFY(manager.setEnabled(QStringLiteral("hakone.builtin.example"), false));
         manager.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor);
         QVERIFY(!manager.providersForFeature(QStringLiteral("subtitles")).first().toMap().value("enabled").toBool());
-        QVERIFY(manager.setProviderOrder(QStringLiteral("subtitles"), {QStringLiteral("vlc.builtin.example/search")}));
-        QCOMPARE(manager.providerOrder(QStringLiteral("subtitles")), QStringList{QStringLiteral("vlc.builtin.example/search")});
+        QVERIFY(manager.setProviderOrder(QStringLiteral("subtitles"), {QStringLiteral("hakone.builtin.example/search")}));
+        QCOMPARE(manager.providerOrder(QStringLiteral("subtitles")), QStringList{QStringLiteral("hakone.builtin.example/search")});
         AddonManager restored(storage.path()); restored.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor);
         QVERIFY(!restored.providersForFeature(QStringLiteral("subtitles")).first().toMap().value("enabled").toBool());
-        manager.unregisterBuiltinProvider(QStringLiteral("vlc.builtin.example/search"));
+        manager.unregisterBuiltinProvider(QStringLiteral("hakone.builtin.example/search"));
         QVERIFY(manager.providersForFeature(QStringLiteral("subtitles")).isEmpty());
+    }
+    void oldBuiltinPreferencesMoveInMemoryBeforeAnExplicitSave()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("provider-order.json"));
+        const QJsonObject saved{{"subtitles", QJsonArray{"vlc.builtin.first/search", "org.example.extra/search",
+            "vlc.builtin.first/search", "vlc.builtin.second/search", "org.example.vlc.builtin.neighbor/search"}},
+            {"_builtinEnabled", QJsonObject{{"vlc.builtin.first", false}, {"vlc.builtin.second", true}, {"org.example.extra", false}}}};
+        const auto original = QJsonDocument(saved).toJson(QJsonDocument::Compact);
+        QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(original), original.size()); file.close();
+        const auto descriptor = [](const QString& name) {
+            const QString package = QStringLiteral("hakone.builtin.") + name;
+            const QString id = package + QStringLiteral("/search");
+            return QVariantMap{{"id", id}, {"packageId", package}, {"name", name}, {"configured", true}, {"enabled", true}};
+        };
+        AddonManager manager(directory.path());
+        manager.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor(QStringLiteral("second")));
+        manager.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor(QStringLiteral("first")));
+        QCOMPARE(manager.providerOrder(QStringLiteral("subtitles")), QStringList({QStringLiteral("hakone.builtin.first/search"),
+            QStringLiteral("org.example.extra/search"), QStringLiteral("hakone.builtin.second/search"), QStringLiteral("org.example.vlc.builtin.neighbor/search")}));
+        const auto providers = manager.providersForFeature(QStringLiteral("subtitles")); QCOMPARE(providers.size(), 2);
+        QCOMPARE(providers[0].toMap().value("id").toString(), QStringLiteral("hakone.builtin.first/search"));
+        QVERIFY(!providers[0].toMap().value("enabled").toBool()); QVERIFY(providers[1].toMap().value("enabled").toBool());
+        QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), original); file.close();
+        QVERIFY(manager.setEnabled(QStringLiteral("hakone.builtin.first"), true));
+        QVERIFY(file.open(QIODevice::ReadOnly)); const auto persisted = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        const auto enabled = persisted.value("_builtinEnabled").toObject();
+        QVERIFY(!enabled.contains("vlc.builtin.first")); QVERIFY(!enabled.contains("vlc.builtin.second"));
+        QVERIFY(enabled.value("hakone.builtin.first").toBool()); QVERIFY(enabled.value("hakone.builtin.second").toBool());
+        QVERIFY(!enabled.value("org.example.extra").toBool());
+        AddonManager restored(directory.path()); restored.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor(QStringLiteral("first")));
+        QVERIFY(restored.providersForFeature(QStringLiteral("subtitles")).first().toMap().value("enabled").toBool());
+    }
+    void explicitHakoneBuiltinPreferencesWinAliases_data()
+    {
+        QTest::addColumn<bool>("oldEnabled"); QTest::addColumn<bool>("enabled");
+        QTest::newRow("explicit-disabled") << true << false;
+        QTest::newRow("explicit-enabled") << false << true;
+    }
+    void explicitHakoneBuiltinPreferencesWinAliases()
+    {
+        QFETCH(bool, oldEnabled); QFETCH(bool, enabled);
+        QTemporaryDir directory; QFile file(directory.filePath(QStringLiteral("provider-order.json")));
+        const QJsonObject saved{{"subtitles", QJsonArray{"vlc.builtin.example/search", "org.example.extra/search",
+            "hakone.builtin.example/search", "vlc.builtin.example/search", "hakone.builtin.example/search"}},
+            {"_builtinEnabled", QJsonObject{{"vlc.builtin.example", oldEnabled}, {"hakone.builtin.example", enabled}}}};
+        const auto original = QJsonDocument(saved).toJson(QJsonDocument::Compact);
+        QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(original), original.size()); file.close();
+        AddonManager manager(directory.path());
+        manager.registerBuiltinProvider(QStringLiteral("subtitles"), {{"id", "hakone.builtin.example/search"},
+            {"packageId", "hakone.builtin.example"}, {"name", "Example"}, {"configured", true}, {"enabled", !enabled}});
+        QCOMPARE(manager.providerOrder(QStringLiteral("subtitles")), QStringList({QStringLiteral("org.example.extra/search"), QStringLiteral("hakone.builtin.example/search")}));
+        QCOMPARE(manager.providersForFeature(QStringLiteral("subtitles")).first().toMap().value("enabled").toBool(), enabled);
+        QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), original);
+    }
+    void liveBuiltinRegistrationRejectsLegacyAndPackageConfusion()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path());
+        for (const auto& ids : {qMakePair(QStringLiteral("vlc.builtin.example/search"), QStringLiteral("vlc.builtin.example")),
+                 qMakePair(QStringLiteral("org.hakone.example/search"), QStringLiteral("org.hakone.example")),
+                 qMakePair(QStringLiteral("hakone.builtin.example/search"), QStringLiteral("hakone.builtin.other"))})
+            manager.registerBuiltinProvider(QStringLiteral("subtitles"), {{"id", ids.first}, {"packageId", ids.second}, {"name", "Refused fixture"}});
+        QVERIFY(manager.providersForFeature(QStringLiteral("subtitles")).isEmpty());
+        const QVariantMap current{{"id", "hakone.builtin.example/search"}, {"packageId", "hakone.builtin.example"}, {"name", "Example"}, {"configured", true}};
+        manager.registerBuiltinProvider(QStringLiteral("subtitles"), current); manager.registerBuiltinProvider(QStringLiteral("subtitles"), current);
+        QCOMPARE(manager.providersForFeature(QStringLiteral("subtitles")).size(), 1);
     }
     void packageNeedsExplicitGrantAndEnable() {
         QTemporaryDir storage; AddonManager manager(storage.path());

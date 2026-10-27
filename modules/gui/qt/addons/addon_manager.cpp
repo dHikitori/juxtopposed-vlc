@@ -101,6 +101,42 @@ QString packageAccountReference(const InstalledPackage& package, const QJsonObje
 }
 QString localPart(const QString& global) { return global.section('/', 1); }
 QString packagePart(const QString& global) { return global.section('/', 0, 0); }
+QString currentBuiltinId(const QString& id)
+{
+    const auto legacy = QLatin1String("vlc.builtin.");
+    return id.startsWith(legacy) ? QString(QStringLiteral("hakone.builtin.") + id.mid(legacy.size())) : id;
+}
+QJsonObject currentBuiltinPreferences(const QJsonObject& saved)
+{
+    auto result = saved;
+    if (saved.value(QStringLiteral("_builtinEnabled")).isObject()) {
+        const auto previous = saved.value(QStringLiteral("_builtinEnabled")).toObject();
+        auto enabled = previous;
+        for (auto it = previous.begin(); it != previous.end(); ++it) {
+            const auto id = currentBuiltinId(it.key());
+            if (id == it.key()) continue;
+            if (!previous.contains(id)) enabled.insert(id, it.value());
+            enabled.remove(it.key());
+        }
+        result.insert(QStringLiteral("_builtinEnabled"), enabled);
+    }
+    for (auto it = saved.begin(); it != saved.end(); ++it) {
+        if (it.key().startsWith(QLatin1Char('_')) || !it.value().isArray()) continue;
+        const auto previous = it.value().toArray();
+        QSet<QString> explicitIds, seen;
+        for (const auto& entry : previous) if (entry.isString()) explicitIds.insert(entry.toString());
+        QJsonArray order;
+        for (const auto& entry : previous) {
+            if (!entry.isString()) { order.append(entry); continue; }
+            const auto raw = entry.toString(), id = currentBuiltinId(raw);
+            if (raw != id && explicitIds.contains(id)) continue;
+            if (id.startsWith(QLatin1String("hakone.builtin.")) && seen.contains(id)) continue;
+            seen.insert(id); order.append(id);
+        }
+        result.insert(it.key(), order);
+    }
+    return result;
+}
 }
 
 AddonManager::AddonManager(const QString& directory, QObject* parent)
@@ -123,7 +159,7 @@ AddonManager::AddonManager(const QString& directory, QObject* parent)
         *output = std::move(captured); return true;
     });
     if (!m_storage->mount(&m_hostServices)) m_storage.reset();
-    m_providerOrder = readObject(QDir(directory).filePath(QStringLiteral("provider-order.json")));
+    m_providerOrder = currentBuiltinPreferences(readObject(QDir(directory).filePath(QStringLiteral("provider-order.json"))));
     const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vlc-addon-worker")
 #ifdef Q_OS_WIN
         + QStringLiteral(".exe")
@@ -600,7 +636,7 @@ QStringList AddonManager::providerOrder(const QString& feature) const
 void AddonManager::registerBuiltinProvider(const QString& feature, const QVariantMap& input)
 {
     const auto id = input.value("id").toString(), package = input.value("packageId").toString();
-    if (!id.startsWith(QLatin1String("vlc.builtin.")) || packagePart(id) != package || feature.isEmpty()) return;
+    if (!id.startsWith(QLatin1String("hakone.builtin.")) || packagePart(id) != package || feature.isEmpty()) return;
     auto descriptor = input; descriptor.insert("builtin", true);
     auto features = descriptor.value("features").toStringList(); if (!features.contains(feature)) features.append(feature);
     descriptor.insert("features", features);

@@ -27,4 +27,7 @@ completion assertion.
 The proof compiles the actual lease implementation and fixture against the
 current normal Core thread and policy helpers. Its source hashes, executables,
 recipe, and logs are recorded in `/tmp/hakone-source-lease-validation.json`.
-The full Core and application still need a fresh build after this change.
+The normal Core rebuild now passes all 54 build actions. Its registered source
+fixture passes all 14 groups against that fresh library. The configured source
+and fixture resolve to the current worktree files, and both source hashes
+match. The full application still needs a fresh build after this change.

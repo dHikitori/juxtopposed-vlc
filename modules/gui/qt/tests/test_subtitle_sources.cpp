@@ -123,7 +123,7 @@ private slots:
         QVERIFY(client.configured());
         const auto providers = manager.providersForFeature("subtitles");
         QCOMPARE(providers.size(), 1);
-        QCOMPARE(providers[0].toMap().value("id").toString(), "vlc.builtin.opensubtitles/search");
+        QCOMPARE(providers[0].toMap().value("id").toString(), "hakone.builtin.opensubtitles/search");
         const auto sources = search(client);
         QCOMPARE(sources.size(), 2);
         const auto selected = sources[0].toMap().value("url").toString();
@@ -154,7 +154,7 @@ private slots:
         client.prepareRows(row({"addon-subtitle:/forged/not-issued.srt"}));
         QVERIFY(!result(prepared).value("success").toBool());
         QVERIFY(server.requests.isEmpty());
-        QVERIFY(manager.setEnabled("vlc.builtin.opensubtitles", false));
+        QVERIFY(manager.setEnabled("hakone.builtin.opensubtitles", false));
         QVERIFY(!client.configured());
         // Refreshing the existing key/configuration must not re-enable it.
         QVERIFY(client.setApiKey("unit-only-native-key"));
@@ -171,10 +171,10 @@ private slots:
         client.setAddonManager(&manager);
         client.setStorageDirectory(directory.filePath("subtitles"));
         QVERIFY(client.setApiKey("unit-only-native-key"));
-        manager.registerBuiltinProvider("subtitles", {{"id", "vlc.builtin.unavailable/search"},
-            {"packageId", "vlc.builtin.unavailable"}, {"name", "Unavailable fixture"}, {"enabled", true},
+        manager.registerBuiltinProvider("subtitles", {{"id", "hakone.builtin.unavailable/search"},
+            {"packageId", "hakone.builtin.unavailable"}, {"name", "Unavailable fixture"}, {"enabled", true},
             {"configured", true}, {"mediaKinds", QStringList{"episode"}}, {"cachePartition", "fixture-1"}});
-        QVERIFY(manager.setProviderOrder("subtitles", {"vlc.builtin.unavailable/search", "vlc.builtin.opensubtitles/search"}));
+        QVERIFY(manager.setProviderOrder("subtitles", {"hakone.builtin.unavailable/search", "hakone.builtin.opensubtitles/search"}));
         const auto sources = search(client);
         QCOMPARE(sources.size(), 2);
         QCOMPARE(server.requests.size(), 1);
