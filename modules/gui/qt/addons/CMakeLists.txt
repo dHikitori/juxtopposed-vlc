@@ -11,7 +11,7 @@ add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_store_authority.cpp addon_credentials.cpp
     addon_network.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
-    addon_visual_scene.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
+    addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_repository_updates.cpp addon_playable_gate.cpp addon_artwork_assets.cpp
     addon_queue_transactions.cpp addon_discovery_service.cpp addon_player_discovery.cpp addon_source_admissions.cpp addon_stream_manifest.cpp)
 target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network Threads::Threads)
@@ -22,7 +22,7 @@ if(WIN32)
 elseif(APPLE)
     target_link_libraries(vlc_addon_host PRIVATE "-framework Security")
 endif()
-foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizers host_services repository_updates playable_gate artwork_assets queue_transactions discovery_service source_admissions storage stream_manifest store_authority)
+foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers host_services repository_updates playable_gate artwork_assets queue_transactions discovery_service source_admissions storage store_authority stream_manifest)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_visual_scene.hpp"
+#include "addon_visualizer_parameters.hpp"
 #include <QJsonArray>
 #include <QPainter>
 #include <QPainterPath>
@@ -44,14 +45,15 @@ double noise(unsigned seed) { seed ^= seed >> 16; seed *= 0x7feb352du; seed ^= s
 bool AddonVisualScene::validate(const QJsonObject& scene, QString* error)
 {
     const auto fail = [&] { if (error) *error = QStringLiteral("VLC cannot use this visual scene. Use a scene that follows visualizer.scene@1."); return false; };
-    if (!keys(scene, {"contract", "background", "nodes", "assets"}) || scene.value("contract").toString() != QLatin1String("visualizer.scene@1")
+    if (!keys(scene, {"contract", "background", "nodes", "assets", "parameters"}) || scene.value("contract").toString() != QLatin1String("visualizer.scene@1")
         || !color(scene.value("background")) || !scene.value("nodes").isArray()) return fail();
     const auto assets = scene.value("assets").toObject();
     if ((scene.contains("assets") && !scene.value("assets").isObject()) || assets.size() > 16) return fail();
-    static const QRegularExpression assetId(QStringLiteral("^[a-zA-Z0-9_-]{1,64}$"));
+    static const QRegularExpression assetId(QStringLiteral("^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$"));
     for (auto it = assets.begin(); it != assets.end(); ++it) {
         const auto path = it.value().toString(); const auto parts = path.split('/');
-        if (!assetId.match(it.key()).hasMatch() || !it.value().isString() || path.size() > 240 || path.contains('\\')
+        if (!assetId.match(it.key()).hasMatch() || QStringList{"__proto__", "prototype", "constructor"}.contains(it.key())
+            || !it.value().isString() || path.size() > 240 || path.contains('\\')
             || path.contains(':') || parts.contains(QString()) || parts.contains(QStringLiteral(".")) || parts.contains(QStringLiteral(".."))) return fail();
     }
     int total = 0, particles = 0, feedback = 0;
@@ -61,7 +63,7 @@ bool AddonVisualScene::validate(const QJsonObject& scene, QString* error)
         for (const auto& value : values) {
             if (!value.isObject() || ++total > 256) return false;
             const auto node = value.toObject(); const auto type = node.value("type").toString();
-            QSet<QString> allowed{"type", "rect", "opacity"};
+            QSet<QString> allowed{"type", "id", "rect", "opacity"};
             if (type == QLatin1String("spectrum")) allowed.unite({"count", "gain", "color"});
             else if (type == QLatin1String("waveform")) allowed.unite({"points", "gain", "color", "lineWidth"});
             else if (type == QLatin1String("spectrogram")) allowed.unite({"color", "gain"});
@@ -109,7 +111,7 @@ bool AddonVisualScene::validate(const QJsonObject& scene, QString* error)
         }
         return true;
     };
-    return nodes(scene.value("nodes").toArray(), 0) ? true : fail();
+    return nodes(scene.value("nodes").toArray(), 0) && AddonVisualizerParameters::validate(scene) ? true : fail();
 }
 void AddonVisualScene::clear()
 { m_feedback = {}; m_spectrogram = {}; m_epoch = m_sequence = 0; }

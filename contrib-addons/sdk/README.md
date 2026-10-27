@@ -1,5 +1,7 @@
 # Add-on SDK
 
+See [visualizer parameters](visualizer-parameters.md) for declared numeric scene updates and their current integration limits.
+
 Use these guides for the current host contracts. The [architecture documents](../README.md) also describe future functions.
 
 | Guide | Current status |
