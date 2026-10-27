@@ -2,7 +2,11 @@
 
 This document specifies a cutover gate. The native approval record is implemented and passes its normal C suite. Its consumer mounts remain open work.
 
-The core exports `vlc_artwork_item_IsRestricted`, `vlc_artwork_item_GetURI`, and `vlc_artwork_item_SetApprovedURI`. The getter performs no image or network operation. The setter accepts a local-file URI after trusted caller validation. It does not decode or validate image bytes itself.
+The core exports `vlc_artwork_item_IsRestricted`, `vlc_artwork_item_GetURI`, `vlc_artwork_item_SetApprovedURI`, and `vlc_artwork_uri_IsLocalFile`. The getter and local-URI check perform no image or network operation. The setter accepts a local-file URI after trusted caller validation. It does not decode or validate image bytes itself.
+
+Native metadata Apply now transfers an approved result record to its original target. It allocates the proof before admission, then writes the field and its reserved revision with that proof under the same item lock. It performs no allocation after the first committed field. A text-only file URI fails the complete patch. An unapproved raw field on a restricted item counts as a missing display asset; a current approved record and ordinary native artwork remain protected.
+
+Seven native proof groups pass normally and with ASAN/UBSAN. They include valid transfer, raw fields, stale result records, foreign source/policy, protected user artwork, cancellation, and native clear. The token-limit suite also changes raw and approved artwork after proof preparation; the complete patch is refused without partial writes. The actual Qt broker/service/Apply test remains under app validation.
 
 ## Source scope
 

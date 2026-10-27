@@ -880,3 +880,10 @@ vlc_tests += {
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlc, libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_artwork',
+    'sources': files('misc/metadata_artwork.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}

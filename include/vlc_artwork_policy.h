@@ -11,6 +11,9 @@ extern "C" {
  */
 VLC_API bool vlc_artwork_item_IsRestricted(input_item_t *);
 
+/** Return true for a bounded local-file URI. No file access occurs here. */
+VLC_API bool vlc_artwork_uri_IsLocalFile(const char *);
+
 /** Return an allocated artwork URI. Ordinary native items retain their raw
  * artwork URI. A restricted item returns only a current native approval.
  * The caller frees the result. No image or network operation occurs here.

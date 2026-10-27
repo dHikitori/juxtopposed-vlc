@@ -113,6 +113,12 @@ VLC_API bool vlc_metadata_job_Complete(vlc_metadata_job_t *, int status, input_i
  * policy revocation read is the linearization point. A later cancellation or policy
  * revocation does not undo an admitted commit. No callback runs under these
  * locks. Allocate all replacement values before admission.
+ *
+ * An artwork change also needs a current native approval on the result copy.
+ * Allocate its proof before admission. Publish the proof and reserved artwork
+ * token under the same item lock. A file URI in text metadata is not proof.
+ * An unapproved raw artwork field on a restricted item is a missing display
+ * asset. A current approved record or ordinary native artwork stays protected.
  */
 VLC_API int vlc_metadata_job_Apply(vlc_metadata_job_t *, input_item_t *,
                                  uint32_t replace_fields, size_t *applied);

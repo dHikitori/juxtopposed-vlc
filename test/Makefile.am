@@ -41,6 +41,7 @@ check_PROGRAMS = \
     test_src_misc_medialibrary_work \
     test_src_misc_addon_medialibrary \
     test_src_misc_metadata_commit \
+    test_src_misc_metadata_artwork \
     test_src_misc_metadata_revision \
     test_src_input_policy \
     test_src_input_artwork_policy \
@@ -263,6 +264,9 @@ test_src_misc_addon_medialibrary_SOURCES = src/misc/addon_medialibrary.c
 
 test_src_misc_metadata_commit_SOURCES = src/misc/metadata_commit.c
 test_src_misc_metadata_commit_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_artwork_SOURCES = src/misc/metadata_artwork.c
+test_src_misc_metadata_artwork_LDADD = $(LIBVLCCORE)
 
 if HAVE_LINUX
 check_PROGRAMS += test_src_misc_metadata_commit_limit

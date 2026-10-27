@@ -10,6 +10,7 @@
 #include <vlc_metadata_revision.h>
 #include <vlc_threads.h>
 #include "../input/item.h"
+#include "../input/artwork_policy.h"
 #include "../input/metadata_revision.h"
 
 #define MAX_JSON (1024u * 1024u)
@@ -310,6 +311,7 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
         || (replace_fields >> VLC_META_TYPE_COUNT) != 0) return VLC_EINVAL;
     vlc_metadata_job_Hold(job);
     char *values[VLC_META_TYPE_COUNT] = {0};
+    struct vlc_artwork_approval artwork = {0};
     bool changes[VLC_META_TYPE_COUNT] = {0};
     unsigned count = 0;
     int status = VLC_SUCCESS;
@@ -317,11 +319,13 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
     const bool ready = job->terminal && job->status == VLC_SUCCESS;
     vlc_mutex_unlock(&job->backend->lock);
     if (!ready) { status = VLC_EINVAL; goto out; }
+    const bool missing_artwork = vlc_artwork_item_HasMissingDisplay(job->request.item);
     size_t bytes = 0;
     for (size_t i = 0; i < job->result.field_count; ++i) {
         const struct vlc_metadata_field_patch *field = &job->patches[i];
         const char *before = field->expected_value;
-        if (before != NULL && before[0] != '\0' && !(replace_fields & (UINT32_C(1) << field->type))) continue;
+        if (before != NULL && before[0] != '\0' && !(replace_fields & (UINT32_C(1) << field->type))
+            && !(field->type == vlc_meta_ArtworkURL && missing_artwork)) continue;
         changes[i] = true; ++count;
         const char *value = job->patches[i].value;
         if (value == NULL) continue;
@@ -330,6 +334,10 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
         bytes += length;
         values[i] = strdup(value);
         if (values[i] == NULL) { status = VLC_ENOMEM; goto out; }
+        if (field->type == vlc_meta_ArtworkURL) {
+            status = vlc_artwork_item_PrepareApproval(job->result.item, job->uri, job->policy, value, &artwork);
+            if (status != VLC_SUCCESS) goto out;
+        }
     }
 
     static const vlc_meta_type_t identity_fields[] = {
@@ -360,13 +368,16 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
         for (size_t i = 0; i < job->result.field_count; ++i) {
             const struct vlc_metadata_field_patch *field = &job->patches[i];
             if (!changes[i]) continue;
-            vlc_meta_SetOwnedRevision(target->p_meta, field->type, values[i], first++); values[i] = NULL;
+            const uint64_t revision = first++;
+            vlc_meta_SetOwnedRevision(target->p_meta, field->type, values[i], revision); values[i] = NULL;
+            if (field->type == vlc_meta_ArtworkURL) vlc_artwork_item_SwapApprovalLocked(target, &artwork, revision);
             if (applied != NULL) ++*applied;
         }
     }
     vlc_mutex_unlock(&target->lock);
     vlc_mutex_unlock(&job->backend->lock);
 out:
+    vlc_artwork_approval_Clear(&artwork);
     for (size_t i = 0; i < ARRAY_SIZE(values); ++i) free(values[i]);
     vlc_metadata_job_Release(job); return status;
 }

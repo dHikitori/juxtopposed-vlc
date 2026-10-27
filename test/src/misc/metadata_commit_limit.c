@@ -14,6 +14,28 @@ int metadata_limit_unused_writer(vlc_object_t *, input_item_t *);
 #include "../../../src/input/meta.c"
 #undef input_item_WriteMeta
 
+#define same_string artwork_limit_same_string
+#include "../../../src/input/artwork_policy.c"
+#undef same_string
+
+static input_item_t *artwork_mutation_target;
+static unsigned artwork_mutation_mode;
+static int prepare_artwork_then_edit(input_item_t *item, const char *source_uri, vlc_input_policy_t *policy,
+                                    const char *uri, struct vlc_artwork_approval *approval)
+{
+    const int status = vlc_artwork_item_PrepareApproval(item, source_uri, policy, uri, approval);
+    if (status == VLC_SUCCESS && artwork_mutation_target != NULL) {
+        input_item_t *target = artwork_mutation_target; artwork_mutation_target = NULL;
+        if (artwork_mutation_mode == 2)
+            assert(vlc_artwork_item_SetApprovedURI(target, "file:///user/new.png") == VLC_SUCCESS);
+        else {
+            if (artwork_mutation_mode == 1) input_item_SetArtURL(target, "https://source.example.org/other.png");
+            input_item_SetArtURL(target, "https://source.example.org/unapproved.png");
+        }
+    }
+    return status;
+}
+
 static vlc_meta_t *competing_meta;
 static bool saturate_between_writes;
 static void consume_revision(vlc_meta_t *meta, vlc_meta_type_t type, char *value, uint64_t revision)
@@ -26,13 +48,36 @@ static void consume_revision(vlc_meta_t *meta, vlc_meta_type_t type, char *value
     vlc_meta_SetOwnedRevision(meta, type, value, revision);
 }
 #define vlc_meta_SetOwnedRevision consume_revision
+#define vlc_artwork_item_PrepareApproval prepare_artwork_then_edit
 #include "../../../src/preparser/metadata_backend.c"
 #undef vlc_meta_SetOwnedRevision
+#undef vlc_artwork_item_PrepareApproval
 
 int metadata_limit_baseline_main(void);
 #define main metadata_limit_baseline_main
 #include "metadata_commit.c"
 #undef main
+
+static void artwork_edits_after_preparation_refuse_every_field(void)
+{
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        struct fixture fixture; init(&fixture);
+        input_item_SetURI(fixture.item, "vlc-addon-source:v1:asset");
+        input_item_SetArtURL(fixture.item, "https://source.example.org/unapproved.png"); start(&fixture);
+        input_item_t *result = input_item_Copy(vlc_metadata_job_GetRequest(fixture.job)->item); assert(result != NULL);
+        assert(vlc_artwork_item_SetApprovedURI(result, "file:///broker/image.png") == VLC_SUCCESS);
+        input_item_SetDescription(result, "Provider description");
+        assert(vlc_metadata_job_Complete(fixture.job, VLC_SUCCESS, result, NULL, 0)); input_item_Release(result);
+        artwork_mutation_mode = mode; artwork_mutation_target = fixture.item;
+        size_t applied = 99;
+        assert(vlc_metadata_job_Apply(fixture.job, fixture.item, 0, &applied) == -EAGAIN && applied == 0);
+        assert(artwork_mutation_target == NULL); field(fixture.item, vlc_meta_Description, NULL);
+        char *uri = vlc_artwork_item_GetURI(fixture.item);
+        if (mode == 2) assert(uri != NULL && !strcmp(uri, "file:///user/new.png"));
+        else assert(uri == NULL);
+        free(uri); clean(&fixture);
+    }
+}
 
 static void failed_range_leaves_target_unchanged(void)
 {
@@ -115,5 +160,6 @@ static void single_token_failure_retains_the_value(void)
 int main(void)
 {
     failed_range_leaves_target_unchanged(); preserved_fields_need_no_token(); exhaustion_between_writes_keeps_reserved_tokens();
-    concurrent_reservations_do_not_overlap(); single_token_failure_retains_the_value(); return 0;
+    concurrent_reservations_do_not_overlap(); single_token_failure_retains_the_value();
+    artwork_edits_after_preparation_refuse_every_field(); return 0;
 }

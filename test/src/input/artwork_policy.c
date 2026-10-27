@@ -118,10 +118,12 @@ static void local_file_uri_limits(void)
         "file:///a.png?request", "file:///a.png#fragment", "file:///a%g0.png", "file:///raw-\xff.png", "file:///raw-\xc0\xaf.png",
         "file:///", "/tmp/a.png", "", NULL};
     for (size_t i = 0; i < ARRAY_SIZE(incorrect); ++i) {
+        assert(!vlc_artwork_uri_IsLocalFile(incorrect[i]));
         assert(vlc_artwork_item_SetApprovedURI(item, incorrect[i]) == VLC_EINVAL); uri(item, artwork);
     }
     char *large = malloc(32770); assert(large != NULL); memset(large, 'a', 32769); memcpy(large, "file:///", 8); large[32769] = '\0';
     assert(vlc_artwork_item_SetApprovedURI(item, large) == VLC_EINVAL); free(large); uri(item, artwork);
+    assert(vlc_artwork_uri_IsLocalFile("FILE:///C:/cache/a%20b.png"));
     assert(vlc_artwork_item_SetApprovedURI(item, "FILE:///C:/cache/a%20b.png") == VLC_SUCCESS); uri(item, "FILE:///C:/cache/a%20b.png");
     assert(vlc_artwork_item_SetApprovedURI(item, "file:///host-cache/caf\xc3\xa9.png") == VLC_SUCCESS); uri(item, "file:///host-cache/caf\xc3\xa9.png");
     input_item_Release(item);

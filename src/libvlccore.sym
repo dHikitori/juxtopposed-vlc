@@ -1138,6 +1138,7 @@ vlc_input_policy_Has
 vlc_input_policy_CheckURL
 vlc_input_policy_CheckConnection
 vlc_artwork_item_IsRestricted
+vlc_artwork_uri_IsLocalFile
 vlc_artwork_item_GetURI
 vlc_artwork_item_SetApprovedURI
 vlc_source_lease_New
