@@ -83,7 +83,9 @@ Add a closed permission named `media.stream` with this profile:
 {"profiles": ["public-https-media@1"]}
 ```
 
-This is a new contract; the current manifest validator does not accept it.
+The manifest validator accepts this exact profile. The host approval screen
+describes its scope and the separate source approval. Other profiles and extra
+scope fields are refused. This declaration does not enable native playback.
 It grants native media GET and HEAD requests through the scoped transport.
 It does not grant a Wasm HTTP request or return media bytes to an add-on.
 The existing `network.http` permission keeps its exact API origins.

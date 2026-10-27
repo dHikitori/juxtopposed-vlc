@@ -87,7 +87,7 @@ QString originForUrl(const QUrl& url)
 bool permissions(const QJsonObject& value, QString* error)
 {
     static const QMap<QString, QSet<QString>> fields = {
-        {"metadata.context", {"fields"}}, {"media.fingerprint", {"algorithms"}},
+        {"metadata.context", {"fields"}}, {"media.fingerprint", {"algorithms"}}, {"media.stream", {"profiles"}},
         {"network.http", {"origins", "methods", "minimumIntervalMs", "assetRedirectProfiles"}}, {"network.websocket", {"origins"}},
         {"credentials.use", {"bindings"}}, {"storage.private", {"quotaBytes"}},
         {"library.read", {"fields", "collections"}}, {"queue.read", {}},
@@ -101,6 +101,9 @@ bool permissions(const QJsonObject& value, QString* error)
         if (!keys(scope, fields.value(it.key()), error, it.key())) return false;
         if (it.key() == QStringLiteral("storage.private") && !scope.contains("quotaBytes"))
             return fail(error, QStringLiteral("Private storage needs a byte limit."));
+        if (it.key() == QStringLiteral("media.stream")
+            && scope.value(QStringLiteral("profiles")) != QJsonArray{QStringLiteral("public-https-media@1")})
+            return fail(error, QStringLiteral("The media stream profile is not supported."));
         for (auto item = scope.begin(); item != scope.end(); ++item) {
             if (item.key() == QStringLiteral("minimumIntervalMs")) {
                 const auto interval = item.value().toDouble(-1);
@@ -149,7 +152,8 @@ bool permissions(const QJsonObject& value, QString* error)
                     return fail(error, QStringLiteral("A credential binding is not correct or occurs more than once."));
                 const auto protectedHeaders = QSet<QString>{"host", "connection", "content-length", "transfer-encoding", "proxy-authorization"};
                 if (protectedHeaders.contains(header.toLower())) return fail(error, QStringLiteral("The credential header is not permitted."));
-                if (websocket && (QSet<QString>{"upgrade","origin","cookie","sec-websocket-key","sec-websocket-version", "sec-websocket-protocol","sec-websocket-extensions"}.contains(header.toLower())))
+                if (websocket && (header.toLower().startsWith(QStringLiteral("sec-websocket-"))
+                    || QSet<QString>{"upgrade","origin","cookie"}.contains(header.toLower())))
                     return fail(error, QStringLiteral("The WSS credential header is not permitted."));
                 if (binding.contains("prefix")) {
                     const auto prefix = binding.value("prefix");
@@ -405,7 +409,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     if (root.contains("icon") && (!root.value("icon").isString() || !requiredResource(root.value("icon").toString(),result.files,error))) return false;
     for (const auto& contribution : result.contributions)
         if (contribution.type == QStringLiteral("visualizer")
-            && (result.permissionDeclared("network.http") || result.permissionDeclared("network.websocket")
+            && (result.permissionDeclared("network.http") || result.permissionDeclared("network.websocket") || result.permissionDeclared("media.stream")
                 || result.permissionDeclared("session.background")))
             return fail(error, QStringLiteral("Visualizer packages cannot have network or background session permissions."));
     const auto bindingScope = result.permissionScope(QStringLiteral("credentials.use"));

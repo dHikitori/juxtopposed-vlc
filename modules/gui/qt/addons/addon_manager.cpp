@@ -165,6 +165,7 @@ QVariantMap AddonManager::capabilities() const
     const QFileInfo worker(m_workerExecutable);
     return {{"workerAvailable", worker.isFile() && worker.isExecutable()}, {"workerProtocol", "wasm-message-v1"},
         {"safeMode", safeMode()}, {"coreOperations", operations}, {"networkHttpAvailable", QSslSocket::supportsSsl()},
+        {"mediaStreamAvailable", false},
         {"privateStorageAvailable", all({QStringLiteral("storage.get"), QStringLiteral("storage.set"), QStringLiteral("storage.remove")})},
         {"webSocketAvailable", all({QStringLiteral("network.websocket.open"), QStringLiteral("network.websocket.send"), QStringLiteral("network.websocket.close")})},
         {"media", media}};

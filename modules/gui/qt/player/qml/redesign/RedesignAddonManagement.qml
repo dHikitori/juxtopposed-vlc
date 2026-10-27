@@ -27,10 +27,14 @@ ColumnLayout {
     readonly property bool candidateCanRun: pendingPackage.workerRequired !== true || hostCapabilities.workerAvailable !== false
     spacing: theme.dp(10)
     onPendingPackageChanged: { enableAfterInstall = false; showTechnicalDetails = false }
-    readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background"]
+    readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "media.stream", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background"]
     readonly property bool permissionsKnown: {
         const permissions = pendingPackage.permissions || {}
         if (!Object.keys(permissions).every(name => knownPermissions.includes(name))) return false
+        const stream = permissions["media.stream"]
+        if (stream !== undefined && (!stream || Object.keys(stream).length !== 1
+            || !Array.isArray(stream.profiles) || stream.profiles.length !== 1
+            || stream.profiles[0] !== "public-https-media@1")) return false
         const scope = permissions["network.http"] || {}
         const profiles = scope.assetRedirectProfiles === undefined ? [] : scope.assetRedirectProfiles
         return Array.isArray(profiles) && profiles.every(profile => profile === "internet-archive-images@1")
@@ -57,6 +61,7 @@ ColumnLayout {
                 break
             }
             case "media.fingerprint": summaries.push(qsTr("Calculate a fingerprint for selected media.")); break
+            case "media.stream": summaries.push(qsTr("Play selected media from public online services. Each source also needs your playback approval.")); break
             case "network.http": {
                 summaries.push(qsTr("Connect to these services: %1").arg(destinations(scope.origins)))
                 if (Array.isArray(scope.assetRedirectProfiles) && scope.assetRedirectProfiles.includes("internet-archive-images@1"))
@@ -113,6 +118,7 @@ ColumnLayout {
         if (permissions["network.http"] && capabilities.networkHttpAvailable === false) limits.push(qsTr("This app cannot connect to online services for add-ons."))
         if (permissions["storage.private"] && capabilities.privateStorageAvailable === false) limits.push(qsTr("This app does not support private add-on storage."))
         if (permissions["network.websocket"] && capabilities.webSocketAvailable === false) limits.push(qsTr("This app cannot keep a live service connection for add-ons."))
+        if (permissions["media.stream"] && capabilities.mediaStreamAvailable !== true) limits.push(qsTr("This app cannot play media from discovery sources."))
         const operations = capabilities.coreOperations
         if (Array.isArray(operations)) {
             if (permissions["library.read"] && !operations.includes("library.query")) limits.push(qsTr("This app cannot give add-ons access to the media library."))

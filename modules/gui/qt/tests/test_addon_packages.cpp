@@ -436,7 +436,7 @@ private slots:
         QVERIFY(store.retainedGenerations(first.manifest.id).size() >= 2);
     }
 
-    void visualizerRejectsRequiredAndOptionalBackgroundSessions()
+    void visualizerRejectsRequiredAndOptionalNetworkOrBackgroundSessions()
     {
         auto document = manifest();
         auto api = document.value("api").toObject();
@@ -447,10 +447,12 @@ private slots:
         Manifest parsed; QString error;
         QVERIFY2(Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error), qPrintable(error));
         for (const auto* category : {"required", "optional"}) {
-            document.insert("permissions", QJsonObject{{QLatin1String(category),
-                QJsonObject{{"session.background", QJsonObject{}}}}});
-            QVERIFY(!Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error));
-            QVERIFY(error.contains(QStringLiteral("background session")));
+            for (const auto& permission : {QJsonObject{{"session.background", QJsonObject{}}},
+                    QJsonObject{{"media.stream", QJsonObject{{"profiles", QJsonArray{"public-https-media@1"}}}}}}) {
+                document.insert("permissions", QJsonObject{{QLatin1String(category), permission}});
+                QVERIFY(!Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error));
+                QVERIFY(error.contains(QStringLiteral("background session")));
+            }
         }
     }
 
@@ -665,6 +667,49 @@ private slots:
         grants.insert("queue.modify", QJsonObject{});
         QVERIFY(!store.install(candidate, grants, &error));
     }
+    void publicMediaStreamProfiles_data()
+    {
+        QTest::addColumn<QJsonObject>("scope"); QTest::addColumn<bool>("valid");
+        QTest::newRow("public-v1") << QJsonObject{{"profiles", QJsonArray{"public-https-media@1"}}} << true;
+        QTest::newRow("missing") << QJsonObject{} << false;
+        QTest::newRow("empty") << QJsonObject{{"profiles", QJsonArray{}}} << false;
+        QTest::newRow("scalar") << QJsonObject{{"profiles", "public-https-media@1"}} << false;
+        QTest::newRow("null") << QJsonObject{{"profiles", QJsonValue::Null}} << false;
+        QTest::newRow("duplicate") << QJsonObject{{"profiles", QJsonArray{"public-https-media@1", "public-https-media@1"}}} << false;
+        QTest::newRow("future-version") << QJsonObject{{"profiles", QJsonArray{"public-https-media@2"}}} << false;
+        QTest::newRow("private-network") << QJsonObject{{"profiles", QJsonArray{"private-media@1"}}} << false;
+        QTest::newRow("wildcard") << QJsonObject{{"profiles", QJsonArray{"*"}}} << false;
+        QTest::newRow("mixed") << QJsonObject{{"profiles", QJsonArray{"public-https-media@1", "private-media@1"}}} << false;
+        QTest::newRow("origin-override") << QJsonObject{{"profiles", QJsonArray{"public-https-media@1"}}, {"origins", QJsonArray{"https://example.org"}}} << false;
+        QTest::newRow("header-override") << QJsonObject{{"profiles", QJsonArray{"public-https-media@1"}}, {"headers", QJsonObject{}}} << false;
+    }
+    void publicMediaStreamProfiles()
+    {
+        QFETCH(QJsonObject, scope); QFETCH(bool, valid);
+        for (const auto* category : {"required", "optional"}) {
+            auto document = manifest();
+            document.insert("permissions", QJsonObject{{QLatin1String(category), QJsonObject{{"media.stream", scope}}}});
+            Manifest parsed; QString error;
+            QCOMPARE(Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error), valid);
+            if (valid) QCOMPARE(parsed.permissionScope(QStringLiteral("media.stream")), scope);
+            else QVERIFY(!error.isEmpty());
+        }
+    }
+    void streamPackageApprovalCannotBroadenItsProfileOrEnablePlayback()
+    {
+        QTemporaryDir source, storage; QString error;
+        auto document = manifest();
+        document.insert("permissions", QJsonObject{{"required", QJsonObject{
+            {"media.stream", QJsonObject{{"profiles", QJsonArray{"public-https-media@1"}}}}}}});
+        QVERIFY(populate(source.path(), document)); PackageCandidate candidate;
+        QVERIFY2(PackageStore::inspectDirectory(source.path(), release(), &candidate, &error), qPrintable(error));
+        PackageStore store(storage.path()); QVERIFY(!store.install(candidate, {}, &error));
+        QVERIFY(!store.install(candidate, {{"media.stream", QJsonObject{{"profiles", QJsonArray{"public-https-media@1", "private-media@1"}}}}}, &error));
+        QVERIFY2(store.install(candidate, candidate.manifest.requiredPermissions, &error), qPrintable(error));
+        QVERIFY(store.setEnabled(candidate.manifest.id, true, &error));
+        AddonManager manager(storage.path()); QVERIFY(!manager.capabilities().value("mediaStreamAvailable").toBool());
+        QVERIFY(!QFile::exists(storage.filePath(QStringLiteral("source-consent/approvals.json"))));
+    }
     void explicitWssCredentialBindings_data()
     {
         QTest::addColumn<QString>("bindingOrigin"); QTest::addColumn<QString>("capability");
@@ -678,7 +723,7 @@ private slots:
         for(const auto& value:QStringList{QStringLiteral("wss://relay.example/"),QStringLiteral("wss://relay.example:443"),
                 QStringLiteral("wss://relay.example:8443"),QStringLiteral("wss://@relay.example"),QStringLiteral("wss://relay.example?room=x"),QStringLiteral("wss://RELAY.EXAMPLE")})
             QTest::newRow(qPrintable(value))<<value<<QStringLiteral("network.websocket")<<wss<<QStringLiteral("Authorization")<<false;
-        for(const auto& value:QStringList{QStringLiteral("Upgrade"),QStringLiteral("Cookie"),QStringLiteral("Origin"),QStringLiteral("Sec-WebSocket-Key"),QStringLiteral("Sec-WebSocket-Protocol")})
+        for(const auto& value:QStringList{QStringLiteral("Upgrade"),QStringLiteral("Cookie"),QStringLiteral("Origin"),QStringLiteral("Sec-WebSocket-Key"),QStringLiteral("Sec-WebSocket-Protocol"),QStringLiteral("Sec-WebSocket-Accept"),QStringLiteral("SeC-WeBsOcKeT-Future")})
             QTest::newRow(qPrintable(value))<<wss<<QStringLiteral("network.websocket")<<wss<<value<<false;
     }
     void explicitWssCredentialBindings()

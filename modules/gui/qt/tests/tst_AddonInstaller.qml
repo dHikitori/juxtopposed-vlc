@@ -242,6 +242,35 @@ TestCase {
         wait(20)
         verify(!item("addonInstallApprove").enabled)
     }
+    function test_streamProfileReview_data() {
+        return [
+            {tag: "public-v1", scope: {profiles: ["public-https-media@1"]}, valid: true},
+            {tag: "missing", scope: {}, valid: false},
+            {tag: "empty", scope: {profiles: []}, valid: false},
+            {tag: "scalar", scope: {profiles: "public-https-media@1"}, valid: false},
+            {tag: "future", scope: {profiles: ["public-https-media@2"]}, valid: false},
+            {tag: "duplicate", scope: {profiles: ["public-https-media@1", "public-https-media@1"]}, valid: false},
+            {tag: "mixed", scope: {profiles: ["public-https-media@1", "private-media@1"]}, valid: false},
+            {tag: "extra", scope: {profiles: ["public-https-media@1"], origins: ["https://example.org"]}, valid: false},
+            {tag: "null", scope: null, valid: false}
+        ]
+    }
+    function test_streamProfileReview(data) {
+        const permissions = {"media.stream": data.scope}
+        manager.pendingPackage = {id: "org.hakone.radio", name: "Radio", permissions: permissions}
+        wait(20)
+        compare(page.permissionsKnown, data.valid)
+        compare(item("addonInstallApprove").enabled, data.valid)
+        compare(manager.approvals, 0)
+        if (!data.valid) return
+        const summary = item("addonInstallPermissionSummary")
+        compare(summary.textFormat, Text.PlainText)
+        verify(summary.text.includes("public online services"))
+        verify(summary.text.includes("Each source also needs your playback approval"))
+        verify(!summary.text.includes("public-https-media@1"))
+        verify(page.capabilityLimits({}, permissions, false).includes("cannot play media"))
+        compare(page.capabilityLimits({mediaStreamAvailable: true}, permissions, false), "")
+    }
     function test_updateUsesInstalledSourceAndStableCompatibleRange() {
         manager.packages = [{id: "org.example.radio", name: "Radio", source: "https://git.example.org/radio.git", version: "1.0.0", enabled: true, configured: true}]
         manager.revision++; wait(20)

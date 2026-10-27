@@ -18,6 +18,7 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Repository work lifetime | Staging and update checks use joined app work. Cancellation reaches each Git process without a Qt event. Eleven focused cases pass normally and with sanitizers. Package integration passes 33 cases. The runtime run passes 16 cases; a separate fresh-worker run covers its one skipped case. See [the repository lifetime contract](repository-worker-lifetime.md). |
 | App package recovery | Bundled updates and restores use captured permission review. Removal can preserve data or delete the exact package data and keys. A shared retirement hold refuses fresh readers during removal. Current checks pass 187 normal, 59 focused QML, and 87 focused sanitizer cases. Windows/macOS wallet execution and the fresh full app check remain open. See [recovery and distribution](recovery-and-distribution-contract.md). |
 | Credentials and network | OS credential store with an explicit temporary-storage option; exact origin and method scopes; DNS and public-address checks; pinned connections; redirect checks; credential removal on cross-origin redirects. Native tests pass. |
+| Native media stream permission | Packages can request only `media.stream` with `public-https-media@1`. The host describes public playback and the separate source approval; wider scopes and visualizer use are refused. Current checks pass 117 host and 29 installer UI cases. WSS handshake header names are also reserved by prefix. Playback capability remains false until the production source route passes. See [the permission contract](native-media-stream-permission.md). |
 | Guest private storage | Mounted `storage.get`, `storage.set`, and `storage.remove`; shared package quotas; account partitions; pure migrations; matching rollback snapshots. All 21 current cases pass normally and with focused sanitizers. See [the storage contract](guest-storage-contract.md) and [joined Qt work](qt-work-lifetime.md). |
 | Metadata coordinator | Ordered providers; partial field patches; provenance; strong identity checks; protected fields; bounded cache partitions; independent cancellation. Native tests pass. |
 | Episode consumer | Eleven real consumer parity cases pass. Host results retain their per-field source credit in a separate cache namespace. The old episode cache reader and local readers remain. |
@@ -77,6 +78,7 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 - The app shutdown coordinator passes 12 normal and 12 sanitizer cases. Repository work passes 11 focused cases in both builds. The joined add-on library runner passes 17 cases in both builds, and the legacy runner passes 40 normal cases. The full Qt module and its new dispatcher case remain open.
 - Joined image, storage, and visualizer work passes 153 normal cases across 11 affected suites. Storage also passes 21 focused sanitizer cases.
 - Native authority snapshots pass ten normal and ten sanitizer cases. Native revocation passes 13 normal and 13 sanitizer cases. The related normal host group passes 185 cases with no skips. Exact source admission readers pass 33 cases in both builds. These host checks do not activate the remaining production owners.
+- Joined native artwork passes 34 normal and 12 targeted sanitizer cases. Metadata service passes all 27 cases in both builds. Native cancellation controls release Core references before joined retirement ends. MainUI binds the service to the app handle and closes metadata and queue owners at the early retirement hooks; its real object compiles. The native provider owner and full app checks remain open.
 
 The Qt metadata/provider owner, selected native artwork consumers, production discovery and session mounts, the normal app rebuild, and supported-platform checks remain open. Work in progress on those gates is separate from the verified checks above.
 
@@ -203,3 +205,6 @@ Successful subtitle tests do not close the other gates. The full implementation 
 - `3ee20bc633`: bounded host-call IDs for active invocations.
 - `087ed8f117`: explicit WSS credential origin bindings.
 - `e309db2ff3`: captured app package review, removal, and saved-data cleanup.
+- `affdfe51ea`: bounded native authority revocation before store publication.
+- `fe1191e639`: mounted metadata and queue retirement connections.
+- `0546969a5d`: joined native artwork workers and metadata callback retirement.
