@@ -1145,3 +1145,7 @@ test_src_preparser_owned_pipeline_DEPENDENCIES = $(LIBVLC) $(LIBVLCCORE) $(top_b
 test_src_preparser_owned_pipeline_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_TIMEOUT=90
 endif
 endif
+
+check_PROGRAMS += test_modules_demux_id3_meta
+test_modules_demux_id3_meta_SOURCES = modules/demux/id3_meta.c
+test_modules_demux_id3_meta_LDADD = $(LIBVLCCORE)

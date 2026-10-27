@@ -556,3 +556,10 @@ if lua_filename_reader.length() > 0
                 'VLC_TEST_FILENAME_LUAC=' + vlc_build_root / 'modules/lua/meta/reader/filename.luac'],
     }
 endif
+
+vlc_tests += {
+    'name': 'test_modules_demux_id3_meta',
+    'sources': files('demux/id3_meta.c'),
+    'suite': ['modules', 'test_modules'],
+    'link_with': [libvlccore],
+}

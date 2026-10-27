@@ -89,7 +89,8 @@ static bool ID3LinkFrameTagHandler( const uint8_t *p_buf, size_t i_buf,
                 char *p_alloc = strndup(&psz[i_desclen + 1], i_len - i_desclen - 1);
                 vlc_meta_Set( p_meta, vlc_meta_ArtworkURL, p_alloc );
                 free( p_alloc );
-                *pb_updated = true;
+                if( pb_updated )
+                    *pb_updated = true;
             }
         }
         return true;
