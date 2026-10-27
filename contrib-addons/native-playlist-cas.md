@@ -67,6 +67,8 @@ A missing media record must cause a complete rollback.
 
 Source preparation uses the exact admitted `hakone-addon-source:v1:` URI. It creates the external record, file row, and initial title in one transaction. It reuses an existing exact record without changing its title. A later append failure can leave a reusable external record; it cannot leave a partial playlist append. Preparation starts no network or stream work.
 
+The retained media library patch also uses the Hakone source prefix. Its bounds use the prefix size. Old source names are refused. The updated patch applies to all eight dependency files without fuzz and recreates their current bytes. All 14 registered dependency test groups and all 19 native library adapter cases pass with the rebuilt library.
+
 Use private control query values for these operations.
 The public wrappers can call the existing `vlc_ml_control()` function.
 An old module returns unsupported through its normal unknown-query result.

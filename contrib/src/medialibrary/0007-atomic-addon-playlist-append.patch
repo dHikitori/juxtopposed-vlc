@@ -329,8 +329,8 @@ new file mode 100644
 +    output = 0;
 +    auto* concrete = dynamic_cast<MediaLibrary*>(&library);
 +    const auto control = [](unsigned char c) { return c < 32 || c == 127; };
-+    if (!concrete || !canStart() || uri.size() <= 20 || uri.size() > 12000
-+        || uri.compare(0,20,"vlc-addon-source:v1:") != 0
++    if (!concrete || !canStart() || uri.size() <= sizeof("hakone-addon-source:v1:") - 1 || uri.size() > 12000
++        || uri.compare(0,sizeof("hakone-addon-source:v1:") - 1,"hakone-addon-source:v1:") != 0
 +        || std::any_of(uri.begin(),uri.end(),[&](unsigned char c) { return c == 32 || control(c); })
 +        || title.empty() || title.size() > 2048 || std::any_of(title.begin(),title.end(),control)) return false;
 +    try {
@@ -367,7 +367,7 @@ diff --git a/src/File.cpp b/src/File.cpp
      {
 -        scheme = utils::url::scheme( mrl );
 +        // A host admission reference has no hierarchical URL authority.
-+        if ( mrl.compare( 0, 20, "vlc-addon-source:v1:" ) != 0 )
++        if ( mrl.compare( 0, sizeof("hakone-addon-source:v1:") - 1, "hakone-addon-source:v1:" ) != 0 )
 +            scheme = utils::url::scheme( mrl );
      }
      catch ( const fs::errors::UnhandledScheme& )
@@ -489,7 +489,7 @@ new file mode 100644
 +            return playlist->id();
 +        };
 +        {
-+            const std::string uri = "vlc-addon-source:v1:new-record-title"; int64_t id = -1;
++            const std::string uri = "hakone-addon-source:v1:new-record-title"; int64_t id = -1;
 +            check(prepareAddonSourceMedia(*library,uri,"Catalog title",id) && id > 0,
 +                "A new source record and its title must commit together.");
 +            const auto media = library->media(uri);
@@ -501,7 +501,7 @@ new file mode 100644
 +            ++groups;
 +        }
 +        {
-+            const std::string uri = "vlc-addon-source:v1:failed-title"; int64_t id = -1;
++            const std::string uri = "hakone-addon-source:v1:failed-title"; int64_t id = -1;
 +            sqlite::Tools::executeRequest(library->getConn(),
 +                "CREATE TRIGGER IgnoreAddonSourceTitle BEFORE UPDATE OF title ON Media "
 +                "WHEN NEW.title='Reject source title' BEGIN SELECT RAISE(IGNORE); END");
@@ -513,10 +513,10 @@ new file mode 100644
 +            ++groups;
 +        }
 +        {
-+            const std::string uri = "vlc-addon-source:v1:bounds"; int64_t id = -1;
++            const std::string uri = "hakone-addon-source:v1:bounds"; int64_t id = -1;
 +            const std::vector<std::pair<std::string,std::string>> bad{
-+                {"https://example.org/not-a-source","Title"},{"vlc-addon-source:v1:","Title"},
-+                {"vlc-addon-source:v1:space ref","Title"},{"vlc-addon-source:v1:"+std::string(11981,'a'),"Title"},
++                {"https://example.org/not-a-source","Title"},{"hakone-addon-source:v1:","Title"},{"vlc-addon-source:v1:retired","Title"},
++                {"hakone-addon-source:v1:space ref","Title"},{"hakone-addon-source:v1:"+std::string(12001 - (sizeof("hakone-addon-source:v1:") - 1),'a'),"Title"},
 +                {uri,""},{uri,std::string(2049,'a')},{uri,"Line\nbreak"},{uri,std::string("Nul\0title",9)}};
 +            for (const auto& value:bad) {
 +                id = -1; check(!prepareAddonSourceMedia(*library,value.first,value.second,id) && id == 0,
@@ -525,13 +525,13 @@ new file mode 100644
 +            { auto transaction = library->getConn()->newTransaction();
 +              check(!prepareAddonSourceMedia(*library,uri,"Title",id) && id == 0,
 +                  "Source preparation must reject a caller transaction."); transaction->commit(); }
-+            check(prepareAddonSourceMedia(*library,"vlc-addon-source:v1:"+std::string(11980,'a'),std::string(2048,'a'),id)
++            check(prepareAddonSourceMedia(*library,"hakone-addon-source:v1:"+std::string(12000 - (sizeof("hakone-addon-source:v1:") - 1),'a'),std::string(2048,'a'),id)
 +                && id > 0, "The source and title byte limits must be inclusive.");
 +            ++groups;
 +        }
 +        {
 +            const auto id = fixture(); const auto value = snapshot(*library,id);
-+            const std::string mrl = "vlc-addon-source:v1:"
++            const std::string mrl = "hakone-addon-source:v1:"
 +                "eyJhY2NvdW50UmVmZXJlbmNlIjoicHVibGljOnRlc3QiLCJmb3JtYXQiOiJ2bGMtYWRkb24tc291cmNlLXYxIiwiaXRlbUlkIjoiaXRlbSIsInNvdXJjZSI6Im9yZy5leGFtcGxlLnNvdXJjZS9zb3VyY2UifQ"
 +                ".00000000-0000-4000-8000-000000000001";
 +            const auto source = library->addExternalMedia(mrl,0);
