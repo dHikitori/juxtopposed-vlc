@@ -9,6 +9,15 @@ class TestAddonRepositoryUpdates : public QObject
     static QByteArray tag(const char* name, char object = 'a')
     { return QByteArray(40, object) + "\trefs/tags/" + name + '\n'; }
 private slots:
+    void objectFormatsMustBeConsistentAcrossTheAdvertisement()
+    {
+        QList<RepositoryTag> tags; QString error;
+        const QByteArray sha256 = QByteArray(64, 'a') + "\trefs/tags/v1.1.0\n";
+        QVERIFY(parseRepositoryTags(sha256, &tags, &error)); QCOMPARE(tags.first().objectId.size(), 64);
+        QVERIFY(!parseRepositoryTags(tag("v1.0.0") + sha256, &tags, &error));
+        QVERIFY(error.contains(QStringLiteral("object format")));
+        QVERIFY(!parseRepositoryTags(sha256 + tag("notes"), &tags, &error));
+    }
     void selectionUsesSemanticVersionAndTheChosenRange()
     {
         QList<RepositoryTag> tags; QString error; RepositoryTag selected;

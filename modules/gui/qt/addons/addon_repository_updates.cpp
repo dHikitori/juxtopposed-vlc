@@ -32,6 +32,7 @@ bool parseRepositoryTags(const QByteArray& advertisement, QList<RepositoryTag>* 
     QList<RepositoryTag> result;
     QSet<QString> names;
     int count = 0;
+    qsizetype objectWidth = 0;
     static const QRegularExpression objectId(QStringLiteral("^(?:[a-f0-9]{40}|[a-f0-9]{64})$"));
     for (auto line : advertisement.split('\n')) {
         if (line.endsWith('\r')) line.chop(1);
@@ -42,6 +43,9 @@ bool parseRepositoryTags(const QByteArray& advertisement, QList<RepositoryTag>* 
         if (fields.size() != 2 || !objectId.match(QString::fromLatin1(fields[0])).hasMatch()
             || !fields[1].startsWith("refs/tags/"))
             return fail(error, QStringLiteral("The repository tag data is not correct."));
+        if (objectWidth && objectWidth != fields[0].size())
+            return fail(error, QStringLiteral("The repository advertised more than one Git object format."));
+        objectWidth = fields[0].size();
         RepositoryTag tag;
         tag.name = QString::fromUtf8(fields[1].mid(10));
         tag.version = tag.name;

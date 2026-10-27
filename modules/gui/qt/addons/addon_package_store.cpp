@@ -180,20 +180,34 @@ public:
         if (!m_temporary.isValid())
             return fail(error, QStringLiteral("The app cannot create a private Git directory."));
         m_repo = QDir(m_temporary.path()).filePath(QStringLiteral("objects.git"));
-        return run({QStringLiteral("init"), QStringLiteral("--bare"), QStringLiteral("--template="), m_repo},
-                   nullptr, error, false);
+        return true;
+    }
+    bool initializeRepository(const QString& format, QString* error)
+    {
+        if (format != QLatin1String("sha1") && format != QLatin1String("sha256"))
+            return fail(error, QStringLiteral("The Git object format is not supported."));
+        m_format = format;
+        QStringList arguments{QStringLiteral("init"), QStringLiteral("--bare"), QStringLiteral("--template=")};
+        // SHA-1 keeps the existing command for supported tools without SHA-256.
+        // SHA-256 must succeed explicitly. Never retry with another format.
+        if (format == QLatin1String("sha256")) arguments.append(QStringLiteral("--object-format=sha256"));
+        arguments.append(m_repo);
+        return run(arguments, nullptr, error, false);
     }
     bool run(QStringList arguments, QByteArray* output, QString* error, bool repository = true,
              qint64 maximumOutput = Manifest::MaximumPackageBytes)
     {
         if (RepositoryCancellation::requested() || QThread::currentThread()->isInterruptionRequested())
             return fail(error, QStringLiteral("The Git request was canceled."));
+        const auto remaining = m_timeout - m_elapsed.elapsed();
+        if (remaining <= 0) return fail(error, QStringLiteral("The Git request reached its time limit."));
         QProcess process;
         QProcessEnvironment environment;
         const auto inherited = QProcessEnvironment::systemEnvironment();
         for (const auto& name : {QStringLiteral("PATH"), QStringLiteral("SystemRoot"),
                 QStringLiteral("WINDIR"), QStringLiteral("TEMP"), QStringLiteral("TMP"),
                 QStringLiteral("SSL_CERT_FILE"), QStringLiteral("SSL_CERT_DIR"),
+                QStringLiteral("GIT_SSL_CAINFO"),
                 QStringLiteral("HTTPS_PROXY"), QStringLiteral("https_proxy"),
                 QStringLiteral("NO_PROXY"), QStringLiteral("no_proxy")})
             if (inherited.contains(name)) environment.insert(name, inherited.value(name));
@@ -208,6 +222,7 @@ public:
         environment.insert(QStringLiteral("GIT_LFS_SKIP_SMUDGE"), QStringLiteral("1"));
         environment.insert(QStringLiteral("GIT_ATTR_NOSYSTEM"), QStringLiteral("1"));
         environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+        if (!m_format.isEmpty()) environment.insert(QStringLiteral("GIT_DEFAULT_HASH"), m_format);
         process.setProcessEnvironment(environment);
         process.setWorkingDirectory(m_temporary.path());
 #ifdef Q_OS_UNIX
@@ -229,7 +244,7 @@ public:
         if (repository) fixed << QStringLiteral("--git-dir=") + m_repo;
         fixed.append(arguments);
         process.start(m_executable, fixed, QIODevice::ReadOnly);
-        if (!process.waitForStarted(3000))
+        if (!process.waitForStarted(int(std::min<qint64>(3000, remaining))))
             return fail(error, QStringLiteral("The app cannot start the Git tool."));
         QByteArray data, diagnostic;
         while (process.state() != QProcess::NotRunning) {
@@ -262,8 +277,13 @@ public:
         return true;
     }
     bool developer = false;
+    bool withinBudget(QString* error) const
+    {
+        return m_elapsed.elapsed() <= m_timeout
+            || fail(error, QStringLiteral("The Git request reached its time limit."));
+    }
 private:
-    QString m_executable, m_repo;
+    QString m_executable, m_repo, m_format;
     QTemporaryDir m_temporary;
     QElapsedTimer m_elapsed;
     int m_timeout;
@@ -340,6 +360,7 @@ bool PackageStore::inspectDirectory(const QString& directory, const ReleaseIdent
 bool PackageStore::fetchGitTag(const QString& source, const QString& tag, PackageCandidate* output,
                               QString* error, bool developerLocalSource, int timeoutMs)
 {
+    if (output) *output = {};
     QString normalized = tag;
     if (normalized.startsWith(QLatin1Char('v'))) normalized.remove(0, 1);
     if (!SemanticVersion::parse(normalized, nullptr) || tag.contains(QLatin1Char('/'))
@@ -355,6 +376,16 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
     git.developer = developerLocalSource;
     if (!git.initialize(error)) return false;
     const QString ref = QStringLiteral("refs/tags/") + tag;
+    QByteArray advertisement;
+    if (!git.run({QStringLiteral("ls-remote"), QStringLiteral("--tags"), QStringLiteral("--refs"),
+                  QStringLiteral("--"), source, ref}, &advertisement, error, false, 8192)) return false;
+    QList<RepositoryTag> advertised;
+    if (!parseRepositoryTags(advertisement, &advertised, error)) return false;
+    if (advertised.size() != 1 || advertised.first().name != tag)
+        return fail(error, QStringLiteral("The repository did not advertise the exact release tag."));
+    const auto advertisedId = advertised.first().objectId;
+    const auto objectFormat = advertisedId.size() == 64 ? QStringLiteral("sha256") : QStringLiteral("sha1");
+    if (!git.initializeRepository(objectFormat, error)) return false;
     if (!git.run({QStringLiteral("fetch"), QStringLiteral("--depth=1"), QStringLiteral("--no-tags"),
                   QStringLiteral("--no-recurse-submodules"), QStringLiteral("--no-write-fetch-head"),
                   QStringLiteral("--"), source, ref + QLatin1Char(':') + ref}, nullptr, error))
@@ -366,12 +397,14 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
     QByteArray value;
     if (!git.run({QStringLiteral("rev-parse"), QStringLiteral("--verify"), ref}, &value, error)) return false;
     candidate.identity.tagObjectId = QString::fromLatin1(value.trimmed());
+    if (candidate.identity.tagObjectId != advertisedId)
+        return fail(error, QStringLiteral("The release tag changed during package preparation. Select the tag again."));
     if (!git.run({QStringLiteral("rev-parse"), QStringLiteral("--verify"), ref + QStringLiteral("^{commit}")},
                  &value, error)) return false;
     candidate.identity.commitId = QString::fromLatin1(value.trimmed());
-    candidate.identity.objectFormat = candidate.identity.commitId.size() == 64
-        ? QStringLiteral("sha256") : QStringLiteral("sha1");
-    if (!gitId(candidate.identity.tagObjectId) || !gitId(candidate.identity.commitId))
+    candidate.identity.objectFormat = objectFormat;
+    if (!gitId(candidate.identity.tagObjectId) || !gitId(candidate.identity.commitId)
+        || candidate.identity.commitId.size() != advertisedId.size())
         return fail(error, QStringLiteral("The resolved Git identity is not correct."));
     if (!git.run({QStringLiteral("ls-tree"), QStringLiteral("-rz"), QStringLiteral("--full-tree"),
                   candidate.identity.commitId}, &value, error)) return false;
@@ -391,7 +424,7 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
         folded.insert(path.toCaseFolded());
         if (header[0] != "100644" && header[0] != "100755")
             return fail(error, QStringLiteral("The repository contains links or submodules."));
-        if (header[1] != "blob" || !gitId(QString::fromLatin1(header[2])))
+        if (header[1] != "blob" || !gitId(QString::fromLatin1(header[2])) || header[2].size() != advertisedId.size())
             return fail(error, QStringLiteral("The git tree object is not correct."));
         objects.insert(path, QString::fromLatin1(header[2]));
     }
@@ -424,7 +457,7 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
             return fail(error, QStringLiteral("The app cannot stage the package check."));
     }
     Manifest validated;
-    if (!Manifest::loadDirectory(check.path(), &validated, nullptr, error)) return false;
+    if (!Manifest::loadDirectory(check.path(), &validated, nullptr, error) || !git.withinBudget(error)) return false;
     if (output) *output = candidate;
     return true;
 }

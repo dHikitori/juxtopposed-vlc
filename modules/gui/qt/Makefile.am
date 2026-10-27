@@ -3464,3 +3464,5 @@ EXTRA_DIST += tests/native-authority/CMakeLists.txt
 EXTRA_DIST += tests/store-authority/CMakeLists.txt
 
 EXTRA_DIST += tests/addon_native_artwork_test_owner.hpp
+
+EXTRA_DIST += tests/test_addon_git_objects.cpp tests/fixtures/addon-git-http-fixture.py
