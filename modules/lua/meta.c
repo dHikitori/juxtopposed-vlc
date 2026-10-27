@@ -40,7 +40,16 @@
 /*****************************************************************************
  * Init lua
  *****************************************************************************/
-static lua_State * init( vlc_object_t *p_this, input_item_t * p_item, const char *psz_filename )
+static void open_library(lua_State *L, const char *name, lua_CFunction function)
+{
+#if LUA_VERSION_NUM >= 502
+    luaL_requiref(L, name, function, 1); lua_pop(L, 1);
+#else
+    lua_pushcfunction(L, function); lua_pushstring(L, name); lua_call(L, 1, 0);
+#endif
+}
+
+static lua_State *init(vlc_object_t *p_this, input_item_t *p_item, bool artwork)
 {
     lua_State * L = luaL_newstate();
     if( !L )
@@ -51,29 +60,33 @@ static lua_State * init( vlc_object_t *p_this, input_item_t * p_item, const char
 
     vlclua_set_this( L, p_this );
 
-    /* Load Lua libraries */
-    luaL_openlibs( L ); /* XXX: Don't open all the libs? */
+    /* The shipped scripts need no file loader or external Lua module. */
+    open_library(L, "_G", luaopen_base);
+    open_library(L, LUA_STRLIBNAME, luaopen_string);
+    if (artwork) {
+        open_library(L, LUA_TABLIBNAME, luaopen_table);
+        open_library(L, LUA_MATHLIBNAME, luaopen_math);
+    }
+    static const char *const loaders[] = {"dofile", "loadfile", "load", "loadstring", "require", "module"};
+    for (unsigned i = 0; i < ARRAY_SIZE(loaders); ++i) { lua_pushnil(L); lua_setglobal(L, loaders[i]); }
 
     static const luaL_Reg p_reg[] = { { NULL, NULL } };
     luaL_register_namespace( L, "vlc", p_reg );
 
     luaopen_msg( L );
-    luaopen_stream( L );
-    luaopen_strings( L );
-    luaopen_variables( L );
-    luaopen_object( L );
-    luaopen_xml( L );
+    if (artwork) { luaopen_stream(L); luaopen_strings(L); }
     luaopen_input_item( L, p_item );
 
-    if( vlclua_add_modules_path( L, psz_filename ) )
-    {
-        msg_Warn( p_this, "Error while setting the module search path for %s",
-                  psz_filename );
-        lua_close( L );
-        return NULL;
-    }
-
     return L;
+}
+
+static bool selected_script(const char *filename, meta_fetcher_provider_t provider, bool reader)
+{
+    char *libdir = config_GetSysPath(VLC_PKG_LIBEXEC_DIR, NULL);
+    char *datadir = config_GetSysPath(VLC_PKG_DATA_DIR, NULL);
+    const bool selected = reader ? vlclua_metadata_reader_selected(filename, libdir, datadir)
+        : vlclua_metadata_script_selected(provider, filename, libdir, datadir);
+    free(libdir); free(datadir); return selected;
 }
 
 /*****************************************************************************
@@ -152,15 +165,9 @@ static bool validate_scope( const luabatch_context_t *p_context, meta_fetcher_sc
 static int fetch_art( vlc_object_t *p_this, const char * psz_filename,
                       const luabatch_context_t *p_context )
 {
-    if (p_context->e_provider != META_FETCHER_PROVIDER_ANY) {
-        if (p_context->e_scope != FETCHER_SCOPE_NETWORK && p_context->e_scope != FETCHER_SCOPE_ANY) return VLC_EGENERIC;
-        char *libdir = config_GetSysPath(VLC_PKG_LIBEXEC_DIR, NULL);
-        char *datadir = config_GetSysPath(VLC_PKG_DATA_DIR, NULL);
-        const bool selected = vlclua_metadata_script_selected(p_context->e_provider, psz_filename, libdir, datadir);
-        free(libdir); free(datadir);
-        if (!selected) return VLC_EGENERIC;
-    }
-    lua_State *L = init( p_this, p_context->p_item, psz_filename );
+    if (p_context->e_scope != FETCHER_SCOPE_NETWORK && p_context->e_scope != FETCHER_SCOPE_ANY) return VLC_EGENERIC;
+    if (!selected_script(psz_filename, p_context->e_provider, false)) return VLC_EGENERIC;
+    lua_State *L = init(p_this, p_context->p_item, true);
     if( !L )
         return VLC_EGENERIC;
 
@@ -210,8 +217,9 @@ static int read_meta( vlc_object_t *p_this, const char * psz_filename,
     /* FIXME: merge with finder */
     demux_meta_t *p_demux_meta = (demux_meta_t *)p_this;
     VLC_UNUSED( p_context );
+    if (!selected_script(psz_filename, META_FETCHER_PROVIDER_NONE, true)) return VLC_EGENERIC;
 
-    lua_State *L = init( p_this, p_demux_meta->p_item, psz_filename );
+    lua_State *L = init(p_this, p_demux_meta->p_item, false);
     if( !L )
         return VLC_EGENERIC;
 
@@ -222,24 +230,6 @@ static int read_meta( vlc_object_t *p_this, const char * psz_filename,
     return i_ret == VLC_SUCCESS ? VLC_EGENERIC : i_ret;
 }
 
-
-/*****************************************************************************
- * Called through lua_scripts_batch_execute to call 'fetch_meta' on the script
- * pointed by psz_filename.
- *****************************************************************************/
-static int fetch_meta( vlc_object_t *p_this, const char * psz_filename,
-                       const luabatch_context_t *p_context )
-{
-    if (p_context->e_provider != META_FETCHER_PROVIDER_ANY) return VLC_EGENERIC;
-    lua_State *L = init( p_this, p_context->p_item, psz_filename );
-    if( !L )
-        return VLC_EGENERIC;
-
-    int ret = run(p_this, psz_filename, L, "fetch_meta", p_context);
-    lua_close( L );
-
-    return ret;
-}
 
 /*****************************************************************************
  * Read meta.
@@ -261,14 +251,8 @@ int ReadMeta( demux_meta_t *p_this )
 
 int FetchMeta( meta_fetcher_t *p_finder )
 {
-    if( lua_Disabled( p_finder ) || p_finder->e_provider == META_FETCHER_PROVIDER_NONE )
-        return VLC_EGENERIC;
-
-    luabatch_context_t context = {.p_item=p_finder->p_item, .e_scope=p_finder->e_scope,
-        .pf_validator=validate_scope, .e_provider=p_finder->e_provider};
-
-    return vlclua_scripts_batch_execute( VLC_OBJECT(p_finder), "meta"DIR_SEP"fetcher",
-                                         &fetch_meta, (void*)&context );
+    /* Core ships no Lua metadata fetcher. Do not scan an add-on directory. */
+    VLC_UNUSED(p_finder); return VLC_EGENERIC;
 }
 
 

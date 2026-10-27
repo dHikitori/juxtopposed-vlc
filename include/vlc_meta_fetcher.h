@@ -28,8 +28,8 @@ typedef enum meta_fetcher_scope_t
     FETCHER_SCOPE_ANY     = 0x03
 } meta_fetcher_scope_t;
 
-/** A native selector. ANY preserves the unowned legacy batch. NONE permits
- * no Lua provider file. The named values select one app-shipped art provider
+/** A native selector. ANY permits the four app-shipped art providers. NONE
+ * permits no Lua provider file. The named values select one shipped provider
  * before Lua state creation or file execution. They grant no network access.
  */
 typedef enum meta_fetcher_provider_t

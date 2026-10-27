@@ -260,6 +260,10 @@ if BUILD_LUA
 check_PROGRAMS += test_modules_lua_meta_selector_runtime
 test_modules_lua_meta_selector_runtime_SOURCES = modules/lua/meta_selector_runtime.c
 test_modules_lua_meta_selector_runtime_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_modules_lua_meta_selector_runtime_DEPENDENCIES = $(top_builddir)/share/lua/meta/reader/filename.luac
+test_modules_lua_meta_selector_runtime_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_FILENAME_LUAC="$(abs_top_builddir)/share/lua/meta/reader/filename.luac"
+$(top_builddir)/share/lua/meta/reader/filename.luac: $(top_srcdir)/share/lua/meta/reader/filename.lua
+	$(AM_V_GEN)$(MAKE) -C "$(top_builddir)/share" lua/meta/reader/filename.luac
 endif
 
 test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c

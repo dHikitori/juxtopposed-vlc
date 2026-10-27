@@ -544,11 +544,15 @@ vlc_tests += {
     'link_with': [libvlccore],
 }
 
-vlc_tests += {
-    'name': 'test_modules_lua_meta_selector_runtime',
-    'sources': files('lua/meta_selector_runtime.c'),
-    'suite': ['modules', 'test_modules', 'addons'],
-    'link_with': [libvlc, libvlccore],
-    'module_depends': ['lua'],
-    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
-}
+if lua_filename_reader.length() > 0
+    vlc_tests += {
+        'name': 'test_modules_lua_meta_selector_runtime',
+        'sources': files('lua/meta_selector_runtime.c'),
+        'suite': ['modules', 'test_modules', 'addons'],
+        'link_with': [libvlc, libvlccore],
+        'module_depends': ['lua'],
+        'depends': lua_filename_reader,
+        'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules',
+                'VLC_TEST_FILENAME_LUAC=' + vlc_build_root / 'modules/lua/meta/reader/filename.luac'],
+    }
+endif
