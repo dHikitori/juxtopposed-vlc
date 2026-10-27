@@ -496,6 +496,66 @@ bool vlc_metadata_job_Complete(vlc_metadata_job_t *job, int status, input_item_t
     return won;
 }
 
+/* The backend and target locks are held, in that order. This function has
+ * no allocation, callback, or revision reservation. The caller performs the
+ * final policy read at its admission point. */
+static int target_current_locked(vlc_metadata_job_t *job, input_item_t *target,
+    bool native_guard, uint32_t *native_fields)
+{
+    static const vlc_meta_type_t identity_fields[] = {
+        vlc_meta_Title, vlc_meta_Artist, vlc_meta_Album, vlc_meta_AlbumArtist,
+        vlc_meta_Date, vlc_meta_TrackID, vlc_meta_TrackNumber, vlc_meta_DiscNumber,
+        vlc_meta_ShowName, vlc_meta_Season, vlc_meta_Episode,
+    };
+    if (job->backend->closed || job->commit_cancelled) return -EINTR;
+    if (job->backend->suspensions != 0) return -EAGAIN;
+    if (target->p_meta == NULL || !same_string(job->uri, target->psz_uri)
+        || job->policy != item_owner(target)->input_policy
+        || vlc_meta_ExtraRevision(target->p_meta) != job->baseline.extra) return -EAGAIN;
+    for (size_t i = 0; i < ARRAY_SIZE(identity_fields); ++i) {
+        const vlc_meta_type_t type = identity_fields[i];
+        if (vlc_meta_FieldRevision(target->p_meta, type) != job->baseline.fields[type]) return -EAGAIN;
+    }
+    for (size_t i = 0; i < job->result.field_count; ++i) {
+        const struct vlc_metadata_field_patch *field = &job->patches[i];
+        if (field->expected_revision == UINT64_MAX
+            || vlc_meta_FieldRevision(target->p_meta, field->type) != field->expected_revision
+            || !same_string(field->expected_value, vlc_meta_Get(target->p_meta, field->type))) return -EAGAIN;
+    }
+    if (native_guard || job->local_prepared) {
+        const uint32_t guarded = (*native_fields & ~VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_EPG))
+            | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_URI) | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_NAME)
+            | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_OPTIONS);
+        for (unsigned i = 0; i < VLC_ITEM_PARSE_FIELD_COUNT; ++i) {
+            const uint64_t current = item_owner(target)->parse_revisions.fields[i];
+            if ((guarded & VLC_ITEM_PARSE_BIT(i)) && (current == UINT64_MAX
+                || current != job->native_baseline.fields[i])) return -EAGAIN;
+            if (i != VLC_ITEM_PARSE_EPG && (*native_fields & VLC_ITEM_PARSE_BIT(i))
+                && current >= UINT64_MAX - 1) return -EAGAIN;
+        }
+        /* A live EPG update has precedence. It does not block other facts. */
+        const uint64_t epg = item_owner(target)->parse_revisions.fields[VLC_ITEM_PARSE_EPG];
+        if (epg >= UINT64_MAX - 1 || epg != job->native_baseline.fields[VLC_ITEM_PARSE_EPG])
+            *native_fields &= ~VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_EPG);
+    }
+    return VLC_SUCCESS;
+}
+bool vlc_metadata_job_IsCurrentFor(vlc_metadata_job_t *job, input_item_t *target)
+{
+    if (job == NULL || target == NULL || target != job->target) return false;
+    vlc_mutex_lock(&job->backend->lock);
+    bool current = job->local && job->started && job->listed && !job->applying && !job->sealed
+        && (!job->terminal || job->status == VLC_SUCCESS);
+    if (current) {
+        uint32_t native_fields = job->local_prepared ? job->local_delta.fields : 0;
+        vlc_mutex_lock(&target->lock);
+        current = target_current_locked(job, target, true, &native_fields) == VLC_SUCCESS
+            && !vlc_input_policy_IsRevoked(job->policy);
+        vlc_mutex_unlock(&target->lock);
+    }
+    vlc_mutex_unlock(&job->backend->lock); return current;
+}
+
 int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
                            uint32_t replace_fields, size_t *applied)
 {
@@ -543,48 +603,13 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
         }
     }
 
-    static const vlc_meta_type_t identity_fields[] = {
-        vlc_meta_Title, vlc_meta_Artist, vlc_meta_Album, vlc_meta_AlbumArtist,
-        vlc_meta_Date, vlc_meta_TrackID, vlc_meta_TrackNumber, vlc_meta_DiscNumber,
-        vlc_meta_ShowName, vlc_meta_Season, vlc_meta_Episode,
-    };
     vlc_mutex_lock(&job->backend->lock);
     vlc_mutex_lock(&target->lock);
-    if (job->backend->closed || job->commit_cancelled) status = -EINTR;
-    else if (job->backend->suspensions != 0) status = -EAGAIN;
-    else if (target->p_meta == NULL || !same_string(job->uri, target->psz_uri)
-        || job->policy != item_owner(target)->input_policy
-        || vlc_meta_ExtraRevision(target->p_meta) != job->baseline.extra) status = -EAGAIN;
-    for (size_t i = 0; status == VLC_SUCCESS && i < ARRAY_SIZE(identity_fields); ++i) {
-        const vlc_meta_type_t type = identity_fields[i];
-        if (vlc_meta_FieldRevision(target->p_meta, type) != job->baseline.fields[type]) status = -EAGAIN;
-    }
-    for (size_t i = 0; status == VLC_SUCCESS && i < job->result.field_count; ++i) {
-        const struct vlc_metadata_field_patch *field = &job->patches[i];
-        if (field->expected_revision == UINT64_MAX
-            || vlc_meta_FieldRevision(target->p_meta, field->type) != field->expected_revision
-            || !same_string(field->expected_value, vlc_meta_Get(target->p_meta, field->type))) status = -EAGAIN;
-    }
     uint32_t native_fields = job->local_prepared ? job->local_delta.fields : 0;
+    status = target_current_locked(job, target, false, &native_fields);
     const bool extra = job->local_prepared && job->local_delta.extras;
     const bool local_status = job->local_prepared && job->local_delta.status && target->p_meta != NULL
         && vlc_meta_StatusRevision(target->p_meta) == job->status_baseline;
-    if (job->local_prepared && status == VLC_SUCCESS) {
-        const uint32_t guarded = (native_fields & ~VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_EPG))
-            | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_URI) | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_NAME)
-            | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_OPTIONS);
-        for (unsigned i = 0; i < VLC_ITEM_PARSE_FIELD_COUNT; ++i) {
-            const uint64_t current = item_owner(target)->parse_revisions.fields[i];
-            if ((guarded & VLC_ITEM_PARSE_BIT(i)) && (current == UINT64_MAX
-                || current != job->native_baseline.fields[i])) status = -EAGAIN;
-            if (i != VLC_ITEM_PARSE_EPG && (native_fields & VLC_ITEM_PARSE_BIT(i))
-                && current >= UINT64_MAX - 1) status = -EAGAIN;
-        }
-        /* A live EPG update has precedence. It does not block other facts. */
-        const uint64_t epg = item_owner(target)->parse_revisions.fields[VLC_ITEM_PARSE_EPG];
-        if (epg >= UINT64_MAX - 1 || epg != job->native_baseline.fields[VLC_ITEM_PARSE_EPG])
-            native_fields &= ~VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_EPG);
-    }
     uint64_t first = 0;
     if (status == VLC_SUCCESS && !vlc_meta_ReserveRevisions(count + extra + local_status, &first)) status = -EAGAIN;
     if (status == VLC_SUCCESS && vlc_input_policy_IsRevoked(job->policy)) status = -EACCES;

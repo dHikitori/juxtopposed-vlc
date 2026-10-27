@@ -18,6 +18,15 @@ struct vlc_metadata_local_events {
  * it omits info groups, EPG, and statistics. */
 VLC_API input_item_t *vlc_metadata_job_CopyLocalItem(vlc_metadata_job_t *);
 
+/* Read the native anchor's current target state without I/O or callbacks.
+ * The caller holds the job and exact target. A pending or retained-complete
+ * successful local anchor can pass. Cancel, closed or suspended backend, an
+ * Apply attempt, changed identity/extra/result-field tokens, and URI/name/
+ * option revisions refuse. Proposed native facts use the Apply rules. Live
+ * statistics and EPG time do not block this query. It reserves no token and
+ * grants no write authority. Apply must validate again after a file write. */
+VLC_API bool vlc_metadata_job_IsCurrentFor(vlc_metadata_job_t *, input_item_t *exact_target);
+
 /* Seal the local facts before any remote stage. parsed must be the exact
  * CopyLocalItem result. Call once, while the anchor is pending. On success,
  * copy subtree nodes and hold attachment references. The caller retains all

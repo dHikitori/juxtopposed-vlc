@@ -443,9 +443,7 @@ test_src_preparser_subtree_identity_SOURCES = src/preparser/subtree_identity.c
 test_src_preparser_subtree_identity_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_playlist_preparse_depth_SOURCES = src/playlist/preparse_depth.c
 test_src_playlist_preparse_depth_LDADD = $(LIBVLCCORE) $(LIBVLC)
-test_src_preparser_fetcher_shutdown_SOURCES = src/preparser/fetcher_shutdown.c \
-    ../src/preparser/art.c ../src/misc/interrupt.c ../src/misc/objects.c \
-    ../src/misc/variables.c ../src/input/item.c ../src/input/policy.c ../src/text/strings.c
+test_src_preparser_fetcher_shutdown_SOURCES = src/preparser/fetcher_shutdown.c
 test_src_preparser_fetcher_shutdown_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_preparser_fetcher_shutdown_LDADD = $(LIBVLCCORE) $(LIBVLC) ../compat/libcompat.la $(SOCKET_LIBS)
 test_src_preparser_artwork_fallback_SOURCES = src/preparser/artwork_fallback.c
@@ -1098,3 +1096,20 @@ test_src_misc_metadata_request_guard_LDADD = $(LIBVLCCORE)
 test_src_misc_metadata_request_events_SOURCES = src/misc/metadata_request_events.c
 test_src_misc_metadata_request_events_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_request_events_LDADD = $(LIBVLCCORE)
+
+if HAVE_LINUX
+check_PROGRAMS += test_src_misc_metadata_local_current test_src_misc_metadata_preparser_internal test_src_misc_metadata_preparser_runtime
+test_src_misc_metadata_local_current_SOURCES = src/misc/metadata_local_current.c src/misc/metadata_local_setters.c
+test_src_misc_metadata_local_current_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_local_current_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_local_current_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_local_current_LDADD = $(LIBVLCCORE)
+test_src_misc_metadata_preparser_internal_SOURCES = src/misc/metadata_preparser_internal.c src/misc/metadata_preparser_setters.c
+test_src_misc_metadata_preparser_internal_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_preparser_internal_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_preparser_internal_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_preparser_internal_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_misc_metadata_preparser_runtime_SOURCES = src/misc/metadata_preparser_runtime.c
+test_src_misc_metadata_preparser_runtime_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_misc_metadata_preparser_runtime_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_TIMEOUT=90
+endif

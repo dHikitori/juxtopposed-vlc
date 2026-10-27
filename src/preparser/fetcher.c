@@ -100,7 +100,9 @@ static struct task *TaskHold(struct task *task)
 { vlc_atomic_rc_inc(&task->refs); return task; }
 static bool TaskCurrent(struct task *task)
 {
-    return !atomic_load(&task->cancelled)
+    return !(task->mode == FETCH_LEGACY && task->local != NULL
+            && !var_InheritBool(task->fetcher->owner, "metadata-network-access"))
+        && !atomic_load(&task->cancelled)
         && !atomic_load(&task->interrupt.killed)
         && (task->legacy == NULL || !atomic_load(&vlc_metadata_legacy_Interrupt(task->legacy)->killed))
         && (task->local == NULL || vlc_metadata_pipeline_stage_IsCurrent(task->local))
@@ -339,8 +341,8 @@ static void TaskLeave(struct task *task)
 static void NotifyArtFetchEnded(struct task *task, bool fetched, int status)
 {
     if (!TaskCurrent(task)) { fetched = false; status = -EINTR; }
-    if (task->mode == FETCH_OWNED_LOCAL) vlc_metadata_pipeline_stage_Done(task->local, status);
-    else if (task->mode == FETCH_NAMED_PROVIDER) task->probe(task->item, status, task->userdata);
+    if (task->probe != NULL) task->probe(task->item, status, task->userdata);
+    else if (task->mode == FETCH_OWNED_LOCAL) vlc_metadata_pipeline_stage_Done(task->local, status);
     else if (task->cbs != NULL && task->cbs->on_art_fetch_ended != NULL)
         task->cbs->on_art_fetch_ended(task->item, fetched, task->userdata);
 }
@@ -534,6 +536,22 @@ int input_fetcher_PushLocal(input_fetcher_t *fetcher, vlc_metadata_pipeline_stag
     return Submit(fetcher, fetcher->executor_local, vlc_metadata_pipeline_stage_GetItem(stage),
         VLC_PREPARSER_TYPE_FETCHMETA_LOCAL, NULL, NULL, stage, FETCH_OWNED_LOCAL,
         META_FETCHER_PROVIDER_NONE, stage, NULL, NULL, NULL);
+}
+
+int input_fetcher_PushNative(input_fetcher_t *fetcher, vlc_metadata_pipeline_stage_t *stage,
+    input_item_t *item, bool legacy, input_fetcher_probe_cb callback, void *userdata)
+{
+    if (fetcher == NULL || stage == NULL || item == NULL || callback == NULL) return VLC_EINVAL;
+    if (!vlc_metadata_pipeline_stage_IsCurrent(stage)) return -EINTR;
+    if (legacy) {
+        if (!vlc_metadata_pipeline_stage_LegacyAllowed(stage) || vlc_artwork_item_IsRestricted(item) || fetcher->executor_network == NULL
+            || !var_InheritBool(fetcher->owner, "metadata-network-access")) return -EACCES;
+    } else if (item != vlc_metadata_pipeline_stage_GetItem(stage) || fetcher->executor_local == NULL) return VLC_EINVAL;
+    return Submit(fetcher, legacy ? fetcher->executor_network : fetcher->executor_local, item,
+        legacy ? VLC_PREPARSER_TYPE_FETCHMETA_NET : VLC_PREPARSER_TYPE_FETCHMETA_LOCAL,
+        NULL, userdata, stage, legacy ? FETCH_LEGACY : FETCH_OWNED_LOCAL,
+        legacy ? META_FETCHER_PROVIDER_ANY : META_FETCHER_PROVIDER_NONE,
+        stage, NULL, callback, NULL);
 }
 
 int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,

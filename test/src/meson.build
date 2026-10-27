@@ -386,10 +386,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name' : 'test_src_preparser_fetcher_shutdown',
-    'sources' : files('preparser/fetcher_shutdown.c',
-        '../../src/preparser/art.c', '../../src/misc/interrupt.c',
-        '../../src/misc/objects.c', '../../src/misc/variables.c',
-        '../../src/input/item.c', '../../src/input/policy.c', '../../src/text/strings.c'),
+    'sources' : files('preparser/fetcher_shutdown.c'),
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
     'include_directories' : include_directories('../../src'),
@@ -995,4 +992,38 @@ vlc_tests += {
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_local_current',
+    'sources': files('misc/metadata_local_current.c', 'misc/metadata_local_setters.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_preparser_internal',
+    'sources': files('misc/metadata_preparser_internal.c', 'misc/metadata_preparser_setters.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_preparser_runtime',
+    'sources': files('misc/metadata_preparser_runtime.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['filesystem', 'wav', 'playlist', 'lua'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules', 'VLC_TEST_TIMEOUT=90'],
+    'depends': lua_filename_reader,
+    'timeout': 90,
+    'enabled': host_system == 'linux',
 }

@@ -2,22 +2,14 @@
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
-#include <vlc/vlc.h>
-#include <vlc_common.h>
-#undef NDEBUG
-#include <assert.h>
-#include "../../../lib/libvlc_internal.h"
-#include <vlc_atomic.h>
-const char vlc_module_name[] = "fetcher-shutdown-test";
-/* These fixtures have no per-item options. The configuration registry is
- * private to the core and is not part of the stage-cancellation test. */
-bool config_IsSafe(const char *name);
-bool config_IsSafe(const char *name) { (void)name; return false; }
+int metadata_fetcher_fixture_main(void);
+#define main metadata_fetcher_fixture_main
+#include "../misc/metadata_fetcher.c"
+#undef main
+#include "../../../src/preparser/metadata_request_guard.c"
 
-/* The fetcher is private to the core. Exercise its stage handoff directly,
- * without a module loader or a network service controlling the timing. */
-#include "../../../src/preparser/fetcher.c"
-
+/* Use the real native executors. The inherited I/O fixture is outside these
+ * blocked stages. No service or module controls the cancellation order. */
 struct test_context {
     input_fetcher_t *fetcher;
     vlc_executor_t *next;
@@ -37,7 +29,7 @@ static void on_ended(input_item_t *item, bool fetched, void *opaque)
         vlc_sem_post(&ctx->cancelled);
 }
 
-static const input_fetcher_callbacks_t callbacks = {
+static const input_fetcher_callbacks_t shutdown_callbacks = {
     .on_art_fetch_ended = on_ended,
 };
 
@@ -45,18 +37,19 @@ static void blocked_stage(void *opaque)
 {
     struct task *task = opaque;
     struct test_context *ctx = task->userdata;
-    vlc_interrupt_set(&task->interrupt);
+    assert(TaskEnter(task));
     vlc_sem_post(&ctx->started);
     vlc_sem_wait(&ctx->resume);
 
     /* Deletion cancels queued work and interrupts this running stage. Even
      * if the stage finishes its search, it must not enqueue a successor. */
     assert(vlc_killed());
+    TaskLeave(task);
     int ret = Submit(ctx->fetcher, ctx->next, task->item, task->options,
-                     task->cbs, task->userdata);
-    assert(ret == VLC_EGENERIC);
-    NotifyArtFetchEnded(task, false);
-    vlc_interrupt_set(NULL);
+                     task->cbs, task->userdata, ctx, FETCH_LEGACY,
+                     META_FETCHER_PROVIDER_ANY, NULL, NULL, NULL, task);
+    assert(ret == -EINTR);
+    NotifyArtFetchEnded(task, false, -EINTR);
     FetcherRemoveTask(ctx->fetcher, task);
     TaskDelete(task);
 }
@@ -84,17 +77,23 @@ static void check_shutdown(vlc_object_t *owner, bool network_stage,
     atomic_init(&ctx.completions, 0);
     vlc_executor_t *first = network_stage ? ctx.fetcher->executor_network
                                          : ctx.fetcher->executor_local;
+    int status;
     struct task *task = TaskNew(ctx.fetcher, first, running,
-                               VLC_PREPARSER_TYPE_FETCHMETA_ALL, &callbacks, &ctx);
+                               VLC_PREPARSER_TYPE_FETCHMETA_ALL, &shutdown_callbacks, &ctx,
+                               &ctx, FETCH_LEGACY, META_FETCHER_PROVIDER_ANY,
+                               NULL, NULL, NULL, &status);
     assert(task);
     task->runnable.run = blocked_stage;
     vlc_mutex_lock(&ctx.fetcher->lock);
     vlc_list_append(&task->node, &ctx.fetcher->submitted_tasks);
+    task->listed = task->retained = true; ++ctx.fetcher->retained;
     vlc_executor_Submit(first, &task->runnable);
     vlc_mutex_unlock(&ctx.fetcher->lock);
     vlc_sem_wait(&ctx.started);
     assert(Submit(ctx.fetcher, first, ctx.queued,
-                  VLC_PREPARSER_TYPE_FETCHMETA_ALL, &callbacks, &ctx) == VLC_SUCCESS);
+                  VLC_PREPARSER_TYPE_FETCHMETA_ALL, &shutdown_callbacks, &ctx,
+                  &ctx, FETCH_LEGACY, META_FETCHER_PROVIDER_ANY,
+                  NULL, NULL, NULL, NULL) == VLC_SUCCESS);
 
     vlc_thread_t deleting;
     int ret = vlc_clone(&deleting, delete_fetcher, ctx.fetcher);
@@ -109,6 +108,7 @@ static void check_shutdown(vlc_object_t *owner, bool network_stage,
 
 int main(void)
 {
+    native_executors = true;
     /* The test runner supplies the timeout on every platform. */
     const char *args[] = { "--quiet", "--no-media-library", "--fetch-art-threads=1" };
     libvlc_instance_t *vlc = libvlc_new(ARRAY_SIZE(args), args);

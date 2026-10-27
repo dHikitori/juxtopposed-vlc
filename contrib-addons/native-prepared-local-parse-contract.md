@@ -1,8 +1,9 @@
 # Prepared native parse output
 
-This stage is a prerequisite for the owned preparser route. It does not mount
-that route. The native provider families and the existing preparser remain in
-place. The MainUI metadata owner stays inactive for Core parse requests.
+The native delta and request guard are available in Core. The internal
+preparser mount now uses them. The external parent mount remains a separate
+stage. The native provider families remain in place. The MainUI metadata owner
+stays inactive for Core parse requests until consumer and provider parity pass.
 
 The host can use these private Core functions:
 
@@ -114,17 +115,79 @@ directory option parser has an abort-only test guard. A test cannot pass if it
 calls that guard. This two-object closure passes all six limit groups against
 the fresh Core library. It requires no new production export or fault hook.
 
+## Internal request mount
+
+The internal preparser submits each parse or fetch request through
+`vlc_metadata_pipeline_PushRequest`. A retained local anchor precedes native
+work. `CopyLocalItem` supplies the parser's exact private item. Parser subtrees
+and attachments enter the bounded request collector. They cannot reach a
+public callback before final admission.
+
+The native front stage first uses local readers and caches with
+`META_FETCHER_PROVIDER_NONE`. If the initial owner decision was never-owned
+`VLC_ENOENT`, a separate legacy artwork copy can use the native lease. The
+four shipped provider families remain available through that path. An owner
+or consent transition discards that copy and keeps the native local result.
+An owned, closed, or suspended profile never acquires that lease. Local output
+remains available with network access disabled.
+
+The parent seals local facts and sidebands after native I/O ends. An owned
+backend can then run its native artwork and ranked remote stages. One final
+request guard admits the full result and takes its sidebands under the same
+lock. A late cancellation cannot relabel the admitted result or remove those
+sidebands. Public callbacks run outside this lock. Each subtree root binds to
+the original request item before its callback.
+
+The request stays on the parent list through `on_ended`. A separate provider
+reference retains its request and parent state until native I/O ends. Cancel
+covers queued parse work, active parse work, queued or active fetch work, and
+owned remote work. Parent Delete closes the pipeline before native executor
+waits. A native callback never needs a Qt event to release its request.
+
+The controlled internal fixture uses the real request, fetcher, pipeline,
+backend, snapshot, delta, and final Apply code. Its native parser, module I/O,
+and executor schedule are controlled. Its unused thumbnail entry points
+abort. The thin item-source closure supplies the real private status setters;
+shared Core owns the metadata token sequence. Ten groups and 19 scenarios
+pass normally and with ASAN/UBSAN and leak diagnostics. Native file and
+attachment results retain their fetched status without a downloader. The
+existing native shutdown fixture also passes 60 cases with real executors.
+This evidence does not prove file-format parity.
+
+The separate application fixture uses the public preparser API and real
+native WAV and playlist modules. It tests tracks, duration, complete baseline
+retention, subtree root identity, and local output with absent, closed, and
+suspended owners. Its eight cases pass through the fresh normal Core. All nine
+affected normal target groups pass, including the prewrite query, controlled
+internal request fixture, legacy artwork fallback, native shutdown, pipeline,
+fetcher, local-result, and standard commit tests.
+
+Request release and cancellation retain their callback-safe behavior. Call
+preparser Delete outside its running executor callbacks. A synchronous Delete
+from that same worker can wait on itself in the existing executor. This mount
+does not grant that broader callback contract.
+
+## Native prewrite query
+
+`vlc_metadata_job_IsCurrentFor` reads the exact native target under the backend
+and item locks. It has no allocation, I/O, callback, or token reservation. It
+accepts pending and retained-complete successful local anchors before their
+one Apply attempt. It refuses cancellation, a closed or suspended backend,
+changed identity, extra tags, result-field tokens, proposed native facts, or
+URI/name/option revisions. It also refuses changed or revoked policy. Live
+statistics, EPG time, and unrelated metadata retain the Apply rules.
+
+A native artwork receipt can use this query before a tag-file write. The query
+grants no write or approval authority. It cannot guarantee that a later commit
+will pass. The final Apply must validate again. Repeated queries do not consume
+the anchor. The five-group native query fixture has 17 scenarios.
+
 ## Remaining mount gates
 
-- Use the full native snapshot at both parent preparser entries. Keep the remote
+- Use the full native snapshot at the external parent entry. Keep the remote
   stage visible to parent cancellation, including the external child handoff.
-- Preserve local and offline output when the owner is absent, closed, or
-  suspended. Only the never-owned `VLC_ENOENT` result permits a legacy remote
-  lease. A retired owner cannot restore directory-scanned remote providers.
-- Validate the trusted Lua reader gate with the fresh normal Lua module. It
-  admits only shipped filename source or bytecode before VM creation. All
-  native Parse paths use this same rule; no per-request reader profile or IPC
-  field can restore an arbitrary reader. Preserve native binary readers.
+- Strip fetch flags from external child configuration and requests. Only the
+  parent can select remote work. A fetch-only request must bypass the child.
 - Complete native artwork format parity and the native embedded HTTP/LAN asset
   adapter before global owner activation. Keep every native provider family
   until its actual consumer replacement passes.
