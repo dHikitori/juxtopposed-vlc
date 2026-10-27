@@ -85,6 +85,15 @@ void addon_test_native_provider_complete(void)
     vlc_mutex_lock(&fixture_lock); input_fetcher_t *fetcher = current ? input_fetcher_Hold(current) : NULL; vlc_mutex_unlock(&fixture_lock);
     if (fetcher) { finish(fetcher, NULL, VLC_SUCCESS); input_fetcher_Release(fetcher); }
 }
+unsigned addon_test_native_provider_pending(void)
+{
+    vlc_mutex_lock(&fixture_lock);
+    input_fetcher_t *fetcher = current ? input_fetcher_Hold(current) : NULL;
+    vlc_mutex_unlock(&fixture_lock);
+    if (!fetcher) return 0;
+    vlc_mutex_lock(&fetcher->lock); const unsigned count = fetcher->count; vlc_mutex_unlock(&fetcher->lock);
+    input_fetcher_Release(fetcher); return count;
+}
 void input_fetcher_Delete(input_fetcher_t *fetcher)
 {
     input_fetcher_Cancel(fetcher, NULL);

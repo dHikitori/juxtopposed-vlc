@@ -11,5 +11,5 @@ public:
     struct Binding { QString family, nativeContribution, portableContribution; };
     static const QList<Binding>& bindings();
     static QVariantList select(const QString& feature, const QString& operation,
-        const QVariantList& eligible, const QStringList& explicitOrder, bool nativeScope);
+        const QVariantList& eligible, const QStringList& explicitOrder, bool nativeAllowed);
 };

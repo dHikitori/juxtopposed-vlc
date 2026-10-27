@@ -198,7 +198,7 @@ QString AddonMetadataCoordinator::start(const QString& feature, const QString& o
         const auto before = consumer.providers;
         const auto plan = m_backend.planProviders;
         const QPointer<AddonMetadataCoordinator> alive(this);
-        const auto planned = plan(feature, operation, before, !privateScope.isEmpty());
+        const auto planned = plan(feature, operation, before, privateScope);
         if (!alive) return id;
         consumer.providers.clear(); QSet<QString> selected;
         for (const auto& value : planned) {
@@ -581,6 +581,7 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
         data.insert(QStringLiteral("candidates"), candidates);
         if (!consumer.candidates.isEmpty()) status = QStringLiteral("match");
         else if (consumer.ambiguous) status = QStringLiteral("ambiguous");
+        else if (status == QStringLiteral("match") || status == QStringLiteral("partial")) status = QStringLiteral("no_match");
     } else {
         data.insert(QStringLiteral("fields"), consumer.fields);
         data.insert(QStringLiteral("provenance"), consumer.provenance);
@@ -589,6 +590,7 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
         if (missing(consumer).isEmpty()) status = QStringLiteral("match");
         else if (!consumer.fields.isEmpty()) status = QStringLiteral("partial");
         else if (consumer.ambiguous) status = QStringLiteral("ambiguous");
+        else if (status == QStringLiteral("match") || status == QStringLiteral("partial")) status = QStringLiteral("no_match");
     }
     emit finished(consumerId, status, data, status == QStringLiteral("match") || status == QStringLiteral("partial") ? QString{} : consumer.error);
 }

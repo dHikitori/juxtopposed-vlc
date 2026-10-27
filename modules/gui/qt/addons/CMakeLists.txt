@@ -102,6 +102,8 @@ if(VLC_BUILD_DIR)
     target_sources(vlc_addon_native_metadata PRIVATE
         addon_native_provider_context.cpp addon_native_provider_context.hpp
         addon_native_provider_artwork_assets.cpp addon_native_provider_artwork_assets.hpp)
+    target_sources(vlc_addon_native_metadata PRIVATE
+        addon_native_metadata_owner.cpp addon_native_metadata_owner.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
@@ -146,6 +148,15 @@ if(VLC_BUILD_DIR)
         target_link_libraries(test_addon_native_provider_context PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
         add_test(NAME addon_native_provider_context COMMAND test_addon_native_provider_context)
         set_tests_properties(addon_native_provider_context PROPERTIES TIMEOUT 90)
+        add_executable(test_addon_native_metadata_owner "../tests/test_addon_native_metadata_owner.cpp"
+            "../tests/fixtures/addon_native_provider_fixture.c"
+            "${VLC_SOURCE_ROOT}/src/preparser/metadata_native_provider.c")
+        target_include_directories(test_addon_native_metadata_owner PRIVATE "${VLC_SOURCE_ROOT}/src" "${VLC_SOURCE_ROOT}")
+        target_link_libraries(test_addon_native_metadata_owner PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
+        target_link_options(test_addon_native_metadata_owner PRIVATE
+            "-Wl,--wrap=_Znwm" "-Wl,--wrap=_Znwj" "-Wl,--wrap=_ZdlPv" "-Wl,--wrap=_ZdlPvm" "-Wl,--wrap=_ZdlPvj")
+        add_test(NAME addon_native_metadata_owner COMMAND test_addon_native_metadata_owner)
+        set_tests_properties(addon_native_metadata_owner PROPERTIES TIMEOUT 90)
         add_executable(test_addon_native_session_player "../tests/test_addon_native_session_player.cpp"
             "../tests/session-runtime/native_session_fixture.c")
         target_include_directories(test_addon_native_session_player PRIVATE "${VLC_SOURCE_ROOT}/src")

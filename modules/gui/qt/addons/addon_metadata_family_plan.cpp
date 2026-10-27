@@ -13,7 +13,7 @@ const QList<AddonMetadataFamilyPlan::Binding>& AddonMetadataFamilyPlan::bindings
     return value;
 }
 QVariantList AddonMetadataFamilyPlan::select(const QString& feature, const QString& operation,
-    const QVariantList& eligible, const QStringList& explicitOrder, bool nativeScope)
+    const QVariantList& eligible, const QStringList& explicitOrder, bool nativeAllowed)
 {
     if (feature != QLatin1String("artwork")) return eligible;
     QHash<QString, QVariant> rows; QStringList inputOrder;
@@ -26,7 +26,7 @@ QVariantList AddonMetadataFamilyPlan::select(const QString& feature, const QStri
     QSet<QString> familyMembers, selected;
     for (const auto& binding : bindings()) {
         familyMembers.insert(binding.nativeContribution); familyMembers.insert(binding.portableContribution);
-        const bool native = nativeScope && operation == QLatin1String("enrich") && rows.contains(binding.nativeContribution);
+        const bool native = nativeAllowed && operation == QLatin1String("enrich") && rows.contains(binding.nativeContribution);
         const bool portable = rows.contains(binding.portableContribution);
         QString choice;
         for (const auto& id : explicitOrder)
@@ -35,7 +35,7 @@ QVariantList AddonMetadataFamilyPlan::select(const QString& feature, const QStri
         if (!choice.isEmpty()) selected.insert(choice);
     }
     QStringList order = explicitOrder;
-    if (nativeScope && operation == QLatin1String("enrich"))
+    if (nativeAllowed && operation == QLatin1String("enrich"))
         for (const auto& binding : bindings()) if (!order.contains(binding.nativeContribution)) order.append(binding.nativeContribution);
     for (const auto& id : inputOrder) if (!order.contains(id)) order.append(id);
     QVariantList result; QSet<QString> emitted;

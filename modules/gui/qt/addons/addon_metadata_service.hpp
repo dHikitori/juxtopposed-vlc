@@ -20,6 +20,7 @@ class AddonMetadataService : public QObject
     Q_OBJECT
 public:
     using ArtworkCallback = std::function<void(const QUrl&, const QString&)>;
+    // Run this resolver and its completion on the service owner thread.
     using ArtworkResolver = std::function<QString(const QString&, const QVariant&, ArtworkCallback)>;
     struct Backend {
         AddonMetadataCoordinator::Backend providers;
@@ -32,14 +33,26 @@ public:
     };
     using NativeInvoke = std::function<void(const QString&, const QString&, const QVariantMap&)>;
     using NativeCancel = std::function<void(const QString&)>;
+    struct NativeArtworkRequest { QString id; std::function<void()> cancel; };
+    struct NativeArtworkHandlers {
+        // This query must not do I/O, call a callback, or change Qt state.
+        std::function<std::optional<AddonMetadataCoordinator::NativeArtwork>(const QVariantMap&, vlc_metadata_job_t*)> validate;
+        // Only automatic native jobs can use this route. Their parent anchor
+        // must remain current through final publication. Cancel is native only.
+        std::function<NativeArtworkRequest(const QVariant&, vlc_metadata_job_t*, ArtworkCallback)> resolve;
+    };
+    using ProviderPlan = std::function<QVariantList(const QString&, const QString&, const QVariantList&, bool)>;
 
     explicit AddonMetadataService(Backend, QObject* parent = nullptr);
     explicit AddonMetadataService(vlc::addons::AddonManager*, QObject* parent = nullptr);
     ~AddonMetadataService() override;
 
     bool registerBuiltinProvider(const QString& feature, const QVariantMap& descriptor,
-                                 QObject* lifetime, NativeInvoke, NativeCancel = {});
+                                 QObject* lifetime, NativeInvoke, NativeCancel = {}, NativeArtworkHandlers = {});
     void unregisterBuiltinProvider(const QString& contribution);
+    void unregisterBuiltinProviderForOwner(const QString& contribution, QObject* exactOwner);
+    void setProviderPlan(QObject* lifetime, ProviderPlan);
+    void clearProviderPlan(QObject* exactOwner);
     void completeBuiltin(const QString& invocation, const QString& status,
                          const QVariantMap& data = {}, const QString& error = {});
     QUrl privateUrlForInvocation(const QString& invocation) const;
@@ -47,6 +60,9 @@ public:
     // A URL or media reference cannot create this binding. The caller releases
     // the job after its native work and claim have ended.
     vlc_metadata_job_t* holdNativeJobForInvocation(const QString& invocation) const;
+    // Install a native-only cancel control for this exact active invocation.
+    // A native job cancel must not wait for a Qt event to interrupt its I/O.
+    void setNativeCancellationForInvocation(const QString&, std::function<void()>);
 
     // These references are private host data. They are not QML API methods.
     QString acquireMedia(const QUrl& privateUrl, const QVariantMap& identity);
@@ -61,9 +77,14 @@ public:
     // This host-only stage uses the pipeline's retained native commit anchor.
     // It never sends the original native artwork address to a provider.
     void setNativeArtworkAdapter(AddonNativeArtworkAssets*);
+    void clearNativeArtworkAdapterIf(AddonNativeArtworkAssets* exactAdapter);
+    bool reserveNativeOwner(QObject*);
+    bool nativeOwnerIs(QObject*) const;
+    void releaseNativeOwnerFor(QObject*);
     // Bind before native dispatch. The owner closes the exact backend before
     // app drain; this memory gate prevents a late native post to Qt.
     bool bindApplicationLifetime(vlc::addons::AddonStreamLifetime::Handle);
+    vlc::addons::AddonStreamLifetime::Handle applicationLifetime() const;
     void setAutomaticNetworkAllowed(bool allowed);
     bool automaticNetworkAllowed() const;
     int nativeJobCount() const;
@@ -75,6 +96,7 @@ public slots:
                            const QString& status, const QVariantMap& data, const QString& error);
 
 signals:
+    void retiring();
     void finished(const QString& consumer, const QString& status,
                   const QVariantMap& data, const QString& error);
     void canceled(const QString& consumer);
@@ -89,6 +111,9 @@ private:
         QPointer<QObject> lifetime;
         NativeInvoke invoke;
         NativeCancel cancel;
+        NativeArtworkHandlers artwork;
+        QString binding;
+        QMetaObject::Connection destroyed;
     };
     struct NativeCall {
         QString contribution, media;
@@ -98,9 +123,10 @@ private:
     };
     struct Consumer { QString media; quint64 core = 0; bool automatic = false; };
     struct PendingResult {
+        struct Asset { QString id; std::function<void()> cancel; };
         QString status, error;
         QVariantMap data;
-        QHash<QString, QString> assets;
+        QHash<QString, Asset> assets;
         int outstanding = 0;
     };
 
@@ -131,6 +157,9 @@ private:
     QHash<QString, Consumer> m_consumers;
     QHash<QString, PendingResult> m_results;
     QHash<quint64, QString> m_coreConsumers;
+    QPointer<QObject> m_planOwner;
+    QPointer<QObject> m_nativeOwner;
+    ProviderPlan m_providerPlan;
     std::shared_ptr<CoreState> m_core;
     QPointer<AddonNativeArtworkAssets> m_nativeArtwork;
     vlc_metadata_backend_t* m_coreBackend = nullptr;

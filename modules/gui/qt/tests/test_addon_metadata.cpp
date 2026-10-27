@@ -464,6 +464,7 @@ private slots:
             if (row >= 2) { QTRY_COMPARE(fake.calls.size(), 1); complete(owner, fake.calls.first(), "match", {{"nativeClaim", "host-reference"}, {"fields", QVariantMap{{"artwork", "https://images.invalid/art.png"}}}}); }
             QTRY_COMPARE(results.size(), 1); QVERIFY(results.first().at(2).toMap().value("fields").toMap().isEmpty());
             if (row < 2) QCOMPARE(fake.calls.size(), 0);
+            else { QVERIFY(results.first().at(1) != QLatin1String("match")); QVERIFY(results.first().at(1) != QLatin1String("partial")); }
         }
     }
 
@@ -474,7 +475,7 @@ private slots:
         backend.invokeNative = [&](const QString& provider, const QString& operation, const QVariantMap& projected, const QString&) {
             const auto id = QStringLiteral("native-call"); fake.calls.append({id, provider, operation, projected}); return id;
         };
-        backend.planProviders = [](const QString&, const QString&, const QVariantList& rows, bool) {
+        backend.planProviders = [](const QString&, const QString&, const QVariantList& rows, const QString&) {
             auto changed = rows.first().toMap(); changed.insert("cachePartition", "forged-partition");
             return QVariantList{registration("unknown/artwork"), changed, changed};
         };
@@ -489,7 +490,7 @@ private slots:
         FakeBackend fake; fake.providers = {registration("portable/artwork")};
         auto backend = fake.backend(); AddonMetadataCoordinator* owner = nullptr;
         auto captured = std::make_shared<int>(1); const std::weak_ptr<int> weak(captured); bool heldDuringReturn = false;
-        backend.planProviders = [&, captured](const QString&, const QString&, const QVariantList& rows, bool) {
+        backend.planProviders = [&, captured](const QString&, const QString&, const QVariantList& rows, const QString&) {
             delete std::exchange(owner, nullptr); heldDuringReturn = !weak.expired(); return rows;
         };
         owner = new AddonMetadataCoordinator(std::move(backend)); captured.reset();

@@ -33,6 +33,8 @@ addon_host_sources = files(
     'addons/addon_native_provider_context.hpp',
     'addons/addon_native_provider_artwork_assets.cpp',
     'addons/addon_native_provider_artwork_assets.hpp',
+    'addons/addon_native_metadata_owner.cpp',
+    'addons/addon_native_metadata_owner.hpp',
     'addons/addon_ui_registry.cpp',
     'addons/addon_ui_registry.hpp',
     'addons/addon_ui_assets.cpp',
@@ -149,6 +151,7 @@ addon_host_sources = files(
     'addons/addon_native_artwork_assets.hpp',
 )
 addon_host_moc_headers = files(
+    'addons/addon_native_metadata_owner.hpp',
     'addons/addon_manager.hpp',
     'addons/addon_network.hpp',
     'addons/addon_worker.hpp',
@@ -1898,6 +1901,23 @@ if qt6_dep.found()
                 'env': addon_worker_environment,
             }
         endforeach
+        if host_system == 'linux'
+            foreach addon_test : ['native_provider_context', 'native_metadata_owner']
+                vlc_tests += {
+                    'name': 'test_qt_addon_' + addon_test,
+                    'sources': files('tests/test_addon_' + addon_test + '.cpp',
+                        'tests/fixtures/addon_native_provider_fixture.c',
+                        '../../../src/preparser/metadata_native_provider.c'),
+                    'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                    'link_with': [addon_host_library, libvlccore, libvlc],
+                    'suite': ['qt', 'addons'],
+                    'timeout': 90,
+                    'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
+                    'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                    'link_args': qt_link_args + (addon_test == 'native_metadata_owner' ? ['-Wl,--wrap=_Znwm', '-Wl,--wrap=_Znwj', '-Wl,--wrap=_ZdlPv', '-Wl,--wrap=_ZdlPvm', '-Wl,--wrap=_ZdlPvj'] : []),
+                }
+            endforeach
+        endif
         vlc_tests += {
             'name': 'test_qt_addon_visualizer_surface',
             'sources': files('tests/test_addon_visualizer_surface.cpp', 'addons/addon_visualizer_surface.cpp'),

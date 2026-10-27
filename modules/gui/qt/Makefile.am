@@ -139,6 +139,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_native_provider_context.hpp \
 	addons/addon_native_provider_artwork_assets.cpp \
 	addons/addon_native_provider_artwork_assets.hpp \
+	addons/addon_native_metadata_owner.cpp \
+	addons/addon_native_metadata_owner.hpp \
 	addons/addon_ui_registry.cpp \
 	addons/addon_ui_registry.hpp \
 	addons/addon_ui_assets.cpp \
@@ -273,6 +275,7 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_session_host.moc.cpp \
 	addons/addon_session_ui.moc.cpp \
 	addons/addon_source_consent_ui.moc.cpp \
+	addons/addon_native_metadata_owner.moc.cpp \
 	addons/addon_player_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
 	addons/addon_visualizer_catalog.moc.cpp \
@@ -2762,6 +2765,30 @@ test_qt_addon_source_consent_ui_owner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADD
 check_PROGRAMS += test_qt_addon_source_consent_ui_owner
 TESTS += test_qt_addon_source_consent_ui_owner
 
+if HAVE_LINUX
+test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider_context.cpp tests/fixtures/addon_native_provider_fixture.c $(top_srcdir)/src/preparser/metadata_native_provider.c
+nodist_test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider_context.moc
+BUILT_SOURCES += tests/test_addon_native_provider_context.moc
+CLEANFILES += tests/test_addon_native_provider_context.moc
+test_qt_addon_native_provider_context_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src
+test_qt_addon_native_provider_context_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_native_provider_context_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_native_provider_context_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_native_provider_context
+TESTS += test_qt_addon_native_provider_context
+
+test_qt_addon_native_metadata_owner_SOURCES = tests/test_addon_native_metadata_owner.cpp tests/fixtures/addon_native_provider_fixture.c $(top_srcdir)/src/preparser/metadata_native_provider.c
+nodist_test_qt_addon_native_metadata_owner_SOURCES = tests/test_addon_native_metadata_owner.moc
+BUILT_SOURCES += tests/test_addon_native_metadata_owner.moc
+CLEANFILES += tests/test_addon_native_metadata_owner.moc
+test_qt_addon_native_metadata_owner_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src
+test_qt_addon_native_metadata_owner_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_native_metadata_owner_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_native_metadata_owner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS) -Wl,--wrap=_Znwm -Wl,--wrap=_Znwj -Wl,--wrap=_ZdlPv -Wl,--wrap=_ZdlPvm -Wl,--wrap=_ZdlPvj
+check_PROGRAMS += test_qt_addon_native_metadata_owner
+TESTS += test_qt_addon_native_metadata_owner
+endif
+
 LIBVLC = ../../../lib/libvlc.la
 QT_QTEST_COMMON_cppflags = $(libqt_plugin_la_CPPFLAGS) -I$(builddir)/tests -DTOP_BUILDDIR=\"$(abs_top_builddir)\"
 QT_QTEST_COMMON_cxxflags = $(AM_CXXFLAGS) $(QT_CFLAGS) $(QT_QTEST_CFLAGS) -fPIC $(CXXFLAGS_qt)
@@ -3552,7 +3579,8 @@ TESTS += tests/tst_AddonSourceConsent.qml
 EXTRA_DIST += tests/builtin-ids/CMakeLists.txt
 
 EXTRA_DIST += tests/test_addon_metadata_family_plan.cpp tests/test_addon_native_provider_context.cpp \
-	tests/fixtures/addon_native_provider_fixture.c tests/fixtures/addon_native_provider_fixture.h
+	tests/fixtures/addon_native_provider_fixture.c tests/fixtures/addon_native_provider_fixture.h \
+	tests/test_addon_native_metadata_owner.cpp
 
 EXTRA_DIST += tests/discovery-source/CMakeLists.txt tests/discovery-source/native_module_baseline.cpp \
 	tests/fixtures/addon_source_tls_fixture.hpp

@@ -31,7 +31,7 @@ public:
         // provider context or a portable request key.
         std::function<bool(const QString&)> requiresNativeScope;
         std::function<QString(const QString&, const QString&, const QVariantMap&, const QString&)> invokeNative;
-        std::function<QVariantList(const QString&, const QString&, const QVariantList&, bool)> planProviders;
+        std::function<QVariantList(const QString&, const QString&, const QVariantList&, const QString&)> planProviders;
         // A native query only: no I/O, callback, target write, or Qt mutation.
         std::function<std::optional<NativeArtwork>(const QString&, const QVariantMap&, const QString&)> validateNativeArtwork;
     };

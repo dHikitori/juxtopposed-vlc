@@ -20,6 +20,7 @@
 #include <vlc_input_item.h>
 #include <vlc_metadata_backend.h>
 #include <vlc_artwork_policy.h>
+#include "../../../../src/preparser/metadata_local.h"
 #include "addons/addon_artwork_assets.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "addons/addon_native_artwork_assets.hpp"
@@ -105,6 +106,82 @@ class TestAddonMetadataService : public QObject
 {
     Q_OBJECT
 private slots:
+    void providerInvalidationRevokesACompletedAutomaticAnchor()
+    {
+        Fake fake; AddonMetadataService service(fake.backend()); service.setAutomaticNetworkAllowed(true);
+        auto* backend = service.holdCoreBackend(); auto* item = input_item_New("file:///private/item.mkv", "Item");
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_backend_Release(backend); input_item_Release(item); });
+        Ended ended; auto* job = coreJob(backend, ended, item, VLC_METADATA_REQUEST_NETWORK | VLC_METADATA_REQUEST_AUTOMATIC);
+        QVERIFY(job); const auto release = qScopeGuard([&] { vlc_metadata_job_Release(job); });
+        QCOMPARE(vlc_metadata_job_StartLocal(job), VLC_SUCCESS);
+        auto* copy = vlc_metadata_job_CopyLocalItem(job); QVERIFY(copy);
+        const auto releaseCopy = qScopeGuard([&] { input_item_Release(copy); });
+        input_item_SetDescription(copy, "Provider text"); QCOMPARE(vlc_metadata_job_PrepareLocal(job, copy, nullptr), VLC_SUCCESS);
+        QVERIFY(vlc_metadata_job_Complete(job, VLC_SUCCESS, copy, nullptr, 0)); QCOMPARE(ended.count.load(), 1);
+        QVERIFY(vlc_metadata_job_IsCurrentFor(job, item)); service.invalidate();
+        QVERIFY(!vlc_metadata_job_IsCurrentFor(job, item)); QVERIFY(vlc_metadata_job_Apply(job, item, 0, nullptr) != VLC_SUCCESS);
+        QVERIFY(!input_item_GetDescription(item)); QCOMPARE(ended.count.load(), 1);
+    }
+
+    void anArtworkResolverCanDeleteTheOwnerBeforeItReturnsItsRequest()
+    {
+        Fake fake; AddonMetadataService* service = nullptr; auto backend = fake.backend(); QStringList canceled;
+        backend.resolveArtwork = [&](const QString&, const QVariant&, AddonMetadataService::ArtworkCallback) {
+            delete std::exchange(service, nullptr); return QStringLiteral("returned-artwork");
+        };
+        backend.cancelArtwork = [&](const QString& id) { canceled.append(id); };
+        service = new AddonMetadataService(std::move(backend));
+        const auto cleanup = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        service->enrich("video.details", {{"identity", identity()}}, {"artwork"});
+        QTRY_COMPARE(fake.calls.size(), 1); fake.complete(*service, {{"artwork", "https://image.invalid/art.png"}});
+        QTRY_VERIFY(!service); QCOMPARE(canceled, QStringList{QStringLiteral("returned-artwork")});
+    }
+
+    void anOldBuiltinLifetimeCannotRemoveItsReplacement()
+    {
+        Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend());
+        auto first = std::make_unique<QObject>(); auto second = std::make_unique<QObject>();
+        const QString id = QStringLiteral("hakone.builtin.binding/details"); int oldCalls = 0, newCalls = 0;
+        QVERIFY(service.registerBuiltinProvider("video.details", provider(id), first.get(),
+            [&](const QString&, const QString&, const QVariantMap&) { ++oldCalls; }));
+        service.unregisterBuiltinProviderForOwner(id, first.get());
+        QVERIFY(service.registerBuiltinProvider("video.details", provider(id), second.get(),
+            [&](const QString& call, const QString&, const QVariantMap&) { ++newCalls; service.completeBuiltin(call, "match", claims({{"description", "New provider"}})); }));
+        service.unregisterBuiltinProviderForOwner(id, first.get()); first.reset();
+        QSignalSpy results(&service, &AddonMetadataService::finished);
+        service.enrich("video.details", {{"identity", identity()}}, {"description"}); QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(oldCalls, 0); QCOMPARE(newCalls, 1); QCOMPARE(results[0][2].toMap().value("fields").toMap().value("description").toString(), "New provider");
+        second.reset(); service.enrich("video.details", {{"identity", identity()}}, {"description"}); QTRY_COMPARE(results.size(), 2);
+        QCOMPARE(results[1][1].toString(), QStringLiteral("no_match")); QCOMPARE(newCalls, 1);
+    }
+
+    void aNativeArtworkResolverCanDeleteTheOwnerBeforeItReturnsItsControl()
+    {
+        Fake fake; fake.providers.clear(); AddonMetadataService* service = new AddonMetadataService(fake.backend());
+        const auto cleanup = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        service->setAutomaticNetworkAllowed(true); QObject lifetime; unsigned canceled = 0;
+        auto descriptor = provider("hakone.builtin.delete/artwork");
+        descriptor.insert("features", QStringList{"artwork"}); descriptor.insert("requiresNativeAnchor", true);
+        descriptor.remove("mediaKinds");
+        AddonMetadataService::NativeArtworkHandlers artwork;
+        artwork.validate = [](const QVariantMap&, vlc_metadata_job_t*) -> std::optional<AddonMetadataCoordinator::NativeArtwork> {
+            return AddonMetadataCoordinator::NativeArtwork{QVariantMap{{"nativeClaim", "test-claim"}}, "musicbrainz", {}};
+        };
+        artwork.resolve = [&](const QVariant&, vlc_metadata_job_t*, AddonMetadataService::ArtworkCallback) {
+            delete std::exchange(service, nullptr);
+            return AddonMetadataService::NativeArtworkRequest{"returned-native-artwork", [&] { ++canceled; }};
+        };
+        QVERIFY(service->registerBuiltinProvider("artwork", descriptor, &lifetime,
+            [&](const QString& id, const QString&, const QVariantMap&) { service->completeBuiltin(id, "match", {}); },
+            {}, std::move(artwork)));
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service->holdCoreBackend(), vlc_metadata_backend_Release);
+        const auto item = std::shared_ptr<input_item_t>(input_item_New("file:///private/song.flac", "Song"), input_item_Release);
+        Ended ended; const auto job = nativeArtworkJob(backend.get(), ended, item.get(), "enrich"); QVERIFY(job);
+        QCOMPARE(vlc_metadata_job_Start(job.get()), VLC_SUCCESS);
+        QTRY_VERIFY(!service); QCOMPARE(canceled, 1u); QCOMPARE(ended.count.load(), 1);
+        QCOMPARE(ended.status.load(), -EINTR); QVERIFY(!input_item_GetArtURL(item.get()));
+    }
+
     void aPortableInvokeCanDeleteTheServiceWithoutAnOrphan()
     {
         Fake fake; AddonMetadataService* service = nullptr; auto backend = fake.backend();
@@ -128,7 +205,7 @@ private slots:
             Fake fake; fake.providers.clear(); auto* service = new AddonMetadataService(fake.backend()); QObject lifetime;
             const auto cleanup = qScopeGuard([&] { delete std::exchange(service, nullptr); });
             QString invocation; unsigned canceled = 0;
-            QVERIFY(service->registerBuiltinProvider("video.details", provider("vlc.builtin.cancel/details"), &lifetime,
+            QVERIFY(service->registerBuiltinProvider("video.details", provider("hakone.builtin.cancel/details"), &lifetime,
                 [&](const QString& id, const QString&, const QVariantMap&) { invocation = id; },
                 [&](const QString& id) { QCOMPARE(id, invocation); ++canceled; delete std::exchange(service, nullptr); }));
             QSignalSpy finished(service, &AddonMetadataService::finished);
@@ -207,7 +284,7 @@ private slots:
     void nativeInvocationsRetainOnlyTheirExactCoreJobs()
     {
         Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend()); QObject lifetime;
-        auto descriptor = provider("vlc.builtin.exact/details"); descriptor.insert("requiresNativeAnchor", true);
+        auto descriptor = provider("hakone.builtin.exact/details"); descriptor.insert("requiresNativeAnchor", true);
         QStringList invocations; QList<vlc_metadata_job_t*> original;
         QVERIFY(service.registerBuiltinProvider("video.details", descriptor, &lifetime,
             [&](const QString& id, const QString&, const QVariantMap& projected) {
@@ -300,7 +377,7 @@ private slots:
             ++unregisters; auto* deleted = std::exchange(service, nullptr); delete deleted;
         };
         service = new AddonMetadataService(std::move(backend)); QObject lifetime;
-        for (const auto* id : {"vlc.builtin.first/details", "vlc.builtin.second/details"})
+        for (const auto* id : {"hakone.builtin.first/details", "hakone.builtin.second/details"})
             QVERIFY(service->registerBuiltinProvider("video.details", provider(id), &lifetime,
                 [](const auto&, const auto&, const auto&) {}));
         service->shutdown(); QVERIFY(!service); QCOMPARE(unregisters, 1u);
@@ -314,10 +391,10 @@ private slots:
             backend.unregisterBuiltin = [&](const QString&) { if (!registration) destroy(); };
             service = new AddonMetadataService(std::move(backend)); QObject lifetime;
             armed = registration;
-            const auto registered = service->registerBuiltinProvider("video.details", provider("vlc.builtin.single/details"),
+            const auto registered = service->registerBuiltinProvider("video.details", provider("hakone.builtin.single/details"),
                 &lifetime, [](const auto&, const auto&, const auto&) {});
             if (registration) QVERIFY(!registered);
-            else { QVERIFY(registered); armed = true; service->unregisterBuiltinProvider("vlc.builtin.single/details"); }
+            else { QVERIFY(registered); armed = true; service->unregisterBuiltinProvider("hakone.builtin.single/details"); }
             QVERIFY(!service);
         }
     }
@@ -329,11 +406,11 @@ private slots:
             unsigned drops = 0;
             auto capture = std::make_shared<Capture>();
             capture->drop = [&] { ++drops; auto* deleted = std::exchange(service, nullptr); delete deleted; };
-            QVERIFY(service->registerBuiltinProvider("video.details", provider("vlc.builtin.capture/details"), &lifetime,
+            QVERIFY(service->registerBuiltinProvider("video.details", provider("hakone.builtin.capture/details"), &lifetime,
                 [capture](const auto&, const auto&, const auto&) {}));
             capture.reset();
-            if (mode == 0) service->unregisterBuiltinProvider("vlc.builtin.capture/details");
-            else if (mode == 1) service->registerBuiltinProvider("video.details", provider("vlc.builtin.capture/details"),
+            if (mode == 0) service->unregisterBuiltinProvider("hakone.builtin.capture/details");
+            else if (mode == 1) service->registerBuiltinProvider("video.details", provider("hakone.builtin.capture/details"),
                 &lifetime, [](const auto&, const auto&, const auto&) {});
             else service->shutdown();
             QVERIFY(!service); QCOMPARE(drops, 1u);
@@ -344,21 +421,21 @@ private slots:
         for (const bool replace : {false, true}) {
             Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend()); QObject lifetime;
             QString invocation; unsigned oldCancel = 0, newCancel = 0;
-            QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.changed/details"), &lifetime,
+            QVERIFY(service.registerBuiltinProvider("video.details", provider("hakone.builtin.changed/details"), &lifetime,
                 [&](const auto& id, const auto&, const auto&) { invocation = id; },
                 [&](const auto& id) { QCOMPARE(id, invocation); ++oldCancel; }));
             service.enrich("video.details", {{"identity", identity()}}, {"description"});
             QTRY_VERIFY(!invocation.isEmpty());
-            if (replace) QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.changed/details"),
+            if (replace) QVERIFY(service.registerBuiltinProvider("video.details", provider("hakone.builtin.changed/details"),
                 &lifetime, [](const auto&, const auto&, const auto&) {}, [&](const auto&) { ++newCancel; }));
-            else service.unregisterBuiltinProvider("vlc.builtin.changed/details");
+            else service.unregisterBuiltinProvider("hakone.builtin.changed/details");
             QCOMPARE(oldCancel, 1u); QCOMPARE(newCancel, 0u);
         }
     }
     void aNativeHandlerCanCompleteInlineAfterItsIDIsRecorded()
     {
         Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend()); QObject lifetime;
-        QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.inline/details"), &lifetime,
+        QVERIFY(service.registerBuiltinProvider("video.details", provider("hakone.builtin.inline/details"), &lifetime,
             [&](const auto& id, const auto&, const auto&) {
                 service.completeBuiltin(id, "match", claims({{"description", "Inline native description"}}));
             }));
@@ -428,7 +505,7 @@ private slots:
     {
         Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend());
         QObject lifetime; QString invocation; QUrl privateUrl;
-        QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.example/details"), &lifetime,
+        QVERIFY(service.registerBuiltinProvider("video.details", provider("hakone.builtin.example/details"), &lifetime,
             [&](const QString& id, const QString& operation, const QVariantMap& context) {
                 invocation = id; privateUrl = service.privateUrlForInvocation(id);
                 QCOMPARE(operation, "enrich"); QVERIFY(context.contains("media"));
@@ -448,7 +525,7 @@ private slots:
     {
         Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend());
         auto* lifetime = new QObject; QString invocation;
-        QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.example/details"), lifetime,
+        QVERIFY(service.registerBuiltinProvider("video.details", provider("hakone.builtin.example/details"), lifetime,
             [&](const QString& id, const QString&, const QVariantMap&) { invocation = id; }));
         QSignalSpy canceled(&service, &AddonMetadataService::canceled);
         const auto media = service.acquireMedia(QUrl("file:///private/native.mkv"), identity());
