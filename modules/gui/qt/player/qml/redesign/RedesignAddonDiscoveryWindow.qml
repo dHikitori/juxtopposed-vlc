@@ -10,6 +10,7 @@ C.Popup {
     dim: true
     required property var backend
     property var settingsBackend: null
+    property var sourceConsentBackend: null
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
@@ -22,7 +23,7 @@ C.Popup {
     padding: theme.dp(16); focus: true
     closePolicy: C.Popup.CloseOnEscape
     function openSource(source) { open(); browser.openSource(source || "") }
-    onClosed: browser.closeView()
+    onClosed: { browser.closeView(); sourceConsent.close() }
     background: RedesignDialogSurface { theme: root.theme }
     contentItem: ColumnLayout {
         spacing: root.theme.dp(12)
@@ -45,6 +46,7 @@ C.Popup {
             objectName: "addonDiscoveryWindowBrowser"
             Layout.fillWidth: true; Layout.fillHeight: true
             backend: root.backend
+            playbackReviewAvailable: !!root.sourceConsentBackend && root.sourceConsentBackend.available === true
             scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
             onConfigureRequested: packageId => {
                 if (!root.settingsBackend) return
@@ -52,11 +54,17 @@ C.Popup {
                 if (schema.type !== "object") { actionError = qsTr("This add-on has no settings."); return }
                 settingsDialog.packageId = packageId; settingsDialog.open()
             }
+            onPlaybackReviewRequested: source => sourceConsent.reviewSource(source)
         }
     }
     RedesignAddonSettingsDialog {
         id: settingsDialog
         backend: root.settingsBackend
+        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+    }
+    RedesignAddonSourceConsentDialog {
+        id: sourceConsent
+        backend: root.sourceConsentBackend
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
     }
 }

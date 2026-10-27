@@ -18,6 +18,7 @@ FocusScope {
     property var selected: []
     property string actionError: ""
     property bool ready: false
+    property bool playbackReviewAvailable: false
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property var sources: { if (!backend) return []; backend.revision; return backend.sources || [] }
     readonly property var source: sources.find(entry => entry.id === sourceId) || ({})
@@ -25,6 +26,7 @@ FocusScope {
     readonly property bool canSearch: (source.operations || []).includes("search")
     signal configureRequested(string packageId)
     signal playlistRequested(var itemReferences)
+    signal playbackReviewRequested(string source)
     function closeView() { if (backend && viewId.length) backend.closeView(viewId); viewId = ""; viewState = ({}); rows.clear(); selected = []; playlistPickerOpen = false; playlistChoice = "" }
     function openSource(id) {
         closeView(); sourceId = id; actionError = ""; query.text = ""
@@ -106,6 +108,14 @@ FocusScope {
                 caption: qsTr("Settings"); text: caption; enabled: root.sourceId.length > 0
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.configureRequested(root.sourceId.split("/")[0])
+            }
+            RedesignButton {
+                objectName: "addonDiscoveryPlaybackReview"
+                visible: root.playbackReviewAvailable
+                enabled: root.sourceId.length > 0 && (root.source.operations || []).includes("resolve")
+                caption: qsTr("Playback access"); text: caption; tooltipTextFormat: Text.PlainText
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onClicked: root.playbackReviewRequested(root.sourceId)
             }
         }
         RowLayout {

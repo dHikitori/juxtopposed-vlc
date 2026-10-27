@@ -38,6 +38,23 @@ TestCase {
         function play(id, ref) { calls = calls.concat([{operation: "play", id: id, ref: ref}]); return "play-request" }
     }
     Component { id: pageComponent; RedesignAddonDiscovery { width: 750; height: 550; backend: service } }
+    QtObject {
+        id: sourceReview
+        property bool available: true
+        property bool preparing: false
+        property bool acting: false
+        property var review: ({})
+        property string errorMessage: ""
+        property string status: ""
+        property string selected: ""
+        property int preparations: 0
+        property int approvals: 0
+        property int closes: 0
+        function prepare(source) { selected = source; preparations++; review = {name: "Source", source: "https://git.example/source", approved: false}; return true }
+        function approve() { approvals++; return true }
+        function revoke() { return true }
+        function viewClosed() { closes++; review = ({}) }
+    }
     Component { id: windowComponent; RedesignAddonDiscoveryWindow { backend: service } }
     Component { id: railComponent; RedesignLibraryNavigation { height: 600; expanded: true; discoveryBackend: service } }
     Component { id: menuComponent; RedesignMenu { discoveryBackend: service } }
@@ -47,6 +64,7 @@ TestCase {
         service.calls = []; service.current = ({})
         service.sources = [{id: "org.example.radio/source", name: "<b>Radio</b>", enabled: true, configured: true, operations: ["roots", "browse", "search"]}]
         service.revision++; navigationSignal.clear(); menuSignal.clear()
+        sourceReview.selected = ""; sourceReview.preparations = 0; sourceReview.approvals = 0; sourceReview.closes = 0; sourceReview.review = ({})
     }
     function page() { return createTemporaryObject(pageComponent, test) }
     function test_openSourceDoesNotPlayOrEnqueue() {
@@ -68,6 +86,18 @@ TestCase {
         verify(!findChild(view, "addonDiscoveryEnqueue").enabled)
         verify(!findChild(view, "addonDiscoveryPlaylist").visible)
         compare(service.calls.length, 1)
+    }
+    function test_playbackReviewIsAnExplicitHostAction() {
+        service.sources = [Object.assign({}, service.sources[0], {operations: ["roots", "browse", "resolve"]})]
+        ++service.revision
+        const window = createTemporaryObject(windowComponent, test, {sourceConsentBackend: sourceReview})
+        window.openSource("org.example.radio/source"); tryCompare(window, "opened", true)
+        const action = findChild(window, "addonDiscoveryPlaybackReview")
+        verify(action !== null); verify(action.visible); verify(action.enabled)
+        compare(sourceReview.preparations, 0); action.clicked()
+        compare(sourceReview.preparations, 1); compare(sourceReview.selected, "org.example.radio/source")
+        compare(sourceReview.approvals, 0); compare(service.calls.length, 1)
+        window.close(); tryCompare(window, "opened", false); compare(sourceReview.closes, 1)
     }
     function test_playlistNeedsAnOpaquePreparedTargetAndExplicitConfirmation() {
         const view = page(); view.openSource("org.example.radio/source"); view.select("item-1")

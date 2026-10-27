@@ -208,6 +208,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_session_ui.cpp \
 	addons/addon_session_ui.hpp \
 	addons/addon_session_ui_manager.cpp \
+	addons/addon_source_consent_ui.cpp \
+	addons/addon_source_consent_ui.hpp \
 	addons/addon_native_session_player.cpp \
 	addons/addon_native_session_player.hpp \
 	addons/addon_player_sessions.cpp \
@@ -260,6 +262,7 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_sessions.moc.cpp \
 	addons/addon_session_host.moc.cpp \
 	addons/addon_session_ui.moc.cpp \
+	addons/addon_source_consent_ui.moc.cpp \
 	addons/addon_player_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
 	addons/addon_visualizer_catalog.moc.cpp \
@@ -1520,6 +1523,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonDiscovery.qml \
 	player/qml/redesign/RedesignAddonDiscoveryWindow.qml \
 	player/qml/redesign/RedesignAddonSessions.qml \
+	player/qml/redesign/RedesignAddonSourceConsentDialog.qml \
 	player/qml/redesign/RedesignAddonSelection.qml \
 	player/qml/redesign/RedesignAddonRecovery.qml \
 	player/qml/redesign/RedesignAddonNode.qml \
@@ -3505,3 +3509,8 @@ EXTRA_DIST += tests/player-sessions/CMakeLists.txt tests/test_addon_player_sessi
 EXTRA_DIST += tests/package-namespaces/CMakeLists.txt
 
 EXTRA_DIST += tests/invocation-guard/CMakeLists.txt tests/test_addon_invocation_guard.cpp
+
+EXTRA_DIST += tests/source-consent-ui/CMakeLists.txt tests/test_addon_source_consent_ui.cpp tests/tst_AddonSourceConsent.qml
+TESTS += tests/tst_AddonSourceConsent.qml
+
+EXTRA_DIST += tests/builtin-ids/CMakeLists.txt

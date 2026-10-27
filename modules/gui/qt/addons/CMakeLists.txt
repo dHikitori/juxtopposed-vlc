@@ -15,6 +15,7 @@ add_library(vlc_addon_host STATIC
     addon_session_websocket.cpp addon_session_websocket.hpp addon_session_host.cpp addon_session_host.hpp
     addon_session_controller.cpp addon_session_controller.hpp addon_session_player.hpp
     addon_session_ui.cpp addon_session_ui.hpp addon_session_ui_manager.cpp
+    addon_source_consent_ui.cpp addon_source_consent_ui.hpp
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
     addon_visualizer_worker_runtime.cpp addon_visualizer_render_queue.cpp
@@ -37,7 +38,7 @@ foreach(name packages runtime metadata broker ui_registry discovery theme sessio
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
     add_test(NAME addon_${name} COMMAND test_addon_${name})
 endforeach()
-foreach(name session_websocket session_host session_ui git_objects)
+foreach(name session_websocket session_host session_ui source_consent_ui git_objects)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     add_test(NAME addon_${name} COMMAND test_addon_${name})
