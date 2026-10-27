@@ -8,12 +8,14 @@ class AddonPlayableGate;
 class AddonDiscoveryService;
 struct AddonDiscoveryNativeBackend {
     bool stableReferencePlaybackAvailable = false;
+    bool libraryAppendAvailable = false;
     std::function<AddonQueueTransactions::Snapshot(const QString& target)> snapshot;
     std::function<AddonQueueTransactions::Cancel(const AddonQueueTransactions::Transaction&, AddonQueueTransactions::Completion)> append;
     // The consumer does the final target identity/revision check under its write
     // lock. It retains the input item if the queue or player will use it later.
     std::function<bool(const AddonQueueTransactions::Transaction&, input_item_t*, QString* error)> play;
 };
+AddonDiscoveryNativeBackend combineDiscoveryBackends(AddonDiscoveryNativeBackend queue, AddonDiscoveryNativeBackend library);
 AddonDiscoveryService* createPlayerDiscovery(AddonManager*, AddonPlayableGate*, AddonDiscoveryNativeBackend, QObject* parent);
 // Call on the manager thread. Admission does not change source activation.
 bool discoveryReferenceAvailable(AddonManager*, const QVariantMap& reference);

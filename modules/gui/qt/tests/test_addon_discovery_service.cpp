@@ -2,6 +2,7 @@
 #include <QTest>
 #include <QSignalSpy>
 #include "addons/addon_discovery_service.hpp"
+#include "addons/addon_player_discovery.hpp"
 
 using namespace vlc::addons;
 class TestAddonDiscoveryService : public QObject
@@ -35,6 +36,60 @@ class TestAddonDiscoveryService : public QObject
     };
     static QVariantList items(AddonDiscoveryService& service, const QString& id) { return service.view(id).value("items").toList(); }
 private slots:
+    void playlistSelectionKeepsNativeAuthorityOutsideProviderCalls() {
+        Fixture fixture; QString appended; QStringList released;
+        AddonQueueTransactions::Backend queues;
+        queues.snapshot=[](const QString& target) { return AddonQueueTransactions::Snapshot{target==QLatin1String("library:one"),target,1}; };
+        queues.append=[&](const auto& transaction,auto done) { appended=transaction.target; done(true,{}); return []{}; };
+        AddonDiscoveryService service(fixture.backend(),queues);
+        AddonDiscoveryService::PlaylistBackend playlists;
+        playlists.list=[](const QString&,auto done) { done(true,{QVariantMap{{"ref","choice:one"},{"name","Saved playlist"}}},false,{}); return []{}; };
+        playlists.prepare=[](const QString& choice,auto done) { if (choice==QLatin1String("choice:one")) done("library:one",{}); return []{}; };
+        playlists.release=[&](const QString& target) { released.append(target); }; service.setPlaylistBackend(playlists);
+        const auto view=service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(),1);
+        fixture.complete(service,0,{{"items",QVariantList{Fixture::item("station")}}}); QTRY_COMPARE(items(service,view).size(),1);
+        QTRY_VERIFY(service.view(view).value("playlistAvailable").toBool()); QVERIFY(!service.canEnqueue(view));
+        QVERIFY(!service.choosePlaylist(view,"native-id:42")); QVERIFY(service.choosePlaylist(view,"choice:one"));
+        QCOMPARE(service.view(view).value("playlistTarget").toString(),QStringLiteral("library:one"));
+        const auto item=items(service,view).first().toMap().value("ref").toString();
+        QVERIFY(service.enqueue(view,{item},"library:foreign").isEmpty());
+        QVERIFY(!service.enqueue(view,{item},"library:one").isEmpty());
+        QCOMPARE(appended,QStringLiteral("library:one")); QTRY_COMPARE(released,QStringList{QStringLiteral("library:one")});
+        QVERIFY(service.view(view).value("playlistTarget").toString().isEmpty());
+        QVERIFY(service.enqueue(view,{item},"library:one").isEmpty()); QCOMPARE(fixture.calls.size(),1);
+        QVERIFY(!fixture.calls.first().toMap().value("context").toMap().contains("playlist"));
+    }
+    void latePlaylistPreparationIsReleasedAfterViewCloseOrReselection() {
+        Fixture fixture; AddonDiscoveryService service(fixture.backend(),{}); QStringList released,releasedChoices; int canceled=0;
+        QList<AddonDiscoveryService::PlaylistBackend::Prepared> pending;
+        AddonDiscoveryService::PlaylistBackend playlists;
+        playlists.list=[](const QString&,auto done) { done(true,{QVariantMap{{"ref","choice:one"},{"name","Playlist"}}},false,{}); return []{}; };
+        playlists.prepare=[&](const QString&,auto done) { pending.append(std::move(done)); return [&] { ++canceled; }; };
+        playlists.release=[&](const QString& target) { released.append(target); };
+        playlists.releaseChoices=[&](const QStringList& choices) { releasedChoices.append(choices); }; service.setPlaylistBackend(playlists);
+        const auto view=service.openSource("org.example.radio/source"); QTRY_VERIFY(service.view(view).value("playlistAvailable").toBool());
+        QVERIFY(service.choosePlaylist(view,"choice:one")); QVERIFY(service.choosePlaylist(view,"choice:one")); QCOMPARE(canceled,1);
+        pending[0]("library:old",{}); QCOMPARE(released,QStringList{QStringLiteral("library:old")});
+        pending[1]("library:current",{}); QCOMPARE(service.view(view).value("playlistTarget").toString(),QStringLiteral("library:current"));
+        service.closeView(view); QVERIFY(released.contains("library:current"));
+        QVERIFY(releasedChoices.contains("choice:one"));
+        const auto next=service.openSource("org.example.radio/source"); QTRY_VERIFY(service.view(next).value("playlistAvailable").toBool());
+        QVERIFY(service.choosePlaylist(next,"choice:one")); service.invalidate(); pending.last()("library:late",{});
+        QVERIFY(released.contains("library:late")); QVERIFY(service.view(next).isEmpty());
+    }
+    void nativeBackendMultiplexerHasNoFallbackForUnknownTargets() {
+        QString appended; AddonDiscoveryNativeBackend queue,library;
+        queue.snapshot=[](const QString& target) { return AddonQueueTransactions::Snapshot{true,"queue-identity",1}; };
+        library.snapshot=[](const QString& target) { return AddonQueueTransactions::Snapshot{target==QLatin1String("library:one"),target,2}; };
+        queue.append=[&](const auto&,auto done) { appended="queue"; done(true,{}); return []{}; };
+        library.append=[&](const auto&,auto done) { appended="library"; done(true,{}); return []{}; };
+        const auto combined=combineDiscoveryBackends(queue,library); QVERIFY(combined.libraryAppendAvailable); QVERIFY(!combined.stableReferencePlaybackAvailable);
+        QVERIFY(combined.snapshot("queue").available); QVERIFY(combined.snapshot("library:one").available); QVERIFY(!combined.snapshot("other:one").available);
+        AddonQueueTransactions::Transaction transaction; transaction.target="other:one"; bool success=true;
+        combined.append(transaction,[&](bool result,const QString&) { success=result; }); QVERIFY(!success); QVERIFY(appended.isEmpty());
+        transaction.target="library:one"; combined.append(transaction,[](bool,const QString&) {}); QCOMPARE(appended,QStringLiteral("library"));
+        transaction.target="queue"; combined.append(transaction,[](bool,const QString&) {}); QCOMPARE(appended,QStringLiteral("queue"));
+    }
     void browseAndSearchUseOnlyHostReferences() {
         Fixture fixture; AddonDiscoveryService service(fixture.backend(), {});
         const auto view = service.openSource("org.example.radio/source"); QVERIFY(!view.isEmpty());

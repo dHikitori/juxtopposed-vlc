@@ -17,6 +17,8 @@
  *****************************************************************************/
 
 #include "medialib.hpp"
+#include <vlc_medialibrary_work.h>
+#include <QScopeGuard>
 #include "mlhelper.hpp"
 #include "playlist/playlist_controller.hpp"
 #include "util/shared_input_item.hpp"
@@ -61,6 +63,25 @@ MediaLib::~MediaLib()
 {
     cancelTrackMatching();
     m_runner->destroy();
+}
+
+struct MediaLib::NativeTask {
+    vlc_ml_work_t* lease;
+    explicit NativeTask(vlc_ml_work_t* value) : lease(value) {}
+    ~NativeTask() { vlc_ml_work_Release(lease); }
+};
+std::shared_ptr<MediaLib::NativeTask> MediaLib::nativeTask() const
+{
+    auto* lease=vlc_ml_work_Acquire(m_ml); if (!lease) return {};
+    try { return std::make_shared<NativeTask>(lease); }
+    catch (...) { vlc_ml_work_Release(lease); throw; }
+}
+void MediaLib::invokeNativeTask(const std::shared_ptr<NativeTask>& task,
+    const std::function<void(vlc_medialibrary_t*)>& work)
+{
+    auto* ml=vlc_ml_work_Begin(task->lease); if (!ml) return;
+    const auto finish=qScopeGuard([&] { vlc_ml_work_End(task->lease); });
+    work(ml);
 }
 
 void MediaLib::setFolderRoots(QStringList roots)
@@ -1325,8 +1346,8 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                 const char* queue)
 {
     struct NoCtx{};
-    return m_runner->runOnThread<NoCtx>(obj,
-    [mlCb, ml=m_ml](NoCtx&){
+    return runOnMLThread<NoCtx>(obj,
+    [mlCb](vlc_medialibrary_t* ml,NoCtx&){
         mlCb(ml);
     },
     [uiCb](quint64, NoCtx&){
@@ -1340,8 +1361,8 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                 std::function< void(quint64)> uiCb, const char* queue)
 {
     struct NoCtx{};
-    return m_runner->runOnThread<NoCtx>(obj,
-    [mlCb, ml=m_ml](NoCtx&){
+    return runOnMLThread<NoCtx>(obj,
+    [mlCb](vlc_medialibrary_t* ml,NoCtx&){
         mlCb(ml);
     },
     [uiCb](quint64 requestId, NoCtx&){
@@ -1355,8 +1376,8 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                 const char* queue)
 {
     struct NoCtx{};
-    return m_runner->runOnThread<NoCtx>(obj,
-    [mlCb, ml=m_ml](NoCtx&){
+    return runOnMLThread<NoCtx>(obj,
+    [mlCb](vlc_medialibrary_t* ml,NoCtx&){
         mlCb(ml);
     },
     [](quint64, NoCtx&){

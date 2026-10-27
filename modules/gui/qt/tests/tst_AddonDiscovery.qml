@@ -31,7 +31,10 @@ TestCase {
         function back(id) { calls = calls.concat([{operation: "back", id: id}]); return true }
         function loadMore(id) { calls = calls.concat([{operation: "more", id: id}]); return true }
         function search(id, query) { calls = calls.concat([{operation: "search", id: id, query: query}]); return true }
-        function enqueue(id, refs) { calls = calls.concat([{operation: "enqueue", id: id, refs: refs}]); return "transaction" }
+        function enqueue(id, refs, target) { calls = calls.concat([{operation: "enqueue", id: id, refs: refs, target: target || "queue"}]); return "transaction" }
+        function loadPlaylists(id, query) { calls = calls.concat([{operation: "playlists", id: id, query: query || ""}]); return true }
+        function choosePlaylist(id, choice) { calls = calls.concat([{operation: "choose", id: id, choice: choice}]); return true }
+        function clearPlaylist(id) { calls = calls.concat([{operation: "release", id: id}]); current = Object.assign({}, current, {playlistTarget: "", canAddToPlaylist: false}); viewChanged(id) }
         function play(id, ref) { calls = calls.concat([{operation: "play", id: id, ref: ref}]); return "play-request" }
     }
     Component { id: pageComponent; RedesignAddonDiscovery { width: 750; height: 550; backend: service } }
@@ -63,7 +66,33 @@ TestCase {
         view.select("item-1")
         verify(!findChild(view, "addonDiscoveryPlay").enabled)
         verify(!findChild(view, "addonDiscoveryEnqueue").enabled)
+        verify(!findChild(view, "addonDiscoveryPlaylist").visible)
         compare(service.calls.length, 1)
+    }
+    function test_playlistNeedsAnOpaquePreparedTargetAndExplicitConfirmation() {
+        const view = page(); view.openSource("org.example.radio/source"); view.select("item-1")
+        service.current = Object.assign({}, service.current, {playlistAvailable: true, playlists: [{ref: "choice:one", name: "<b>Saved</b>"}], canAddToPlaylist: false})
+        service.viewChanged(view.viewId)
+        findChild(view, "addonDiscoveryPlaylist").clicked()
+        const choices = findChild(view, "addonDiscoveryPlaylistChoices")
+        verify(choices.visible); choices.activated(1)
+        compare(service.calls[1].operation, "playlists"); compare(service.calls[2].operation, "choose"); compare(service.calls[2].choice, "choice:one")
+        compare(choices.contentItem.textFormat, Text.PlainText); compare(choices.contentItem.text, "<b>Saved</b>")
+        verify(!findChild(view, "addonDiscoveryPlaylistConfirm").enabled)
+        service.current = Object.assign({}, service.current, {playlistTarget: "library:opaque", canAddToPlaylist: true})
+        service.viewChanged(view.viewId)
+        findChild(view, "addonDiscoveryPlaylistConfirm").clicked()
+        compare(service.calls[3].operation, "enqueue"); compare(service.calls[3].target, "library:opaque")
+        compare(service.calls[3].refs[0], "item-1"); verify(!view.playlistPickerOpen)
+    }
+    function test_playlistCancelAndItemReselectionReleaseTheTarget() {
+        const view = page(); view.openSource("org.example.radio/source"); view.select("item-1")
+        service.current = Object.assign({}, service.current, {playlistAvailable: true, playlists: [], playlistTarget: "library:old", canAddToPlaylist: true})
+        service.viewChanged(view.viewId); findChild(view, "addonDiscoveryPlaylist").clicked()
+        findChild(view, "addonDiscoveryPlaylistCancel").clicked()
+        compare(service.calls[2].operation, "release"); verify(!view.playlistPickerOpen)
+        findChild(view, "addonDiscoveryPlaylist").clicked(); view.select("item-1")
+        compare(service.calls[4].operation, "release"); verify(!view.playlistPickerOpen)
     }
     function test_nodeAndSearchUseOnlyOpaqueReferences() {
         const view = page(); view.openSource("org.example.radio/source")

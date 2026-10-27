@@ -14,8 +14,17 @@ class AddonDiscoveryService final : public QObject
     Q_PROPERTY(QVariantList sources READ sources NOTIFY changed FINAL)
     Q_PROPERTY(int revision READ revision NOTIFY changed FINAL)
 public:
+    struct PlaylistBackend {
+        using Choices = std::function<void(bool available, const QVariantList&, bool more, const QString&)>;
+        using Prepared = std::function<void(const QString& target, const QString& error)>;
+        std::function<AddonQueueTransactions::Cancel(const QString& query, Choices)> list;
+        std::function<AddonQueueTransactions::Cancel(const QString& choice, Prepared)> prepare;
+        std::function<void(const QString& target)> release;
+        std::function<void(const QStringList& choices)> releaseChoices;
+    };
     AddonDiscoveryService(AddonDiscoveryCoordinator::Backend, AddonQueueTransactions::Backend, QObject* parent = nullptr);
     AddonDiscoveryService(AddonManager*, AddonDiscoveryCoordinator::Backend, AddonQueueTransactions::Backend, QObject* parent = nullptr);
+    ~AddonDiscoveryService() override;
     QVariantList sources() const { return m_coordinator.sources(); }
     int revision() const { return m_revision; }
     Q_INVOKABLE QString openSource(const QString& source);
@@ -26,6 +35,10 @@ public:
     Q_INVOKABLE bool loadMore(const QString& view);
     Q_INVOKABLE bool canPlay(const QString& view) const;
     Q_INVOKABLE bool canEnqueue(const QString& view) const;
+    void setPlaylistBackend(PlaylistBackend);
+    Q_INVOKABLE bool loadPlaylists(const QString& view, const QString& query = {});
+    Q_INVOKABLE bool choosePlaylist(const QString& view, const QString& choice);
+    Q_INVOKABLE void clearPlaylist(const QString& view);
     Q_INVOKABLE QString enqueue(const QString& view, const QStringList& items, const QString& target = QStringLiteral("queue"));
     Q_INVOKABLE QString play(const QString& view, const QString& item);
     Q_INVOKABLE void closeView(const QString& view);
@@ -45,6 +58,11 @@ private:
         QVariantList items;
         quint64 generation = 1;
         bool busy = false, append = false;
+        QVariantList playlists;
+        QString playlistTarget, playlistError;
+        AddonQueueTransactions::Cancel playlistCancel;
+        quint64 playlistGeneration = 0;
+        bool playlistAvailable = false, playlistBusy = false, morePlaylists = false;
     };
     struct Play { QString view, item; AddonQueueTransactions::Snapshot snapshot; };
     static AddonDiscoveryCoordinator::Backend managerBackend(AddonManager*, AddonDiscoveryCoordinator::Backend);
@@ -57,6 +75,9 @@ private:
     QHash<QString, Play> m_plays;
     QHash<QString, QString> m_actions;
     QHash<QString, QString> m_playActions;
+    QHash<QString, QString> m_libraryActions;
+    PlaylistBackend m_playlists;
     int m_revision = 0;
+    bool m_closing = false;
 };
 }

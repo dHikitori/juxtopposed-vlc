@@ -9,7 +9,7 @@ The dependency patch and the VLC module boundary are implemented. The installed 
 
 The dependency tests pass 23 transaction and preparation groups plus 13 existing playlist cases. They cover rollback when a trigger skips an insert, full suffix and order checks, changed or reused playlist IDs, real database reset and restore, repeated source references, and new-record title preparation. The patch applies after the previous six patches with no fuzz or offset; all eight output files match the tested source.
 
-The host picker and store still need their final app and shutdown tests. These module tests do not establish that the host mount is complete.
+The host picker and store now pass all 21 actual app cases. They include exact selection snapshots, native source titles, account changes, cancellation, actual dispatcher append, and Core shutdown with active and queued work. The service and QML suites each pass 11 cases. Production source playback remains gated on the lazy resolver, consent, and contained transport.
 
 ## Required result
 

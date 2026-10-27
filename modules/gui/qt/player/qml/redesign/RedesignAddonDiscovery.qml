@@ -9,7 +9,9 @@ FocusScope {
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
-    property bool playlistActionsAvailable: false
+    property bool playlistActionsAvailable: viewState.playlistAvailable === true
+    property bool playlistPickerOpen: false
+    property string playlistChoice: ""
     property string viewId: ""
     property string sourceId: ""
     property var viewState: ({})
@@ -23,7 +25,7 @@ FocusScope {
     readonly property bool canSearch: (source.operations || []).includes("search")
     signal configureRequested(string packageId)
     signal playlistRequested(var itemReferences)
-    function closeView() { if (backend && viewId.length) backend.closeView(viewId); viewId = ""; viewState = ({}); rows.clear(); selected = [] }
+    function closeView() { if (backend && viewId.length) backend.closeView(viewId); viewId = ""; viewState = ({}); rows.clear(); selected = []; playlistPickerOpen = false; playlistChoice = "" }
     function openSource(id) {
         closeView(); sourceId = id; actionError = ""; query.text = ""
         if (!id.length) return
@@ -47,7 +49,16 @@ FocusScope {
         }
         selected = selected.filter(ref => wanted.has(ref))
     }
-    function select(ref) { selected = selected.includes(ref) ? selected.filter(value => value !== ref) : selected.concat([ref]) }
+    function select(ref) {
+        if (playlistPickerOpen) cancelPlaylist()
+        selected = selected.includes(ref) ? selected.filter(value => value !== ref) : selected.concat([ref])
+    }
+    function cancelPlaylist() { if (backend && viewId.length && backend.clearPlaylist) backend.clearPlaylist(viewId); playlistPickerOpen = false; playlistChoice = "" }
+    function addToPlaylist() {
+        const target = viewState.playlistTarget || ""
+        if (!target.length || !backend.enqueue(viewId, selected, target)) actionError = qsTr("The app cannot add this selection to the playlist.")
+        else { playlistPickerOpen = false; playlistChoice = "" }
+    }
     function search() { if (viewId.length) { selected = []; actionError = ""; backend.search(viewId, query.text) } }
     function enqueue() {
         actionError = ""
@@ -65,7 +76,7 @@ FocusScope {
         function onViewChanged(id) { if (id === root.viewId) root.reload() }
         function onViewClosed(id) {
             if (id !== root.viewId) return
-            root.viewId = ""; root.viewState = ({}); rows.clear(); root.selected = []
+            root.viewId = ""; root.viewState = ({}); rows.clear(); root.selected = []; root.playlistPickerOpen = false; root.playlistChoice = ""
             root.actionError = qsTr("The source changed. Open it again.")
         }
         function onActionFinished(id, success, error) { if (id === root.viewId) root.actionError = success ? "" : error }
@@ -169,6 +180,65 @@ FocusScope {
             color: root.theme.danger; font.pixelSize: root.theme.dp(13)
             Accessible.role: Accessible.AlertMessage
         }
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: root.playlistPickerOpen && root.playlistActionsAvailable
+            RowLayout {
+                Layout.fillWidth: true
+                C.TextField {
+                    id: playlistQuery
+                    objectName: "addonDiscoveryPlaylistQuery"
+                    Layout.fillWidth: true; maximumLength: 256
+                    placeholderText: qsTr("Search playlists"); Accessible.name: placeholderText
+                    color: root.theme.bright; font.pixelSize: root.theme.dp(14)
+                    background: Rectangle { color: root.theme.field; radius: root.theme.dp(root.theme.controlRadius); border.width: 1; border.color: root.theme.border }
+                    onAccepted: { root.playlistChoice = ""; root.backend.loadPlaylists(root.viewId, text) }
+                }
+                RedesignButton {
+                    objectName: "addonDiscoveryPlaylistSearch"
+                    caption: qsTr("Search"); text: caption; enabled: root.viewState.playlistBusy !== true
+                    scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                    onClicked: { root.playlistChoice = ""; root.backend.loadPlaylists(root.viewId, playlistQuery.text) }
+                }
+            }
+            RedesignComboBox {
+                objectName: "addonDiscoveryPlaylistChoices"
+                Layout.fillWidth: true
+                readonly property var choices: [{ref: "", name: qsTr("Select playlist")}].concat(root.viewState.playlists || [])
+                model: choices; textRole: "name"; valueRole: "ref"; labelTextFormat: Text.PlainText
+                currentIndex: Math.max(0, choices.findIndex(entry => entry.ref === root.playlistChoice))
+                enabled: root.viewState.playlistBusy !== true
+                Accessible.name: qsTr("Playlist")
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onActivated: index => {
+                    root.playlistChoice = choices[index].ref
+                    if (root.playlistChoice.length) root.backend.choosePlaylist(root.viewId, root.playlistChoice)
+                    else root.backend.clearPlaylist(root.viewId)
+                }
+            }
+            Text {
+                Layout.fillWidth: true; textFormat: Text.PlainText; wrapMode: Text.Wrap
+                text: root.viewState.playlistError || (root.viewState.playlistBusy ? qsTr("The app must prepare the playlist.")
+                    : root.viewState.morePlaylists ? qsTr("Use search to find other playlists.")
+                    : !(root.viewState.playlists || []).length ? qsTr("No saved playlists match this search.") : "")
+                visible: text.length > 0; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+            }
+            RowLayout {
+                RedesignButton {
+                    objectName: "addonDiscoveryPlaylistCancel"
+                    caption: qsTr("Cancel"); text: caption
+                    scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                    onClicked: root.cancelPlaylist()
+                }
+                RedesignButton {
+                    objectName: "addonDiscoveryPlaylistConfirm"
+                    caption: qsTr("Add"); text: caption
+                    enabled: root.selected.length > 0 && root.viewState.canAddToPlaylist === true && root.viewState.playlistBusy !== true
+                    scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                    onClicked: root.addToPlaylist()
+                }
+            }
+        }
         RowLayout {
             Layout.fillWidth: true
             RedesignButton {
@@ -188,7 +258,10 @@ FocusScope {
                 visible: root.playlistActionsAvailable
                 caption: qsTr("Add to playlist"); text: caption; enabled: root.selected.length > 0
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                onClicked: root.playlistRequested(root.selected.slice())
+                onClicked: {
+                    root.playlistPickerOpen = true; root.playlistChoice = ""
+                    root.backend.loadPlaylists(root.viewId, playlistQuery.text)
+                }
             }
         }
     }

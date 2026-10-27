@@ -218,6 +218,9 @@ signals:
     void idleChanged();
 
 private:
+    struct NativeTask;
+    std::shared_ptr<NativeTask> nativeTask() const;
+    static void invokeNativeTask(const std::shared_ptr<NativeTask>&, const std::function<void(vlc_medialibrary_t*)>&);
     void saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles,
                                  const QVariantMap& rule, QJSValue callback);
     enum class MediaStateAction { Read, Ensure, Played, Favorite };
@@ -251,5 +254,8 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                                     std::function<void (quint64 taskId, Ctx&)> uiFun,
                                     const char* queue)
 {
-    return m_runner->runOnThread<Ctx>(obj, [ml = m_ml, mlFun](Ctx& ctx){mlFun(ml,ctx);}, uiFun, queue);
+    const auto task=nativeTask(); if (!task) return 0;
+    return m_runner->runOnThread<Ctx>(obj, [task,mlFun](Ctx& ctx) {
+        invokeNativeTask(task,[&](vlc_medialibrary_t* ml) { mlFun(ml,ctx); });
+    },uiFun,queue);
 }

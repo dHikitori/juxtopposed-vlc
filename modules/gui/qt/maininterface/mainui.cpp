@@ -83,6 +83,8 @@
 #include "addons/addon_visualizer_surface.hpp"
 #include "addons/addon_discovery_service.hpp"
 #include "addons/addon_native_queue_store.hpp"
+#include "addons/addon_native_library_store.hpp"
+#include "addons/addon_native_library_targets.hpp"
 #include "addons/addon_player_discovery.hpp"
 #include "addons/addon_playable_gate.hpp"
 #include <QApplication>
@@ -165,6 +167,8 @@ MainUI::MainUI(qt_intf_t *p_intf, MainCtx *mainCtx, QWindow* interfaceWindow,  Q
 
 MainUI::~MainUI()
 {
+    for (auto* picker:findChildren<vlc::addons::AddonNativeLibraryTargets*>(QString(),Qt::FindDirectChildrenOnly)) picker->close();
+    for (auto* library:findChildren<vlc::addons::AddonNativeLibraryStore*>(QString(),Qt::FindDirectChildrenOnly)) library->close();
     if (!m_engineBound)
     {
         // If the global engine is dead, we assume no other QML engine exists hence can clear the
@@ -408,7 +412,18 @@ void MainUI::registerQMLTypes()
             nativeQueue->setObjectName(QStringLiteral("addonNativeQueueStore"));
             auto* playableGate = new vlc::addons::AddonPlayableGate(addonManager, this);
             playableGate->setObjectName(QStringLiteral("addonPlayableGate"));
-            auto* discovery = vlc::addons::createPlayerDiscovery(addonManager, playableGate, nativeQueue->backend(), this);
+            auto nativeBackend=nativeQueue->backend();
+            vlc::addons::AddonNativeLibraryTargets* libraryTargets=nullptr;
+            if (auto* mediaLibrary=m_mainCtx->getMediaLibrary()) {
+                const auto dispatcher=vlc::addons::AddonNativeLibraryStore::dispatcherFor(mediaLibrary);
+                auto* libraryStore=new vlc::addons::AddonNativeLibraryStore(dispatcher,admissions,addonManager,this);
+                libraryStore->setObjectName(QStringLiteral("addonNativeLibraryStore"));
+                libraryTargets=new vlc::addons::AddonNativeLibraryTargets(dispatcher,libraryStore,this);
+                connect(addonManager,&QObject::destroyed,libraryTargets,&vlc::addons::AddonNativeLibraryTargets::close);
+                nativeBackend=vlc::addons::combineDiscoveryBackends(std::move(nativeBackend),libraryStore->backend());
+            }
+            auto* discovery = vlc::addons::createPlayerDiscovery(addonManager, playableGate, std::move(nativeBackend), this);
+            if (libraryTargets) discovery->setPlaylistBackend(libraryTargets->backend());
             qmlRegisterSingletonInstance<vlc::addons::AddonDiscoveryService>(uri, versionMajor, versionMinor, "AddonDiscovery", discovery);
         }
         qmlRegisterType<vlc::addons::AddonVisualizerSurface>(uri, versionMajor, versionMinor, "AddonVisualizerSurface");

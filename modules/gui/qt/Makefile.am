@@ -146,6 +146,10 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_source_admissions.hpp \
 	addons/addon_native_queue_store.cpp \
 	addons/addon_native_queue_store.hpp \
+	addons/addon_native_library_store.cpp \
+	addons/addon_native_library_store.hpp \
+	addons/addon_native_library_targets.cpp \
+	addons/addon_native_library_targets.hpp \
 	addons/addon_theme_service.cpp \
 	addons/addon_theme_service.hpp \
 	addons/addon_sessions.cpp \
@@ -182,6 +186,8 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_queue_transactions.moc.cpp \
 	addons/addon_discovery_service.moc.cpp \
 	addons/addon_native_queue_store.moc.cpp \
+	addons/addon_native_library_store.moc.cpp \
+	addons/addon_native_library_targets.moc.cpp \
 	addons/addon_theme_service.moc.cpp \
 	addons/addon_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
@@ -3092,3 +3098,4 @@ endif
 EXTRA_DIST += $(addon_reference_DATA) $(addon_reference_dist_DATA) $(addon_reference_settings_DATA) $(addon_reference_locales_DATA)
 EXTRA_DIST += $(addon_tvmaze_DATA) $(addon_tvmaze_dist_DATA)
 EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/test_addon_artwork_consumers.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp util/artwork_approval.hpp
+EXTRA_DIST += tests/build_addon_native_library_tests.py tests/test_addon_native_library_store.cpp

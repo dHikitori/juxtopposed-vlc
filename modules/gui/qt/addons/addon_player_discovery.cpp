@@ -5,6 +5,23 @@
 #include <QPointer>
 
 namespace vlc::addons {
+AddonDiscoveryNativeBackend combineDiscoveryBackends(AddonDiscoveryNativeBackend queue,AddonDiscoveryNativeBackend library)
+{
+    AddonDiscoveryNativeBackend result;
+    result.stableReferencePlaybackAvailable=queue.stableReferencePlaybackAvailable;
+    result.libraryAppendAvailable=bool(library.snapshot) && bool(library.append);
+    result.play=queue.play;
+    result.snapshot=[queue,library](const QString& target) {
+        if (target==QLatin1String("queue")) return queue.snapshot?queue.snapshot(target):AddonQueueTransactions::Snapshot{};
+        return target.startsWith(QLatin1String("library:")) && library.snapshot?library.snapshot(target):AddonQueueTransactions::Snapshot{};
+    };
+    result.append=[queue,library](const auto& transaction,auto done) {
+        if (transaction.target==QLatin1String("queue") && queue.append) return queue.append(transaction,std::move(done));
+        if (transaction.target.startsWith(QLatin1String("library:")) && library.append) return library.append(transaction,std::move(done));
+        done(false,QObject::tr("The destination is not available.")); return AddonQueueTransactions::Cancel{};
+    };
+    return result;
+}
 bool discoveryReferenceAvailable(AddonManager* manager, const QVariantMap& reference)
 {
     if (!manager || manager->safeMode() || !AddonQueueTransactions::validReference(reference)) return false;
@@ -36,8 +53,14 @@ AddonDiscoveryService* createPlayerDiscovery(AddonManager* manager, AddonPlayabl
     }
     AddonQueueTransactions::Backend queues;
     const bool playableReferences = gate && gate->supported() && native.stableReferencePlaybackAvailable;
-    queues.snapshot = std::move(native.snapshot);
-    if (playableReferences) queues.append = std::move(native.append);
+    queues.snapshot = [snapshot=std::move(native.snapshot),playableReferences](const QString& target) {
+        return snapshot && (target!=QLatin1String("queue") || playableReferences)?snapshot(target):AddonQueueTransactions::Snapshot{};
+    };
+    if (native.append && (playableReferences || native.libraryAppendAvailable))
+        queues.append = [append=std::move(native.append),playableReferences](const auto& transaction,auto done) {
+            if (transaction.target!=QLatin1String("queue") || playableReferences) return append(transaction,std::move(done));
+            done(false,QObject::tr("Discovery playback is not available.")); return AddonQueueTransactions::Cancel{};
+        };
     queues.releasePlayable = [guardedGate](const QString& handle) { if (guardedGate) guardedGate->release(handle); };
     if (playableReferences && native.play) queues.play = [guardedGate, consume = std::move(native.play)](const AddonQueueTransactions::Transaction& transaction, auto completion) {
         QString error;

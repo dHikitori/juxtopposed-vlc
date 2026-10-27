@@ -46,7 +46,9 @@ if(VLC_BUILD_DIR)
     add_library(vlc_addon_core UNKNOWN IMPORTED)
     set_target_properties(vlc_addon_core PROPERTIES IMPORTED_LOCATION "${VLC_CORE_LIBRARY}")
     add_library(vlc_addon_native_metadata STATIC addon_metadata_service.cpp addon_metadata_service.hpp
-        addon_native_queue_store.cpp addon_native_queue_store.hpp)
+        addon_native_queue_store.cpp addon_native_queue_store.hpp
+        addon_native_library_store.cpp addon_native_library_store.hpp
+        addon_native_library_targets.cpp addon_native_library_targets.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
@@ -65,6 +67,15 @@ if(VLC_BUILD_DIR)
     target_include_directories(test_addon_native_queue_store PRIVATE "${VLC_SOURCE_ROOT}")
     target_compile_definitions(test_addon_native_queue_store PRIVATE VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
     add_test(NAME addon_native_queue_store COMMAND test_addon_native_queue_store)
+
+    find_package(SQLite3 QUIET)
+    if(TARGET SQLite::SQLite3)
+        add_executable(test_addon_native_library_store "../tests/test_addon_native_library_store.cpp")
+        target_link_libraries(test_addon_native_library_store PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}" SQLite::SQLite3)
+        target_include_directories(test_addon_native_library_store PRIVATE "${VLC_SOURCE_ROOT}")
+        target_compile_definitions(test_addon_native_library_store PRIVATE VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
+        add_test(NAME addon_native_library_store COMMAND test_addon_native_library_store)
+    endif()
 
     add_executable(test_metadata_backend "${VLC_SOURCE_ROOT}/test/src/misc/metadata_backend.c")
     set_target_properties(test_metadata_backend PROPERTIES AUTOMOC OFF)
