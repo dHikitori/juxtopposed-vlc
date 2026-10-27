@@ -53,7 +53,8 @@ struct vlc_metadata_backend_operations {
     /** The bridge calls this function without its lock. The job is valid for
      * this call. Use Hold before asynchronous work. Release the reference
      * after a result, cancellation, or queue error. Return without a wait for
-     * a UI event or network operation.
+     * a UI event or network operation. Refuse a cancelled or closed job before
+     * I/O and after each queued handoff.
      */
     int (*dispatch)(void *opaque, vlc_metadata_job_t *job);
     /** Use this hook for host cleanup. The native request is complete before
@@ -75,6 +76,18 @@ VLC_API void vlc_metadata_backend_Release(vlc_metadata_backend_t *);
  */
 VLC_API void vlc_metadata_backend_Close(vlc_metadata_backend_t *);
 VLC_API bool vlc_metadata_backend_IsClosed(vlc_metadata_backend_t *);
+/** Suspend dispatch before an ownership transition. Refuse a closed backend
+ * or a backend with active dispatched work. An already suspended backend can
+ * retain another suspension. Pair each successful call with Resume.
+ * Start can accept bounded pending jobs while dispatch is suspended.
+ * A suspended backend does not admit an Apply operation.
+ */
+VLC_API bool vlc_metadata_backend_Suspend(vlc_metadata_backend_t *);
+/** Release one suspension. Dispatch pending jobs outside the backend lock.
+ * A closed backend does not resume work. No interface event is necessary.
+ */
+VLC_API void vlc_metadata_backend_Resume(vlc_metadata_backend_t *);
+VLC_API bool vlc_metadata_backend_IsReady(vlc_metadata_backend_t *);
 
 VLC_API vlc_metadata_job_t *vlc_metadata_job_New(vlc_metadata_backend_t *, const struct vlc_metadata_request *, vlc_metadata_ended_cb, void *userdata);
 VLC_API vlc_metadata_job_t *vlc_metadata_job_Hold(vlc_metadata_job_t *);

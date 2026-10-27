@@ -175,11 +175,44 @@ static void cancellation_completion_race_and_reentrant_close(void)
     assert(vlc_metadata_backend_IsClosed(owner)); assert(atomic_load(&fixture.callbacks) == 1);
     vlc_metadata_job_Release(value); vlc_metadata_backend_Release(owner);
 }
+static void suspended_jobs_cancel_and_resume_without_an_event_loop(void)
+{
+    struct fixture fixture = {0}; vlc_metadata_backend_t *owner = backend(&fixture);
+    assert(vlc_metadata_backend_IsReady(owner)); assert(vlc_metadata_backend_Suspend(owner));
+    assert(vlc_metadata_backend_Suspend(owner) && !vlc_metadata_backend_IsReady(owner));
+    vlc_metadata_job_t *first = job(owner, &fixture), *second = job(owner, &fixture);
+    assert(vlc_metadata_job_Start(first) == VLC_SUCCESS && vlc_metadata_job_Start(second) == VLC_SUCCESS);
+    assert(fixture.held_count == 0 && vlc_metadata_job_IsPending(first));
+    assert(vlc_metadata_job_Cancel(first)); assert(atomic_load(&fixture.callbacks) == 1 && atomic_load(&fixture.cancels) == 1);
+    vlc_metadata_backend_Resume(owner); assert(fixture.held_count == 0 && !vlc_metadata_backend_IsReady(owner));
+    vlc_metadata_backend_Resume(owner); assert(fixture.held_count == 1 && fixture.held[0] == second);
+    assert(vlc_metadata_backend_IsReady(owner)); assert(!vlc_metadata_backend_Suspend(owner));
+    assert(vlc_metadata_job_Complete(second, VLC_SUCCESS, NULL, NULL, 0)); assert(atomic_load(&fixture.callbacks) == 2);
+    vlc_metadata_backend_Resume(owner); assert(fixture.held_count == 1);
+    vlc_metadata_job_Release(first); vlc_metadata_job_Release(second); release_held(&fixture);
+    vlc_metadata_backend_Close(owner); vlc_metadata_backend_Release(owner);
+}
+static void suspended_close_and_reentrant_resume_do_not_dispatch_late_work(void)
+{
+    for (unsigned reentry = 0; reentry < 2; ++reentry) {
+        struct fixture fixture = {.synchronous=reentry != 0, .close_in_callback=reentry != 0};
+        vlc_metadata_backend_t *owner = backend(&fixture); assert(vlc_metadata_backend_Suspend(owner));
+        vlc_metadata_job_t *first = job(owner, &fixture), *second = job(owner, &fixture);
+        assert(vlc_metadata_job_Start(first) == VLC_SUCCESS && vlc_metadata_job_Start(second) == VLC_SUCCESS);
+        if (!reentry) vlc_metadata_backend_Close(owner);
+        vlc_metadata_backend_Resume(owner);
+        assert(vlc_metadata_backend_IsClosed(owner) && atomic_load(&fixture.callbacks) == 2);
+        assert(fixture.held_count == 0 && !vlc_metadata_backend_IsReady(owner));
+        vlc_metadata_job_Release(first); vlc_metadata_job_Release(second); vlc_metadata_backend_Release(owner);
+    }
+}
 int main(void)
 {
     idle_synchronous_and_rejected_dispatch();
     close_drains_without_an_event_loop_and_ignores_late_results();
     native_snapshot_and_patch_do_not_touch_the_live_item();
     cancellation_completion_race_and_reentrant_close();
+    suspended_jobs_cancel_and_resume_without_an_event_loop();
+    suspended_close_and_reentrant_resume_do_not_dispatch_late_work();
     return 0;
 }

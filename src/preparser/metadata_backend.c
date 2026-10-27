@@ -22,7 +22,7 @@ struct vlc_metadata_backend {
     vlc_atomic_rc_t refs;
     vlc_mutex_t lock;
     bool closed;
-    size_t active;
+    size_t active, suspensions;
     vlc_metadata_job_t *head;
     struct vlc_metadata_backend_operations ops;
     void *opaque;
@@ -31,7 +31,7 @@ struct vlc_metadata_job {
     vlc_atomic_rc_t refs;
     vlc_metadata_backend_t *backend;
     vlc_metadata_job_t *next, *previous;
-    bool started, terminal;
+    bool started, terminal, dispatched;
     bool commit_cancelled;
     int status;
     struct vlc_metadata_request request;
@@ -71,6 +71,20 @@ bool vlc_metadata_backend_IsClosed(vlc_metadata_backend_t *backend)
     const bool closed = backend->closed;
     vlc_mutex_unlock(&backend->lock);
     return closed;
+}
+bool vlc_metadata_backend_Suspend(vlc_metadata_backend_t *backend)
+{
+    vlc_mutex_lock(&backend->lock);
+    const bool accepted = !backend->closed && backend->suspensions != SIZE_MAX
+        && (backend->suspensions != 0 || backend->active == 0);
+    if (accepted) ++backend->suspensions;
+    vlc_mutex_unlock(&backend->lock); return accepted;
+}
+bool vlc_metadata_backend_IsReady(vlc_metadata_backend_t *backend)
+{
+    vlc_mutex_lock(&backend->lock);
+    const bool ready = !backend->closed && backend->suspensions == 0;
+    vlc_mutex_unlock(&backend->lock); return ready;
 }
 vlc_metadata_job_t *vlc_metadata_job_Hold(vlc_metadata_job_t *job)
 { vlc_atomic_rc_inc(&job->refs); return job; }
@@ -348,6 +362,7 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
     vlc_mutex_lock(&job->backend->lock);
     vlc_mutex_lock(&target->lock);
     if (job->backend->closed || job->commit_cancelled) status = -EINTR;
+    else if (job->backend->suspensions != 0) status = -EAGAIN;
     else if (target->p_meta == NULL || !same_string(job->uri, target->psz_uri)
         || job->policy != item_owner(target)->input_policy
         || vlc_meta_ExtraRevision(target->p_meta) != job->baseline.extra) status = -EAGAIN;
@@ -381,6 +396,31 @@ out:
     for (size_t i = 0; i < ARRAY_SIZE(values); ++i) free(values[i]);
     vlc_metadata_job_Release(job); return status;
 }
+static void dispatch_if_ready(vlc_metadata_job_t *job)
+{
+    vlc_metadata_backend_t *backend = job->backend;
+    vlc_mutex_lock(&backend->lock);
+    const bool ready = job->started && !job->terminal && !job->dispatched
+        && !backend->closed && backend->suspensions == 0;
+    if (ready) job->dispatched = true;
+    vlc_mutex_unlock(&backend->lock);
+    if (ready && vlc_metadata_job_IsPending(job)) {
+        const int status = backend->ops.dispatch(backend->opaque, job);
+        if (status != VLC_SUCCESS) vlc_metadata_job_Complete(job, status, NULL, NULL, 0);
+    }
+}
+void vlc_metadata_backend_Resume(vlc_metadata_backend_t *backend)
+{
+    vlc_metadata_backend_Hold(backend);
+    vlc_metadata_job_t *pending[MAX_ACTIVE]; size_t count = 0;
+    vlc_mutex_lock(&backend->lock);
+    if (backend->suspensions != 0 && --backend->suspensions == 0 && !backend->closed)
+        for (vlc_metadata_job_t *job = backend->head; job != NULL; job = job->next)
+            if (!job->dispatched) pending[count++] = vlc_metadata_job_Hold(job);
+    vlc_mutex_unlock(&backend->lock);
+    for (size_t i = 0; i < count; ++i) { dispatch_if_ready(pending[i]); vlc_metadata_job_Release(pending[i]); }
+    vlc_metadata_backend_Release(backend);
+}
 int vlc_metadata_job_Start(vlc_metadata_job_t *job)
 {
     vlc_metadata_job_Hold(job);
@@ -397,10 +437,7 @@ int vlc_metadata_job_Start(vlc_metadata_job_t *job)
     ++backend->active;
     vlc_metadata_job_Hold(job); // active-list reference
     vlc_mutex_unlock(&backend->lock);
-    if (vlc_metadata_job_IsPending(job)) {
-        const int status = backend->ops.dispatch(backend->opaque, job);
-        if (status != VLC_SUCCESS) vlc_metadata_job_Complete(job, status, NULL, NULL, 0);
-    }
+    dispatch_if_ready(job);
     vlc_metadata_job_Release(job);
     return VLC_SUCCESS;
 }

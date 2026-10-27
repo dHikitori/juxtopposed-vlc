@@ -34,17 +34,21 @@ static void unit_Forget(vlc_object_t *);
 #undef vlc_metadata_owner_Forget
 
 struct fixture {
-    unsigned ended, destroyed;
+    unsigned ended, destroyed, dispatched;
     vlc_object_t *owner;
     vlc_metadata_backend_t *replacement;
-    bool native, destroy_reentry, ended_forget;
+    bool native, destroy_reentry, ended_forget, close_in_dispatch;
 };
 static vlc_metadata_backend_t *hold_owner(struct fixture *state, bool *owned)
 { return state->native ? vlc_metadata_owner_Hold(state->owner, owned) : unit_Hold(state->owner, owned); }
 static int set_owner(struct fixture *state)
 { return state->native ? vlc_metadata_owner_Set(state->owner, state->replacement) : unit_Set(state->owner, state->replacement); }
 static int dispatch(void *opaque, vlc_metadata_job_t *job)
-{ (void)opaque; (void)job; return VLC_SUCCESS; }
+{
+    (void)job; struct fixture *state = opaque; ++state->dispatched;
+    if (state->close_in_dispatch) unit_Close(state->owner);
+    return VLC_SUCCESS;
+}
 static void destroy(void *opaque)
 {
     struct fixture *state = opaque; ++state->destroyed;
@@ -169,8 +173,126 @@ static void native_lifecycle_and_instance_isolation(void)
     assert(owned && held == b && !vlc_metadata_backend_IsClosed(held)); vlc_metadata_backend_Release(held);
     libvlc_InternalDestroy(second); vlc_metadata_backend_Release(b); assert(other.destroyed == 1);
 }
+struct gate_result { unsigned count; int status; };
+static void gate_ended(vlc_metadata_job_t *job, int status, void *opaque)
+{ (void)job; struct gate_result *result = opaque; ++result->count; result->status = status; }
+static vlc_metadata_job_t *gate_job(vlc_metadata_backend_t *backend, struct gate_result *result)
+{
+    const struct vlc_metadata_request request = {.feature="artwork", .operation="enrich", .flags=VLC_METADATA_REQUEST_NETWORK};
+    vlc_metadata_job_t *job = vlc_metadata_job_New(backend, &request, gate_ended, result); assert(job != NULL);
+    assert(vlc_metadata_job_Start(job) == VLC_SUCCESS); return job;
+}
+static bool scope_killed(vlc_metadata_legacy_t *scope)
+{
+    vlc_interrupt_t *old = vlc_interrupt_set(vlc_metadata_legacy_Interrupt(scope));
+    const bool killed = vlc_killed(); vlc_interrupt_set(old); return killed;
+}
+static void pending_legacy_cannot_begin_after_owner_install(void)
+{
+    libvlc_int_t *instance = instance_new(); vlc_object_t *root = VLC_OBJECT(instance);
+    vlc_metadata_legacy_t *scope = vlc_metadata_legacy_Acquire(root); assert(scope != NULL);
+    struct fixture state = {.owner=root}; vlc_metadata_backend_t *backend = new_backend(&state);
+    assert(unit_Set(root, backend) == VLC_SUCCESS && vlc_metadata_backend_IsReady(backend));
+    assert(scope_killed(scope) && !vlc_metadata_legacy_Begin(scope)); assert(vlc_metadata_legacy_Acquire(root) == NULL);
+    struct gate_result result = {0}; vlc_metadata_job_t *job = gate_job(backend, &result); assert(state.dispatched == 1);
+    unit_Close(root); assert(result.count == 1 && result.status == -EINTR);
+    vlc_metadata_legacy_Release(scope); unit_Forget(root); vlc_metadata_job_Release(job);
+    vlc_metadata_backend_Release(backend); libvlc_InternalDestroy(instance); assert(legacy_count == 0 && owner_count == 0);
+}
+static void running_legacy_blocks_dispatch_until_native_end(void)
+{
+    for (unsigned reentry = 0; reentry < 2; ++reentry) {
+        libvlc_int_t *instance = instance_new(); vlc_object_t *root = VLC_OBJECT(instance);
+        vlc_metadata_legacy_t *scope = vlc_metadata_legacy_Acquire(root); assert(scope != NULL && vlc_metadata_legacy_Begin(scope));
+        struct fixture state = {.owner=root, .close_in_dispatch=reentry != 0}; vlc_metadata_backend_t *backend = new_backend(&state);
+        assert(unit_Set(root, backend) == VLC_SUCCESS && !vlc_metadata_backend_IsReady(backend) && scope_killed(scope));
+        struct gate_result a = {0}, b = {0}; vlc_metadata_job_t *first = gate_job(backend, &a), *second = gate_job(backend, &b);
+        assert(state.dispatched == 0); assert(vlc_metadata_job_Cancel(first)); assert(a.count == 1 && a.status == -EINTR);
+        vlc_metadata_legacy_End(scope); assert(state.dispatched == 1); vlc_metadata_legacy_End(scope); assert(state.dispatched == 1);
+        if (reentry) assert(b.count == 1 && b.status == -EINTR && vlc_metadata_backend_IsClosed(backend));
+        else assert(vlc_metadata_job_Complete(second, VLC_SUCCESS, NULL, NULL, 0) && b.count == 1 && b.status == VLC_SUCCESS);
+        vlc_metadata_legacy_Release(scope); unit_Forget(root); vlc_metadata_job_Release(first); vlc_metadata_job_Release(second);
+        vlc_metadata_backend_Release(backend); libvlc_InternalDestroy(instance); assert(legacy_count == 0 && owner_count == 0);
+    }
+}
+static void shared_backend_keeps_every_instance_suspension(void)
+{
+    libvlc_int_t *a = instance_new(), *b = instance_new();
+    vlc_metadata_legacy_t *first = vlc_metadata_legacy_Acquire(VLC_OBJECT(a)), *second = vlc_metadata_legacy_Acquire(VLC_OBJECT(b));
+    assert(first != NULL && second != NULL && vlc_metadata_legacy_Begin(first) && vlc_metadata_legacy_Begin(second));
+    struct fixture state = {0}; vlc_metadata_backend_t *backend = new_backend(&state);
+    assert(unit_Set(VLC_OBJECT(a), backend) == VLC_SUCCESS);
+    struct gate_result result = {0}; vlc_metadata_job_t *job = gate_job(backend, &result); assert(state.dispatched == 0);
+    assert(unit_Set(VLC_OBJECT(b), backend) == VLC_SUCCESS);
+    vlc_metadata_legacy_End(first); assert(state.dispatched == 0 && !vlc_metadata_backend_IsReady(backend));
+    vlc_metadata_legacy_End(second); assert(state.dispatched == 1 && vlc_metadata_backend_IsReady(backend));
+    assert(vlc_metadata_job_Complete(job, VLC_SUCCESS, NULL, NULL, 0));
+    vlc_metadata_legacy_Release(first); vlc_metadata_legacy_Release(second); unit_Forget(VLC_OBJECT(a)); unit_Forget(VLC_OBJECT(b));
+    vlc_metadata_job_Release(job); vlc_metadata_backend_Release(backend); libvlc_InternalDestroy(a); libvlc_InternalDestroy(b);
+    assert(legacy_count == 0 && owner_count == 0);
+}
+static void retired_leases_do_not_access_a_dead_instance(void)
+{
+    libvlc_int_t *instance = instance_new(); vlc_object_t *root = VLC_OBJECT(instance);
+    vlc_metadata_legacy_t *pending = vlc_metadata_legacy_Acquire(root), *running = vlc_metadata_legacy_Acquire(root);
+    assert(pending != NULL && running != NULL && vlc_metadata_legacy_Begin(running));
+    unit_Close(root); assert(scope_killed(pending) && scope_killed(running)); assert(vlc_metadata_legacy_Acquire(root) == NULL);
+    unit_Forget(root); libvlc_InternalDestroy(instance);
+    assert(!vlc_metadata_legacy_Begin(pending) && !vlc_metadata_legacy_Begin(running));
+    vlc_metadata_legacy_Release(pending); vlc_metadata_legacy_End(running); vlc_metadata_legacy_Release(running);
+    assert(legacy_count == 0);
+}
+static void bounded_leases_and_active_backend_refusal(void)
+{
+    libvlc_int_t *instance = instance_new(); vlc_object_t *root = VLC_OBJECT(instance);
+    vlc_metadata_legacy_t *scopes[MAX_LEGACY];
+    for (unsigned i = 0; i < MAX_LEGACY; ++i) { scopes[i] = vlc_metadata_legacy_Acquire(root); assert(scopes[i] != NULL); }
+    assert(vlc_metadata_legacy_Acquire(root) == NULL);
+    for (unsigned i = 0; i < MAX_LEGACY; ++i) vlc_metadata_legacy_Release(scopes[i]);
+    vlc_metadata_legacy_t *cancelled = vlc_metadata_legacy_Acquire(root); assert(cancelled != NULL);
+    vlc_metadata_legacy_Cancel(cancelled); assert(scope_killed(cancelled) && !vlc_metadata_legacy_Begin(cancelled));
+    vlc_metadata_legacy_Release(cancelled);
+    vlc_metadata_legacy_t *scope = vlc_metadata_legacy_Acquire(root); assert(scope != NULL && vlc_metadata_legacy_Begin(scope));
+    struct fixture state = {0}; vlc_metadata_backend_t *backend = new_backend(&state);
+    struct gate_result result = {0}; vlc_metadata_job_t *job = gate_job(backend, &result);
+    assert(unit_Set(root, backend) == -EBUSY && owner_count == 0 && !scope_killed(scope));
+    assert(vlc_metadata_job_Complete(job, VLC_SUCCESS, NULL, NULL, 0));
+    assert(unit_Set(root, backend) == VLC_SUCCESS && scope_killed(scope)); vlc_metadata_legacy_End(scope);
+    vlc_metadata_legacy_Release(scope); vlc_metadata_job_Release(job); unit_Forget(root); vlc_metadata_backend_Release(backend);
+    libvlc_InternalDestroy(instance); assert(legacy_count == 0 && owner_count == 0);
+}
+struct native_gate_wait {
+    vlc_metadata_legacy_t *scope;
+    vlc_sem_t entered, interrupted, finish;
+};
+static void native_gate_wake(void *opaque) { vlc_sem_post(opaque); }
+static void *native_gate_worker(void *opaque)
+{
+    struct native_gate_wait *state = opaque; assert(vlc_metadata_legacy_Begin(state->scope));
+    vlc_interrupt_t *old = vlc_interrupt_set(vlc_metadata_legacy_Interrupt(state->scope));
+    vlc_interrupt_register(native_gate_wake, &state->interrupted); vlc_sem_post(&state->entered);
+    vlc_sem_wait(&state->interrupted); assert(vlc_interrupt_unregister() == EINTR); vlc_interrupt_set(old);
+    vlc_sem_wait(&state->finish); vlc_metadata_legacy_End(state->scope); vlc_metadata_legacy_Release(state->scope); return NULL;
+}
+static void native_interrupt_acknowledgement_releases_the_gate(void)
+{
+    libvlc_int_t *instance = instance_new(); vlc_object_t *root = VLC_OBJECT(instance);
+    struct native_gate_wait wait = {.scope=vlc_metadata_legacy_Acquire(root)}; assert(wait.scope != NULL);
+    vlc_sem_init(&wait.entered, 0); vlc_sem_init(&wait.interrupted, 0); vlc_sem_init(&wait.finish, 0);
+    vlc_thread_t worker; assert(vlc_clone(&worker, native_gate_worker, &wait) == 0); vlc_sem_wait(&wait.entered);
+    struct fixture state = {.owner=root}; vlc_metadata_backend_t *backend = new_backend(&state);
+    assert(unit_Set(root, backend) == VLC_SUCCESS && !vlc_metadata_backend_IsReady(backend));
+    struct gate_result result = {0}; vlc_metadata_job_t *job = gate_job(backend, &result); assert(state.dispatched == 0);
+    vlc_sem_post(&wait.finish); vlc_join(worker, NULL); assert(state.dispatched == 1 && vlc_metadata_backend_IsReady(backend));
+    assert(vlc_metadata_job_Complete(job, VLC_SUCCESS, NULL, NULL, 0));
+    vlc_metadata_job_Release(job); unit_Forget(root); vlc_metadata_backend_Release(backend); libvlc_InternalDestroy(instance);
+    assert(legacy_count == 0 && owner_count == 0);
+}
 int main(void)
 {
     binding_and_closed_owner(); unbound_close_and_allocation_failure(); final_release_and_callback_reentry();
-    bounded_instance_registry(); concurrent_set_and_close(); native_lifecycle_and_instance_isolation(); return 0;
+    bounded_instance_registry(); concurrent_set_and_close(); native_lifecycle_and_instance_isolation();
+    pending_legacy_cannot_begin_after_owner_install(); running_legacy_blocks_dispatch_until_native_end();
+    shared_backend_keeps_every_instance_suspension(); retired_leases_do_not_access_a_dead_instance();
+    bounded_leases_and_active_backend_refusal(); native_interrupt_acknowledgement_releases_the_gate(); return 0;
 }
