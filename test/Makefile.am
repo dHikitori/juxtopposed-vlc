@@ -36,21 +36,21 @@ noinst_PROGRAMS =
 check_PROGRAMS = \
     test_src_misc_configured_proxy \
     test_src_misc_metadata_backend \
-    test_src_misc_metadata_owner \
-    test_src_misc_metadata_requests \
-    test_src_misc_medialibrary_work \
-    test_src_misc_addon_medialibrary \
     test_src_misc_metadata_commit \
     test_src_misc_metadata_artwork \
     test_src_misc_metadata_revision \
+    test_src_misc_metadata_owner \
+    test_src_misc_metadata_requests \
+    test_src_misc_addon_medialibrary \
     test_src_input_policy \
     test_src_input_artwork_policy \
     test_src_input_artwork_fetcher \
     test_src_input_source_backend \
     test_src_input_addon_source \
     test_src_input_addon_source_playback \
-    test_src_misc_media_library_startup \
+    test_src_misc_medialibrary_work \
     test_src_input_source_owner \
+    test_src_misc_media_library_startup \
 	test_src_misc_iso_language \
 	test_libvlc_core \
 	test_libvlc_downloader \
@@ -252,17 +252,6 @@ test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c
 test_src_misc_metadata_backend_LDADD = $(LIBVLCCORE)
 
-test_src_misc_metadata_owner_SOURCES = src/misc/metadata_owner.c
-test_src_misc_metadata_owner_LDADD = $(LIBVLCCORE)
-
-test_src_misc_metadata_requests_SOURCES = src/misc/metadata_requests.c
-test_src_misc_metadata_requests_LDADD = $(LIBVLCCORE)
-
-test_src_misc_medialibrary_work_SOURCES = src/misc/medialibrary_work.c
-test_src_misc_medialibrary_work_LDADD = $(LIBVLC) $(LIBVLCCORE)
-
-test_src_misc_addon_medialibrary_SOURCES = src/misc/addon_medialibrary.c
-
 test_src_misc_metadata_commit_SOURCES = src/misc/metadata_commit.c
 test_src_misc_metadata_commit_LDADD = $(LIBVLCCORE)
 
@@ -280,6 +269,14 @@ endif
 test_src_misc_metadata_revision_SOURCES = src/misc/metadata_revision.c
 test_src_misc_metadata_revision_LDADD = $(LIBVLCCORE)
 
+test_src_misc_metadata_owner_SOURCES = src/misc/metadata_owner.c
+test_src_misc_metadata_owner_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_requests_SOURCES = src/misc/metadata_requests.c
+test_src_misc_metadata_requests_LDADD = $(LIBVLCCORE)
+
+test_src_misc_addon_medialibrary_SOURCES = src/misc/addon_medialibrary.c
+
 test_src_input_policy_SOURCES = src/input/input_policy.c
 test_src_input_policy_LDADD = $(LIBVLCCORE)
 
@@ -287,6 +284,7 @@ test_src_input_artwork_policy_SOURCES = src/input/artwork_policy.c
 test_src_input_artwork_policy_LDADD = $(LIBVLCCORE)
 
 test_src_input_artwork_fetcher_SOURCES = src/input/artwork_fetcher.c
+test_src_input_artwork_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_input_artwork_fetcher_LDADD = $(LIBVLCCORE)
 
 test_src_input_source_backend_SOURCES = src/input/source_backend.c
@@ -297,6 +295,9 @@ test_src_input_addon_source_LDADD = $(LIBVLCCORE)
 
 test_src_input_addon_source_playback_SOURCES = src/input/addon_source_playback.c
 test_src_input_addon_source_playback_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+test_src_misc_medialibrary_work_SOURCES = src/misc/medialibrary_work.c
+test_src_misc_medialibrary_work_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_input_source_owner_SOURCES = src/input/source_owner.c
 test_src_input_source_owner_LDADD = $(LIBVLCCORE)

@@ -74,6 +74,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_keystore.h \
 	../include/vlc_list.h \
 	../include/vlc_media_library.h \
+	../include/vlc_addon_medialibrary.h \
 	../include/vlc_media_source.h \
 	../include/vlc_memstream.h \
 	../include/vlc_messages.h \
@@ -84,7 +85,6 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_metadata_backend.h \
 	../include/vlc_metadata_owner.h \
 	../include/vlc_medialibrary_work.h \
-	../include/vlc_addon_medialibrary.h \
 	../include/vlc_metadata_revision.h \
 	../include/vlc_mime.h \
 	../include/vlc_modules.h \

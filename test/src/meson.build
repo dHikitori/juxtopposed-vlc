@@ -20,6 +20,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_misc_metadata_artwork',
+    'sources': files('misc/metadata_artwork.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_misc_metadata_commit_limit',
     'sources': files('misc/metadata_commit_limit.c'),
     'suite': ['src', 'test_src', 'addons'],
@@ -32,6 +39,26 @@ vlc_tests += {
 vlc_tests += {
     'name': 'test_src_misc_metadata_revision',
     'sources': files('misc/metadata_revision.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_addon_medialibrary',
+    'sources': files('misc/addon_medialibrary.c'),
+    'suite': ['src', 'test_src', 'addons'],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_owner',
+    'sources': files('misc/metadata_owner.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_requests',
+    'sources': files('misc/metadata_requests.c'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
 }
@@ -51,6 +78,14 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_input_artwork_fetcher',
+    'sources': files('input/artwork_fetcher.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_input_source_backend',
     'sources': files('input/source_backend.c'),
     'suite': ['src', 'test_src', 'addons'],
@@ -62,6 +97,28 @@ vlc_tests += {
     'sources': files('input/source_owner.c'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_addon_source',
+    'sources': files('input/addon_source.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_addon_source_playback',
+    'sources': files('input/addon_source_playback.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_medialibrary_work',
+    'sources': files('misc/medialibrary_work.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
 }
 
 vlc_tests += {
@@ -837,61 +894,4 @@ vlc_tests += {
     'sources': files('network/http_auth.c'),
     'suite': ['src', 'test_src'],
     'link_with': [libvlc, libvlccore],
-}
-
-vlc_tests += {
-    'name': 'test_src_misc_metadata_owner',
-    'sources': files('misc/metadata_owner.c'),
-    'suite': ['src', 'test_src', 'addons'],
-    'link_with': [libvlccore],
-}
-
-vlc_tests += {
-    'name': 'test_src_misc_metadata_requests',
-    'sources': files('misc/metadata_requests.c'),
-    'suite': ['src', 'test_src', 'addons'],
-    'link_with': [libvlccore],
-}
-
-vlc_tests += {
-    'name': 'test_src_misc_addon_medialibrary',
-    'sources': files('misc/addon_medialibrary.c'),
-    'suite': ['src', 'test_src', 'addons'],
-}
-
-vlc_tests += {
-    'name': 'test_src_input_addon_source',
-    'sources': files('input/addon_source.c'),
-    'include_directories': include_directories('../../src'),
-    'suite': ['src', 'test_src', 'addons'],
-    'link_with': [libvlccore],
-}
-
-vlc_tests += {
-    'name': 'test_src_input_addon_source_playback',
-    'sources': files('input/addon_source_playback.c'),
-    'suite': ['src', 'test_src', 'addons'],
-    'link_with': [libvlc, libvlccore],
-}
-
-vlc_tests += {
-    'name': 'test_src_misc_medialibrary_work',
-    'sources': files('misc/medialibrary_work.c'),
-    'suite': ['src', 'test_src', 'addons'],
-    'link_with': [libvlc, libvlccore],
-}
-
-vlc_tests += {
-    'name': 'test_src_misc_metadata_artwork',
-    'sources': files('misc/metadata_artwork.c'),
-    'suite': ['src', 'test_src', 'addons'],
-    'link_with': [libvlccore],
-}
-
-vlc_tests += {
-    'name': 'test_src_input_artwork_fetcher',
-    'sources': files('input/artwork_fetcher.c'),
-    'include_directories': include_directories('../../src'),
-    'suite': ['src', 'test_src', 'addons'],
-    'link_with': [libvlccore],
 }
