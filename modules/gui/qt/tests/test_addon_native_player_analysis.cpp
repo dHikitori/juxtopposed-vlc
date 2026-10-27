@@ -8,6 +8,7 @@
 #include "qt.hpp"
 #include "lib/libvlc_internal.h"
 #include <QTest>
+#include "addon_test_application_work.hpp"
 #include <QSignalSpy>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -180,5 +181,5 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(native.visualizers->active(), 5000);
     }
 };
-QTEST_GUILESS_MAIN(TestAddonNativePlayerAnalysis)
+HAKONE_QTEST_MAIN(TestAddonNativePlayerAnalysis, QCoreApplication)
 #include "test_addon_native_player_analysis.moc"

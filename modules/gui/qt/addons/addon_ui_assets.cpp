@@ -7,11 +7,10 @@
 #include <QJsonDocument>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QRunnable>
-#include <QThreadPool>
 #include <QRegularExpression>
 #include <QUuid>
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 
 namespace vlc::addons {
@@ -23,6 +22,7 @@ struct AddonUiAssets::SharedImages {
     QHash<QString, Ticket> tickets;
     QHash<QString, Claim> claims;
     std::function<void()> wake;
+    std::atomic_bool retiring{false};
 };
 namespace {
 struct DecodeBudget {
@@ -99,7 +99,8 @@ AddonUiAssets::AddonUiAssets(AddonManager* manager, QObject* parent)
     }
 }
 AddonUiAssets::AddonUiAssets(Backend backend, const Options& options, QObject* parent)
-    : QObject(parent), m_backend(std::move(backend)), m_options(options), m_images(std::make_shared<SharedImages>())
+    : QObject(parent), m_backend(std::move(backend)), m_options(options), m_images(std::make_shared<SharedImages>()),
+      m_lifetime(AddonStreamLifetime::applicationHandle())
 {
     m_options.maximumImageBytes = std::clamp<qint64>(options.maximumImageBytes, 1, 1024 * 1024);
     m_options.maximumQueuedBytes = std::clamp<qint64>(options.maximumQueuedBytes, 1, 8 * 1024 * 1024);
@@ -133,6 +134,7 @@ void AddonUiAssets::shutdown(bool notify)
 {
     if (m_closing) return;
     m_closing = true;
+    m_images->retiring.store(true, std::memory_order_release);
     m_authorityTimer.stop();
     { QMutexLocker lock(&m_images->mutex); m_images->owner = nullptr; m_images->tickets.clear(); m_images->claims.clear(); }
     for (const auto& claim : m_claims) disconnect(claim.destroyed);
@@ -171,7 +173,7 @@ QImage AddonUiAssets::decodeImage(const QByteArray& bytes, const QString& suffix
 }
 bool AddonUiAssets::openSession(const QString& session, const QString& contribution)
 {
-    if (m_closing) return false;
+    if (m_closing || !m_lifetime.current()) return false;
     QPointer<AddonUiAssets> guard(this);
     closeSession(session, false); if (!guard || session.isEmpty() || session.size() > 128 || m_scopes.size() >= 32) return false;
     const auto epoch = ++m_epoch;
@@ -185,6 +187,7 @@ bool AddonUiAssets::openSession(const QString& session, const QString& contribut
 }
 void AddonUiAssets::captured(const QString& id, UiAssetCapture capture)
 {
+    if (!m_lifetime.current()) { close(); return; }
     const auto active = m_captureJobs.find(id); if (active == m_captureJobs.end()) return;
     const auto work = *active; m_captureJobs.erase(active);
     auto found = m_scopes.find(work.session);
@@ -235,6 +238,7 @@ void AddonUiAssets::captured(const QString& id, UiAssetCapture capture)
 }
 void AddonUiAssets::pump()
 {
+    if (!m_lifetime.current()) { close(); return; }
     if (!m_closing && m_captureJobs.isEmpty() && !m_captureQueue.isEmpty()) {
         const auto budget = decodeBudget(); bool admitted = false;
         { QMutexLocker lock(&budget->mutex); if (budget->captures < 1) { ++budget->captures; admitted = true; } }
@@ -242,7 +246,8 @@ void AddonUiAssets::pump()
             auto lease = std::make_shared<CaptureLease>(); lease->budget = budget;
             const auto work = m_captureQueue.takeFirst(); m_captureJobs.insert(work.id, work);
             const auto shared = m_images;
-            QThreadPool::globalInstance()->start(QRunnable::create([shared, work, lease = std::move(lease)]() mutable {
+            const bool started = m_lifetime.startQtWork([shared, work, lease]() mutable {
+                if (shared->retiring.load(std::memory_order_acquire)) return;
                 auto capture = work.read();
                 if (capture.current && !capture.current()) { capture.registration.clear(); capture.assets.clear(); }
                 const auto declarations = capture.registration.value("assets").toMap();
@@ -252,10 +257,12 @@ void AddonUiAssets::pump()
                     capture.cacheKeys.insert(it.key(), QString::fromLatin1(hash.result().toHex()));
                 }
                 QMutexLocker lock(&shared->mutex); const auto target = shared->owner;
-                if (target) QMetaObject::invokeMethod(target, [target, id = work.id, capture = std::move(capture), lease = std::move(lease)]() mutable {
+                if (target && !shared->retiring.load(std::memory_order_acquire)) QMetaObject::invokeMethod(target, [target, id = work.id, capture = std::move(capture), lease = std::move(lease)]() mutable {
                     if (target) target->captured(id, std::move(capture));
                 }, Qt::QueuedConnection);
-            }));
+            }, [shared] { shared->retiring.store(true, std::memory_order_release); },
+                [lease](const auto& ticket) { ticket.retain(lease); });
+            if (!started) { m_captureJobs.remove(work.id); m_captureQueue.prepend(work); }
         }
     }
 
@@ -268,20 +275,22 @@ void AddonUiAssets::pump()
         auto work = m_queue.takeFirst(); m_jobs.insert(work.id, work);
         const auto shared = m_images; const auto options = m_options;
         const auto decode = m_backend.decode;
-        QThreadPool::globalInstance()->start(QRunnable::create([shared, options, work, jobLease = std::move(jobLease), decode]() mutable {
+        const bool started = m_lifetime.startQtWork([shared, options, work, jobLease, decode]() mutable {
             QString error; QImage pixels;
-            if (work.current && work.current()) {
+            if (!shared->retiring.load(std::memory_order_acquire) && work.current && work.current()) {
                 pixels = decode ? decode(work.bytes, work.suffix, options, &error) : decodeImage(work.bytes, work.suffix, options, &error);
-                if (!work.current()) pixels = {};
+                if (shared->retiring.load(std::memory_order_acquire) || !work.current()) pixels = {};
             }
             work.bytes.clear(); work.bytesLease.reset();
             QMutexLocker lock(&shared->mutex);
-            if (!shared->owner) return;
+            if (!shared->owner || shared->retiring.load(std::memory_order_acquire)) return;
             const auto target = shared->owner;
             QMetaObject::invokeMethod(target, [target, id = work.id, pixels = std::move(pixels), error, jobLease = std::move(jobLease)]() mutable {
                 if (target) target->decoded(id, std::move(pixels), error);
             }, Qt::QueuedConnection);
-        }));
+        }, [shared] { shared->retiring.store(true, std::memory_order_release); },
+            [jobLease](const auto& ticket) { ticket.retain(jobLease); });
+        if (!started) { m_jobs.remove(work.id); m_queue.prepend(work); return; }
     }
 }
 bool AddonUiAssets::makeRoom(qint64 bytes)
@@ -298,6 +307,7 @@ bool AddonUiAssets::makeRoom(qint64 bytes)
 }
 bool AddonUiAssets::publish(const QString& session, const QString& alias, const QString& cacheKey)
 {
+    if (m_closing || !m_lifetime.current()) return false;
     auto scope = m_scopes.find(session); auto cached = m_cache.find(cacheKey);
     if (scope == m_scopes.end() || scope->suspended || !scope->live || !scope->live() || cached == m_cache.end()) return false;
     const auto ticket = nonce(); ++cached->pins; cached->use = ++m_use;
@@ -308,6 +318,7 @@ bool AddonUiAssets::publish(const QString& session, const QString& alias, const 
 }
 void AddonUiAssets::decoded(const QString& id, QImage image, const QString& error)
 {
+    if (!m_lifetime.current()) { close(); return; }
     const auto found = m_jobs.find(id); if (found == m_jobs.end()) return;
     const auto work = *found; m_jobs.erase(found); m_queuedBytes -= work.bytes.size();
     if (!m_scopes.contains(work.session) || m_scopes.value(work.session).epoch != work.epoch || m_scopes.value(work.session).suspended) {
@@ -423,7 +434,7 @@ QString AddonUiAssets::assetUrlForClaim(const QString& session, const QString& a
 QImage AddonUiAssets::image(const std::shared_ptr<SharedImages>& shared, const QString& id, QSize* size)
 {
     if (size) *size = {};
-    const auto parts = id.split('/'); if (!shared || parts.size() != 2) return {};
+    const auto parts = id.split('/'); if (!shared || shared->retiring.load(std::memory_order_acquire) || parts.size() != 2) return {};
     QMutexLocker lock(&shared->mutex);
     const auto ticket = shared->tickets.constFind(parts[0]); const auto claim = shared->claims.constFind(parts[1]);
     if (ticket == shared->tickets.cend() || claim == shared->claims.cend()
@@ -450,6 +461,7 @@ void AddonUiAssets::expireScopes()
             closeSession(session); if (!guard) return;
         }
     }
+    pump();
 }
 QVariantMap AddonUiAssets::statistics() const
 {

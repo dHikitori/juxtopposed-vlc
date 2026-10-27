@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "addon_stream_lifetime.hpp"
 #include <QObject>
 #include <QImage>
 #include <QMap>
@@ -91,6 +92,7 @@ private:
     Backend m_backend;
     Options m_options;
     std::shared_ptr<SharedImages> m_images;
+    AddonStreamLifetime::Handle m_lifetime;
     QHash<QString, Scope> m_scopes;
     QHash<QString, Work> m_jobs;
     QList<Work> m_queue;

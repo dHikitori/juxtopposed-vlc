@@ -2,6 +2,7 @@
 #include "addon_visualizer_worker.hpp"
 #include "addon_visualizer_activation.hpp"
 #include "addon_worker.hpp"
+#include "addon_stream_lifetime.hpp"
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -9,7 +10,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QTemporaryDir>
-#include <QThread>
+#include <QTimer>
 #include <atomic>
 #include <optional>
 
@@ -31,16 +32,21 @@ struct WorkerState : std::enable_shared_from_this<WorkerState> {
     std::optional<WorkerRequest> pending;
     std::shared_ptr<const AddonVisualizerActivation> activation;
     QString contribution;
+    AddonStreamLifetime::Handle lifetime;
     bool start()
     {
-        if (closing.load(std::memory_order_acquire)) return false;
+        if (closing.load(std::memory_order_acquire) || !lifetime.current()) return false;
         if (started) return true;
         int expected = 0;
         if (!workerCount.compare_exchange_strong(expected, 1)) return false;
+        struct Slot { ~Slot() { workerCount.fetch_sub(1); } };
+        const auto slot = std::make_shared<Slot>();
         started = true; const auto self = shared_from_this();
-        auto* thread = QThread::create([self] { self->run(); });
-        QObject::connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-        thread->start(); return true;
+        const bool accepted = lifetime.startQtWork([self] { self->run(); },
+            [self] { self->closing.store(true, std::memory_order_release); },
+            [slot](const auto& ticket) { ticket.retain(slot); });
+        if (!accepted) started = false;
+        return accepted;
     }
     void wake()
     {
@@ -80,7 +86,6 @@ struct WorkerState : std::enable_shared_from_this<WorkerState> {
     }
     void run()
     {
-        struct Slot { ~Slot() { workerCount.fetch_sub(1); } } slot;
         if (closing.load() || !activation->current || !activation->current()) { startupFailure(); return; }
         QTemporaryDir directory;
         if (!directory.isValid() || activation->runtime.isEmpty() || activation->runtime.size() > Manifest::MaximumFileBytes) { startupFailure(); return; }
@@ -91,6 +96,12 @@ struct WorkerState : std::enable_shared_from_this<WorkerState> {
         if (closing.load() || !activation->current()) { startupFailure(); return; }
         auto package = activation->package; package.directory = directory.path(); package.manifest.runtimeEntry = QStringLiteral("visualizer.wasm");
         QObject context; NetworkBroker broker; AddonWorker worker(package, &broker); QEventLoop loop;
+        QTimer retirement;
+        retirement.setInterval(20);
+        QObject::connect(&retirement, &QTimer::timeout, &context, [this, &loop, &worker] {
+            if (closing.load(std::memory_order_acquire)) { worker.stop(); loop.quit(); }
+        });
+        retirement.start();
         worker.setExecutable(activation->executable);
         worker.setConfiguration(activation->settings, activation->secretStatus, {});
         worker.setHostCapabilities({{"workerProtocol", "wasm-message-v1"}, {"visualizerParameters", "visualizer.parameters@1"},
@@ -140,6 +151,7 @@ struct WorkerState : std::enable_shared_from_this<WorkerState> {
 AddonVisualizerWorker::Backend AddonVisualizerWorker::production(std::shared_ptr<const AddonVisualizerActivation> activation, const QString& contribution)
 {
     const auto state = std::make_shared<WorkerState>(); state->activation = std::move(activation); state->contribution = contribution;
+    state->lifetime = AddonStreamLifetime::applicationHandle();
     return {[state](const QJsonObject& context, Completion completion) -> Cancel {
         if (!state->activation || !state->activation->live || !state->activation->live() || state->closing.load()) { completion(QStringLiteral("denied"), {}); return {}; }
         const auto* entry = state->activation->package.manifest.contribution(state->contribution.section('/', 1));

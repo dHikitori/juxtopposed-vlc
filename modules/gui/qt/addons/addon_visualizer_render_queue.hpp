@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "addon_stream_lifetime.hpp"
 #include "addon_visual_scene.hpp"
 #include <QObject>
 #include <QTimer>
@@ -40,6 +41,7 @@ private:
     void pump();
     void finished(Work, QImage, qint64 costNs);
     std::shared_ptr<Shared> m_shared;
+    AddonStreamLifetime::Handle m_lifetime;
     Render m_render;
     std::optional<Work> m_latest;
     QTimer m_timer;

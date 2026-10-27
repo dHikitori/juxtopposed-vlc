@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
+#include "addon_test_application_work.hpp"
 #include <QTemporaryDir>
 #include <QFile>
 #include <QJsonArray>
@@ -7,12 +8,57 @@
 #include <QDir>
 #include <QThreadPool>
 #include <QSemaphore>
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QScopeGuard>
 #include "addons/addon_storage.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_storage_data.hpp"
+#ifdef Q_OS_UNIX
+# include <fcntl.h>
+# include <sys/stat.h>
+# include <unistd.h>
+#endif
 using namespace vlc::addons;
+
+#ifdef Q_OS_UNIX
+namespace {
+class StateRead final {
+public:
+    explicit StateRead(const QString& profile)
+        : path(QDir(profile).filePath(QStringLiteral("packages/org.example.storage/state.json")))
+    {
+        QFile file(path);
+        if(!file.open(QIODevice::ReadOnly)) return;
+        bytes=file.readAll(); file.close();
+        if(bytes.isEmpty() || bytes.size()>4096 || !QFile::remove(path)) return;
+        replaced=true; ready=::mkfifo(QFile::encodeName(path).constData(),0600)==0;
+    }
+    ~StateRead() { release(); }
+    bool valid() const { return ready; }
+    bool entered() {
+        if(writer<0) writer=::open(QFile::encodeName(path).constData(),O_WRONLY|O_NONBLOCK);
+        return writer>=0;
+    }
+    bool release() {
+        if(!replaced) return restored;
+        if(writer<0 && ready) writer=::open(QFile::encodeName(path).constData(),O_RDWR|O_NONBLOCK);
+        QFile::remove(path); QFile file(path);
+        restored=file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size(); file.close();
+        if(writer>=0) {
+            const auto count=::write(writer,bytes.constData(),size_t(bytes.size()));
+            restored=restored && count==bytes.size(); ::close(writer); writer=-1;
+        }
+        replaced=false; return restored;
+    }
+private:
+    QString path;
+    QByteArray bytes;
+    int writer=-1;
+    bool replaced=false,ready=false,restored=false;
+};
+}
+#endif
 
 class TestAddonStorage : public QObject
 {
@@ -279,40 +325,70 @@ private slots:
         QVERIFY(store.install(candidate, candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id, true));
         QVERIFY(operation(store, capture(store), QStringLiteral("storage.get"), {{"key", "saved"}}, &result)); QVERIFY(!result.value("found").toBool());
     }
-    void canceledQueuedServiceWorkHasNoMutation() {
-        QTemporaryDir source, profile; PackageCandidate candidate; QString error; QVERIFY(package(source.path(), &candidate, &error));
-        PackageStore store(profile.path()); QVERIFY(store.install(candidate, candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id, true));
-        AddonHostServices services; AddonStorage storage(store, [&](const auto&, auto* output, QString*) { *output = capture(store); return true; });
-        QVERIFY(storage.mount(&services)); auto* pool = QThreadPool::globalInstance(); const int oldCount = pool->maxThreadCount(); pool->setMaxThreadCount(1);
-        QSemaphore entered, resume; pool->start([&] { entered.release(); resume.acquire(); }); entered.acquire();
-        int calls = 0;
-        const auto job = services.dispatch({candidate.manifest.id, candidate.manifest.id + QStringLiteral("/theme"), QStringLiteral("request"), candidate.manifest.requiredPermissions, {}},
-            QStringLiteral("storage.set"), {{"key", "canceled"}, {"value", true}}, [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
-        services.cancel(job); QCOMPARE(calls, 1); resume.release(); pool->waitForDone(); pool->setMaxThreadCount(oldCount);
-        QJsonObject result; QVERIFY(operation(store, capture(store), QStringLiteral("storage.get"), {{"key", "canceled"}}, &result)); QVERIFY(!result.value("found").toBool());
-        QTest::qWait(10); QCOMPARE(calls, 1);
-    }
-    void canceledQueuedJobsStillUseThePendingQuota() {
-        QTemporaryDir source, profile; PackageCandidate candidate; QString error; QVERIFY(package(source.path(), &candidate, &error));
-        PackageStore store(profile.path()); QVERIFY(store.install(candidate, candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id, true));
-        auto* pool = QThreadPool::globalInstance(); const int oldCount = pool->maxThreadCount(); pool->setMaxThreadCount(1);
-        QSemaphore entered, resume; pool->start([&] { entered.release(); resume.acquire(); }); entered.acquire();
-        const auto release = qScopeGuard([&] { resume.release(); pool->waitForDone(); pool->setMaxThreadCount(oldCount); });
-        AddonHostServices services; AddonStorage storage(store, [&](const auto&, auto* output, QString*) { *output = capture(store); return true; });
-        QVERIFY(storage.mount(&services)); int calls = 0;
-        const AddonHostServices::Context host{candidate.manifest.id, candidate.manifest.id + QStringLiteral("/theme"), QStringLiteral("request"), candidate.manifest.requiredPermissions, {}};
-        for (int index = 0; index < 4; ++index) {
-            const auto id = services.dispatch(host, QStringLiteral("storage.set"), {{"key", "canceled"}, {"value", true}},
-                [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
-            services.cancel(id);
+    void captureRefusalOrOwnerRetirementCannotStartStorageWork() {
+        for(int action=0;action<3;++action) {
+            QTemporaryDir source, profile; PackageCandidate candidate; QString error;
+            QVERIFY(package(source.path(),&candidate,&error)); PackageStore store(profile.path());
+            QVERIFY(store.install(candidate,candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id,true));
+            const auto context=capture(store); AddonHostServices services; std::unique_ptr<AddonStorage> storage;
+            storage=std::make_unique<AddonStorage>(store,[&](const auto&,auto* output,QString* failure) {
+                *output=context;
+                if(action==0) { *failure=QStringLiteral("The test refused the captured request."); return false; }
+                if(action==1) storage->close();
+                else storage.reset();
+                return true;
+            });
+            QVERIFY(storage->mount(&services)); int calls=0;
+            services.dispatch({candidate.manifest.id,candidate.manifest.id+QStringLiteral("/theme"),QStringLiteral("request"),candidate.manifest.requiredPermissions,{}},
+                QStringLiteral("storage.set"),{{"key","refused"},{"value",true}},[&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
+            QTRY_COMPARE(calls,1); QTRY_VERIFY(AddonStreamLifetime::applicationHandle().qtDrained());
+            QJsonObject result; QVERIFY(operation(store,context,QStringLiteral("storage.get"),{{"key","refused"}},&result));
+            QVERIFY(!result.value("found").toBool()); QCoreApplication::processEvents(); QCOMPARE(calls,1);
         }
-        QCOMPARE(calls, 4);
-        services.dispatch(host, QStringLiteral("storage.set"), {{"key", "overflow"}, {"value", true}},
-            [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
-        QTRY_COMPARE(calls, 5);
-        resume.release(); pool->waitForDone(); QTest::qWait(10); QCOMPARE(calls, 5);
-        QJsonObject result; QVERIFY(operation(store, capture(store), QStringLiteral("storage.get"), {{"key", "overflow"}}, &result));
+    }
+    void retiredStorageReadKeepsItsOwnJoinedWork_data() {
+        QTest::addColumn<int>("action");
+        QTest::newRow("cancel")<<0; QTest::newRow("close")<<1; QTest::newRow("destroy")<<2;
+    }
+    void retiredStorageReadKeepsItsOwnJoinedWork() {
+#ifndef Q_OS_UNIX
+        QSKIP("The controlled file read needs a Unix pipe.");
+#else
+        QFETCH(int,action); QTemporaryDir source,profile; PackageCandidate candidate; QString error;
+        QVERIFY(package(source.path(),&candidate,&error)); PackageStore store(profile.path());
+        QVERIFY(store.install(candidate,candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id,true));
+        const auto context=capture(store); const auto lifetime=AddonStreamLifetime::applicationHandle(); QTRY_VERIFY(lifetime.qtDrained());
+        AddonHostServices services; auto storage=std::make_unique<AddonStorage>(store,[context](const auto&,auto* output,QString*) { *output=context; return true; });
+        QVERIFY(storage->mount(&services)); StateRead read(profile.path()); QVERIFY(read.valid()); int calls=0;
+        const auto request=services.dispatch({candidate.manifest.id,candidate.manifest.id+QStringLiteral("/theme"),QStringLiteral("request"),candidate.manifest.requiredPermissions,{}},
+            QStringLiteral("storage.set"),{{"key","canceled"},{"value",true}},[&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
+        QTRY_VERIFY_WITH_TIMEOUT(read.entered(),3000); QVERIFY(lifetime.qtWorkCount()>0);
+        QElapsedTimer elapsed; elapsed.start();
+        if(action==0) services.cancel(request);
+        else if(action==1) { storage->close(); services.cancel(request); }
+        else storage.reset();
+        QVERIFY(elapsed.elapsed()<100); QCOMPARE(calls,1); QVERIFY(!lifetime.qtDrained());
+        QVERIFY(read.release()); QTRY_VERIFY(lifetime.qtDrained()); QCoreApplication::processEvents(); QCOMPARE(calls,1);
+        QJsonObject result; QVERIFY(operation(store,context,QStringLiteral("storage.get"),{{"key","canceled"}},&result));
         QVERIFY(!result.value("found").toBool());
+#endif
+    }
+    void completedStorageWorkDoesNotWaitForAnUnrelatedPoolTask() {
+        QTemporaryDir source,profile; PackageCandidate candidate; QString error;
+        QVERIFY(package(source.path(),&candidate,&error)); PackageStore store(profile.path());
+        QVERIFY(store.install(candidate,candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id,true));
+        const auto context=capture(store); const auto lifetime=AddonStreamLifetime::applicationHandle(); QTRY_VERIFY(lifetime.qtDrained());
+        auto* pool=QThreadPool::globalInstance(); const int oldCount=pool->maxThreadCount(); pool->setMaxThreadCount(2);
+        QSemaphore entered,resume; std::atomic_bool unrelatedEnded{false};
+        const auto release=qScopeGuard([&] { resume.release(); pool->waitForDone(); pool->setMaxThreadCount(oldCount); });
+        pool->start([&] { entered.release(); resume.acquire(); unrelatedEnded=true; }); QVERIFY(entered.tryAcquire(1,3000));
+        AddonHostServices services; AddonStorage storage(store,[context](const auto&,auto* output,QString*) { *output=context; return true; });
+        QVERIFY(storage.mount(&services)); int calls=0;
+        services.dispatch({candidate.manifest.id,candidate.manifest.id+QStringLiteral("/theme"),QStringLiteral("request"),candidate.manifest.requiredPermissions,{}},
+            QStringLiteral("storage.set"),{{"key","independent"},{"value",true}},[&](auto result) { ++calls; QVERIFY(result.error.isEmpty()); });
+        QTRY_COMPARE(calls,1); QTRY_VERIFY(lifetime.qtDrained()); QVERIFY(!unrelatedEnded.load());
+        QJsonObject result; QVERIFY(operation(store,context,QStringLiteral("storage.get"),{{"key","independent"}},&result));
+        QVERIFY(result.value("found").toBool());
     }
     void realManagerRoutesGuestStorageCalls() {
 #ifndef Q_OS_UNIX
@@ -335,25 +411,21 @@ private slots:
         QVERIFY(store.settings(candidate.manifest.id, &settings)); QVERIFY(settings.isEmpty());
 #endif
     }
-    void queuedWorkFailsAfterSettingsChangeOrOwnerRemoval() {
-        QTemporaryDir source, profile; PackageCandidate candidate; QString error; QVERIFY(package(source.path(), &candidate, &error));
-        PackageStore store(profile.path()); QVERIFY(store.install(candidate, candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id, true));
-        auto* pool = QThreadPool::globalInstance(); const int oldCount = pool->maxThreadCount(); pool->setMaxThreadCount(1);
-        QSemaphore entered, resume; pool->start([&] { entered.release(); resume.acquire(); }); entered.acquire();
-        const auto release = qScopeGuard([&] { resume.release(); pool->waitForDone(); pool->setMaxThreadCount(oldCount); });
-        AddonHostServices services; auto storage = std::make_unique<AddonStorage>(store,
-            [&](const auto&, auto* output, QString*) { *output = capture(store); return true; });
-        QVERIFY(storage->mount(&services)); int calls = 0;
-        const AddonHostServices::Context host{candidate.manifest.id, candidate.manifest.id + QStringLiteral("/theme"), QStringLiteral("request"), candidate.manifest.requiredPermissions, {}};
-        services.dispatch(host, QStringLiteral("storage.set"), {{"key", "changed"}, {"value", true}}, [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
-        QVERIFY(store.saveSettings(candidate.manifest.id, {{"language", "fr"}}, capture(store).settingsRevision));
-        resume.release(); pool->waitForDone(); QTRY_COMPARE(calls, 1);
-        pool->start([&] { entered.release(); resume.acquire(); }); entered.acquire();
-        services.dispatch(host, QStringLiteral("storage.set"), {{"key", "removed"}, {"value", true}}, [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
-        storage.reset(); QCOMPARE(calls, 2); resume.release(); pool->waitForDone(); QTest::qWait(10); QCOMPARE(calls, 2);
-        QJsonObject result; const auto current = capture(store);
-        QVERIFY(operation(store, current, QStringLiteral("storage.get"), {{"key", "changed"}}, &result)); QVERIFY(!result.value("found").toBool());
-        QVERIFY(operation(store, current, QStringLiteral("storage.get"), {{"key", "removed"}}, &result)); QVERIFY(!result.value("found").toBool());
+    void aSettingsChangeDuringCaptureRefusesTheOldRequest() {
+        QTemporaryDir source,profile; PackageCandidate candidate; QString error;
+        QVERIFY(package(source.path(),&candidate,&error)); PackageStore store(profile.path());
+        QVERIFY(store.install(candidate,candidate.manifest.requiredPermissions)); QVERIFY(store.setEnabled(candidate.manifest.id,true));
+        const auto context=capture(store); AddonHostServices services;
+        AddonStorage storage(store,[&](const auto&,auto* output,QString*) {
+            *output=context;
+            return store.saveSettings(candidate.manifest.id,{{"language","fr"}},context.settingsRevision);
+        });
+        QVERIFY(storage.mount(&services)); int calls=0;
+        services.dispatch({candidate.manifest.id,candidate.manifest.id+QStringLiteral("/theme"),QStringLiteral("request"),candidate.manifest.requiredPermissions,{}},
+            QStringLiteral("storage.set"),{{"key","changed"},{"value",true}},[&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); });
+        QTRY_COMPARE(calls,1); QTRY_VERIFY(AddonStreamLifetime::applicationHandle().qtDrained());
+        QJsonObject result; QVERIFY(operation(store,capture(store),QStringLiteral("storage.get"),{{"key","changed"}},&result));
+        QVERIFY(!result.value("found").toBool());
     }
     void managerRejectsStorageWithoutALiveInvocation() {
         QTemporaryDir profile; AddonManager manager(profile.path()); QVERIFY(manager.capabilities().value("privateStorageAvailable").toBool());
@@ -363,5 +435,5 @@ private slots:
         QTRY_COMPARE(calls, 1);
     }
 };
-QTEST_GUILESS_MAIN(TestAddonStorage)
+HAKONE_QTEST_MAIN(TestAddonStorage, QCoreApplication)
 #include "test_addon_storage.moc"

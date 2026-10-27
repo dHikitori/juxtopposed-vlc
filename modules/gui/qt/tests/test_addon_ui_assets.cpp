@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
+#include "addon_test_application_work.hpp"
 #include <QSignalSpy>
 #include <QGuiApplication>
 #include <QBuffer>
@@ -562,6 +563,7 @@ private slots:
 int main(int argc, char** argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen"); qputenv("QT_QUICK_BACKEND", "software");
-    QGuiApplication app(argc, argv); TestAddonUiAssets test; return QTest::qExec(&test, argc, argv);
+    QGuiApplication app(argc, argv); AddonTestApplicationWork work; work.start();
+    TestAddonUiAssets test; return QTest::qExec(&test, argc, argv);
 }
 #include "test_addon_ui_assets.moc"

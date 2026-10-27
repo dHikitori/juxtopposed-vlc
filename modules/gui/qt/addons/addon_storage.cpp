@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_storage.hpp"
+#include "addon_stream_lifetime.hpp"
 #include <QPointer>
-#include <QThreadPool>
 
 namespace vlc::addons {
 AddonStorage::AddonStorage(PackageStore store, Capture capture, QObject* parent)
@@ -23,6 +23,8 @@ bool AddonStorage::mount(AddonHostServices* services)
 AddonHostServices::Cancel AddonStorage::start(const AddonHostServices::Context& host, const QString& operation,
                                              const QJsonObject& request, AddonHostServices::Completion done)
 {
+    const auto lifetime = AddonStreamLifetime::applicationHandle();
+    if (!lifetime.current()) { done({{}, QStringLiteral("Private storage is not available.")}); return {}; }
     const auto state = m_state; const auto capture = m_capture; const auto store = m_store;
     const QPointer<AddonStorage> owner(this);
     PrivateStorageContext context; QString error;
@@ -42,21 +44,27 @@ AddonHostServices::Cancel AddonStorage::start(const AddonHostServices::Context& 
         if (!busy) state->jobs.append(pending);
     }
     if (busy) { done({{}, QStringLiteral("Private storage is busy. Try again.")}); return {}; }
-    QThreadPool::globalInstance()->start([state, pending, store, context = std::move(context), operation, request, done = std::move(done)]() mutable {
+    const auto cancel = [pending] { int expected = 0; pending->compare_exchange_strong(expected, 1); };
+    auto task = [state, pending, store, context = std::move(context), operation, request, done, lifetime]() mutable {
         AddonHostServices::Result result;
-        const auto current = [state, pending] { return !state->closed.load() && pending->load() == 0; };
-        const auto commit = [state, pending] {
+        const auto current = [state, pending, lifetime] { return lifetime.current() && !state->closed.load() && pending->load() == 0; };
+        const auto commit = [state, pending, lifetime] {
             std::lock_guard<std::mutex> lock(state->mutex);
             int expected = 0;
-            return !state->closed.load() && pending->compare_exchange_strong(expected, 2);
+            return !state->closed.load() && pending->compare_exchange_strong(expected, 2) && lifetime.current();
         };
         if (!current()) result.error = QStringLiteral("The private storage request was canceled.");
         else if (!store.privateStorage(context, operation, request, &result.response, current, commit, &result.error) && result.error.isEmpty())
             result.error = QStringLiteral("The private storage request did not complete.");
         pending->store(3);
         done(std::move(result));
-    });
-    return [pending] { int expected = 0; pending->compare_exchange_strong(expected, 1); };
+    };
+    const bool started = lifetime.startQtWork(std::move(task), cancel);
+    if (!started) {
+        pending->store(3);
+        done({{}, QStringLiteral("Private storage is busy. Try again.")}); return {};
+    }
+    return cancel;
 }
 void AddonStorage::close()
 {

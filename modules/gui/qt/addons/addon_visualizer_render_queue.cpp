@@ -5,8 +5,6 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPointer>
-#include <QRunnable>
-#include <QThreadPool>
 #include <atomic>
 namespace vlc::addons {
 struct AddonVisualizerRenderQueue::Shared {
@@ -22,7 +20,8 @@ std::atomic_int jobs{0};
 struct JobLease { ~JobLease() { jobs.fetch_sub(1, std::memory_order_release); } };
 }
 AddonVisualizerRenderQueue::AddonVisualizerRenderQueue(Render render, QObject* parent)
-    : QObject(parent), m_shared(std::make_shared<Shared>()), m_render(std::move(render))
+    : QObject(parent), m_shared(std::make_shared<Shared>()),
+      m_lifetime(AddonStreamLifetime::applicationHandle()), m_render(std::move(render))
 {
     m_shared->owner = this;
     if (!m_render) m_render = [](AddonVisualScene& renderer, const Request& frame) {
@@ -47,7 +46,7 @@ void AddonVisualizerRenderQueue::invalidate()
 }
 bool AddonVisualizerRenderQueue::submit(Request request)
 {
-    if (m_closed || request.mediaTimeUs < 0 || request.size.isEmpty() || request.size.width() > 4096 || request.size.height() > 4096
+    if (m_closed || !m_lifetime.current() || request.mediaTimeUs < 0 || request.size.isEmpty() || request.size.width() > 4096 || request.size.height() > 4096
         || request.quality < 0 || request.quality > 2 || !request.current || !request.current()
         || request.assets.size() > 16 || QJsonDocument(request.scene).toJson(QJsonDocument::Compact).size() > 256 * 1024) return false;
     qint64 pixels = 0;
@@ -60,12 +59,13 @@ bool AddonVisualizerRenderQueue::submit(Request request)
 void AddonVisualizerRenderQueue::pump()
 {
     if (m_closed || m_running || !m_latest) return;
+    if (!m_lifetime.current()) { close(); return; }
     int expected = 0;
     if (!jobs.compare_exchange_strong(expected, 1)) { m_timer.start(); return; }
     const auto lease = std::make_shared<JobLease>();
     m_timer.stop(); m_running = true; auto work = std::move(*m_latest); m_latest.reset();
     const auto shared = m_shared; const auto render = m_render;
-    QThreadPool::globalInstance()->start(QRunnable::create([shared, render, lease, work = std::move(work)]() mutable {
+    const bool started = m_lifetime.startQtWork([shared, render, lease, work]() mutable {
         const auto current = [&] { return !shared->closed.load(std::memory_order_acquire)
             && work.epoch == shared->epoch.load(std::memory_order_acquire) && work.request.current(); };
         QImage image; qint64 cost = 0;
@@ -78,12 +78,14 @@ void AddonVisualizerRenderQueue::pump()
         if (owner) QMetaObject::invokeMethod(owner, [owner, work = std::move(work), image = std::move(image), cost]() mutable {
             if (owner) owner->finished(std::move(work), std::move(image), cost);
         }, Qt::QueuedConnection);
-    }));
+    }, [shared] { shared->closed.store(true, std::memory_order_release); },
+        [lease](const auto& ticket) { ticket.retain(lease); });
+    if (!started) { m_running = false; m_latest = std::move(work); m_timer.start(); }
 }
 void AddonVisualizerRenderQueue::finished(Work work, QImage image, qint64 cost)
 {
     m_running = false;
-    if (m_closed) return;
+    if (m_closed || !m_lifetime.current()) return;
     const bool current = work.epoch == m_shared->epoch.load(std::memory_order_acquire) && work.request.current();
     if (current) {
         ++m_rendered; m_maximumCostNs = qMax(m_maximumCostNs, cost); QPointer<AddonVisualizerRenderQueue> guard(this);

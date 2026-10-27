@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
+#include "addon_test_application_work.hpp"
 #include <QBuffer>
 #include <QDir>
 #include <QElapsedTimer>
@@ -140,5 +141,5 @@ private slots:
         QCOMPARE(catalog.choices().size(), 1); QVERIFY(!catalog.choices().first().toMap().value("enabled").toBool());
     }
 };
-QTEST_GUILESS_MAIN(TestAddonVisualizerResources)
+HAKONE_QTEST_MAIN(TestAddonVisualizerResources, QCoreApplication)
 #include "test_addon_visualizer_resources.moc"

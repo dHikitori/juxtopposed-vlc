@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
+#include "addon_test_application_work.hpp"
 #include <QSignalSpy>
 #include <QFile>
 #include <QFileInfo>
@@ -87,5 +88,5 @@ private slots:
         QVERIFY(worker.values().isEmpty()); QCOMPARE(AddonVisualizerWorker::liveWorkers(), 0);
     }
 };
-QTEST_GUILESS_MAIN(TestAddonVisualizerWorkerRuntime)
+HAKONE_QTEST_MAIN(TestAddonVisualizerWorkerRuntime, QCoreApplication)
 #include "test_addon_visualizer_worker_runtime.moc"

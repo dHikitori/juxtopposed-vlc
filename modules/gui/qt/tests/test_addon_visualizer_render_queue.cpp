@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
+#include "addon_test_application_work.hpp"
 #include <QSignalSpy>
 #include <QSemaphore>
 #include <QScopeGuard>
@@ -111,5 +112,5 @@ private slots:
         }
     }
 };
-QTEST_GUILESS_MAIN(TestAddonVisualizerRenderQueue)
+HAKONE_QTEST_MAIN(TestAddonVisualizerRenderQueue, QCoreApplication)
 #include "test_addon_visualizer_render_queue.moc"

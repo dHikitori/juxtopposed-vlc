@@ -208,6 +208,18 @@ QObject *TestImages::grabWindow(QQuickItem *item) const
     return image;
 }
 
+void Setup::applicationAvailable()
+{
+    m_addonWork = std::make_unique<AddonTestApplicationWork>();
+    m_addonWork->start();
+}
+
+void Setup::cleanupTestCase()
+{
+    // Qt Quick Test calls this hook before it destroys the application.
+    m_addonWork.reset();
+}
+
 void Setup::qmlEngineAvailable(QQmlEngine *engine)
 {
 #if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)

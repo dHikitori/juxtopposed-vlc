@@ -405,9 +405,11 @@ void MainUI::registerQMLTypes()
             qmlRegisterSingletonInstance<vlc::addons::AddonThemeService>(uri, versionMajor, versionMinor, "AddonThemes", themes);
             auto* addonUi = new vlc::addons::AddonUiRegistry(addonManager, this);
             auto* uiAssets = new vlc::addons::AddonUiAssets(addonManager, this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, uiAssets, &vlc::addons::AddonUiAssets::close);
             addonUi->setAssetService(uiAssets);
             qmlRegisterSingletonInstance<vlc::addons::AddonUiRegistry>(uri, versionMajor, versionMinor, "AddonUiRegistry", addonUi);
             auto* visualizers = vlc::addons::createPlayerVisualizers(addonManager, m_intf->p_mainPlayerController, this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, visualizers, &vlc::addons::AddonVisualizers::close);
             qmlRegisterSingletonInstance<vlc::addons::AddonVisualizers>(uri, versionMajor, versionMinor, "AddonVisualizers", visualizers);
             const QPointer<vlc::addons::AddonManager> managerOwner(addonManager);
             auto admissions = std::make_shared<vlc::addons::AddonSourceAdmissions>(addonManager->storageDirectory(),
@@ -421,8 +423,10 @@ void MainUI::registerQMLTypes()
             if (auto* mediaLibrary=m_mainCtx->getMediaLibrary()) {
                 const auto dispatcher=vlc::addons::AddonNativeLibraryStore::dispatcherFor(mediaLibrary);
                 auto* libraryStore=new vlc::addons::AddonNativeLibraryStore(dispatcher,admissions,addonManager,this);
+                connect(m_mainCtx,&MainCtx::addonWorkRetiring,libraryStore,&vlc::addons::AddonNativeLibraryStore::close);
                 libraryStore->setObjectName(QStringLiteral("addonNativeLibraryStore"));
                 libraryTargets=new vlc::addons::AddonNativeLibraryTargets(dispatcher,libraryStore,this);
+                connect(m_mainCtx,&MainCtx::addonWorkRetiring,libraryTargets,&vlc::addons::AddonNativeLibraryTargets::close);
                 connect(addonManager,&QObject::destroyed,libraryTargets,&vlc::addons::AddonNativeLibraryTargets::close);
                 nativeBackend=vlc::addons::combineDiscoveryBackends(std::move(nativeBackend),libraryStore->backend());
             }

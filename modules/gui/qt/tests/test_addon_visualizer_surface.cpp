@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
-#include <QQuickWindow>
+#include "addon_test_application_work.hpp"
 #include <QGuiApplication>
+#include <QQuickWindow>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QFile>
@@ -87,5 +88,5 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(controller.active(), 5000);
     }
 };
-QTEST_MAIN(TestAddonVisualizerSurface)
+HAKONE_QTEST_MAIN(TestAddonVisualizerSurface, QGuiApplication)
 #include "test_addon_visualizer_surface.moc"

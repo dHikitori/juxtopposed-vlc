@@ -26,6 +26,7 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <memory>
+#include "addon_test_application_work.hpp"
 
 class QQmlNetworkAccessManagerFactory;
 struct TestTextResourceState;
@@ -94,7 +95,11 @@ public:
     using QObject::QObject;
 
 public slots:
+    void applicationAvailable();
     void qmlEngineAvailable(QQmlEngine *engine);
+    void cleanupTestCase();
+private:
+    std::unique_ptr<AddonTestApplicationWork> m_addonWork;
 };
 
 #endif /* QML_TEST_HPP */
