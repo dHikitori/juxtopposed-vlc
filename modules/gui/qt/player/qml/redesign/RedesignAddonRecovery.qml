@@ -11,39 +11,73 @@ ColumnLayout {
     property bool lightTheme: false
     property Component videoBackdropContent
     property string actionError: ""
+    property string actionStatus: ""
+    property string pendingAction: ""
     readonly property bool supported: !!backend && typeof backend.setSafeMode === "function"
     readonly property bool busy: !!backend && backend.busy === true
     readonly property bool safeMode: { if (!backend) return false; backend.revision; return backend.safeMode === true }
     readonly property var recoverable: {
         if (!backend) return []
         backend.revision
-        return (backend.packages || []).filter(row => row.recoveryRequired === true || (row.suppressed === true && row.distributionSource === true))
+        return (backend.packages || []).filter(row => row.recoveryRequired === true || row.savedData === true || (row.suppressed === true && row.distributionSource === true))
     }
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     visible: supported
     spacing: theme.dp(8)
+    function signature(row) {
+        return JSON.stringify([row.id, row.version || "", row.digest || "", row.source || "", row.enabled === true,
+            row.recoveryRequired === true, row.suppressed === true, row.distributionSource === true, row.savedData === true])
+    }
+    function currentRow(id) { return backend ? (backend.packages || []).find(row => row.id === id) : null }
+    function permitted(row, operation) {
+        if (!row || row.builtin === true) return false
+        if (operation === "restore") return row.suppressed === true && row.distributionSource === true && typeof backend.stageDistributionPackage === "function"
+        if (operation === "recover") return row.recoveryRequired === true && typeof backend.recoverPackage === "function"
+        return (operation === "remove" && row.recoveryRequired === true || operation === "removeData" && (row.recoveryRequired === true || row.savedData === true)) && typeof backend.uninstall === "function"
+    }
+    function completedAction(operation) {
+        actionError = backend.errorMessage || ""
+        actionStatus = actionError ? "" : operation === "restore" ? qsTr("The package is ready for a permission review.")
+            : operation === "recover" ? qsTr("The app recovered the add-on. The add-on stays disabled.") : qsTr("The app removed the add-on.")
+    }
+    function result(operation, accepted) {
+        if (!accepted) {
+            actionError = backend.errorMessage || qsTr("The app cannot complete this action.")
+            actionStatus = ""
+        } else if (busy) {
+            pendingAction = operation
+            actionStatus = operation === "restore" ? qsTr("The app prepares the package for review.") : qsTr("The app removes the add-on.")
+        } else completedAction(operation)
+    }
     function request(id, operation) {
-        if (busy || !recoverable.some(row => row.id === id)) return false
-        const row = recoverable.find(row => row.id === id)
-        if (operation === "restore" ? row.suppressed !== true || row.distributionSource !== true || typeof backend.restoreDistributionPackage !== "function"
-                                    : operation !== "recover" || row.recoveryRequired !== true || typeof backend.recoverPackage !== "function") return false
-        actionError = ""; confirmation.packageId = id; confirmation.operation = operation; confirmation.open(); return true
+        const row = currentRow(id)
+        if (busy || !permitted(row, operation)) return false
+        actionError = ""; actionStatus = ""
+        if (operation === "restore") {
+            result(operation, backend.stageDistributionPackage(id))
+            return true
+        }
+        confirmation.packageId = id; confirmation.operation = operation
+        confirmation.packageState = signature(row); confirmation.revision = backend.revision; confirmation.savedDataOnly = row.installed === false
+        confirmation.open(); return true
+    }
+    onBusyChanged: if (!busy && pendingAction) {
+        const operation = pendingAction; pendingAction = ""; completedAction(operation)
     }
     RedesignButton {
         objectName: "addonSafeMode"
         caption: root.safeMode ? qsTr("Use add-ons") : qsTr("Temporarily disable add-ons")
         text: caption; tooltipTextFormat: Text.PlainText
-        enabled: !root.busy
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-        onClicked: if (!root.busy) {
+        onClicked: {
             const success = root.backend.setSafeMode(!root.safeMode)
-            root.actionError = success ? "" : root.backend.errorMessage || qsTr("VLC cannot change the add-on state.")
+            root.actionError = success ? "" : root.backend.errorMessage || qsTr("The app cannot change the add-on state.")
         }
     }
     Text {
         Layout.fillWidth: true
         text: root.safeMode ? qsTr("Add-ons are temporarily disabled. Installed packages and their settings stay in the app.")
-            : qsTr("Use this control if an add-on causes a problem.")
+            : qsTr("Use this control if an add-on causes a problem. You can use it while a repository request is in progress.")
         textFormat: Text.PlainText; wrapMode: Text.Wrap
         color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
     }
@@ -65,19 +99,17 @@ ColumnLayout {
             }
             Text {
                 Layout.fillWidth: true
-                text: row.modelData.recoveryRequired === true ? qsTr("This add-on needs recovery.") : qsTr("This app package was removed.")
+                text: row.modelData.recoveryRequired === true ? qsTr("This add-on needs recovery.") : row.modelData.savedData === true ? qsTr("This add-on was removed. Its saved data stays in the app.") : qsTr("This app package was removed.")
                 textFormat: Text.PlainText; wrapMode: Text.Wrap
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
             }
             Text {
-                Layout.fillWidth: true
-                visible: !!row.modelData.error
+                Layout.fillWidth: true; visible: !!row.modelData.error
                 text: row.modelData.error || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap
                 color: root.theme.danger; font.pixelSize: root.theme.dp(13)
             }
             Text {
-                Layout.fillWidth: true
-                visible: row.modelData.recoveryRequired === true && row.retained.length > 0
+                Layout.fillWidth: true; visible: row.modelData.recoveryRequired === true && row.retained.length > 0
                 text: qsTr("Saved versions: %1").arg(row.retained.map(entry => entry.version).join(", "))
                 textFormat: Text.PlainText; wrapMode: Text.Wrap
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
@@ -93,18 +125,43 @@ ColumnLayout {
             RedesignButton {
                 objectName: "addonRestore_" + row.modelData.id
                 visible: row.modelData.suppressed === true && row.modelData.distributionSource === true
-                enabled: !root.busy && typeof root.backend.restoreDistributionPackage === "function"
-                caption: qsTr("Restore app package"); text: caption; tooltipTextFormat: Text.PlainText
+                enabled: !root.busy && typeof root.backend.stageDistributionPackage === "function"
+                caption: qsTr("Review app package"); text: caption; tooltipTextFormat: Text.PlainText
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.request(row.modelData.id, "restore")
+            }
+            Flow {
+                Layout.fillWidth: true; spacing: root.theme.dp(6)
+                visible: row.modelData.recoveryRequired === true || row.modelData.savedData === true
+                RedesignButton {
+                    objectName: "addonRecoveryRemove_" + row.modelData.id
+                    visible: row.modelData.recoveryRequired === true
+                    enabled: !root.busy && typeof root.backend.uninstall === "function"
+                    caption: qsTr("Remove add-on"); text: caption; tooltipTextFormat: Text.PlainText
+                    scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                    onClicked: root.request(row.modelData.id, "remove")
+                }
+                RedesignButton {
+                    objectName: "addonRecoveryRemoveData_" + row.modelData.id
+                    enabled: !root.busy && typeof root.backend.uninstall === "function"
+                    caption: row.modelData.installed === false ? qsTr("Delete saved data") : qsTr("Delete add-on and saved data"); text: caption; tooltipTextFormat: Text.PlainText
+                    scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                    onClicked: root.request(row.modelData.id, "removeData")
+                }
             }
         }
     }
     Text {
+        objectName: "addonRecoveryStatus"
+        Layout.fillWidth: true; visible: text.length > 0
+        text: root.actionStatus; textFormat: Text.PlainText; wrapMode: Text.Wrap
+        color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+        Accessible.role: Accessible.StaticText
+    }
+    Text {
         objectName: "addonRecoveryError"
-        Layout.fillWidth: true
+        Layout.fillWidth: true; visible: text.length > 0
         text: root.actionError; textFormat: Text.PlainText; wrapMode: Text.Wrap
-        visible: text.length > 0
         color: root.theme.danger; font.pixelSize: root.theme.dp(13)
         Accessible.role: Accessible.AlertMessage
     }
@@ -114,17 +171,23 @@ ColumnLayout {
         parent: root.Window.contentItem
         property string packageId: ""
         property string operation: ""
-        title: operation === "restore" ? qsTr("Restore app package?") : qsTr("Recover add-on?")
-        message: operation === "restore" ? qsTr("VLC will restore and enable the package from the app installation.")
-            : qsTr("VLC will select a saved package that passed validation. The add-on will stay disabled. Its settings will match that package.")
-        confirmText: operation === "restore" ? qsTr("Restore app package") : qsTr("Recover add-on")
+        property string packageState: ""
+        property int revision: -1
+        property bool savedDataOnly: false
+        title: operation === "recover" ? qsTr("Recover add-on?") : operation === "removeData" ? savedDataOnly ? qsTr("Delete saved data?") : qsTr("Delete add-on and saved data?") : qsTr("Remove add-on?")
+        message: operation === "recover" ? qsTr("The app will select a saved package that passed validation. The add-on will stay disabled. Its settings and private data will match that package.")
+            : operation === "removeData" ? savedDataOnly ? qsTr("The app will delete the saved settings, saved keys, private data, and damaged package files for this add-on.") : qsTr("The app will remove the add-on and delete its saved settings, saved keys, and private data.")
+            : qsTr("The app will remove the add-on and keep its saved settings, saved keys, and private data. Damaged files stay in the recovery folder.")
+        confirmText: operation === "recover" ? qsTr("Recover add-on") : operation === "removeData" ? savedDataOnly ? qsTr("Delete saved data") : qsTr("Delete add-on and saved data") : qsTr("Remove add-on")
+        destructive: operation !== "recover"
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         videoBackdropContent: root.videoBackdropContent
         onAccepted: {
-            if (root.busy || !root.recoverable.some(row => row.id === packageId
-                && (operation === "restore" ? row.suppressed === true && row.distributionSource === true : row.recoveryRequired === true))) return
-            const success = operation === "restore" ? root.backend.restoreDistributionPackage(packageId) : root.backend.recoverPackage(packageId)
-            root.actionError = success ? "" : root.backend.errorMessage || qsTr("VLC cannot recover this add-on.")
+            const row = root.currentRow(packageId)
+            if (root.busy || !root.permitted(row, operation) || root.backend.revision !== revision || root.signature(row) !== packageState) {
+                root.actionError = qsTr("The add-on changed. Open this action again."); return
+            }
+            root.result(operation, operation === "recover" ? root.backend.recoverPackage(packageId) : root.backend.uninstall(packageId, operation === "removeData"))
         }
     }
 }

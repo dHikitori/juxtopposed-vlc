@@ -54,7 +54,11 @@ TestCase {
         function setEnabled(id, enabled) { return true }
         function setSafeMode(enabled) { safeMode = enabled; revision++; return true }
         function recoverPackage(id) { recoveries++; lastPackage = id; return true }
-        function restoreDistributionPackage(id) { restores++; lastPackage = id; return true }
+        function stageDistributionPackage(id) {
+            restores++; lastPackage = id
+            pendingPackage = {id: id, name: "App package", version: "2.0.0", source: "https://git.example.org/app.git", distributionSource: true, permissions: {}}
+            revision++; return true
+        }
         function retainedGenerations(id) { return [{version: "1.0.0"}] }
         function rollback(id) { rollbacks++; lastPackage = id; return true }
         function uninstall(id, removeData) { removals++; lastPackage = id; removedData = removeData; return true }
@@ -102,6 +106,47 @@ TestCase {
         verify(item("addonPackage_vlc.builtin.opensubtitles") === null)
         verify(item("addonPackage_org.example.app") === null)
         tryVerify(() => item("addonRestore_org.example.app") !== null)
+    }
+    function test_appUpdateAndRestoreUseTheExistingPermissionReview() {
+        manager.packages = [{id: "org.example.app", name: "App", version: "1.0.0", distributionSource: true,
+            appUpdateAvailable: true, appUpdateVersion: "2.0.0", enabled: true, configured: true}]; manager.revision++
+        tryVerify(() => item("addonPackageAppUpdate_org.example.app") !== null)
+        item("addonPackageAppUpdate_org.example.app").clicked()
+        compare(manager.restores, 1); compare(manager.approvals, 0)
+        verify(item("addonInstallReview").visible); verify(item("addonInstallOverview").text.includes("app distribution"))
+        item("addonInstallCancel").clicked(); compare(manager.approvals, 0)
+        manager.packages = [{id: "org.example.app", name: "App", distributionSource: true, installed: false, suppressed: true}]; manager.revision++
+        tryVerify(() => item("addonRestore_org.example.app") !== null)
+        item("addonRestore_org.example.app").clicked(); compare(manager.restores, 2); compare(manager.approvals, 0)
+        item("addonInstallApprove").clicked(); compare(manager.approvals, 1)
+    }
+    function test_fullDeletionAndStaleConfirmationHaveDifferentOutcomes() {
+        manager.packages = [{id: "org.example.radio", name: "Radio", version: "2.0.0", enabled: true, configured: true}]; manager.revision++
+        tryVerify(() => item("addonPackageRemoveData_org.example.radio") !== null)
+        item("addonPackageRemoveData_org.example.radio").clicked()
+        const dialog = item("addonPackageChangeDialog")
+        tryCompare(dialog, "opened", true); verify(dialog.message.includes("saved keys"))
+        dialog.reject(); compare(manager.removals, 0)
+        verify(page.requestPackageChange("org.example.radio", "removeData")); ++manager.revision
+        dialog.accept(); compare(manager.removals, 0); verify(page.actionError.includes("changed"))
+        verify(page.requestPackageChange("org.example.radio", "removeData")); dialog.accept()
+        compare(manager.removals, 1); verify(manager.removedData)
+    }
+    function test_removalCannotOfferRepositoryCancel() {
+        manager.packages = [{id: "org.example.radio", name: "Radio", installed: true, removing: true}]; manager.revision++
+        manager.busy = true
+        verify(!item("addonRepositoryCancel").visible)
+        verify(item("addonSafeMode").enabled); item("addonSafeMode").clicked(); verify(manager.safeMode)
+    }
+    function test_reviewUsesLiveSafeModeInsteadOfItsOldCapabilitySnapshot() {
+        manager.safeMode = true
+        manager.pendingPackage = {id: "org.example.app", name: "App", permissions: {}, hostCapabilities: {safeMode: true, workerAvailable: true}}
+        verify(!item("addonInstallEnable").enabled)
+        item("addonSafeMode").clicked(); compare(manager.safeMode, false)
+        verify(item("addonInstallEnable").enabled)
+        page.enableAfterInstall = true
+        item("addonSafeMode").clicked(); compare(manager.safeMode, true)
+        item("addonInstallApprove").clicked(); compare(manager.approvals, 1); verify(!manager.lastEnable)
     }
     function test_repositoryStagingNeverInstallsOrGrants() {
         verify(!item("addonStagePackage").enabled)

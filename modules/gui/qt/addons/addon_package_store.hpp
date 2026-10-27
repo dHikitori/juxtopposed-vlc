@@ -47,6 +47,8 @@ public:
     QString storageDirectory() const;
     StoreAuthorityToken authorityToken() const noexcept { return m_authority.capture(); }
     void invalidateAuthority() const noexcept { m_authority.invalidate(); }
+    StorePackageRetirement retirePackage(const QString& id) const { return m_authority.retirePackage(id); }
+    bool packageRetiring(const QString& id) const noexcept { return m_authority.packageRetiring(id); }
     static bool inspectDirectory(const QString&, const ReleaseIdentity&, PackageCandidate*, QString* error = nullptr);
     // No shell or checkout. Local fixtures require explicit developerLocalSource.
     static bool fetchGitTag(const QString& source, const QString& tag, PackageCandidate*,
@@ -55,12 +57,16 @@ public:
     bool fetchRepositoryUpdate(const QString& id, const QString& versionRange, bool allowPrerelease,
                                PackageCandidate*, QString* error = nullptr,
                                bool developerLocalSource = false, int timeoutMs = 30000) const;
-    bool install(const PackageCandidate&, const QJsonObject& approvedGrants, QString* error = nullptr);
+    // Distribution approval is host-only and commits with the current release pointer.
+    bool install(const PackageCandidate&, const QJsonObject& approvedGrants, QString* error = nullptr, bool distributionApproval = false);
     bool installed(const QString& id, InstalledPackage*, QString* error = nullptr) const;
     QStringList installedIds() const;
+    // These IDs permit saved-data cleanup only. They grant no package authority.
+    QStringList savedDataIds() const;
     bool setEnabled(const QString& id, bool enabled, QString* error = nullptr);
     bool rollback(const QString& id, QString* error = nullptr);
     bool uninstall(const QString& id, bool removeData, QString* error = nullptr);
+    bool canUninstall(const QString& id, bool removeData, QString* error = nullptr) const;
     // Versioned nonsecret settings live in the same state pointer as the release.
     bool settings(const QString& id, QJsonObject*, quint64* revision = nullptr, QString* error = nullptr) const;
     bool networkConfiguration(const InstalledPackage&, QJsonObject*, quint64* revision = nullptr) const;

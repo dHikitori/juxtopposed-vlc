@@ -15,6 +15,28 @@ class TestAddonStoreAuthority : public QObject
         QFile file(path); return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
     }
 private slots:
+    void packageRetirementIsSharedAndKeepsOtherPackagesAvailable()
+    {
+        QTemporaryDir directory; StoreAuthority owner(directory.path()), peer(directory.path());
+        const auto old = owner.capture();
+        {
+            auto first = owner.retirePackage(QStringLiteral("org.example.first"));
+            QVERIFY(bool(first)); QVERIFY(!old.current());
+            QVERIFY(peer.packageRetiring(QStringLiteral("org.example.first")));
+            QVERIFY(!peer.packageRetiring(QStringLiteral("org.example.other")));
+            const auto during = peer.capture(); QVERIFY(during.current());
+            {
+                auto nested = peer.retirePackage(QStringLiteral("org.example.first"));
+                auto moved = std::move(nested); QVERIFY(bool(moved));
+                QVERIFY(!during.current());
+            }
+            QVERIFY(peer.packageRetiring(QStringLiteral("org.example.first")));
+        }
+        QVERIFY(!peer.packageRetiring(QStringLiteral("org.example.first")));
+        QVERIFY(!old.current()); QVERIFY(peer.capture().current());
+        QVERIFY(!bool(owner.retirePackage(QStringLiteral("../other"))));
+        QVERIFY(owner.packageRetiring(QStringLiteral("../other")));
+    }
     void storeAuthorityTokensAreAtomicAndKeepTheirEpochAlive()
     {
         QTemporaryDir storage;

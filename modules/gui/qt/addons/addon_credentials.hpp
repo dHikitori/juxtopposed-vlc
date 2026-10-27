@@ -24,6 +24,10 @@ public:
     // This call reads memory only. The reader can use the platform store.
     Reader snapshotReader() const;
     void remove(const QString& packageId, const QString& reference);
+    // Call on an owned background store. No credential value is returned.
+    bool removePackage(const QString& packageId);
+    // This call changes memory only. It does not contact the platform store.
+    void forgetPackage(const QString& packageId);
     void clearSession();
 private:
     struct Secret { QString packageId; QByteArray value; bool persistent; };

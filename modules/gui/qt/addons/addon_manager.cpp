@@ -246,6 +246,7 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Install
 }
 QVariantMap AddonManager::settingsSecretStatus(const QString& id) const
 {
+    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return {};
     InstalledPackage package; if (!m_store.installed(id, &package)) return {};
     const auto properties = schema(package).value("properties").toObject();
     const auto references = savedSettings(id).value("_credentials").toObject(); QVariantMap status;
@@ -257,6 +258,7 @@ QVariantMap AddonManager::settingsSecretStatus(const QString& id) const
 }
 bool AddonManager::configured(const InstalledPackage& package) const
 {
+    if (m_removingPackages.contains(package.manifest.id) || m_store.packageRetiring(package.manifest.id)) return false;
     const auto document = schema(package); if (document.value("type").toString() != QLatin1String("object")) return false;
     const auto values = QJsonObject::fromVariantMap(settingsValues(package.manifest.id));
     const auto properties = document.value("properties").toObject();
@@ -270,6 +272,7 @@ bool AddonManager::configured(const InstalledPackage& package) const
 
 bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input, const QVariantMap& secretOperations)
 {
+    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
     InstalledPackage package; QString error;
     if (!m_store.installed(id, &package, &error)) return changed(false, error);
     const auto document = schema(package), properties = document.value("properties").toObject();
@@ -312,7 +315,7 @@ bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input
     values.insert("_credentials", references);
     if (!m_store.saveSettings(id, values, expectedRevision, &error)) return reject(error);
     // Keep old credentials for rollback. Explicit account deletion revokes all generations.
-    withdraw(id);
+    if (!withdraw(id)) return false;
     for (const auto& field : deletedFields)
         for (const auto& reference : m_store.credentialReferences(id, field)) m_secrets.remove(id, reference);
     return changed(true);
@@ -322,13 +325,20 @@ QVariantList AddonManager::packages() const
 {
     QVariantList result;
     const auto installedIds = m_store.installedIds();
+    const auto savedDataIds = m_store.savedDataIds();
     for (const auto& id : installedIds) {
         InstalledPackage package; QString error;
         if (!m_store.installed(id, &package, &error)) {
             result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", true}, {"enabled", false},
-                {"configured", false}, {"recoveryRequired", true}, {"error", error}});
+                {"configured", false}, {"recoveryRequired", true}, {"error", error}, {"removing", m_removingPackages.contains(id)}});
             continue;
         }
+        const auto app = m_distributionPackages.value(id);
+        SemanticVersion offered, installed;
+        const bool appUpdate = package.identity.distributionSource && !package.recoveryRequired
+            && app.value("source").toString() == package.identity.source
+            && SemanticVersion::parse(app.value("version").toString(), &offered)
+            && SemanticVersion::parse(package.manifest.version, &installed) && offered.compare(installed) > 0;
         result.append(QVariantMap{{"id", id}, {"name", package.manifest.name}, {"version", package.manifest.version},
             {"source", package.identity.source}, {"tag", package.identity.tag},
             {"commit", package.identity.distributionSource ? QString{} : package.identity.commitId},
@@ -336,15 +346,31 @@ QVariantList AddonManager::packages() const
             {"developerSource", package.identity.developerSource},
             {"digest", QString::fromLatin1(package.digest)}, {"enabled", package.enabled},
             {"configured", configured(package)}, {"hasPrevious", !package.previousDigest.isEmpty()},
-            {"installed", true}, {"recoveryRequired", package.recoveryRequired}});
+            {"installed", true}, {"recoveryRequired", package.recoveryRequired}, {"removing", m_removingPackages.contains(id)},
+            {"appUpdateAvailable", appUpdate}, {"appUpdateVersion", appUpdate ? app.value("version").toString() : QString{}}});
     }
     for (auto it = m_distributionDirectories.begin(); it != m_distributionDirectories.end(); ++it)
         if (!installedIds.contains(it.key()) && m_store.distributionSuppressed(it.key())) {
-            const auto manifest = readObject(QDir(it.value()).filePath(QStringLiteral("addon.json")));
-            result.append(QVariantMap{{"id", it.key()}, {"name", manifest.value("name").toString(it.key())},
+            const auto manifest = m_distributionPackages.value(it.key());
+            result.append(QVariantMap{{"id", it.key()}, {"name", manifest.value("name", it.key()).toString()},
                 {"distributionSource", true}, {"publisherVerified", false}, {"installed", false},
-                {"suppressed", true}, {"enabled", false}, {"configured", false}});
+                {"suppressed", true}, {"enabled", false}, {"configured", false}, {"savedData", savedDataIds.contains(it.key())}});
         }
+    for (const auto& id : savedDataIds)
+        if (!installedIds.contains(id) && !std::any_of(result.begin(), result.end(), [&id](const QVariant& row) { return row.toMap().value("id").toString() == id; }))
+            result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", false}, {"savedData", true},
+                {"enabled", false}, {"configured", false}, {"removing", m_removingPackages.contains(id)}});
+    // Disk cleanup can finish before its terminal event reaches the UI.
+    for (const auto& id : m_removingPackages) {
+        bool present = false;
+        for (auto& value : result) {
+            auto row = value.toMap();
+            if (row.value("id").toString() != id) continue;
+            row.insert("removing", true); value = row; present = true; break;
+        }
+        if (!present) result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", false},
+            {"enabled", false}, {"configured", false}, {"removing", true}});
+    }
     return result;
 }
 QVariantList AddonManager::contributionsOfType(const QString& type, bool includeDisabled) const
@@ -389,6 +415,8 @@ QByteArray AddonManager::contributionFile(const QString& global, const QString& 
 }
 std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& global) const
 {
+    if (m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
+        return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on is being removed."); return result; };
     // This preparation reads memory only. The detached reader owns no QObject.
     const auto store = m_store;
     const auto presence = m_secrets.presenceSnapshot();
@@ -401,7 +429,7 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
             return result;
         };
         InstalledPackage package;
-        if (!authority.current() || !store.installed(packagePart(global), &package) || !package.enabled) return rejected();
+        if (!authority.current() || store.packageRetiring(packagePart(global)) || !store.installed(packagePart(global), &package) || !package.enabled) return rejected();
         const auto* contribution = package.manifest.contribution(localPart(global));
         if (!contribution || !QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement"}.contains(contribution->type)) return rejected();
         const auto scope = package.grants.value(QStringLiteral("ui.contribute")).toObject();
@@ -471,12 +499,14 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
 }
 AddonNativeAuthorityReader AddonManager::nativeAuthorityReader(const QString& global) const
 {
+    if (m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
+        return []() -> std::optional<AddonNativeAuthority> { return std::nullopt; };
     const auto store = m_store;
     const auto authority = store.authorityToken();
     const auto readSecret = m_secrets.snapshotReader();
     return [store, authority, readSecret, global]() -> std::optional<AddonNativeAuthority> {
         AddonNativeAuthority result;
-        if (!authority.current() || !store.installed(packagePart(global), &result.package)
+        if (!authority.current() || store.packageRetiring(packagePart(global)) || !store.installed(packagePart(global), &result.package)
             || !result.package.enabled) return std::nullopt;
         auto& package = result.package;
         if (!store.networkConfiguration(package, &result.settings, &result.settingsRevision)) return std::nullopt;
@@ -590,7 +620,7 @@ QVariantMap AddonManager::pendingPackage() const
     return {{"id", candidate.manifest.id}, {"name", candidate.manifest.name}, {"version", candidate.manifest.version},
         {"source", candidate.identity.source}, {"tag", candidate.identity.tag}, {"digest", QString::fromLatin1(candidate.digest)},
         {"permissions", candidate.manifest.requiredPermissions.toVariantMap()},
-        {"developerSource", candidate.identity.developerSource}, {"publisherVerified", false},
+        {"developerSource", candidate.identity.developerSource}, {"distributionSource", candidate.identity.distributionSource}, {"publisherVerified", false},
         {"hostCapabilities", capabilities()}, {"workerRequired", !candidate.manifest.runtimeEntry.isEmpty()}};
 }
 bool AddonManager::stageLocalPackage(const QString& directory)
@@ -606,19 +636,23 @@ bool AddonManager::stageLocalPackage(const QString& directory)
 }
 bool AddonManager::ensureDistributionPackage(const QString& directory, const QString& expectedPackageId)
 {
-    if (expectedPackageId.isEmpty()) return changed(false, tr("The distribution package ID is invalid."));
+    Manifest manifest; QString error;
+    if (!Manifest::loadDirectory(directory, &manifest, nullptr, &error)) return changed(false, error);
+    if (manifest.id != expectedPackageId)
+        return changed(false, tr("The distribution package ID is not correct."));
+    const auto source = manifest.source.toString();
+    if (m_distributionPackages.contains(expectedPackageId)
+        && m_distributionPackages.value(expectedPackageId).value("source").toString() != source)
+        return changed(false, tr("The app package source changed."));
     m_distributionDirectories.insert(expectedPackageId, directory);
+    m_distributionPackages.insert(expectedPackageId, {{"name", manifest.name}, {"version", manifest.version}, {"source", source}});
     if (m_store.distributionSuppressed(expectedPackageId)) return true;
     InstalledPackage existing;
     if (m_store.installed(expectedPackageId, &existing)) return true;
     if (QFileInfo::exists(QDir(m_store.storageDirectory()).filePath(QStringLiteral("packages/") + expectedPackageId + QStringLiteral("/state.json"))))
-        return changed(false, tr("The installed package state is invalid. Restore the package before the next import."));
-    Manifest manifest; QString error;
-    if (!Manifest::loadDirectory(directory, &manifest, nullptr, &error)) return changed(false, error);
-    if (manifest.id != expectedPackageId)
-        return changed(false, tr("The distribution package ID is invalid."));
+        return changed(false, tr("The installed package state is not correct. Recover or remove the package first."));
     ReleaseIdentity identity;
-    identity.source = manifest.source.toString(); identity.tag = QStringLiteral("v") + manifest.version;
+    identity.source = source; identity.tag = QStringLiteral("v") + manifest.version;
     identity.distributionSource = true;
     PackageCandidate candidate;
     if (!PackageStore::inspectDirectory(directory, identity, &candidate, &error)
@@ -627,14 +661,47 @@ bool AddonManager::ensureDistributionPackage(const QString& directory, const QSt
     return changed(true);
 }
 bool AddonManager::restoreDistributionPackage(const QString& id)
+{ return stageDistributionPackage(id); }
+bool AddonManager::stageDistributionPackage(const QString& id)
 {
-    if (!m_distributionDirectories.contains(id))
-        return changed(false, tr("VLC has no trusted distribution path for this package."));
-    QString error;
-    if (!m_store.setDistributionSuppressed(id, false, &error)) return changed(false, error);
-    if (ensureDistributionPackage(m_distributionDirectories.value(id), id)) return true;
-    m_store.setDistributionSuppressed(id, true);
-    return false;
+    if (busy()) return changed(false, tr("Wait for the current add-on request to end."));
+    if (!m_distributionDirectories.contains(id) || m_store.packageRetiring(id))
+        return changed(false, tr("The app has no available distribution package for this ID."));
+    const auto expected = m_distributionPackages.value(id);
+    const auto directory = m_distributionDirectories.value(id);
+    const auto store = m_store;
+    auto candidate = std::make_shared<PackageCandidate>();
+    auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
+    m_pendingPackage.reset(); m_updateResult.clear();
+    const bool started = m_repositoryJobs->submit([id, expected, directory, store, candidate, error, success] {
+        InstalledPackage active;
+        const bool installed = store.installed(id, &active);
+        if ((installed && (!active.identity.distributionSource || active.identity.developerSource
+                || active.identity.source != expected.value("source").toString()))
+            || (!installed && !store.distributionSuppressed(id))) {
+            *error = QStringLiteral("This package does not use the app distribution source."); return;
+        }
+        ReleaseIdentity identity; identity.source = expected.value("source").toString();
+        identity.tag = QStringLiteral("v") + expected.value("version").toString(); identity.distributionSource = true;
+        if (!PackageStore::inspectDirectory(directory, identity, candidate.get(), error.get())) return;
+        if (candidate->manifest.id != id || candidate->manifest.source.toString() != identity.source
+            || candidate->manifest.version != expected.value("version").toString()) {
+            *error = QStringLiteral("The app package changed. Start the app again before a package review."); return;
+        }
+        if (installed) {
+            SemanticVersion next, previous;
+            if (!SemanticVersion::parse(candidate->manifest.version, &next)
+                || !SemanticVersion::parse(active.manifest.version, &previous) || next.compare(previous) <= 0) {
+                *error = QStringLiteral("A newer app package is not available."); return;
+            }
+        }
+        *success = true;
+    }, [this, candidate, error, success](AddonRepositoryJobs::Result result) {
+        const bool finished = result == AddonRepositoryJobs::Result::Finished;
+        if (*success && finished) m_pendingPackage = candidate;
+        changed(*success && finished, !finished ? tr("The app package request did not finish.") : *error);
+    });
+    return changed(started, started ? QString{} : tr("The app cannot start the package request."));
 }
 bool AddonManager::stageRepository(const QString& source, const QString& tag)
 {
@@ -685,8 +752,20 @@ bool AddonManager::approvePendingPackage(bool enable)
 {
     if (busy() || !m_pendingPackage) return changed(false, tr("Select an add-on package first."));
     const auto candidate = m_pendingPackage; QString error;
+    const QPointer<AddonManager> alive(this);
     withdraw(candidate->manifest.id);
-    if (!m_store.install(*candidate, candidate->manifest.requiredPermissions, &error)) return changed(false, error);
+    if (!alive) return false;
+    if (candidate->identity.distributionSource) {
+        const auto known = m_distributionPackages.value(candidate->manifest.id);
+        InstalledPackage active;
+        if (!m_distributionDirectories.contains(candidate->manifest.id)
+            || known.value("source").toString() != candidate->identity.source
+            || known.value("version").toString() != candidate->manifest.version
+            || (m_store.installed(candidate->manifest.id, &active) && (!active.identity.distributionSource
+                || active.identity.source != candidate->identity.source)))
+            return changed(false, tr("The app distribution source changed. Do a new package review."));
+    }
+    if (!m_store.install(*candidate, candidate->manifest.requiredPermissions, &error, candidate->identity.distributionSource)) return changed(false, error);
     m_pendingPackage.reset();
     m_updateResult.clear();
     if (enable && !m_store.setEnabled(candidate->manifest.id, true, &error)) return changed(false, error);
@@ -706,11 +785,12 @@ bool AddonManager::installLocalPackage(const QString& directory, bool approve)
     identity.developerSource = true;
     PackageCandidate candidate;
     if (!PackageStore::inspectDirectory(directory, identity, &candidate, &error)) return changed(false, error);
-    withdraw(manifest.id);
+    if (!withdraw(manifest.id)) return false;
     return changed(m_store.install(candidate, approve ? manifest.requiredPermissions : QJsonObject{}, &error), error);
 }
 bool AddonManager::setEnabled(const QString& id, bool enabled)
 {
+    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
     bool builtin = false;
     for (const auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) builtin = true;
     if (builtin) {
@@ -724,36 +804,67 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
         for (auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) descriptor.insert("enabled", enabled);
         return changed(true);
     }
-    QString error; withdraw(id); return changed(m_store.setEnabled(id, enabled, &error), error);
+    QString error; if (!withdraw(id)) return false; return changed(m_store.setEnabled(id, enabled, &error), error);
 }
 bool AddonManager::rollback(const QString& id)
-{ QString error; withdraw(id); return changed(m_store.rollback(id, &error), error); }
+{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
+  QString error; if (!withdraw(id)) return false; return changed(m_store.rollback(id, &error), error); }
 bool AddonManager::setSafeMode(bool enabled)
 {
     QString error;
     if (!m_store.setSafeMode(enabled, &error)) return changed(false, error);
-    if (enabled) for (const auto& id : m_store.installedIds()) withdraw(id);
+    if (enabled) for (const auto& id : m_store.installedIds()) if (!withdraw(id)) return false;
     return changed(true);
 }
 bool AddonManager::recoverPackage(const QString& id)
-{ QString error; withdraw(id); return changed(m_store.recover(id, &error), error); }
+{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
+  QString error; if (!withdraw(id)) return false; return changed(m_store.recover(id, &error), error); }
 QVariantList AddonManager::retainedGenerations(const QString& id) const
 { return m_store.retainedGenerations(id).toVariantList(); }
 bool AddonManager::uninstall(const QString& id, bool removeData)
 {
-    QString error; withdraw(id);
-    const auto references = m_store.credentialReferences(id);
-    if (!m_store.setDistributionSuppressed(id, true, &error)) return changed(false, error);
-    const bool success = m_store.uninstall(id, removeData, &error);
-    if (success && removeData) for (const auto& reference : references) m_secrets.remove(id, reference);
-    return changed(success, error);
+    if (busy() || m_removingPackages.contains(id)) return changed(false, tr("Wait for the current add-on request to end."));
+    auto retirement = std::make_shared<StorePackageRetirement>(m_store.retirePackage(id));
+    if (!*retirement) return changed(false, tr("The package ID is not correct."));
+    auto store = m_store;
+    auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
+    m_removingPackages.insert(id);
+    const QPointer<AddonManager> alive(this);
+    withdraw(id);
+    if (!alive) return false;
+    const bool started = m_repositoryJobs->submit([store, id, removeData, retirement, error, success]() mutable {
+        // The shared retirement hold refuses fresh readers before this task starts.
+        if (!store.canUninstall(id, removeData, error.get())) return;
+        if (removeData) {
+            InstalledPackage active;
+            if (store.installed(id, &active) && !store.setEnabled(id, false, error.get())) return;
+            CredentialStore credentials;
+            if (!credentials.removePackage(id)) {
+                *error = QStringLiteral("The app cannot delete all saved keys. The add-on stays disabled. Try deletion again."); return;
+            }
+        }
+        if (!store.setDistributionSuppressed(id, true, error.get())) return;
+        *success = store.uninstall(id, removeData, error.get());
+    }, [this, id, retirement, error, success](AddonRepositoryJobs::Result result) mutable {
+        m_removingPackages.remove(id);
+        retirement.reset();
+        changed(*success, *success ? QString{} : !error->isEmpty() ? *error
+            : result == AddonRepositoryJobs::Result::Canceled ? tr("The app canceled the removal request.") : tr("The removal request did not finish."));
+    });
+    if (!started) {
+        m_removingPackages.remove(id); retirement.reset();
+        return changed(false, tr("The app cannot start the removal request."));
+    }
+    if (removeData) m_secrets.forgetPackage(id);
+    retirement.reset();
+    return changed(true);
 }
 
 AddonWorker* AddonManager::worker(const InstalledPackage& package)
 {
     if (auto* previous = m_workers.value(package.manifest.id)) {
         if (previous->configurationCurrent()) return previous;
-        withdraw(package.manifest.id);
+        if (!withdraw(package.manifest.id)) return nullptr;
     }
     auto* instance = new AddonWorker(package, &m_network, this); instance->setExecutable(m_workerExecutable);
     instance->setHostServices(&m_hostServices);
@@ -788,6 +899,7 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
     // Local paths and consumer state never enter the portable provider projection.
     for (const auto& name : {QStringLiteral("url"), QStringLiteral("targets"), QStringLiteral("existingFields"), QStringLiteral("protectedFields"), QStringLiteral("fieldRevisions")}) projected.remove(name);
     auto* instance = worker(package);
+    if (!instance) return {};
     instance->setHostCapabilities(QJsonObject::fromVariantMap(capabilities()));
     const auto request = instance->invoke(localPart(contributionId), operation, projected);
     m_invocationPackages.insert(request, packageId); m_invocationContributions.insert(request, contributionId);
@@ -801,7 +913,8 @@ void AddonManager::cancel(const QString& request)
 quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback callback)
 {
     const auto id = packagePart(contributionId); InstalledPackage package;
-    if (!m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
+    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)
+        || !m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
         QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
     }
     NetworkBroker::RequestGuard current; auto resolver = credentialResolver(package, &current);
@@ -811,7 +924,8 @@ quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObjec
 quint64 AddonManager::fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback callback)
 {
     const auto id = packagePart(contributionId); InstalledPackage package;
-    if (!m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
+    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)
+        || !m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
         QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
     }
     auto request = descriptor; request.insert("method", "GET"); request.remove("body");
@@ -819,17 +933,26 @@ quint64 AddonManager::fetchImageAsset(const QString& contributionId, const QJson
     return m_network.fetch(package.manifest, package.grants, request,
         std::move(resolver), std::move(callback), 1024 * 1024, NetworkBroker::RequestKind::ImageAsset, std::move(current));
 }
-void AddonManager::withdraw(const QString& id)
+bool AddonManager::withdraw(const QString& id)
 {
-    if (auto* instance = m_workers.take(id)) { instance->stop(); instance->deleteLater(); }
+    const QPointer<AddonManager> alive(this);
+    if (const QPointer<AddonWorker> instance = m_workers.take(id)) {
+        instance->stop(); if (instance) instance->deleteLater();
+    }
+    if (!alive) return false;
     m_network.cancelPackage(id);
+    if (!alive) return false;
     m_hostServices.cancelPackage(id);
+    if (!alive) return false;
     emit packageWithdrawn(id);
+    if (!alive) return false;
     const auto requests = m_invocationPackages.keys(id);
     for (const auto& request : requests) {
         const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);
         emit operationFinished(request, contribution, QStringLiteral("error"), {}, tr("The add-on settings changed."));
+        if (!alive) return false;
     }
+    return true;
 }
 bool AddonManager::changed(bool success, const QString& error)
 { m_error = success ? QString{} : error; ++m_revision; emit revisionChanged(); return success; }

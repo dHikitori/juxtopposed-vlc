@@ -624,13 +624,15 @@ bool PackageStore::privateStorage(const PrivateStorageContext& context, const QS
     if (response) *response = result;
     return true;
 }
-bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject& grants, QString* error)
+bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject& grants, QString* error, bool distributionApproval)
 {
     if (!validateCandidate(candidate, error) || !validateGrants(candidate.manifest, grants, error)) return false;
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The app cannot create the add-on store."));
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     const auto id = candidate.manifest.id;
+    if (distributionApproval && (!candidate.identity.distributionSource || candidate.identity.developerSource))
+        return fail(error, QStringLiteral("Only an app distribution package can use this approval."));
     QJsonObject state;
     const auto statePath = QDir(m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
     if ((QFileInfo::exists(statePath) || QFileInfo::exists(statePath + QStringLiteral(".backup")))
@@ -661,10 +663,30 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
         if (!installed(id, &verified, error)) return false;
         oldManifest = verified.manifest;
         if (old.value("digest") == QString::fromLatin1(candidate.digest)
-            && old.value("identity").toObject() == identityJson(candidate.identity)) return true;
+            && old.value("identity").toObject() == identityJson(candidate.identity)) {
+            if (!distributionApproval) return true;
+            state.insert("distributionApproval", QString::fromLatin1(candidate.digest));
+            return saveState(id, state, error);
+        }
     }
-    if (!migrateSettings(candidate.manifest, candidate.contents, old.isEmpty() ? nullptr : &oldManifest,
-                         old.value("settings").toObject(), grants, &nextSettings, error)) return false;
+    QJsonObject priorSettings = old.value("settings").toObject();
+    bool retainedSettings = false;
+    const auto savedPath = QDir(m_root).filePath(QStringLiteral("retained-settings/") + id + QStringLiteral(".json"));
+    if (old.isEmpty() && QFileInfo::exists(savedPath)) {
+        QJsonObject archive;
+        if (!readJson(savedPath, &archive, error)) return false;
+        if (archive.value("formatVersion") == 2 && archive.value("id") == id) {
+            const auto identity = readIdentity(archive.value("identity").toObject());
+            if (identity.source == candidate.identity.source && identity.developerSource == candidate.identity.developerSource
+                && identity.distributionSource == candidate.identity.distributionSource) {
+                if (!Manifest::parse(QJsonDocument(archive.value("manifest").toObject()).toJson(), &oldManifest, error)
+                    || oldManifest.id != id) return fail(error, QStringLiteral("The saved settings manifest is not correct."));
+                priorSettings = archive.value("settings").toObject(); retainedSettings = true;
+            }
+        }
+    }
+    if (!migrateSettings(candidate.manifest, candidate.contents, old.isEmpty() && !retainedSettings ? nullptr : &oldManifest,
+                         priorSettings, grants, &nextSettings, error)) return false;
     if (!collectPrivateStorage(id, state, error)) return false;
     QJsonObject priorDataRelease = old;
     if (old.isEmpty()) {
@@ -756,6 +778,7 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
         {"retained", retainSnapshot(state.value("retained").toArray(), old)},
         {"credentialReferences", state.value("credentialReferences").toObject()}
     };
+    if (distributionApproval) next.insert("distributionApproval", QString::fromLatin1(candidate.digest));
     return saveState(id, next, error);
 }
 bool PackageStore::installed(const QString& id, InstalledPackage* output, QString* error) const
@@ -776,7 +799,14 @@ bool PackageStore::installed(const QString& id, InstalledPackage* output, QStrin
     result.grants = current.value("grants").toObject();
     if (!validateGrants(result.manifest, result.grants, error)) return false;
     result.recoveryRequired = state.value("recoveryRequired").toBool();
-    result.enabled = state.value("enabled").toBool() && !result.recoveryRequired && !safeMode();
+    result.enabled = state.value("enabled").toBool() && !result.recoveryRequired && !safeMode() && !packageRetiring(id);
+    if (result.enabled && result.identity.distributionSource) {
+        const auto policyPath = QDir(m_root).filePath(QStringLiteral("distribution-policy.json"));
+        QJsonObject policy;
+        if (QFileInfo::exists(policyPath) && (!readJson(policyPath, &policy, nullptr)
+            || (policy.value("removed").toObject().value(id).toBool()
+                && state.value("distributionApproval").toString() != digest))) result.enabled = false;
+    }
     result.generation = quint64(state.value("generation").toDouble());
     result.previousDigest = state.value("previous").toObject().value("digest").toString();
     if (output) *output = result;
@@ -801,6 +831,8 @@ bool PackageStore::setEnabled(const QString& id, bool enabled, QString* error)
     if (enabled) {
         InstalledPackage verified;
         if (!installed(id, &verified, error)) return false;
+        if (verified.identity.distributionSource && distributionSuppressed(id))
+            return fail(error, QStringLiteral("Review and approve the app package before it can be enabled."));
     }
     state.insert("enabled", enabled);
     state.insert("generation", state.value("generation").toDouble() + 1);
@@ -820,38 +852,124 @@ bool PackageStore::rollback(const QString& id, QString* error)
     state.insert("retained", retainSnapshot(state.value("retained").toArray(), state.value("current").toObject()));
     state.insert("previous", state.value("current"));
     state.insert("current", previous);
+    state.remove("distributionApproval");
     state.insert("generation", state.value("generation").toDouble() + 1);
     return saveState(id, state, error);
 }
-bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
+namespace {
+bool ownedRemovalPath(const QString& root, const QString& relative, bool tree, QString* error)
 {
+    QString path = root;
+    if ((QFileInfo(path).isSymLink() || QFileInfo(path).isJunction())) return fail(error, QStringLiteral("The add-on store path is a symbolic link."));
+    const auto parts = relative.split(QLatin1Char('/'));
+    for (qsizetype i = 0; i < parts.size(); ++i) {
+        path = QDir(path).filePath(parts.at(i));
+        const QFileInfo info(path);
+        if ((info.isSymLink() || info.isJunction()) || (info.exists() && i + 1 < parts.size() && !info.isDir()))
+            return fail(error, QStringLiteral("The saved package path is not a contained directory."));
+    }
+    if (!tree || !QFileInfo::exists(path)) return true;
+    if (!QFileInfo(path).isDir()) return fail(error, QStringLiteral("The saved package path is not a directory."));
+    QDirIterator entries(path, QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    unsigned count = 0;
+    while (entries.hasNext()) {
+        entries.next(); const auto info = entries.fileInfo();
+        if (++count > 65536 || (info.isSymLink() || info.isJunction()) || (!info.isDir() && !info.isFile()))
+            return fail(error, QStringLiteral("The package contains an unsafe path or too many files."));
+    }
+    return true;
+}
+}
+QStringList PackageStore::savedDataIds() const
+{
+    QSet<QString> found;
+    const QStringList parents{QStringLiteral("retained-settings"), QStringLiteral("private-storage"), QStringLiteral("retained-corrupt")};
+    unsigned inspected = 0;
+    for (const auto& parent : parents) {
+        if (!ownedRemovalPath(m_root, parent, false, nullptr)) continue;
+        const auto directory = QDir(m_root).filePath(parent);
+        if (!QFileInfo(directory).isDir()) continue;
+        QDirIterator entries(directory, QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+        while (entries.hasNext()) {
+            if (++inspected > 1024 || found.size() >= 256) break;
+            entries.next(); const auto info = entries.fileInfo();
+            if ((info.isSymLink() || info.isJunction())) continue;
+            const bool settings = parent == QLatin1String("retained-settings");
+            if ((settings && (!info.isFile() || !info.fileName().endsWith(QLatin1String(".json")))) || (!settings && !info.isDir())) continue;
+            const auto id = settings ? info.fileName().chopped(5) : info.fileName();
+            if (packageId(id)) found.insert(id);
+        }
+    }
+    auto ids = found.values(); ids.sort(); return ids;
+}
+bool PackageStore::canUninstall(const QString& id, bool removeData, QString* error) const
+{
+    if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    const QStringList paths{QStringLiteral("packages/") + id, QStringLiteral("retained-settings/") + id + QStringLiteral(".json"),
+        QStringLiteral("private-storage/") + id, QStringLiteral("retained-corrupt/") + id};
+    for (qsizetype i = 0; i < paths.size(); ++i)
+        if (!ownedRemovalPath(m_root, paths.at(i), i != 1, error)) return false;
+    if (QFileInfo::exists(QDir(m_root).filePath(paths.first()))) return true;
+    if (removeData) for (qsizetype i = 1; i < paths.size(); ++i)
+        if (QFileInfo::exists(QDir(m_root).filePath(paths.at(i)))) return true;
+    return fail(error, QStringLiteral("The package has no installed files or saved data."));
+}
+bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
+{
+    if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
+    QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    const auto retirement = m_authority.retirePackage(id);
+    const QString packagePath = QStringLiteral("packages/") + id;
+    const QString savedPath = QStringLiteral("retained-settings/") + id + QStringLiteral(".json");
+    const QString privatePath = QStringLiteral("private-storage/") + id;
+    const QString corruptPath = QStringLiteral("retained-corrupt/") + id;
+    if (!ownedRemovalPath(m_root, packagePath, true, error)
+        || !ownedRemovalPath(m_root, savedPath, false, error)
+        || !ownedRemovalPath(m_root, privatePath, true, error)
+        || !ownedRemovalPath(m_root, corruptPath, true, error)) return false;
+    const auto folder = QDir(m_root).filePath(packagePath);
+    if (!QFileInfo::exists(folder) && (!removeData || (!QFileInfo::exists(QDir(m_root).filePath(corruptPath))
+            && !QFileInfo::exists(QDir(m_root).filePath(privatePath)) && !QFileInfo::exists(QDir(m_root).filePath(savedPath)))))
+        return fail(error, QStringLiteral("The package is not installed."));
     QJsonObject state;
-    if (!loadState(id, &state, error)) return false;
-    const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
-    if (!removeData) {
+    InstalledPackage verified;
+    const bool valid = loadState(id, &state, nullptr) && installed(id, &verified, nullptr);
+    const auto mutation = m_authority.mutation();
+    if (!removeData && valid) {
         const auto retained = QDir(m_root).filePath(QStringLiteral("retained-settings"));
-        if (!QDir().mkpath(retained) || !writeJson(QDir(retained).filePath(id + QStringLiteral(".json")),
-                state.value("current").toObject().value("settings").toObject(), error)) return false;
         const auto current = state.value("current").toObject();
+        const QJsonObject archive{{"formatVersion", 2}, {"id", id}, {"identity", current.value("identity")},
+            {"manifest", verified.manifest.document}, {"settings", current.value("settings")}};
+        if (!QDir().mkpath(retained) || !writeJson(QDir(m_root).filePath(savedPath), archive, error)) return false;
         if (current.contains("storage")) {
             const auto parent = QFileInfo(privateStorageDirectory(id)).absolutePath();
             if (!QDir().mkpath(parent) || !writeJson(QDir(parent).filePath(QStringLiteral("archive.json")),
                 {{"formatVersion", 1}, {"id", id}, {"identity", current.value("identity")}, {"storage", current.value("storage")}}, error)) return false;
         }
     }
-    const QString tombstone = folder + QStringLiteral(".removing-") + QUuid::createUuid().toString(QUuid::Id128);
-    const auto mutation = m_authority.mutation();
-    if (!QDir().rename(folder, tombstone)) return fail(error, QStringLiteral("The app cannot withdraw the installed package."));
-    // The manager withdraws active registrations and workers before this call.
-    if (!QDir(tombstone).removeRecursively())
-        return fail(error, QStringLiteral("The package was withdrawn. Try the resource cleanup again."));
+    if (!removeData && !valid) {
+        const auto retained = QDir(m_root).filePath(corruptPath);
+        if (!QDir().mkpath(retained) || !QDir().rename(folder, QDir(retained).filePath(QUuid::createUuid().toString(QUuid::Id128))))
+            return fail(error, QStringLiteral("The app cannot retain the damaged package files."));
+        return true;
+    }
     if (removeData) {
-        QFile::remove(QDir(m_root).filePath(QStringLiteral("retained-settings/") + id + QStringLiteral(".json")));
-        const auto directory = QFileInfo(privateStorageDirectory(id)).absolutePath();
-        if (QFileInfo(directory).isSymLink() || (QFileInfo::exists(directory) && !QDir(directory).removeRecursively()))
-            return fail(error, QStringLiteral("The package was removed. The app cannot remove its saved private data."));
+        const auto saved = QDir(m_root).filePath(savedPath);
+        if ((QFileInfo::exists(saved) && !QFile::remove(saved))
+            || (QFileInfo::exists(QDir(m_root).filePath(privatePath)) && !QDir(QDir(m_root).filePath(privatePath)).removeRecursively())
+            || (QFileInfo::exists(QDir(m_root).filePath(corruptPath)) && !QDir(QDir(m_root).filePath(corruptPath)).removeRecursively()))
+            return fail(error, QStringLiteral("The app cannot delete all saved package data. The add-on stays withdrawn. Try deletion again."));
+    }
+    if (!QFileInfo::exists(folder)) return true;
+    const QString tombstone = folder + QStringLiteral(".removing-") + QUuid::createUuid().toString(QUuid::Id128);
+    if (!QDir().rename(folder, tombstone)) return fail(error, QStringLiteral("The app cannot withdraw the installed package."));
+    if (!QDir(tombstone).removeRecursively()) {
+        if (QDir().rename(tombstone, folder) && !QFileInfo::exists(QDir(folder).filePath(QStringLiteral("state.json"))))
+            writeJson(QDir(folder).filePath(QStringLiteral("state.json")), {}, nullptr);
+        return fail(error, QStringLiteral("The package cleanup did not finish. Try deletion again."));
     }
     return true;
 }
@@ -868,6 +986,7 @@ bool PackageStore::settings(const QString& id, QJsonObject* output, quint64* rev
 }
 bool PackageStore::networkConfiguration(const InstalledPackage& package, QJsonObject* settings, quint64* revision) const
 {
+    if (packageRetiring(package.manifest.id)) return false;
     QJsonObject state;
     if (!package.enabled || !loadState(package.manifest.id, &state, nullptr) || !state.value("enabled").toBool()
         || state.value("recoveryRequired").toBool() || safeMode()
@@ -878,7 +997,7 @@ bool PackageStore::networkConfiguration(const InstalledPackage& package, QJsonOb
         || current.value("grants").toObject() != package.grants) return false;
     if (settings) *settings = current.value("settings").toObject();
     if (revision) *revision = quint64(current.value("settingsRevision").toDouble());
-    return true;
+    return !packageRetiring(package.manifest.id);
 }
 bool PackageStore::networkConfigurationMatches(const InstalledPackage& package, const QJsonObject& settings, quint64 revision) const
 {
@@ -1004,6 +1123,7 @@ bool PackageStore::recover(const QString& id, QString* error)
         state.insert("enabled", false);
         state.insert("recoveryRequired", false);
         state.insert("generation", state.value("generation").toDouble() + 1);
+        state.remove("distributionApproval");
         return saveState(id, state, error);
     }
     return fail(error, QStringLiteral("A correct retained release is not available. Keep safe mode active and restore a verified package."));
@@ -1059,7 +1179,15 @@ bool PackageStore::distributionSuppressed(const QString& id) const
     const auto path = QDir(m_root).filePath(QStringLiteral("distribution-policy.json"));
     if (!QFileInfo::exists(path)) return false;
     QJsonObject policy;
-    return !readJson(path, &policy, nullptr) || policy.value("removed").toObject().value(id).toBool();
+    if (!readJson(path, &policy, nullptr)) return true;
+    if (!policy.value("removed").toObject().value(id).toBool()) return false;
+    QJsonObject state;
+    if (!loadState(id, &state, nullptr) || state.value("recoveryRequired").toBool()) return true;
+    const auto current = state.value("current").toObject();
+    const auto digest = current.value("digest").toString();
+    return !digestId(digest) || state.value("distributionApproval").toString() != digest
+        || !readIdentity(current.value("identity").toObject()).distributionSource
+        || !validateSnapshot(id, current, nullptr);
 }
 
 bool PackageStore::setDistributionSuppressed(const QString& id, bool suppressed, QString* error)

@@ -14,13 +14,15 @@ ColumnLayout {
     property bool developerSource: false
     property bool enableAfterInstall: false
     property bool showTechnicalDetails: false
+    property string actionError: ""
+    readonly property bool removalInProgress: packages.some(row => row.removing === true)
     readonly property bool busy: backend.busy === true
     readonly property var pendingPackage: backend.pendingPackage || ({})
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property var packages: { backend.revision; return backend.packages || [] }
     readonly property var managedPackages: packages.filter(row => row.builtin !== true && row.installed !== false && row.recoveryRequired !== true)
     readonly property var updateResult: backend.updateResult || ({})
-    readonly property var hostCapabilities: pendingPackage.hostCapabilities || backend.capabilities || ({})
+    readonly property var hostCapabilities: Object.assign({}, pendingPackage.hostCapabilities || backend.capabilities || ({}), {safeMode: backend.safeMode === true})
     readonly property bool updatingInstalledPackage: !!pendingPackage.id && packages.some(entry => entry.id === pendingPackage.id && entry.installed !== false)
     readonly property bool candidateCanRun: pendingPackage.workerRequired !== true || hostCapabilities.workerAvailable !== false
     spacing: theme.dp(10)
@@ -88,6 +90,16 @@ ColumnLayout {
             }
         }
         return summaries.length ? summaries.join("\n\n") : qsTr("The add-on does not need other permissions.")
+    }
+    function packageSignature(row) {
+        return JSON.stringify([row.id, row.version || "", row.digest || "", row.source || "", row.enabled === true, row.hasPrevious === true])
+    }
+    function requestPackageChange(id, operation) {
+        const row = packages.find(entry => entry.id === id)
+        if (busy || !row || row.builtin === true || row.installed === false || row.recoveryRequired === true) return false
+        actionError = ""; changePackage.packageId = id; changePackage.operation = operation
+        changePackage.packageState = packageSignature(row); changePackage.revision = backend.revision
+        changePackage.open(); return true
     }
     function configure(id) {
         const entry = packages.find(item => item.id === id)
@@ -162,7 +174,7 @@ ColumnLayout {
     }
     ActionButton {
         objectName: "addonStagePackage"
-        caption: root.busy ? qsTr("Package preparation") : qsTr("Prepare package")
+        caption: root.busy ? root.removalInProgress ? qsTr("Package removal") : qsTr("Package preparation") : qsTr("Prepare package")
         enabled: !root.busy && !root.pendingPackage.id && (root.developerSource
             ? directory.text.trim().length > 0 && typeof root.backend.stageLocalPackage === "function"
             : /^https:\/\/[^\s/]+\/[^\s]+$/i.test(source.text.trim()) && tag.text.trim().length > 0 && typeof root.backend.stageRepository === "function")
@@ -170,16 +182,16 @@ ColumnLayout {
     }
     ActionButton {
         objectName: "addonRepositoryCancel"
-        caption: qsTr("Cancel request"); visible: root.busy
+        caption: qsTr("Cancel request"); visible: root.busy && !root.removalInProgress
         onClicked: root.backend.discardPendingPackage()
     }
     Text {
         objectName: "addonUpdateStatus"
         Layout.fillWidth: true; visible: !!root.updateResult.packageId
         text: root.updateResult.checking ? qsTr("Update search in progress.")
-            : root.updateResult.canceled ? qsTr("VLC canceled the update search.")
+            : root.updateResult.canceled ? qsTr("The app canceled the update search.")
             : root.backend.errorMessage ? root.backend.errorMessage
-            : root.updateResult.available ? qsTr("An update is ready for approval. VLC keeps the installed release until you give approval.")
+            : root.updateResult.available ? qsTr("An update is ready for approval. The app keeps the installed release until you give approval.")
             : qsTr("No compatible stable update is available.")
         textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
     }
@@ -203,6 +215,7 @@ ColumnLayout {
                 text: [qsTr("Version: %1").arg(root.pendingPackage.version || ""),
                     qsTr("Repository: %1").arg(root.pendingPackage.source || ""), qsTr("Release tag: %1").arg(root.pendingPackage.tag || ""),
                     root.pendingPackage.developerSource ? qsTr("Local development package") : "",
+                    root.pendingPackage.distributionSource ? qsTr("Package from the app distribution") : "",
                     root.pendingPackage.publisherVerified === true ? qsTr("Publisher verified") : qsTr("Publisher not verified")].filter(value => value.length > 0).join("\n")
                 textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
             }
@@ -257,7 +270,7 @@ ColumnLayout {
                 objectName: "addonInstallEnable"
                 Layout.fillWidth: true
                 label: root.updatingInstalledPackage ? qsTr("Enable if disabled") : qsTr("Enable after installation"); checked: root.enableAfterInstall
-                enabled: !root.busy && root.candidateCanRun && root.hostCapabilities.safeMode !== true
+                enabled: !root.busy && root.candidateCanRun && root.backend.safeMode !== true && root.hostCapabilities.safeMode !== true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onToggled: checked => root.enableAfterInstall = checked
             }
@@ -267,7 +280,7 @@ ColumnLayout {
                     objectName: "addonInstallApprove"
                     caption: qsTr("Give approval and install")
                     enabled: !root.busy && root.permissionsKnown && (!root.enableAfterInstall || root.candidateCanRun)
-                    onClicked: root.backend.approvePendingPackage(root.enableAfterInstall)
+                    onClicked: root.backend.approvePendingPackage(root.enableAfterInstall && root.backend.safeMode !== true)
                 }
                 ActionButton {
                     objectName: "addonInstallCancel"
@@ -327,16 +340,29 @@ ColumnLayout {
                         onClicked: root.backend.checkRepositoryUpdates(row.modelData.id, "^" + row.modelData.version, false)
                     }
                     ActionButton {
+                        objectName: "addonPackageAppUpdate_" + row.modelData.id
+                        caption: qsTr("Review app version %1").arg(row.modelData.appUpdateVersion || "")
+                        visible: row.modelData.appUpdateAvailable === true && typeof root.backend.stageDistributionPackage === "function"
+                        enabled: !root.busy && !root.pendingPackage.id
+                        onClicked: root.backend.stageDistributionPackage(row.modelData.id)
+                    }
+                    ActionButton {
                         objectName: "addonPackageRollback_" + row.modelData.id
                         caption: qsTr("Use previous version")
                         visible: row.modelData.hasPrevious === true; enabled: !root.busy
-                        onClicked: { changePackage.packageId = row.modelData.id; changePackage.operation = "rollback"; changePackage.open() }
+                        onClicked: root.requestPackageChange(row.modelData.id, "rollback")
                     }
                     ActionButton {
                         objectName: "addonPackageRemove_" + row.modelData.id
                         caption: qsTr("Remove")
                         enabled: !root.busy
-                        onClicked: { changePackage.packageId = row.modelData.id; changePackage.operation = "remove"; changePackage.open() }
+                        onClicked: root.requestPackageChange(row.modelData.id, "remove")
+                    }
+                    ActionButton {
+                        objectName: "addonPackageRemoveData_" + row.modelData.id
+                        caption: qsTr("Delete add-on and saved data")
+                        enabled: !root.busy
+                        onClicked: root.requestPackageChange(row.modelData.id, "removeData")
                     }
                 }
             }
@@ -344,13 +370,13 @@ ColumnLayout {
     }
     Text {
         Layout.fillWidth: true; visible: !root.managedPackages.length
-        text: qsTr("No add-ons from repositories are installed."); textFormat: Text.PlainText; wrapMode: Text.Wrap
+        text: qsTr("No add-ons are installed."); textFormat: Text.PlainText; wrapMode: Text.Wrap
         color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
     }
     Text {
         objectName: "addonManagementError"
         Layout.fillWidth: true; visible: text.length > 0 && text !== recovery.actionError
-        text: root.backend.errorMessage || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap
+        text: root.actionError || root.backend.errorMessage || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap
         color: root.theme.danger; font.pixelSize: root.theme.dp(13)
         Accessible.role: Accessible.AlertMessage
     }
@@ -368,14 +394,24 @@ ColumnLayout {
         parent: root.Window.contentItem
         property string packageId: ""
         property string operation: ""
-        title: operation === "rollback" ? qsTr("Use the previous add-on version?") : qsTr("Remove add-on?")
-        message: operation === "rollback" ? qsTr("The app will use the previous version. The app will use the settings snapshot for that version.")
-            : qsTr("The app will disable and remove the add-on. The app will keep its settings.")
-        confirmText: operation === "rollback" ? qsTr("Use previous version") : qsTr("Remove")
-        destructive: operation === "remove"
+        property string packageState: ""
+        property int revision: -1
+        title: operation === "rollback" ? qsTr("Use the previous add-on version?") : operation === "removeData" ? qsTr("Delete add-on and saved data?") : qsTr("Remove add-on?")
+        message: operation === "rollback" ? qsTr("The app will use the previous version with its saved settings and private data.")
+            : operation === "removeData" ? qsTr("The app will remove the add-on and delete its saved settings, saved keys, and private data.")
+            : qsTr("The app will remove the add-on. The app will keep its saved settings, saved keys, and private data.")
+        confirmText: operation === "rollback" ? qsTr("Use previous version") : operation === "removeData" ? qsTr("Delete add-on and saved data") : qsTr("Remove")
+        destructive: operation !== "rollback"
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         videoBackdropContent: root.videoBackdropContent
-        onAccepted: operation === "rollback" ? root.backend.rollback(packageId) : root.backend.uninstall(packageId, false)
+        onAccepted: {
+            const row = root.packages.find(entry => entry.id === packageId)
+            if (root.busy || !row || root.backend.revision !== revision || root.packageSignature(row) !== packageState) {
+                root.actionError = qsTr("The add-on changed. Open this action again."); return
+            }
+            if (operation === "rollback") root.backend.rollback(packageId)
+            else root.backend.uninstall(packageId, operation === "removeData")
+        }
     }
     component ActionButton: RedesignButton {
         captionMaximumWidth: Math.max(0, root.width - root.theme.dp(48))

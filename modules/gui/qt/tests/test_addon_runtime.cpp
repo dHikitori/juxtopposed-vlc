@@ -6,11 +6,72 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <memory>
+#include <thread>
+#ifdef Q_OS_UNIX
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#endif
 #include "addons/addon_manager.hpp"
 #include "addons/addon_stream_lifetime.hpp"
+#include "addons/addon_repository_jobs.hpp"
 
 using namespace vlc::addons;
+
+#ifdef Q_OS_LINUX
+namespace {
+class TestCredentialPlatform final {
+    QTemporaryDir directory;
+    QByteArray oldPath = qgetenv("PATH"), oldBus = qgetenv("DBUS_SESSION_BUS_ADDRESS");
+public:
+    bool start() {
+        QFile helper(directory.filePath(QStringLiteral("secret-tool")));
+        if (!helper.open(QIODevice::WriteOnly)) return false;
+        const QByteArray script = R"PY(#!/usr/bin/python3
+import json, pathlib, sys
+root = pathlib.Path(__file__).parent
+args = sys.argv[1:]
+values = json.loads((root / 'values.json').read_text()) if (root / 'values.json').exists() else {}
+options = dict(zip(args[1::2], args[2::2])) if args[0] != 'store' else dict(zip(args[2::2], args[3::2]))
+package = options.get('package', '')
+reference = options.get('reference', '')
+if args[0] == 'store':
+    values[package + '/' + reference] = sys.stdin.read()
+elif args[0] == 'lookup':
+    value = values.get(package + '/' + reference, '')
+    sys.stdout.write(value)
+    sys.exit(0 if value else 1)
+elif args[0] == 'clear':
+    (root / 'clear.json').write_text(json.dumps(args))
+    if (root / 'gate').exists():
+        with (root / 'gate').open() as gate: gate.read(1)
+    if (root / 'fail').exists():
+        sys.stderr.write('Test platform refusal')
+        sys.exit(2)
+    values = {key: value for key, value in values.items() if not (key.startswith(package + '/') and (not reference or key == package + '/' + reference))}
+else:
+    sys.exit(2)
+(root / 'values.json').write_text(json.dumps(values))
+)PY";
+        if (helper.write(script) != script.size()) return false;
+        helper.close(); helper.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        const QByteArray path = directory.path().toUtf8() + ':' + oldPath;
+        qputenv("PATH", path); qputenv("DBUS_SESSION_BUS_ADDRESS", "test-only");
+        return true;
+    }
+    ~TestCredentialPlatform() { unblock(); qputenv("PATH", oldPath); if (oldBus.isNull()) qunsetenv("DBUS_SESSION_BUS_ADDRESS"); else qputenv("DBUS_SESSION_BUS_ADDRESS", oldBus); }
+    QString path(const QString& name) const { return directory.filePath(name); }
+    bool block() { return ::mkfifo(QFile::encodeName(path(QStringLiteral("gate"))).constData(), 0600) == 0; }
+    void unblock() {
+        const int file = ::open(QFile::encodeName(path(QStringLiteral("gate"))).constData(), O_WRONLY | O_NONBLOCK);
+        if (file >= 0) { const char value = 'x'; const auto written = ::write(file, &value, 1); Q_UNUSED(written); ::close(file); }
+        QFile::remove(path(QStringLiteral("gate")));
+    }
+};
+}
+#endif
 
 class RuntimeMediaCapabilities : public QObject
 {
@@ -34,6 +95,203 @@ class TestAddonRuntime : public QObject
         return {{"apiKey", QVariantMap{{"operation", "replace"}, {"value", key}, {"sessionOnly", true}}}};
     }
 private slots:
+    void completedRemovalKeepsItsUiStateUntilTerminalDelivery()
+    {
+#ifdef Q_OS_LINUX
+        TestCredentialPlatform platform; QVERIFY(platform.start());
+        AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        QTemporaryDir storage; AddonManager manager(storage.path()); const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.uninstall(id, true));
+        QElapsedTimer deadline; deadline.start();
+        while (!handle.qtDrained() && deadline.elapsed() < 5000) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        QVERIFY(handle.qtDrained()); QVERIFY(manager.busy());
+        const auto rows = manager.packages(); QCOMPARE(rows.size(), 1);
+        QVERIFY(rows.first().toMap().value("removing").toBool()); QVERIFY(!rows.first().toMap().value("installed").toBool());
+        QVERIFY(manager.contributionsOfType(QStringLiteral("metadata.provider")).isEmpty());
+        QTRY_VERIFY(!manager.busy()); QVERIFY(manager.packages().isEmpty());
+#else
+        QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
+    }
+    void removalObserverCanDeleteTheManagerBeforeJobAdmission()
+    {
+        QTemporaryDir storage; auto* manager = new AddonManager(storage.path());
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager->installLocalPackage(reference(), true));
+        const QPointer<AddonManager> guard(manager);
+        connect(manager, &AddonManager::packageWithdrawn, this, [manager] { delete manager; }, Qt::DirectConnection);
+        QVERIFY(!manager->uninstall(id, false)); QVERIFY(!guard);
+        PackageStore store(storage.path()); InstalledPackage package;
+        QVERIFY(store.installed(id, &package)); QVERIFY(!store.packageRetiring(id));
+    }
+    void removalRefusalKeepsTemporaryKeysAndSavedState()
+    {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("test-temporary-key"))));
+        QVERIFY(manager.setEnabled(id, true));
+        const auto token = manager.storeAuthorityToken();
+        QVERIFY(!manager.uninstall(id, true)); QVERIFY(!manager.busy()); QVERIFY(!token.current());
+        QVERIFY(manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
+        PackageStore store(storage.path()); InstalledPackage package;
+        QVERIFY(store.installed(id, &package)); QVERIFY(package.enabled); QVERIFY(!store.packageRetiring(id));
+        QVERIFY(!store.distributionSuppressed(id));
+    }
+    void removalQuotaRefusalDoesNotForgetTemporaryKeys()
+    {
+        QSemaphore entered, release;
+        AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { release.release(2); handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        AddonRepositoryJobs first(handle), second(handle);
+        const auto work = [&] { entered.release(); release.acquire(); };
+        QVERIFY(first.submit(work, [](AddonRepositoryJobs::Result) {}));
+        QVERIFY(second.submit(work, [](AddonRepositoryJobs::Result) {}));
+        QVERIFY(entered.tryAcquire(2, 5000)); QCOMPARE(AddonRepositoryJobs::processCount(), 2u);
+        QTemporaryDir storage; AddonManager manager(storage.path()); const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("test-temporary-key"))));
+        const auto token = manager.storeAuthorityToken();
+        QVERIFY(!manager.uninstall(id, true)); QVERIFY(!manager.busy()); QVERIFY(!token.current());
+        QVERIFY(manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
+        PackageStore store(storage.path()); InstalledPackage package;
+        QVERIFY(store.installed(id, &package)); QVERIFY(!store.packageRetiring(id)); QVERIFY(!store.distributionSuppressed(id));
+    }
+    void safeModeCanWithdrawPackagesDuringRepositoryWork()
+    {
+        QTemporaryDir storage; AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        AddonManager manager(storage.path());
+        QVERIFY(manager.stageRepository(QStringLiteral("http://example.invalid/no-network.git"), QStringLiteral("v1.0.0")));
+        QVERIFY(manager.busy()); QVERIFY(manager.setSafeMode(true)); QVERIFY(manager.safeMode());
+        QVERIFY(manager.busy()); manager.discardPendingPackage(); QTRY_VERIFY(!manager.busy());
+        QVERIFY(manager.safeMode()); QVERIFY(manager.setSafeMode(false)); QVERIFY(!manager.safeMode());
+    }
+    void pendingRemovalWithdrawsEveryManagerBeforeTheWorkerStarts()
+    {
+#ifdef Q_OS_LINUX
+        TestCredentialPlatform platform; QVERIFY(platform.start()); QVERIFY(platform.block());
+        QTemporaryDir storage; AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { platform.unblock(); handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        AddonManager manager(storage.path()), peer(storage.path());
+        const QString id = QStringLiteral("org.hakone.thesubtitledb"), contribution = id + QStringLiteral("/search");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, {{"apiKey", QVariantMap{{"operation", "replace"}, {"value", "test-persistent-key"}}}}));
+        QVERIFY(manager.setEnabled(id, true));
+        const auto previous = peer.nativeAuthorityReader(contribution)(); QVERIFY(previous.has_value()); QVERIFY(previous->live());
+        PackageStore store(storage.path()); InstalledPackage package; QVERIFY(store.installed(id, &package));
+        QVERIFY(manager.uninstall(id, true)); QVERIFY(manager.busy());
+        QVERIFY(!previous->live()); QVERIFY(store.packageRetiring(id));
+        QVERIFY(!peer.nativeAuthorityReader(contribution)().has_value());
+        QVERIFY(!store.networkConfiguration(package, nullptr));
+        QVERIFY(!peer.setEnabled(id, true)); QVERIFY(!peer.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("new-key"))));
+        QTRY_VERIFY(QFileInfo::exists(platform.path(QStringLiteral("clear.json"))));
+        platform.unblock(); QTRY_VERIFY(!manager.busy()); QVERIFY2(manager.errorMessage().isEmpty(), qPrintable(manager.errorMessage()));
+        QVERIFY(!store.packageRetiring(id)); QVERIFY(!store.installed(id, &package));
+#else
+        QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
+    }
+    void failedKeyDeletionKeepsThePackageDisabledForRetry()
+    {
+#ifdef Q_OS_LINUX
+        TestCredentialPlatform platform; QVERIFY(platform.start());
+        QFile failure(platform.path(QStringLiteral("fail"))); QVERIFY(failure.open(QIODevice::WriteOnly)); failure.close();
+        QTemporaryDir storage; AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        AddonManager manager(storage.path()); const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true)); QVERIFY(manager.setEnabled(id, true));
+        QVERIFY(manager.uninstall(id, true)); QTRY_VERIFY(!manager.busy());
+        QVERIFY(manager.errorMessage().contains(QStringLiteral("saved keys")));
+        PackageStore store(storage.path()); InstalledPackage package; QVERIFY(store.installed(id, &package)); QVERIFY(!package.enabled);
+        QVERIFY(QFile::remove(failure.fileName()));
+        QVERIFY(manager.uninstall(id, true)); QTRY_VERIFY(!manager.busy()); QVERIFY(manager.errorMessage().isEmpty());
+        QVERIFY(!store.installed(id, &package));
+#else
+        QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
+    }
+    void packageCredentialDeletionFindsUnknownReferencesAndKeepsOtherPackages()
+    {
+#ifdef Q_OS_LINUX
+        TestCredentialPlatform platform; QVERIFY(platform.start());
+        CredentialStore credentials;
+        const QString id = QStringLiteral("org.example.remove"), sibling = QStringLiteral("org.example.remove-other");
+        const auto first = credentials.create(id, QStringLiteral("key"), QByteArray("test-first"));
+        const auto lost = credentials.create(id, QStringLiteral("key"), QByteArray("test-lost-reference"));
+        const auto kept = credentials.create(sibling, QStringLiteral("key"), QByteArray("test-neighbor"));
+        QVERIFY(first.persistent); QVERIFY(lost.persistent); QVERIFY(kept.persistent);
+        // The owned cleanup store has no reference index or cached credential.
+        CredentialStore cleanup;
+        QVERIFY(!cleanup.removePackage(QStringLiteral("org.example.remove/*")));
+        QVERIFY(!QFileInfo::exists(platform.path(QStringLiteral("clear.json"))));
+        QVERIFY(cleanup.removePackage(id)); credentials.forgetPackage(id);
+        QVERIFY(credentials.read(id, first.reference).isEmpty()); QVERIFY(credentials.read(id, lost.reference).isEmpty());
+        QCOMPARE(credentials.read(sibling, kept.reference), QByteArray("test-neighbor"));
+        QFile call(platform.path(QStringLiteral("clear.json"))); QVERIFY(call.open(QIODevice::ReadOnly));
+        QCOMPARE(QJsonDocument::fromJson(call.readAll()).array(), QJsonArray({"clear", "application", "vlc-addons", "package", id}));
+#else
+        QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
+    }
+    void ordinaryRemovalKeepsSettingsKeysAndALaterCleanupAction()
+    {
+#ifdef Q_OS_LINUX
+        TestCredentialPlatform platform; QVERIFY(platform.start());
+        AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        QTemporaryDir storage; AddonManager manager(storage.path()); const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "fr"}}, replace(QStringLiteral("test-kept-key"))));
+        QVERIFY(manager.uninstall(id, false)); QTRY_VERIFY(!manager.busy()); QVERIFY(manager.errorMessage().isEmpty());
+        const auto rows = manager.packages(); QCOMPARE(rows.size(), 1);
+        QVERIFY(rows.first().toMap().value("savedData").toBool()); QVERIFY(!rows.first().toMap().value("installed").toBool());
+        QVERIFY(!QFileInfo::exists(platform.path(QStringLiteral("clear.json"))));
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QCOMPARE(manager.settingsValues(id).value("language").toString(), QStringLiteral("fr"));
+        QVERIFY(manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
+        QVERIFY(manager.uninstall(id, false)); QTRY_VERIFY(!manager.busy());
+        QVERIFY(manager.uninstall(id, true)); QTRY_VERIFY(!manager.busy()); QVERIFY(manager.errorMessage().isEmpty());
+        QVERIFY(manager.packages().isEmpty());
+#else
+        QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
+    }
+    void corruptStateCannotHideKeysFromFullRemoval()
+    {
+#ifdef Q_OS_LINUX
+        TestCredentialPlatform platform; QVERIFY(platform.start());
+        AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        QTemporaryDir storage; AddonManager manager(storage.path()); const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        CredentialStore orphan;
+        const auto lost = orphan.create(id, QStringLiteral("key"), QByteArray("test-unindexed-key"));
+        const auto neighbor = orphan.create(QStringLiteral("org.example.neighbor"), QStringLiteral("key"), QByteArray("test-neighbor-key"));
+        QVERIFY(lost.persistent); QVERIFY(neighbor.persistent);
+        const auto path = storage.filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
+        for (const auto& filePath : QStringList{path, path + QStringLiteral(".backup")}) {
+            QFile file(filePath); QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write("broken", 6), qint64(6));
+        }
+        QVERIFY(manager.packages().first().toMap().value("recoveryRequired").toBool());
+        QVERIFY(manager.uninstall(id, true)); QTRY_VERIFY(!manager.busy()); QVERIFY2(manager.errorMessage().isEmpty(), qPrintable(manager.errorMessage()));
+        CredentialStore fresh;
+        QVERIFY(fresh.read(id, lost.reference).isEmpty());
+        QCOMPARE(fresh.read(QStringLiteral("org.example.neighbor"), neighbor.reference), QByteArray("test-neighbor-key"));
+        QVERIFY(manager.packages().isEmpty());
+#else
+        QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
+    }
     void repositoryWorkRequiresAnAppOwnerAndKeepsPublicResultState()
     {
         QTemporaryDir firstDirectory,secondDirectory;
@@ -281,6 +539,11 @@ private slots:
         QVERIFY(store.saveSettings(id, settings, revision)); QTRY_COMPARE(completed, 2);
     }
     void fullRemovalRevokesAllCredentialGenerations() {
+#ifdef Q_OS_LINUX
+        TestCredentialPlatform platform; QVERIFY(platform.start());
+        AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
         QTemporaryDir storage; AddonManager manager(storage.path());
         const QString id = QStringLiteral("org.hakone.thesubtitledb");
         QVERIFY(manager.installLocalPackage(reference(), true));
@@ -288,13 +551,17 @@ private slots:
         QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("second-unit-secret"))));
         PackageStore store(storage.path()); const auto references = store.credentialReferences(id);
         QCOMPARE(references.size(), 2);
-        QVERIFY(manager.uninstall(id, true)); QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.uninstall(id, true)); QTRY_VERIFY(!manager.busy()); QVERIFY(manager.errorMessage().isEmpty());
+        QVERIFY(manager.installLocalPackage(reference(), true));
         quint64 revision = 0;
         for (const auto& reference : references) {
             QVERIFY(store.saveSettings(id, {{"language", "en"},
                 {"_credentials", QJsonObject{{"apiKey", reference}}}}, revision++));
             QVERIFY(!manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
         }
+#else
+        QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
     }
     void realPortableWorkerHasNoAmbientCredential() {
         const auto executable = qEnvironmentVariable("VLC_ADDON_WORKER");

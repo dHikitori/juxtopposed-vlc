@@ -2,9 +2,26 @@
 #pragma once
 #include <QString>
 #include <memory>
+#include <string>
 
 namespace vlc::addons {
 struct StoreAuthorityState;
+class StorePackageRetirement final
+{
+public:
+    StorePackageRetirement() = default;
+    StorePackageRetirement(StorePackageRetirement&&) noexcept;
+    StorePackageRetirement(const StorePackageRetirement&) = delete;
+    StorePackageRetirement& operator=(const StorePackageRetirement&) = delete;
+    ~StorePackageRetirement();
+    explicit operator bool() const noexcept { return bool(m_state); }
+private:
+    friend class StoreAuthority;
+    StorePackageRetirement(std::shared_ptr<StoreAuthorityState>, std::string);
+    std::shared_ptr<StoreAuthorityState> m_state;
+    std::string m_package;
+    bool m_counted = false;
+};
 class StoreAuthorityMutation final
 {
 public:
@@ -36,6 +53,9 @@ public:
     // Hold the store lock before this gate. Keep it through the last write.
     StoreAuthorityMutation mutation() const noexcept;
     void invalidate() const noexcept;
+    // Memory-only package withdrawal. Retain it through background cleanup.
+    StorePackageRetirement retirePackage(const QString&) const;
+    bool packageRetiring(const QString&) const noexcept;
 private:
     std::shared_ptr<StoreAuthorityState> m_state;
 };

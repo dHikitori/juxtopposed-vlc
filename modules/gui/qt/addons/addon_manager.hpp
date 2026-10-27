@@ -65,6 +65,7 @@ public:
     // Only the app distribution calls this API with its trusted package path.
     bool ensureDistributionPackage(const QString& directory, const QString& expectedPackageId);
     Q_INVOKABLE bool restoreDistributionPackage(const QString& packageId);
+    Q_INVOKABLE bool stageDistributionPackage(const QString& packageId);
     Q_INVOKABLE bool stageLocalPackage(const QString& directory);
     Q_INVOKABLE bool stageRepository(const QString& source, const QString& tag);
     Q_INVOKABLE bool checkRepositoryUpdates(const QString& packageId, const QString& versionRange, bool allowPrerelease = false);
@@ -98,7 +99,7 @@ private:
     bool configured(const InstalledPackage&) const;
     QByteArray credential(const QString& package, const QString& field) const;
     AddonWorker* worker(const InstalledPackage&);
-    void withdraw(const QString& packageId);
+    bool withdraw(const QString& packageId);
     bool changed(bool success, const QString& error = {});
     PackageStore m_store;
     mutable CredentialStore m_secrets;
@@ -110,6 +111,8 @@ private:
     QJsonObject m_providerOrder;
     QMap<QString, QVariantMap> m_builtinProviders;
     QMap<QString, QString> m_distributionDirectories;
+    QMap<QString, QVariantMap> m_distributionPackages;
+    QSet<QString> m_removingPackages;
     std::shared_ptr<PackageCandidate> m_pendingPackage;
     std::unique_ptr<AddonRepositoryJobs> m_repositoryJobs;
     QString m_workerExecutable, m_error;
