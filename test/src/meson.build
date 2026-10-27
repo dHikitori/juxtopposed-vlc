@@ -971,3 +971,11 @@ vlc_tests += {
     'link_args': ['-Wl,--gc-sections'],
     'enabled': host_system == 'linux',
 }
+
+vlc_tests += {
+    'name': 'test_src_text_filesystem_sort',
+    'sources': files('text/filesystem_sort.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'enabled': host_system == 'linux',
+}

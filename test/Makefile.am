@@ -1082,4 +1082,7 @@ test_src_misc_metadata_local_limit_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_local_limit_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
 test_src_misc_metadata_local_limit_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
 test_src_misc_metadata_local_limit_LDADD = $(LIBVLCCORE)
+check_PROGRAMS += test_src_text_filesystem_sort
+test_src_text_filesystem_sort_SOURCES = src/text/filesystem_sort.c
+test_src_text_filesystem_sort_LDADD = $(LIBVLCCORE)
 endif
