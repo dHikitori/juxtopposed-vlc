@@ -245,6 +245,12 @@ AddonNativeSourceResolver::AddonNativeSourceResolver(vlc_object_t* instance, Bac
 AddonNativeSourceResolver::~AddonNativeSourceResolver() { close(); }
 bool AddonNativeSourceResolver::bound() const
 { return m_bound && m_backend.lifetime.current() && !m_gate->closed.load(std::memory_order_acquire) && m_native && !vlc_source_backend_IsClosed(m_native.get()); }
+AddonNativeSourceResolver::Current AddonNativeSourceResolver::liveGuard() const
+{
+    const auto native=m_native; const auto gate=m_gate; const auto lifetime=m_backend.lifetime; const bool bound=m_bound;
+    return [native,gate,lifetime,bound] { return bound && native && lifetime.current()
+        && !gate->closed.load(std::memory_order_acquire) && !vlc_source_backend_IsClosed(native.get()); };
+}
 bool AddonNativeSourceResolver::prune()
 {
     std::vector<Issued> discarded;

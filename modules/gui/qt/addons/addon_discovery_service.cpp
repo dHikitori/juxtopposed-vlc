@@ -61,6 +61,9 @@ AddonDiscoveryService::~AddonDiscoveryService()
 }
 QString AddonDiscoveryService::openSource(const QString& source)
 {
+    const QPointer<AddonDiscoveryService> owner(this);
+    if(m_sourcePlayback.refresh) m_sourcePlayback.refresh(source);
+    if(!owner) return {};
     if (m_closing || m_views.size() >= 16) return {};
     bool available = false;
     for (const auto& value : sources()) { const auto row = value.toMap(); if (row.value("id").toString() == source && row.value("enabled").toBool() && row.value("configured").toBool()) available = true; }
@@ -125,9 +128,21 @@ bool AddonDiscoveryService::visibleMedia(const View& view, const QString& item) 
     return false;
 }
 bool AddonDiscoveryService::canPlay(const QString& id) const
-{ const auto it = m_views.constFind(id); return it != m_views.cend() && m_transactions.playAvailable() && m_coordinator.supports(it->source, QStringLiteral("resolve")); }
+{
+    const auto it=m_views.constFind(id); if(it==m_views.cend()) return false;
+    return m_sourcePlayback.ready ? m_transactions.referencePlayAvailable() && m_sourcePlayback.ready(it->source)
+        : m_transactions.playAvailable() && m_coordinator.supports(it->source,QStringLiteral("resolve"));
+}
 bool AddonDiscoveryService::canEnqueue(const QString& id) const
-{ return m_views.contains(id) && m_transactions.appendAvailable() && m_transactions.snapshot().available; }
+{ const auto it=m_views.constFind(id); return it!=m_views.cend() && m_transactions.appendAvailable() && m_transactions.snapshot().available
+    && (!m_sourcePlayback.ready || m_sourcePlayback.ready(it->source)); }
+void AddonDiscoveryService::setSourcePlayback(SourcePlayback backend)
+{ m_sourcePlayback=std::move(backend); refreshSourcePlayback(); }
+void AddonDiscoveryService::refreshSourcePlayback()
+{
+    const auto views=m_views.keys(); const QPointer<AddonDiscoveryService> owner(this);
+    for(const auto& id:views) { emit viewChanged(id); if(!owner) return; }
+}
 void AddonDiscoveryService::setPlaylistBackend(PlaylistBackend backend)
 { if (m_closing) return; const QPointer<AddonDiscoveryService> owner(this); invalidate(); if (owner) m_playlists=std::move(backend); }
 void AddonDiscoveryService::clearPlaylist(const QString& id)
@@ -197,6 +212,7 @@ QString AddonDiscoveryService::enqueue(const QString& id, const QStringList& ite
     for (const auto& item : items) {
         if (seen.contains(item) || !visibleMedia(*it, item)) return {};
         seen.insert(item); const auto reference = m_coordinator.queueReference(item); if (reference.isEmpty()) return {};
+        if(target==QLatin1String("queue") && m_sourcePlayback.referenceReady && !m_sourcePlayback.referenceReady(reference)) return {};
         references.append(reference);
     }
     const QPointer<AddonDiscoveryService> owner(this);
@@ -208,9 +224,20 @@ QString AddonDiscoveryService::play(const QString& id, const QString& item)
 {
     const auto it = m_views.constFind(id); if (it == m_views.cend() || !canPlay(id) || !visibleMedia(*it, item)) return {};
     const auto snapshot = m_transactions.snapshot(); if (!snapshot.available) return {};
-    const auto pending = m_plays.keys(); for (const auto& request : pending) if (m_plays.value(request).view == id) { m_plays.remove(request); m_coordinator.cancel(request); }
-    const auto actions = m_playActions.keys(id); for (const auto& request : actions) { m_actions.remove(request); m_playActions.remove(request); m_transactions.cancel(request); }
-    const auto request = m_coordinator.resolve(item, QStringLiteral("play"), id, it->generation);
+    const auto generation=it->generation; const QPointer<AddonDiscoveryService> alive(this);
+    const auto pending = m_plays.keys(); for (const auto& request : pending) if (m_plays.value(request).view == id) { m_plays.remove(request); m_coordinator.cancel(request); if(!alive) return {}; }
+    const auto actions = m_playActions.keys(id); for (const auto& request : actions) { m_actions.remove(request); m_playActions.remove(request); m_transactions.cancel(request); if(!alive) return {}; }
+    const auto currentView=m_views.constFind(id);
+    if(currentView==m_views.cend() || currentView->generation!=generation || !visibleMedia(*currentView,item)) return {};
+    if(m_sourcePlayback.referenceReady) {
+        const auto reference=m_coordinator.queueReference(item);
+        if(reference.isEmpty() || !m_sourcePlayback.referenceReady(reference)) return {};
+        const QPointer<AddonDiscoveryService> owner(this);
+        const auto request=m_transactions.playReference(id,reference,snapshot);
+        if(owner) { m_actions.insert(request,id); m_playActions.insert(request,id); }
+        return request;
+    }
+    const auto request = m_coordinator.resolve(item, QStringLiteral("play"), id, generation);
     m_plays.insert(request, {id, item, snapshot}); return request;
 }
 void AddonDiscoveryService::completed(const QString& request, const QString& status, const QVariantMap& data, const QString& error)

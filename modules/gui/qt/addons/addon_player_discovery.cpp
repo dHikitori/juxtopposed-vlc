@@ -10,7 +10,7 @@ AddonDiscoveryNativeBackend combineDiscoveryBackends(AddonDiscoveryNativeBackend
     AddonDiscoveryNativeBackend result;
     result.stableReferencePlaybackAvailable=queue.stableReferencePlaybackAvailable;
     result.libraryAppendAvailable=bool(library.snapshot) && bool(library.append);
-    result.play=queue.play;
+    result.play=queue.play; result.playReference=queue.playReference;
     result.snapshot=[queue,library](const QString& target) {
         if (target==QLatin1String("queue")) return queue.snapshot?queue.snapshot(target):AddonQueueTransactions::Snapshot{};
         return target.startsWith(QLatin1String("library:")) && library.snapshot?library.snapshot(target):AddonQueueTransactions::Snapshot{};

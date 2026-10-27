@@ -35,6 +35,13 @@ public:
     Q_INVOKABLE bool loadMore(const QString& view);
     Q_INVOKABLE bool canPlay(const QString& view) const;
     Q_INVOKABLE bool canEnqueue(const QString& view) const;
+    struct SourcePlayback {
+        std::function<bool(const QString&)> ready;
+        std::function<bool(const QVariantMap&)> referenceReady;
+        std::function<void(const QString&)> refresh;
+    };
+    void setSourcePlayback(SourcePlayback);
+    void refreshSourcePlayback();
     void setPlaylistBackend(PlaylistBackend);
     Q_INVOKABLE bool loadPlaylists(const QString& view, const QString& query = {});
     Q_INVOKABLE bool choosePlaylist(const QString& view, const QString& choice);
@@ -77,6 +84,7 @@ private:
     QHash<QString, QString> m_playActions;
     QHash<QString, QString> m_libraryActions;
     PlaylistBackend m_playlists;
+    SourcePlayback m_sourcePlayback;
     int m_revision = 0;
     bool m_closing = false;
 };

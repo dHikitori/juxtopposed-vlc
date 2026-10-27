@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
 #include <QSignalSpy>
+#include <QPointer>
 #include "addons/addon_queue_transactions.hpp"
 
 using namespace vlc::addons;
@@ -10,6 +11,38 @@ class TestAddonQueueTransactions : public QObject
     static QVariantMap reference() { return {{"format", "hakone-addon-source-v1"}, {"source", "org.example.radio/source"},
         {"itemId", "station-42"}, {"accountReference", "default"}, {"snapshot", QVariantMap{{"title", "Station"}, {"mediaKind", "audio"}}}}; }
 private slots:
+    void nativeCallbacksCanDeleteTheTransactionOwner_data() {
+        QTest::addColumn<int>("operation"); QTest::newRow("cancel")<<0; QTest::newRow("failed-completion")<<1; QTest::newRow("inline-admission")<<2;
+    }
+    void nativeCallbacksCanDeleteTheTransactionOwner() {
+        QFETCH(int,operation); AddonQueueTransactions* owner=nullptr; AddonQueueTransactions::Completion completion;
+        AddonQueueTransactions::Backend backend;
+        backend.snapshot=[](const auto&) { return AddonQueueTransactions::Snapshot{true,"queue",1}; };
+        backend.append=[&](const auto&,auto done) {
+            completion=std::move(done);
+            if(operation==2) delete std::exchange(owner,nullptr);
+            return [&] { delete std::exchange(owner,nullptr); };
+        };
+        owner=new AddonQueueTransactions(backend); QPointer<AddonQueueTransactions> guarded(owner);
+        const auto id=owner->append("view",{reference()});
+        if(operation==0) owner->cancel(id); else if(operation==1) completion(false,QStringLiteral("Native refusal"));
+        QTRY_VERIFY(!guarded); QVERIFY(!owner); completion(true,{}); QCoreApplication::sendPostedEvents();
+    }
+    void stableReferencePlayDoesNotRequireOrCreateAResolvedHandle() {
+        int stable=0,legacy=0; AddonQueueTransactions::Transaction received;
+        AddonQueueTransactions::Backend backend;
+        backend.snapshot=[](const auto&) { return AddonQueueTransactions::Snapshot{true,"queue",7}; };
+        backend.play=[&](const auto&,auto done) { ++legacy; done(true,{}); return []{}; };
+        backend.playReference=[&](const auto& value,auto done) { ++stable; received=value; done(true,{}); return []{}; };
+        AddonQueueTransactions owner(backend); QSignalSpy finished(&owner,&AddonQueueTransactions::finished);
+        owner.playReference("view",reference(),{true,"queue",6}); QTRY_COMPARE(finished.size(),1);
+        QVERIFY(!finished.last()[1].toBool()); QCOMPARE(stable,0);
+        owner.playReference("view",reference(),{true,"queue",7}); QTRY_COMPARE(finished.size(),2);
+        QVERIFY(finished.last()[1].toBool()); QCOMPARE(stable,1); QCOMPARE(legacy,0);
+        QVERIFY(received.playbackHandle.isEmpty()); QCOMPARE(received.references,QVariantList{reference()});
+        owner.play("view",reference(),{},{true,"queue",7}); QTRY_COMPARE(finished.size(),3);
+        QVERIFY(!finished.last()[1].toBool()); QCOMPARE(legacy,0);
+    }
     void validatesOnlySourceReferences() {
         const auto ref = reference(); QVERIFY(AddonQueueTransactions::validReference(ref));
         auto bad = ref; bad.insert("url", "https://private.example/stream"); QVERIFY(!AddonQueueTransactions::validReference(bad));

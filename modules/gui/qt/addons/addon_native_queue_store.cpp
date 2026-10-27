@@ -9,12 +9,17 @@
 #include <QUuid>
 #include <vlc_common.h>
 #include <vlc_input_item.h>
+#include <vlc_input_policy.h>
 #include <vlc_playlist.h>
 #include <vector>
 #include <cstring>
 
 namespace vlc::addons {
 namespace {
+bool authorityCurrent(const AddonQueueTransactions::Transaction& transaction) noexcept
+{
+    try { return !transaction.authorityCurrent || transaction.authorityCurrent(); } catch(...) { return false; }
+}
 QString displayTitle(const QVariantMap& reference)
 {
     auto display = reference.value("snapshot").toMap().value("title").toString();
@@ -100,11 +105,15 @@ AddonQueueTransactions::Cancel AddonNativeQueueStore::append(const AddonQueueTra
         const auto title = displayTitle(transaction.references[index].toMap()).toUtf8();
         auto* item = input_item_NewExt(uri.constData(), title.constData(), INPUT_DURATION_UNSET, ITEM_TYPE_STREAM, ITEM_NET);
         if (!item) { completion(false, tr("The app cannot create the queue items.")); return {}; }
+        auto* policy=vlc_input_policy_HoldSourceItem(item,uri.constData());
+        if(!policy) { input_item_Release(item); completion(false,tr("The source item cannot use its native policy.")); return {}; }
+        vlc_input_policy_Release(policy);
         input_item_SetTitle(item, title.constData()); input_item_SetMetaExtra(item, "vlc:addon-source-title", title.constData());
         held.emplace_back(item, input_item_Release); items.push_back(item);
     }
     vlc_playlist_Lock(m_playlist);
-    const bool current = transaction.targetIdentity == m_identity && transaction.expectedRevision == m_revision;
+    const bool current = transaction.targetIdentity == m_identity && transaction.expectedRevision == m_revision
+        && authorityCurrent(transaction);
     const bool success = current && vlc_playlist_Append(m_playlist, items.data(), items.size()) == VLC_SUCCESS;
     const auto metadata = success ? refreshItems(m_playlist, uris, transaction.references) : QList<quint64>{};
     vlc_playlist_Unlock(m_playlist);
@@ -112,16 +121,66 @@ AddonQueueTransactions::Cancel AddonNativeQueueStore::append(const AddonQueueTra
     completion(success, success ? QString() : current ? tr("The app cannot add the selection to the queue.") : tr("The queue changed. Select the items again."));
     return {};
 }
+AddonQueueTransactions::Cancel AddonNativeQueueStore::playReference(const AddonQueueTransactions::Transaction& transaction, AddonQueueTransactions::Completion completion)
+{
+    const auto before=snapshot(transaction.target);
+    if(!completion) return {};
+    if(!before.available || before.identity!=transaction.targetIdentity || before.revision!=transaction.expectedRevision
+        || transaction.references.size()!=1 || !transaction.playbackHandle.isEmpty()) {
+        completion(false,tr("The queue changed. Select the item again.")); return {};
+    }
+    QStringList uris; QString error;
+    if(!m_admissions->admit(transaction.references,&uris,&error) || uris.size()!=1) {
+        completion(false,error); return {};
+    }
+    const auto uri=uris.first().toUtf8(); const auto title=displayTitle(transaction.references.first().toMap()).toUtf8();
+    const auto item=std::shared_ptr<input_item_t>(input_item_NewExt(uri.constData(),title.constData(),INPUT_DURATION_UNSET,ITEM_TYPE_STREAM,ITEM_NET),input_item_Release);
+    if(!item) { completion(false,tr("The app cannot create the queue item.")); return {}; }
+    auto* policy=vlc_input_policy_HoldSourceItem(item.get(),uri.constData());
+    if(!policy) { completion(false,tr("The source item cannot use its native policy.")); return {}; }
+    vlc_input_policy_Release(policy); input_item_SetTitle(item.get(),title.constData());
+    input_item_SetMetaExtra(item.get(),"vlc:addon-source-title",title.constData());
+    vlc_playlist_Lock(m_playlist);
+    const bool current=transaction.targetIdentity==m_identity && transaction.expectedRevision==m_revision
+        && authorityCurrent(transaction);
+    bool success=false; bool appended=false; bool blocked=false; size_t index=vlc_playlist_Count(m_playlist);
+    if(current) {
+        // Reuse the exact stable locator. A second Play action adds no duplicate.
+        for(size_t at=0;at<vlc_playlist_Count(m_playlist);++at) {
+            auto* queued=vlc_playlist_item_GetMedia(vlc_playlist_Get(m_playlist,at));
+            char* address=input_item_GetURI(queued); const bool same=address && !strcmp(address,uri.constData()); free(address);
+            if(!same) continue;
+            auto* existing=vlc_input_policy_HoldSourceItem(queued,uri.constData());
+            if(existing) { vlc_input_policy_Release(existing); index=at; } else blocked=true;
+            break;
+        }
+        if(!blocked && index==vlc_playlist_Count(m_playlist)) {
+            appended=vlc_playlist_AppendOne(m_playlist,item.get())==VLC_SUCCESS;
+        }
+        if(!blocked && index<vlc_playlist_Count(m_playlist)) success=vlc_playlist_PlayAt(m_playlist,index)==VLC_SUCCESS;
+        if(!success && appended) vlc_playlist_RemoveOne(m_playlist,index);
+    }
+    const auto metadata=success?refreshItems(m_playlist,uris,transaction.references):QList<quint64>{};
+    vlc_playlist_Unlock(m_playlist);
+    if(!metadata.isEmpty()) emit notifications()->metadataChanged(reinterpret_cast<quintptr>(m_playlist),metadata);
+    completion(success,success?QString():current?tr("The app cannot start this queue item."):tr("The queue changed. Select the item again."));
+    return {};
+}
 AddonDiscoveryNativeBackend AddonNativeQueueStore::backend()
 {
     const QPointer<AddonNativeQueueStore> owner(this);
     AddonDiscoveryNativeBackend result;
+    result.stableReferencePlaybackAvailable=true;
+    result.playReference=[owner](const auto& transaction,auto done) {
+        if(owner) return owner->playReference(transaction,std::move(done));
+        done(false,QObject::tr("The queue is not available.")); return AddonQueueTransactions::Cancel{};
+    };
     result.snapshot = [owner](const QString& target) { return owner ? owner->snapshot(target) : AddonQueueTransactions::Snapshot{}; };
     result.append = [owner](const auto& transaction, auto completion) {
         if (!owner) { completion(false, QObject::tr("The queue is not available.")); return AddonQueueTransactions::Cancel{}; }
         return owner->append(transaction, std::move(completion));
     };
-    // A core lazy resolver must provide playback. An admitted URI is not a URL.
+    // The source factory enables this path only while a native lazy owner is active.
     return result;
 }
 QVariantMap AddonNativeQueueStore::queuedReference(quint64 itemId) const

@@ -26,6 +26,7 @@ public:
     ~AddonNativeQueueStore() override;
     AddonQueueTransactions::Snapshot snapshot(const QString& target = QStringLiteral("queue")) const;
     AddonQueueTransactions::Cancel append(const AddonQueueTransactions::Transaction&, AddonQueueTransactions::Completion);
+    AddonQueueTransactions::Cancel playReference(const AddonQueueTransactions::Transaction&, AddonQueueTransactions::Completion);
     AddonDiscoveryNativeBackend backend();
     static AddonNativeQueueNotifications* notifications();
     bool refreshDisplay(const QVariantMap& reference);

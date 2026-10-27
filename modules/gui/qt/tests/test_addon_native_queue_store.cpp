@@ -12,6 +12,7 @@
 #include "lib/libvlc_internal.h"
 #include <vlc_playlist.h>
 #include <vlc_input_item.h>
+#include <vlc_input_policy.h>
 #include "addons/addon_native_queue_store.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_player_discovery.hpp"
@@ -29,7 +30,8 @@ class TestAddonNativeQueueStore : public QObject
     }
 private slots:
     void initTestCase() {
-        qputenv("VLC_PLUGIN_PATH", VLC_ADDON_NATIVE_BUILD_ROOT "/modules");
+        const auto selected=qgetenv("VLC_TEST_PLUGIN_PATH");
+        qputenv("VLC_PLUGIN_PATH",selected.isEmpty()?QByteArray(VLC_ADDON_NATIVE_BUILD_ROOT "/modules"):selected);
         const char* options[] = {"--ignore-config", "--no-plugins-cache", "--no-media-library"};
         instance = libvlc_new(3, options); QVERIFY(instance);
         playlist = vlc_playlist_New(VLC_OBJECT(instance->p_libvlc_int), VLC_PLAYLIST_PREPARSING_DISABLED, 1, 0); QVERIFY(playlist);
@@ -63,6 +65,37 @@ private slots:
         QFile output(file); QVERIFY(output.open(QIODevice::ReadOnly)); const auto text = output.readAll();
         QVERIFY(text.contains(uri.toUtf8()));
         QVERIFY(!text.contains("\nhttps://invalid.example/injected\n"));
+    }
+    void playKeepsTheStableQueueItemAndRejectsAStaleTarget() {
+        QTemporaryDir profile; auto admissions=std::make_shared<AddonSourceAdmissions>(profile.path(),[](const auto&){return true;});
+        AddonNativeQueueStore store(playlist,admissions); auto before=store.snapshot();
+        AddonQueueTransactions::Transaction transaction; transaction.target="queue"; transaction.targetIdentity=before.identity;
+        transaction.expectedRevision=before.revision; transaction.references={reference()};
+        bool success=false; store.append(transaction,[&](bool result,const QString&){success=result;}); QVERIFY(success);
+        QString uri; quint64 itemId;
+        { Locked lock(playlist); auto* entry=vlc_playlist_Get(playlist,0); itemId=vlc_playlist_item_GetId(entry);
+            auto* item=vlc_playlist_item_GetMedia(entry); char* raw=input_item_GetURI(item); uri=QString::fromUtf8(raw); free(raw);
+            auto* scope=vlc_input_policy_HoldItem(item); QVERIFY(scope); const bool exact=vlc_input_policy_IsSource(scope,uri.toUtf8().constData()); vlc_input_policy_Release(scope); QVERIFY(exact); }
+        store.playReference(transaction,[&](bool result,const QString&){success=result;}); QVERIFY(!success);
+        before=store.snapshot(); transaction.expectedRevision=before.revision;
+        store.playReference(transaction,[&](bool result,const QString&){success=result;}); QVERIFY(success);
+        { Locked lock(playlist); QCOMPARE(vlc_playlist_Count(playlist),size_t(1)); QCOMPARE(vlc_playlist_item_GetId(vlc_playlist_Get(playlist,0)),itemId); vlc_playlist_Stop(playlist); }
+        QCOMPARE(store.queuedReference(itemId),reference());
+    }
+    void sourceRevocationDuringAdmissionCannotCommitAQueueAction_data() {
+        QTest::addColumn<bool>("playing"); QTest::newRow("enqueue")<<false; QTest::newRow("play")<<true;
+    }
+    void sourceRevocationDuringAdmissionCannotCommitAQueueAction() {
+        QFETCH(bool,playing); QTemporaryDir profile; bool authorized=true;
+        auto admissions=std::make_shared<AddonSourceAdmissions>(profile.path(),[&](const auto&) { authorized=false; return true; });
+        AddonNativeQueueStore store(playlist,admissions); const auto before=store.snapshot();
+        AddonQueueTransactions::Transaction transaction; transaction.target="queue"; transaction.targetIdentity=before.identity;
+        transaction.expectedRevision=before.revision; transaction.references={reference()}; transaction.authorityCurrent=[&] { return authorized; };
+        bool success=true;
+        if(playing) store.playReference(transaction,[&](bool result,const QString&){success=result;});
+        else store.append(transaction,[&](bool result,const QString&){success=result;});
+        QVERIFY(!success); QVERIFY(!authorized); QCOMPARE(store.snapshot().revision,before.revision);
+        { Locked lock(playlist); QCOMPARE(vlc_playlist_Count(playlist),size_t(0)); QCOMPARE(vlc_playlist_GetCurrentIndex(playlist),ssize_t(-1)); }
     }
     void staleSnapshotAndMixedInvalidBatchDoNotChangeQueue() {
         QTemporaryDir profile;

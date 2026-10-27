@@ -19,6 +19,9 @@ public:
         quint64 expectedRevision = 0;
         QVariantList references;
         QString playbackHandle;
+        // The host captures this query before admission. A native adapter does a
+        // check under its final write lock. It has no I/O, signal, or QObject call.
+        std::function<bool()> authorityCurrent;
     };
     using Completion = std::function<void(bool, const QString&)>;
     using Cancel = std::function<void()>;
@@ -32,14 +35,20 @@ public:
         // its last identity/revision check. No URL or input pointer enters QML.
         std::function<Cancel(const Transaction&, Completion)> play;
         std::function<void(const QString& handle)> releasePlayable;
+        // A trusted native lazy resolver opens the saved reference at playback.
+        // This callback must not ask a provider for a stream URL before enqueue.
+        std::function<Cancel(const Transaction&, Completion)> playReference;
     };
     explicit AddonQueueTransactions(Backend, QObject* parent = nullptr);
     ~AddonQueueTransactions() override;
     bool appendAvailable() const { return bool(m_backend.snapshot) && bool(m_backend.append); }
+    bool referencePlayAvailable() const { return bool(m_backend.snapshot) && bool(m_backend.playReference); }
     bool playAvailable() const { return bool(m_backend.snapshot) && bool(m_backend.play); }
     QString append(const QString& view, const QVariantList& references, const QString& target = QStringLiteral("queue"));
     QString play(const QString& view, const QVariantMap& reference, const QString& playbackHandle,
                  const Snapshot& expected, const QString& target = QStringLiteral("queue"));
+    QString playReference(const QString& view, const QVariantMap& reference, const Snapshot& expected,
+                          const QString& target = QStringLiteral("queue"));
     Snapshot snapshot(const QString& target = QStringLiteral("queue")) const;
     void releasePlayable(const QString& handle);
     void cancelView(const QString& view);
@@ -50,7 +59,7 @@ signals:
 private:
     struct Job { Transaction transaction; Cancel cancel; };
     struct Gate { std::mutex mutex; AddonQueueTransactions* owner = nullptr; };
-    QString start(Transaction, const Snapshot&, bool play);
+    QString start(Transaction, const Snapshot&, bool play, bool stableReference = false);
     void finish(const QString&, bool, const QString&);
     Backend m_backend;
     QHash<QString, Job> m_jobs;

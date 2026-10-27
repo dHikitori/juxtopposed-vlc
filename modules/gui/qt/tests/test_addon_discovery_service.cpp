@@ -36,6 +36,27 @@ class TestAddonDiscoveryService : public QObject
     };
     static QVariantList items(AddonDiscoveryService& service, const QString& id) { return service.view(id).value("items").toList(); }
 private slots:
+    void stablePlayAndEnqueueDoNotResolveBeforeTheNativeOpen() {
+        Fixture fixture; fixture.sources[0]=QVariantMap{{"id","org.example.radio/source"},{"name","Radio"},{"enabled",true},{"configured",true},
+            {"accountReference","public:fixture"},{"cachePartition","release-1"},{"operations",QStringList{"roots","resolve"}}};
+        int played=0,appended=0,refreshed=0; bool approved=false,emptyHandle=false; QVariantList saved;
+        AddonQueueTransactions::Backend queues;
+        queues.snapshot=[](const auto&) { return AddonQueueTransactions::Snapshot{true,"queue",1}; };
+        queues.append=[&](const auto& value,auto done) { ++appended; saved=value.references; done(true,{}); return []{}; };
+        queues.playReference=[&](const auto& value,auto done) { ++played; saved=value.references; emptyHandle=value.playbackHandle.isEmpty(); done(true,{}); return AddonQueueTransactions::Cancel{}; };
+        AddonDiscoveryService service(fixture.backend(),queues);
+        service.setSourcePlayback({[&](const auto&) { return approved; },[&](const auto& ref) { return approved && ref.value("accountReference")==QLatin1String("public:fixture"); },[&](const auto&) { ++refreshed; }});
+        const auto view=service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(),1); QCOMPARE(refreshed,1);
+        fixture.complete(service,0,{{"items",QVariantList{Fixture::item("station")}}}); QTRY_COMPARE(items(service,view).size(),1);
+        const auto item=items(service,view).first().toMap().value("ref").toString();
+        QVERIFY(!service.canPlay(view)); QVERIFY(!service.canEnqueue(view)); QVERIFY(service.play(view,item).isEmpty());
+        approved=true; service.refreshSourcePlayback(); QVERIFY(service.canPlay(view)); QVERIFY(service.canEnqueue(view));
+        QVERIFY(!service.enqueue(view,{item}).isEmpty()); QVERIFY(!service.play(view,item).isEmpty());
+        QCOMPARE(appended,1); QCOMPARE(played,1); QVERIFY(emptyHandle); QCOMPARE(fixture.calls.size(),1); QCOMPARE(saved.size(),1);
+        QCOMPARE(saved.first().toMap().value("itemId").toString(),QStringLiteral("station")); QVERIFY(!saved.first().toMap().contains("url"));
+        approved=false; QVERIFY(service.play(view,item).isEmpty()); QVERIFY(service.enqueue(view,{item}).isEmpty());
+        QCOMPARE(appended,1); QCOMPARE(played,1);
+    }
     void playlistSelectionKeepsNativeAuthorityOutsideProviderCalls() {
         Fixture fixture; QString appended; QStringList released;
         AddonQueueTransactions::Backend queues;

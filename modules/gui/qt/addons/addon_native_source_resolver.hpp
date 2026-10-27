@@ -88,6 +88,8 @@ public:
     AddonNativeSourceResolver(vlc_object_t* instance, Backend, Limits, QObject* parent = nullptr);
     ~AddonNativeSourceResolver() override;
     bool bound() const;
+    // Capture on the owner thread. The returned query uses native state only.
+    Current liveGuard() const;
     void withdraw(const AddonSourceConsent::Binding&);
     void close();
     unsigned pendingCount() const { return unsigned(m_jobs.size()); }
