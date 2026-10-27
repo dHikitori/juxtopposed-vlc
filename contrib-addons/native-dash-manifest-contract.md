@@ -56,7 +56,7 @@ No failure permits the caller to return the source MPD or a source media URL.
 
 ## Evidence and remaining work
 
-The combined HLS and DASH suite has 21 cases. It covers inherited bases, separate
+The combined HLS and DASH suite has 22 cases. It covers inherited bases, separate
 representations, private query removal, initialization and media ranges, finite
 timelines, malformed input, unsupported external features, size limits, and an
 invalid proxy callback. Normal and sanitizer results are recorded with the

@@ -231,6 +231,13 @@ private slots:
         const auto result = parse("#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n");
         QVERIFY2(result.valid(), qPrintable(result.error)); QVERIFY(resources.isEmpty());
     }
+    void truncatedUtf8FailsBeforeResourceRegistration()
+    {
+        for (const auto* hex : {"c2", "e282", "f09f92"}) {
+            QByteArray body("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nstream.ts\n#comment ");
+            body += QByteArray::fromHex(hex); QVERIFY(!parse(body).valid()); QCOMPARE(batches, 0u);
+        }
+    }
 };
 QTEST_GUILESS_MAIN(TestAddonStreamManifest)
 #include "test_addon_stream_manifest.moc"

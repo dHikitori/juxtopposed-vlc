@@ -95,7 +95,7 @@ AddonStreamManifest::Result AddonStreamManifest::hls(const QByteArray& bytes, co
     const auto invalid = [] { return Result{{}, QStringLiteral("The stream playlist is not valid.")}; };
     const auto unsupported = [] { return Result{{}, QStringLiteral("This stream playlist uses a feature that is not supported.")}; };
     if (bytes.isEmpty() || bytes.size() > 1024 * 1024 || !https(upstream) || !proxy(proxyPrefix) || !install) return invalid();
-    QStringDecoder decoder(QStringDecoder::Utf8); const QString text = decoder.decode(bytes);
+    QStringDecoder decoder(QStringDecoder::Utf8, QStringConverter::Flag::Stateless); const QString text = decoder.decode(bytes);
     if (decoder.hasError() || text.contains(QChar(0)) || text.startsWith(QChar(0xfeff))) return invalid();
     auto lines = text.split(QLatin1Char('\n'));
     if (lines.size() > 8192) return invalid();
@@ -423,7 +423,7 @@ AddonStreamManifest::Result AddonStreamManifest::dash(const QByteArray& bytes, c
 {
     const auto invalid = [] { return Result{{}, QStringLiteral("This DASH playlist is not valid or uses a feature that is not supported.")}; };
     if (bytes.isEmpty() || bytes.size() > 1024 * 1024 || !https(upstream) || !proxy(proxyPrefix) || !install) return invalid();
-    QStringDecoder decoder(QStringDecoder::Utf8); const QString text = decoder.decode(bytes);
+    QStringDecoder decoder(QStringDecoder::Utf8, QStringConverter::Flag::Stateless); const QString text = decoder.decode(bytes);
     if (decoder.hasError() || text.startsWith(QChar(0xfeff))) return invalid();
     for (const auto c : text) if ((c.unicode() < 32 && c != QLatin1Char('\n') && c != QLatin1Char('\r') && c != QLatin1Char('\t'))
         || (c.unicode() >= 127 && c.unicode() <= 159)) return invalid();
