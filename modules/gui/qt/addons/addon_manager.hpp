@@ -4,6 +4,7 @@
 #include "addon_credentials.hpp"
 #include "addon_network.hpp"
 #include "addon_worker.hpp"
+#include "addon_native_authority.hpp"
 #include <QObject>
 #include <QVariantList>
 
@@ -38,6 +39,8 @@ public:
     QJsonObject contributionResource(const QString& globalId, const QString& resourceField) const;
     QByteArray contributionFile(const QString& globalId, const QString& path, qint64 maximumBytes) const;
     std::function<UiAssetCapture()> uiAssetReader(const QString& globalId) const;
+    // Prepare on the manager thread. This preparation reads memory only.
+    AddonNativeAuthorityReader nativeAuthorityReader(const QString& globalId) const;
     QJsonObject grantedScope(const QString& packageId, const QString& capability) const;
     bool credentialPersistenceAvailable() const { return CredentialStore::persistentAvailable(); }
     bool busy() const;

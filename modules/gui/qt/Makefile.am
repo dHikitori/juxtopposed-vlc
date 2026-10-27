@@ -124,6 +124,7 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_credentials.hpp \
 	addons/addon_manager.cpp \
 	addons/addon_manager.hpp \
+	addons/addon_native_authority.hpp \
 	addons/addon_network.cpp \
 	addons/addon_network.hpp \
 	addons/addon_public_network_policy.cpp \
@@ -2215,6 +2216,17 @@ test_qt_ml_joined_runner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_L
 check_PROGRAMS += test_qt_ml_joined_runner
 TESTS += test_qt_ml_joined_runner
 
+test_qt_addon_native_authority_SOURCES = tests/test_addon_native_authority.cpp
+nodist_test_qt_addon_native_authority_SOURCES = tests/test_addon_native_authority.moc
+BUILT_SOURCES += tests/test_addon_native_authority.moc
+CLEANFILES += tests/test_addon_native_authority.moc
+test_qt_addon_native_authority_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_native_authority_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_native_authority_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_native_authority_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_native_authority
+TESTS += test_qt_addon_native_authority
+
 test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.cpp
 nodist_test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.moc
 BUILT_SOURCES += tests/test_addon_repository_jobs.moc
@@ -3446,3 +3458,5 @@ EXTRA_DIST += tests/addon_test_application_work.hpp
 EXTRA_DIST += tests/app-shutdown/CMakeLists.txt
 
 EXTRA_DIST += tests/ml-joined-runner/CMakeLists.txt
+
+EXTRA_DIST += tests/native-authority/CMakeLists.txt

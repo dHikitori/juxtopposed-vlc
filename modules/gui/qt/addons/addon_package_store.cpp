@@ -905,8 +905,11 @@ bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, 
         QFile schema(QDir(package.directory).filePath(package.manifest.settingsSchema));
         if (!schema.open(QIODevice::ReadOnly)) return fail(error, QStringLiteral("The app cannot examine the protected settings fields."));
         const auto properties = QJsonDocument::fromJson(schema.readAll()).object().value("properties").toObject();
-        for (auto it = properties.begin(); it != properties.end(); ++it)
-            if (it.value().toObject().value("x-hakone-secret").toBool()) secretFields.insert(it.key());
+        for (auto it = properties.begin(); it != properties.end(); ++it) {
+            const auto field = it.value().toObject();
+            if (field.value("x-hakone-secret").toBool() || field.value("writeOnly").toBool()
+                || field.value("format").toString() == QLatin1String("password")) secretFields.insert(it.key());
+        }
     }
     if (settings.contains("_credentials")) {
         if (!settings.value("_credentials").isObject())

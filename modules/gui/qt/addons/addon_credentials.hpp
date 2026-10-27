@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QString>
+#include <functional>
 
 namespace vlc::addons {
 
@@ -11,6 +12,7 @@ namespace vlc::addons {
 class CredentialStore
 {
 public:
+    using Reader = std::function<QByteArray(const QString& packageId, const QString& reference)>;
     struct Created { QString reference; bool persistent = false; };
     Created create(const QString& packageId, const QString& field, const QByteArray& value, bool allowSessionOnly = false);
     static bool persistentAvailable();
@@ -18,6 +20,9 @@ public:
     bool present(const QString& packageId, const QString& reference) const;
     bool sessionOnly(const QString& reference) const;
     QHash<QString, QHash<QString, bool>> presenceSnapshot() const;
+    // Prepare on the store owner thread. The reader owns a serialized copy.
+    // This call reads memory only. The reader can use the platform store.
+    Reader snapshotReader() const;
     void remove(const QString& packageId, const QString& reference);
     void clearSession();
 private:

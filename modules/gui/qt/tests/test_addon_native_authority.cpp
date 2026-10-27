@@ -1,0 +1,193 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#include <QTest>
+#include <QTemporaryDir>
+#include <QFile>
+#include <QSaveFile>
+#include <QDir>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QScopeGuard>
+#include <atomic>
+#include <thread>
+#include "addons/addon_manager.hpp"
+#ifdef Q_OS_UNIX
+# include <fcntl.h>
+# include <sys/stat.h>
+# include <unistd.h>
+#endif
+
+using namespace vlc::addons;
+namespace {
+const QString packageId = QStringLiteral("org.hakone.thesubtitledb");
+const QString contributionId = QStringLiteral("org.hakone.thesubtitledb/search");
+std::optional<AddonNativeAuthority> capture(const AddonNativeAuthorityReader& reader)
+{
+    std::optional<AddonNativeAuthority> result;
+    std::thread worker([&] { result = reader(); });
+    worker.join(); return result;
+}
+QByteArray credential(const AddonNativeAuthority& authority, const QString& field)
+{
+    QByteArray result;
+    std::thread worker([&] { result = authority.credentials(field); });
+    worker.join(); return result;
+}
+bool saveObject(const QString& path, const QJsonObject& value)
+{
+    QSaveFile file(path); const auto bytes = QJsonDocument(value).toJson();
+    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
+}
+}
+class TestAddonNativeAuthority : public QObject
+{
+    Q_OBJECT
+    static QString example() { return QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/thesubtitledb"); }
+    static QVariantMap key(const QString& field = QStringLiteral("apiKey"), const QString& value = QStringLiteral("unit-native-authority"))
+    { return {{field, QVariantMap{{"operation", "replace"}, {"value", value}, {"sessionOnly", true}}}}; }
+    static bool setup(AddonManager& manager, const QString& source = example())
+    {
+        return manager.installLocalPackage(source, true)
+            && manager.saveAddonSettings(packageId, {{"language", "en"}}, key())
+            && manager.setEnabled(packageId, true);
+    }
+private slots:
+    void credentialSnapshotsOwnAndSerializeTheirCache()
+    {
+        CredentialStore store;
+        const auto first = store.create(packageId, QStringLiteral("apiKey"), QByteArray("unit-owned-first"), true);
+        const auto second = store.create(packageId, QStringLiteral("apiKey"), QByteArray("unit-owned-second"), true);
+        QVERIFY(!first.reference.isEmpty()); QVERIFY(!second.reference.isEmpty());
+        const auto reader = store.snapshotReader(); store.clearSession();
+        std::atomic_bool correct{true};
+        const auto read = [&] {
+            for (int i = 0; i < 100; ++i)
+                if (reader(packageId, first.reference) != QByteArray("unit-owned-first")
+                    || reader(packageId, second.reference) != QByteArray("unit-owned-second")
+                    || !reader(QStringLiteral("org.hakone.other"), first.reference).isEmpty()) correct.store(false);
+        };
+        std::thread one(read), two(read); one.join(); two.join();
+        QVERIFY(correct.load()); QVERIFY(store.presenceSnapshot().isEmpty());
+    }
+    void backgroundCaptureMatchesTheHostAccountAndCredentials()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path()); QVERIFY(setup(manager));
+        const auto expected = manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap().value("accountReference").toString();
+        const auto authority = capture(manager.nativeAuthorityReader(contributionId)); QVERIFY(authority);
+        QCOMPARE(authority->globalId, contributionId); QCOMPARE(authority->package.manifest.id, packageId);
+        QCOMPARE(authority->contribution.id, QStringLiteral("search"));
+        QCOMPARE(authority->contribution.type, QStringLiteral("metadata.provider"));
+        QCOMPARE(authority->accountReference, expected); QVERIFY(expected.startsWith(QStringLiteral("account:")));
+        QCOMPARE(authority->settings.value("language").toString(), QStringLiteral("en"));
+        QVERIFY(authority->live()); QVERIFY(authority->current());
+        QCOMPARE(credential(*authority, QStringLiteral("apiKey")), QByteArray("unit-native-authority"));
+        QVERIFY(credential(*authority, QStringLiteral("other")).isEmpty());
+    }
+    void missingSetupDisabledSafeModeAndChangedFilesRefuseCapture()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path());
+        QVERIFY(!capture(manager.nativeAuthorityReader(contributionId)));
+        QVERIFY(manager.installLocalPackage(example(), true)); QVERIFY(manager.setEnabled(packageId, true));
+        QVERIFY(!capture(manager.nativeAuthorityReader(contributionId)));
+        QVERIFY(manager.saveAddonSettings(packageId, {{"language", "en"}}, key()));
+        QVERIFY(!capture(manager.nativeAuthorityReader(packageId + QStringLiteral("/absent"))));
+        QVERIFY(!capture(manager.nativeAuthorityReader(contributionId + QStringLiteral("/extra"))));
+        auto authority = capture(manager.nativeAuthorityReader(contributionId)); QVERIFY(authority);
+        QVERIFY(manager.setSafeMode(true)); QVERIFY(!authority->live());
+        QVERIFY(!capture(manager.nativeAuthorityReader(contributionId)));
+        QVERIFY(manager.setSafeMode(false)); QVERIFY(manager.setEnabled(packageId, false));
+        QVERIFY(!capture(manager.nativeAuthorityReader(contributionId)));
+        QVERIFY(manager.setEnabled(packageId, true));
+        InstalledPackage installed; PackageStore store(directory.path()); QVERIFY(store.installed(packageId, &installed));
+        const auto path = QDir(installed.directory).filePath(QStringLiteral("locales/en.json"));
+        QVERIFY(QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner));
+        QVERIFY(saveObject(path, {{"changed", true}}));
+        QVERIFY(!capture(manager.nativeAuthorityReader(contributionId)));
+    }
+    void settingsKeysAndManagerDestructionRevokeCapturedReaders()
+    {
+        QTemporaryDir directory; auto manager = std::make_unique<AddonManager>(directory.path()); QVERIFY(setup(*manager));
+        auto reader = manager->nativeAuthorityReader(contributionId);
+        auto first = capture(reader); QVERIFY(first);
+        QVERIFY(manager->saveAddonSettings(packageId, {{"language", "fr"}}, {}));
+        QVERIFY(!first->live()); QVERIFY(!first->current());
+        QVERIFY(credential(*first, QStringLiteral("apiKey")).isEmpty()); QVERIFY(!capture(reader));
+        auto second = capture(manager->nativeAuthorityReader(contributionId)); QVERIFY(second);
+        QCOMPARE(second->accountReference, first->accountReference);
+        QVERIFY(manager->saveAddonSettings(packageId, {{"language", "fr"}}, key(QStringLiteral("apiKey"), QStringLiteral("unit-rotated"))));
+        QVERIFY(!second->live());
+        reader = manager->nativeAuthorityReader(contributionId);
+        auto third = capture(reader); QVERIFY(third); QVERIFY(third->accountReference != second->accountReference);
+        manager.reset(); QVERIFY(!third->live()); QVERIFY(!third->current());
+        QVERIFY(credential(*third, QStringLiteral("apiKey")).isEmpty()); QVERIFY(!capture(reader));
+    }
+    void savedStateChangesRefuseCredentialsWithoutAMemoryWrite()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path()); QVERIFY(setup(manager));
+        const auto authority = capture(manager.nativeAuthorityReader(contributionId)); QVERIFY(authority);
+        const auto path = directory.filePath(QStringLiteral("packages/org.hakone.thesubtitledb/state.json"));
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        auto state = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        auto current = state.value("current").toObject(), settings = current.value("settings").toObject();
+        settings.insert("language", "fr"); current.insert("settings", settings);
+        current.insert("settingsRevision", current.value("settingsRevision").toDouble() + 1); state.insert("current", current);
+        QVERIFY(saveObject(path, state)); QVERIFY(authority->live()); QVERIFY(!authority->current());
+        QVERIFY(credential(*authority, QStringLiteral("apiKey")).isEmpty());
+    }
+    void secretFieldsNeedAnApprovedBinding()
+    {
+        QTemporaryDir directory, source; Manifest manifest; QMap<QString, QByteArray> contents;
+        QVERIFY(Manifest::loadDirectory(example(), &manifest, &contents));
+        auto schema = QJsonDocument::fromJson(contents.value(manifest.settingsSchema)).object();
+        auto fields = schema.value("properties").toObject();
+        fields.insert("privateKey", QJsonObject{{"type", "string"}, {"maxLength", 128}, {"writeOnly", true}});
+        fields.insert("retries", QJsonObject{{"type", "integer"}, {"minimum", 0}, {"maximum", 8}, {"default", 1}});
+        schema.insert("properties", fields); contents.insert(manifest.settingsSchema, QJsonDocument(schema).toJson());
+        for (auto it = contents.cbegin(); it != contents.cend(); ++it) {
+            const auto path = source.filePath(it.key()); QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+            QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(it.value()), it.value().size());
+        }
+        AddonManager manager(directory.path()); QVERIFY(setup(manager, source.path()));
+        QVERIFY(!manager.saveAddonSettings(packageId, {{"language", "en"}, {"retries", 1e30}}, {}));
+        QVERIFY(manager.saveAddonSettings(packageId, {{"language", "en"}}, key(QStringLiteral("privateKey"), QStringLiteral("unit-unbound"))));
+        const auto authority = capture(manager.nativeAuthorityReader(contributionId)); QVERIFY(authority);
+        QCOMPARE(credential(*authority, QStringLiteral("apiKey")), QByteArray("unit-native-authority"));
+        QVERIFY(credential(*authority, QStringLiteral("privateKey")).isEmpty());
+    }
+    void preparationAndLiveChecksDoNotWaitForSavedState()
+    {
+#ifdef Q_OS_UNIX
+        QTemporaryDir directory; AddonManager manager(directory.path()); QVERIFY(setup(manager));
+        const auto authority = capture(manager.nativeAuthorityReader(contributionId)); QVERIFY(authority);
+        const auto path = directory.filePath(QStringLiteral("packages/org.hakone.thesubtitledb/state.json"));
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto saved = file.readAll(); file.close();
+        QVERIFY(QFile::remove(path)); QVERIFY(::mkfifo(QFile::encodeName(path).constData(), 0600) == 0);
+        int writer = -1; bool released = false;
+        auto release = [&] {
+            if (released) return true;
+            if (writer < 0) writer = ::open(QFile::encodeName(path).constData(), O_RDWR | O_NONBLOCK);
+            QFile::remove(path); QFile restored(path);
+            const bool restoredOk = restored.open(QIODevice::WriteOnly) && restored.write(saved) == saved.size(); restored.close();
+            if (writer >= 0) { const auto count = ::write(writer, saved.constData(), size_t(saved.size())); Q_UNUSED(count); ::close(writer); writer = -1; }
+            released = true; return restoredOk;
+        };
+        const auto restore = qScopeGuard([&] { if (QFileInfo(path).isFile()) return; release(); });
+        const auto prepared = manager.nativeAuthorityReader(contributionId); QVERIFY(prepared);
+        std::atomic_bool finished{false}, accepted{true};
+        std::thread worker([&] { accepted.store(authority->current()); finished.store(true); });
+        const auto joined = qScopeGuard([&] { release(); worker.join(); });
+        const auto entered = [&] {
+            if (writer < 0) writer = ::open(QFile::encodeName(path).constData(), O_WRONLY | O_NONBLOCK);
+            return writer >= 0;
+        };
+        QTRY_VERIFY(entered());
+        QVERIFY(!finished.load()); QVERIFY(authority->live());
+        StoreAuthority invalidator(directory.path()); invalidator.invalidate();
+        QVERIFY(!authority->live()); QVERIFY(!capture(prepared));
+        QVERIFY(release()); QTRY_VERIFY(finished.load()); QVERIFY(!accepted.load());
+#else
+        QSKIP("This file-read check needs a native FIFO.");
+#endif
+    }
+};
+QTEST_GUILESS_MAIN(TestAddonNativeAuthority)
+#include "test_addon_native_authority.moc"

@@ -10,7 +10,7 @@ enable_testing()
 get_filename_component(VLC_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
 add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_store_authority.cpp addon_credentials.cpp
-    addon_network.cpp addon_public_network_policy.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
+    addon_network.cpp addon_public_network_policy.cpp addon_worker.cpp addon_manager.cpp addon_native_authority.hpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
@@ -28,7 +28,7 @@ elseif(APPLE)
 endif()
 add_executable(addon_visualizer_process "../tests/fixtures/addon_visualizer_process.c")
 set_target_properties(addon_visualizer_process PROPERTIES AUTOMOC OFF)
-foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs)
+foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs native_authority)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
@@ -147,4 +147,4 @@ else()
     message(STATUS "Set VLC_BUILD_DIR to add native metadata tests and the provider probe.")
 endif()
 
-set_tests_properties(addon_stream_http addon_stream_proxy addon_stream_shutdown addon_app_shutdown addon_repository_jobs PROPERTIES TIMEOUT 90)
+set_tests_properties(addon_stream_http addon_stream_proxy addon_stream_shutdown addon_app_shutdown addon_repository_jobs addon_native_authority PROPERTIES TIMEOUT 90)

@@ -4,6 +4,8 @@
 #include <QStandardPaths>
 #include <QUuid>
 #include <QRegularExpression>
+#include <memory>
+#include <mutex>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <wincred.h>
@@ -82,6 +84,20 @@ QHash<QString, QHash<QString, bool>> CredentialStore::presenceSnapshot() const
     for (auto it = m_session.cbegin(); it != m_session.cend(); ++it)
         result[it->packageId].insert(it.key(), !it->value.isEmpty());
     return result;
+}
+CredentialStore::Reader CredentialStore::snapshotReader() const
+{
+    struct Snapshot {
+        explicit Snapshot(const CredentialStore& value) : store(value) {}
+        ~Snapshot() { store.clearSession(); }
+        std::mutex mutex;
+        CredentialStore store;
+    };
+    const auto captured = std::make_shared<Snapshot>(*this);
+    return [captured](const QString& package, const QString& reference) {
+        std::lock_guard<std::mutex> lock(captured->mutex);
+        return captured->store.read(package, reference);
+    };
 }
 void CredentialStore::remove(const QString& package, const QString& reference)
 {

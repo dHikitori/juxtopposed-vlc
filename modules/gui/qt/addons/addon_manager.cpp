@@ -19,6 +19,7 @@
 #include <QThread>
 #include <QUuid>
 #include <algorithm>
+#include <cmath>
 
 namespace vlc::addons {
 namespace {
@@ -37,7 +38,7 @@ bool valueValid(const QJsonValue& value, const QJsonObject& field)
     if (type == QLatin1String("number") || type == QLatin1String("integer")) {
         if (!value.isDouble()) return false;
         const auto n = value.toDouble();
-        if (type == QLatin1String("integer") && n != qint64(n)) return false;
+        if (type == QLatin1String("integer") && (n < -0x1p63 || n >= 0x1p63 || std::trunc(n) != n)) return false;
         return n >= field.value("minimum").toDouble(-1e12) && n <= field.value("maximum").toDouble(1e12);
     }
     if (type == QLatin1String("array")) {
@@ -64,6 +65,38 @@ bool valueValid(const QJsonValue& value, const QJsonObject& field)
         if (text.size() > 64 || !language.match(text).hasMatch()) return false;
     }
     return true;
+}
+QString packageAccountReference(const InstalledPackage& package, const QJsonObject& saved,
+                                const QJsonObject& document,
+                                const std::function<bool(const QString&)>& present)
+{
+    const auto storedReferences = saved.value(QStringLiteral("_credentials")).toObject();
+    const auto properties = document.value(QStringLiteral("properties")).toObject();
+    QJsonObject references, account;
+    bool connected = true, protectedAccount = false;
+    const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
+    for (const auto& binding : package.manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray()) {
+        if (!approved.contains(binding)) continue;
+        protectedAccount = true;
+        const auto name = binding.toObject().value(QStringLiteral("field")).toString();
+        const auto reference = storedReferences.value(name).toString();
+        references.insert(name, reference);
+        connected &= present(reference);
+    }
+    for (const auto& name : package.manifest.accountFields) {
+        const auto field = properties.value(name).toObject();
+        if (!field.isEmpty() && !secretField(field)) {
+            const auto value = saved.contains(name) ? saved.value(name) : field.value(QStringLiteral("default"));
+            account.insert(name, value.isUndefined() ? QJsonValue(QJsonValue::Null) : value);
+        }
+    }
+    const QJsonObject identity{{"package", package.manifest.id}, {"source", package.identity.source},
+        {"references", references}, {"account", account}};
+    const QByteArray canonical = QByteArray("vlc-addon-account-v1\n") + QJsonDocument(identity).toJson(QJsonDocument::Compact);
+    const QString digest = QString::fromLatin1(QCryptographicHash::hash(canonical, QCryptographicHash::Sha256).toHex());
+    const QString prefix = !connected && protectedAccount ? QStringLiteral("disconnected:")
+        : !protectedAccount && account.isEmpty() ? QStringLiteral("public:") : QStringLiteral("account:");
+    return prefix + digest;
 }
 QString localPart(const QString& global) { return global.section('/', 1); }
 QString packagePart(const QString& global) { return global.section('/', 0, 0); }
@@ -103,6 +136,7 @@ AddonManager::AddonManager(const QString& directory, QObject* parent)
 }
 AddonManager::~AddonManager()
 {
+    m_store.invalidateAuthority();
     if (m_storage) m_storage->close();
     disconnect(&m_hostServices, nullptr, this, nullptr);
     for (const auto& connection : m_mediaCapabilityConnections) disconnect(connection);
@@ -160,34 +194,8 @@ QJsonObject AddonManager::savedSettings(const QString& id) const
 { QJsonObject values; m_store.settings(id, &values); return values; }
 QString AddonManager::accountReference(const InstalledPackage& package) const
 {
-    const auto saved = savedSettings(package.manifest.id);
-    const auto storedReferences = saved.value(QStringLiteral("_credentials")).toObject();
-    QJsonObject references, account;
-    const auto properties = schema(package).value("properties").toObject();
-    bool connected = true, protectedAccount = false;
-    const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
-    for (const auto& binding : package.manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray()) {
-        if (!approved.contains(binding)) continue;
-        protectedAccount = true;
-        const auto name = binding.toObject().value(QStringLiteral("field")).toString();
-        const auto reference = storedReferences.value(name).toString();
-        references.insert(name, reference);
-        connected &= m_secrets.present(package.manifest.id, reference);
-    }
-    for (const auto& name : package.manifest.accountFields) {
-        const auto field = properties.value(name).toObject();
-        if (!field.isEmpty() && !secretField(field)) {
-            const auto value = saved.contains(name) ? saved.value(name) : field.value(QStringLiteral("default"));
-            account.insert(name, value.isUndefined() ? QJsonValue(QJsonValue::Null) : value);
-        }
-    }
-    const QJsonObject identity{{"package", package.manifest.id}, {"source", package.identity.source},
-        {"references", references}, {"account", account}};
-    const QByteArray canonical = QByteArray("vlc-addon-account-v1\n") + QJsonDocument(identity).toJson(QJsonDocument::Compact);
-    const QString digest = QString::fromLatin1(QCryptographicHash::hash(canonical, QCryptographicHash::Sha256).toHex());
-    if (!connected && protectedAccount)
-        return QStringLiteral("disconnected:") + digest;
-    return (!protectedAccount && account.isEmpty() ? QStringLiteral("public:") : QStringLiteral("account:")) + digest;
+    return packageAccountReference(package, savedSettings(package.manifest.id), schema(package),
+        [this, id = package.manifest.id](const QString& reference) { return m_secrets.present(id, reference); });
 }
 QVariantMap AddonManager::settingsSchema(const QString& id) const
 { InstalledPackage package; return m_store.installed(id, &package) ? schema(package).toVariantMap() : QVariantMap{}; }
@@ -458,6 +466,62 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
         if (!result.current()) return rejected();
         result.registration = {{"id", global}, {"packageId", verified.id}, {"enabled", true}, {"configured", true},
             {"accountReference", account}, {"assetStamp", stamp}, {"assets", declarations.toVariantMap()}};
+        return result;
+    };
+}
+AddonNativeAuthorityReader AddonManager::nativeAuthorityReader(const QString& global) const
+{
+    const auto store = m_store;
+    const auto authority = store.authorityToken();
+    const auto readSecret = m_secrets.snapshotReader();
+    return [store, authority, readSecret, global]() -> std::optional<AddonNativeAuthority> {
+        AddonNativeAuthority result;
+        if (!authority.current() || !store.installed(packagePart(global), &result.package)
+            || !result.package.enabled) return std::nullopt;
+        auto& package = result.package;
+        if (!store.networkConfiguration(package, &result.settings, &result.settingsRevision)) return std::nullopt;
+        Manifest verified; QMap<QString, QByteArray> contents;
+        if (!Manifest::loadDirectory(package.directory, &verified, &contents)
+            || packageDigest(contents) != package.digest || verified.id != package.manifest.id) return std::nullopt;
+        package.manifest = std::move(verified);
+        const auto* contribution = package.manifest.contribution(localPart(global));
+        if (!contribution || global != package.manifest.id + QLatin1Char('/') + contribution->id) return std::nullopt;
+        result.contribution = *contribution;
+        result.globalId = global;
+        const auto document = package.manifest.settingsSchema.isEmpty()
+            ? QJsonObject{{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}}
+            : QJsonDocument::fromJson(contents.value(package.manifest.settingsSchema)).object();
+        if (document.value(QStringLiteral("type")).toString() != QLatin1String("object")) return std::nullopt;
+        const auto properties = document.value(QStringLiteral("properties")).toObject();
+        const auto references = result.settings.value(QStringLiteral("_credentials")).toObject();
+        const auto present = [readSecret, id = package.manifest.id](const QString& reference) {
+            return !readSecret(id, reference).isEmpty();
+        };
+        for (const auto& required : document.value(QStringLiteral("required")).toArray()) {
+            const auto name = required.toString();
+            const auto field = properties.value(name).toObject();
+            if (secretField(field)) {
+                if (!present(references.value(name).toString())) return std::nullopt;
+            } else if (!valueValid(result.settings.contains(name) ? result.settings.value(name)
+                : field.value(QStringLiteral("default")), field)) return std::nullopt;
+        }
+        result.accountReference = packageAccountReference(package, result.settings, document, present);
+        if (result.accountReference.startsWith(QStringLiteral("disconnected:"))) return std::nullopt;
+        result.live = [authority] { return authority.current(); };
+        result.current = [store, package, settings = result.settings, revision = result.settingsRevision, authority] {
+            return authority.current() && store.networkConfigurationMatches(package, settings, revision) && authority.current();
+        };
+        QSet<QString> fields;
+        const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
+        for (const auto& binding : package.manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray())
+            if (approved.contains(binding)) fields.insert(binding.toObject().value(QStringLiteral("field")).toString());
+        result.credentials = [readSecret, references, fields, id = package.manifest.id, current = result.current](const QString& field) {
+            if (!fields.contains(field) || !current()) return QByteArray{};
+            auto value = readSecret(id, references.value(field).toString());
+            if (!current()) { value.fill('\0'); return QByteArray{}; }
+            return value;
+        };
+        if (!result.current()) return std::nullopt;
         return result;
     };
 }

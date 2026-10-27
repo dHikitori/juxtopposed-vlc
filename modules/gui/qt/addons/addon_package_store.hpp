@@ -46,6 +46,7 @@ public:
     explicit PackageStore(QString storageDirectory);
     QString storageDirectory() const;
     StoreAuthorityToken authorityToken() const noexcept { return m_authority.capture(); }
+    void invalidateAuthority() const noexcept { m_authority.invalidate(); }
     static bool inspectDirectory(const QString&, const ReleaseIdentity&, PackageCandidate*, QString* error = nullptr);
     // No shell or checkout. Local fixtures require explicit developerLocalSource.
     static bool fetchGitTag(const QString& source, const QString& tag, PackageCandidate*,
