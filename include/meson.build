@@ -64,6 +64,7 @@ install_headers(
     'vlc_input.h',
     'vlc_input_item.h',
     'vlc_input_policy.h',
+    'vlc_addon_player.h',
     'vlc_source_backend.h',
     'vlc_source_owner.h',
     'vlc_interface.h',

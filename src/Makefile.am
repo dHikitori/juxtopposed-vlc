@@ -66,6 +66,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_input.h \
 	../include/vlc_input_item.h \
 	../include/vlc_input_policy.h \
+	../include/vlc_addon_player.h \
 	../include/vlc_artwork_policy.h \
 	../include/vlc_source_backend.h \
 	../include/vlc_source_owner.h \
@@ -335,6 +336,9 @@ libvlccore_la_SOURCES = \
 	input/replay_gain.c \
 	player/player.c \
 	player/player.h \
+	player/addon_session.c \
+	player/addon_session_state.c \
+	player/addon_session_state.h \
 	player/input.c \
 	player/timer.c \
 	player/track.c \

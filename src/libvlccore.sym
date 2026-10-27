@@ -1188,3 +1188,11 @@ vlc_process_fd_Write
 vlc_preparser_msg_Init
 vlc_preparser_msg_Clean
 vlc_preparser_msg_serdes_Create
+vlc_addon_player_Snapshot
+vlc_addon_player_Grant
+vlc_addon_player_Renew
+vlc_addon_player_Resume
+vlc_addon_player_Revoke
+vlc_addon_player_Apply
+vlc_addon_player_AddListener
+vlc_addon_player_RemoveListener

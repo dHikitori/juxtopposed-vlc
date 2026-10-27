@@ -1,8 +1,77 @@
 # Native session transport audit
 
 This note defines the native boundary for a session playback adapter.
-It records the source state after the tagged-update implementation.
-It does not add a native session adapter.
+It records the player admission and input execution boundaries.
+The native API is separate from the room protocol and the session interface.
+
+## Private state implementation
+
+The new [state code](../src/player/addon_session_state.c) and
+[private API](../src/player/addon_session_state.h) define the native authority record.
+The [state tests](../test/src/player/addon_session_state.c) run without Qt.
+The [native fixture](../test/src/player/addon_session.c) uses a builtin audio demux
+and the real player and input threads.
+Its normal Core build and runtime result must pass before this mount is accepted.
+The state tests alone do not prove local priority in the real input FIFO.
+
+The state retains one owner identity, media generation, input generation, and lease.
+An input scope holds the state after the session interface closes.
+Admission issues a typed token with the exact operation and parameters.
+The input calls `Begin` before it changes native playback state.
+`Begin`, local intent, and lease revocation use the same short state mutex.
+The mutex does not call the player, Qt, the input FIFO, or a callback.
+State methods release the mutex before they return.
+The caller then wakes the input queue.
+
+The token has one execution attempt.
+A wrong input scope or changed parameter also consumes that attempt.
+Later admission does not invalidate an earlier command in the same FIFO.
+Local input, a core interruption, lease replacement, and media or input changes do invalidate it.
+A command that passed `Begin` can complete before a later local command.
+The native mount must preserve that FIFO order.
+The snapshot separates the last intended action from the last completed action.
+The completion record includes its own stamp, lease, origin, and sequence.
+A late completion cannot replace the current local intent.
+
+The initial limits are 64 retained tokens, a 60-second lease, and a 5-second speed correction.
+A correction must stay within five percent of the saved user rate and the input rate limits.
+Lease renewal can extend the deadline without a new sequence or authority epoch.
+It cannot resume a lease that local input suspended.
+The host must perform the explicit resume action with a current snapshot.
+Counter exhaustion denies remote commands.
+The host must use a new owner identity and bind new input scopes before it grants authority again.
+The host must restore an applied correction before it replaces that owner identity.
+
+A temporary correction changes only the input rate.
+It does not change the saved player rate for later media.
+The input retains a rate guard and includes its deadline in the control wait.
+Restore needs no new token or FIFO slot.
+Session end and local seek retain this cleanup authority.
+A later user rate choice, input removal, or player destruction removes it.
+Session end uses `Revoke`; `Close` is for player destruction.
+The rate result must use the observed input rate, because a demux can adjust the requested value.
+Restore success means that the observed rate equals the saved base rate.
+The generic `Control` return value reports a required update; it does not prove that result.
+A failed restore waits at least 250 milliseconds before its next attempt.
+
+The [public native API](../include/vlc_addon_player.h) requires the player lock.
+It accepts typed playback values; it does not accept a URL or variable name.
+`Apply` success means that the native FIFO accepted the command.
+An executed command sends its captured completion through a separate listener.
+The listener runs under the player lock and must copy its value before it returns.
+It must defer interface work and must not call the player.
+The host can register at most eight completion listeners.
+FIFO reduction, revocation, input removal, and owner shutdown can discard a queued command.
+Those commands cannot execute and do not promise an execution callback.
+The host must cancel their pending interface requests when the authority snapshot changes
+or a newer command replaces them, with a bounded timeout as the final fallback.
+
+Remote pause preserves the native buffering rule.
+It returns a failed execution result while the output clocks are not ready.
+It never leaves a deferred pause after its token completes.
+If a native pause has a partial effect, the input removes that effect before it reports failure.
+Automatic next-item maintenance does not claim local playback intent.
+The public next-item choice still records local intent.
 
 ## Finding
 
@@ -157,8 +226,7 @@ Session end, package withdrawal, permission removal, and owner shutdown revoke t
 
 ## Required tests
 
-Use the native player fixtures in `test/src/player/common.h` and `modules.c`.
-Test the actual player lock and input FIFO.
+Use a builtin PCM demux with the actual native player, player lock, and input FIFO.
 
 | Case | Required result |
 | --- | --- |
@@ -177,3 +245,11 @@ Test the actual player lock and input FIFO.
 
 Also run the existing lifecycle, media, seek, pause, title, A-to-B, and discontinuity regression suites.
 No working core feature needs removal for this boundary.
+
+## Normal build evidence
+
+The private state fixture passes 24 normal and sanitizer scenarios. The native player fixture passes all 12 scenarios in the normal Core build. It covers real input threads, queue reduction, local precedence, input replacement, bounded rate restore, buffering, pause, play, and native completion origin.
+
+The player fixture uses `VLC_TEST_TIMEOUT=90` for the full suite. Every event wait has a five-second deadline. The registered Meson and Automake tests set this bounded suite alarm.
+
+The shared-session transport, Qt host adapter, two-player drift checks, and the existing broad player regression suites remain open. The native state and player results do not prove these integrations.

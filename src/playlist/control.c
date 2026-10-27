@@ -452,5 +452,5 @@ vlc_playlist_UpdateNextMedia(vlc_playlist_t *playlist)
             vlc_assert_unreachable();
     }
 
-    vlc_player_SetNextMedia(playlist->player, media);
+    vlc_player_SetNextMediaInternal(playlist->player, media, VLC_ADDON_SESSION_CORE);
 }

@@ -927,3 +927,23 @@ vlc_tests += {
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_player_addon_session_state',
+    'sources': files('player/addon_session_state.c', '../../src/player/addon_session_state.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_player_addon_session',
+    'sources': files('player/addon_session.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'link_args': ['-Wl,--export-dynamic'],
+    'module_depends': ['araw', 'adummy'],
+    'env': ['VLC_TEST_TIMEOUT=90'],
+    'enabled': host_system == 'linux',
+}

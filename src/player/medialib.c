@@ -153,7 +153,10 @@ vlc_player_input_RestoreMlStates(struct vlc_player_input* input, bool force_pos)
     if (restore_pos == VLC_PLAYER_RESTORE_PLAYBACK_POS_ALWAYS &&
             input->ml.states.current_title == -1 &&
             media->f_progress > .0f)
+    {
+        vlc_player_session_Record(player, VLC_ADDON_SESSION_CORE, VLC_ADDON_SESSION_SEEK);
         input_SetPosition(input->thread, media->f_progress, false);
+    }
     else if (restore_pos == VLC_PLAYER_RESTORE_PLAYBACK_POS_ASK &&
              media->f_progress > .0f)
     {
@@ -166,7 +169,7 @@ vlc_player_input_RestoreMlStates(struct vlc_player_input* input, bool force_pos)
     if (!restore_states)
         return;
     if (input->ml.states.rate != .0f)
-        vlc_player_ChangeRate(player, input->ml.states.rate);
+        vlc_player_ChangeRateInternal(player, input->ml.states.rate, VLC_ADDON_SESSION_CORE);
 
 
     const char *video_track_ids = input->ml.states.current_video_track;

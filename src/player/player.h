@@ -29,6 +29,7 @@
 #include <vlc_vout_osd.h>
 
 #include "input/input_internal.h"
+#include "addon_session_state.h"
 
 struct vlc_player_track_priv
 {
@@ -267,6 +268,10 @@ struct vlc_player_t
     vlc_mutex_t aout_listeners_lock;
     vlc_mutex_t vout_listeners_lock;
     vlc_cond_t start_delay_cond;
+    vlc_addon_session_state *addon_session;
+    struct vlc_list addon_session_listeners;
+    unsigned addon_session_listener_count;
+    bool addon_session_notifying;
 
     bool start_paused;
     bool play_and_pause;
@@ -320,6 +325,19 @@ struct vlc_player_t
 
     struct vlc_player_timer timer;
 };
+
+void vlc_player_session_Record(vlc_player_t *, enum vlc_addon_session_origin,
+                              enum vlc_addon_session_operation);
+void vlc_player_session_Completed(vlc_player_t *, const struct vlc_addon_session_snapshot *);
+int vlc_player_StartInternal(vlc_player_t *, enum vlc_addon_session_origin);
+void vlc_player_SetPauseInternal(vlc_player_t *, bool, enum vlc_addon_session_origin);
+void vlc_player_ChangeRateInternal(vlc_player_t *, float, enum vlc_addon_session_origin);
+void vlc_player_SeekByPosInternal(vlc_player_t *, double, enum vlc_player_seek_speed,
+                                enum vlc_player_whence, enum vlc_addon_session_origin);
+void vlc_player_SeekByTimeInternal(vlc_player_t *, vlc_tick_t, enum vlc_player_seek_speed,
+                                 enum vlc_player_whence, enum vlc_addon_session_origin);
+void vlc_player_SelectTitleIdxInternal(vlc_player_t *, size_t, enum vlc_addon_session_origin);
+void vlc_player_SetNextMediaInternal(vlc_player_t *, input_item_t *, enum vlc_addon_session_origin);
 
 #ifndef NDEBUG
 /*
