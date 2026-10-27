@@ -36,6 +36,8 @@ noinst_PROGRAMS =
 check_PROGRAMS = \
     test_src_misc_configured_proxy \
     test_src_misc_metadata_backend \
+    test_src_misc_metadata_owner \
+    test_src_misc_metadata_requests \
     test_src_misc_metadata_commit \
     test_src_misc_metadata_revision \
     test_src_input_policy \
@@ -243,6 +245,12 @@ test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c
 test_src_misc_metadata_backend_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_owner_SOURCES = src/misc/metadata_owner.c
+test_src_misc_metadata_owner_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_requests_SOURCES = src/misc/metadata_requests.c
+test_src_misc_metadata_requests_LDADD = $(LIBVLCCORE)
 
 test_src_misc_metadata_commit_SOURCES = src/misc/metadata_commit.c
 test_src_misc_metadata_commit_LDADD = $(LIBVLCCORE)

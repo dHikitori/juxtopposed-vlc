@@ -838,3 +838,17 @@ vlc_tests += {
     'suite': ['src', 'test_src'],
     'link_with': [libvlc, libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_owner',
+    'sources': files('misc/metadata_owner.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_requests',
+    'sources': files('misc/metadata_requests.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}

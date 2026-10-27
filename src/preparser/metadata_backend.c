@@ -254,7 +254,13 @@ bool vlc_metadata_job_Cancel(vlc_metadata_job_t *job)
 {
     vlc_metadata_job_Hold(job);
     vlc_mutex_lock(&job->backend->lock);
-    if (job->started) job->commit_cancelled = true;
+    if (!job->started) {
+        const bool won = !job->commit_cancelled;
+        job->commit_cancelled = true;
+        vlc_mutex_unlock(&job->backend->lock);
+        vlc_metadata_job_Release(job); return won;
+    }
+    job->commit_cancelled = true;
     vlc_mutex_unlock(&job->backend->lock);
     struct vlc_metadata_result result = {0};
     const bool won = finish(job, -EINTR, &result, true);
@@ -369,8 +375,8 @@ int vlc_metadata_job_Start(vlc_metadata_job_t *job)
     vlc_metadata_job_Hold(job);
     vlc_metadata_backend_t *backend = job->backend;
     vlc_mutex_lock(&backend->lock);
-    if (backend->closed || job->started || backend->active >= MAX_ACTIVE) {
-        const int error = backend->closed ? -EINTR : VLC_EGENERIC;
+    if (backend->closed || job->commit_cancelled || job->started || backend->active >= MAX_ACTIVE) {
+        const int error = backend->closed || job->commit_cancelled ? -EINTR : VLC_EGENERIC;
         vlc_mutex_unlock(&backend->lock); vlc_metadata_job_Release(job); return error;
     }
     job->started = true;

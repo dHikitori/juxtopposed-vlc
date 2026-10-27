@@ -84,6 +84,10 @@ VLC_API void vlc_metadata_job_Release(vlc_metadata_job_t *);
  * error after acceptance causes an on_ended error.
  */
 VLC_API int vlc_metadata_job_Start(vlc_metadata_job_t *);
+/** Idle cancellation prevents Start and adds no callback. A completed result
+ * keeps its status, but Cancel still prevents a later Apply. Return true only
+ * when this call wins an idle or pending cancellation.
+ */
 VLC_API bool vlc_metadata_job_Cancel(vlc_metadata_job_t *);
 VLC_API bool vlc_metadata_job_IsPending(vlc_metadata_job_t *);
 VLC_API const struct vlc_metadata_request *vlc_metadata_job_GetRequest(const vlc_metadata_job_t *);

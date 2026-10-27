@@ -76,9 +76,14 @@ static void idle_synchronous_and_rejected_dispatch(void)
     struct fixture fixture = {0};
     vlc_metadata_backend_t *owner = backend(&fixture);
     vlc_metadata_job_t *value = job(owner, &fixture);
+    assert(vlc_metadata_job_Cancel(value));
     assert(!vlc_metadata_job_Cancel(value));
     assert(atomic_load(&fixture.callbacks) == 0);
     assert(vlc_metadata_job_GetResult(value) == NULL);
+    assert(vlc_metadata_job_Start(value) == -EINTR);
+    assert(fixture.held_count == 0 && atomic_load(&fixture.cancels) == 0);
+    vlc_metadata_job_Release(value);
+    value = job(owner, &fixture);
     fixture.synchronous = true;
     assert(vlc_metadata_job_Start(value) == VLC_SUCCESS);
     assert(atomic_load(&fixture.callbacks) == 1);
