@@ -16,6 +16,8 @@ foreach vlc_test: vlc_tests
         'sources',
         'moc_headers',
         'moc_sources',
+        'moc_args',
+        'timeout',
         'suite',
         'link_with',
         'link_args',
@@ -76,6 +78,7 @@ foreach vlc_test: vlc_tests
         moc_sources += qt6.preprocess(
             moc_headers: vlc_test.get('moc_headers', []),
             moc_sources: vlc_test.get('moc_sources', []),
+            moc_extra_arguments: vlc_test.get('moc_args', []),
             include_directories: qt_include_dir,
             dependencies: qt6_dep)
     endif
@@ -102,6 +105,7 @@ foreach vlc_test: vlc_tests
                 test_wrapper,
                 args: [test_exe],
                 env: vlc_test.get('env', []),
+                timeout: vlc_test.get('timeout', 30),
                 suite: [vlc_test.get('suite', []), 'test'],
                 depends: [test_modules_deps])
         else
@@ -112,6 +116,7 @@ foreach vlc_test: vlc_tests
         test(vlc_test['name'],
             test_exe,
             env: vlc_test.get('env', []),
+            timeout: vlc_test.get('timeout', 30),
             suite: [vlc_test.get('suite', []), 'test'],
             depends: [test_modules_deps])
     endif

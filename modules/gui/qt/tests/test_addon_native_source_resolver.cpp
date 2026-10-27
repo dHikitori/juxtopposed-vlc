@@ -78,6 +78,7 @@ struct NativeJob {
 struct Fixture {
     struct State { std::atomic_bool enabled{true}; std::atomic_uint revision{1}; std::atomic_int admitted{0}; };
     QTemporaryDir profile;
+    AddonStreamLifetime lifetime;
     libvlc_int_t* instance = libvlc_InternalCreate();
     Binding binding{AddonSourceConsent::SourceKind::Git, QStringLiteral("https://example.org/radio.git"),
         QStringLiteral("org.example.radio/source"), QStringLiteral("account-1")};
@@ -113,8 +114,8 @@ struct Fixture {
     }
     Resolver::Backend backend() {
         const auto source=state; const auto records=admissions; const auto approvals=consent; const auto key=binding;
-        auto admission=admit;
-        if(!admission) admission=[source,records,approvals,key](const QString& uri, quint64 generation) -> std::optional<Resolver::Admission> {
+        auto admission=admit; const auto app=lifetime.handle();
+        if(!admission) admission=[source,records,approvals,key,app](const QString& uri, quint64 generation) -> std::optional<Resolver::Admission> {
             ++source->admitted; const auto ref = records->currentReference(uri); if (ref.isEmpty()) return {};
             auto value = key; value.accountReference = ref.value("accountReference").toString();
             const auto token = approvals->mintIntent(value, uri, generation, Reason::PrimaryPlayback);
@@ -123,11 +124,11 @@ struct Fixture {
             const auto captured = source->revision.load();
             return Resolver::Admission{approvals, *authorization,
                 [source, captured] { return source->revision.load() == captured; },
-                [source, captured] { return source->revision.load() == captured; }};
+                [source, captured] { return source->revision.load() == captured; },app};
         };
         return {std::move(admission), [this](const auto& admission, auto current, auto done) -> Resolver::Cancel {
             ++preparations; return prepare ? prepare(admission, std::move(current), std::move(done)) : Resolver::Cancel{};
-        }};
+        },app};
     }
     void create(Resolver::Limits limits = {}) { owner = std::make_unique<Resolver>(root(), backend(), limits); }
     void automatic(const QString& uri, const std::shared_ptr<Transport>& transport) {
@@ -140,6 +141,26 @@ class TestAddonNativeSourceResolver : public QObject
     Q_OBJECT
 private slots:
     void cleanup() { QTRY_COMPARE_WITH_TIMEOUT(Resolver::admissionWorkCount(),0u,5000); }
+    void anAppLifetimeIsRequiredBeforeNativeBinding() {
+        Fixture f; auto backend=f.backend(); backend.lifetime={};
+        Resolver missing(f.root(),std::move(backend)); QVERIFY(!missing.bound());
+        f.lifetime.close(); f.create(); QVERIFY(!f.owner->bound());
+    }
+    void appRetirementCancelsNativeWaitAndJoinsAdmission() {
+        struct Wait { QSemaphore release; std::atomic_bool entered{false}; };
+        const auto wait=std::make_shared<Wait>(); const auto release=qScopeGuard([wait] { wait->release.release(); });
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); const auto base=f.backend().admit;
+        f.admit=[base,wait](const QString& value,quint64 generation) {
+            auto result=base(value,generation); wait->entered=true; wait->release.acquire(); return result;
+        };
+        f.create(); NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_VERIFY(wait->entered.load());
+        QCOMPARE(f.lifetime.handle().qtWorkCount(),1u); f.lifetime.close();
+        QTRY_COMPARE(job.ended.load(),1); QCOMPARE(job.status.load(),-EINTR);
+        QVERIFY(!f.lifetime.handle().waitQt(std::chrono::milliseconds(5)));
+        QCOMPARE(Resolver::admissionWorkCount(),1u); QVERIFY(!f.owner->bound());
+        wait->release.release(); QVERIFY(f.lifetime.handle().waitQt(std::chrono::milliseconds(3000)));
+        QCOMPARE(Resolver::admissionWorkCount(),0u); QCoreApplication::sendPostedEvents(); QCOMPARE(f.preparations.load(),0);
+    }
     void savedAdmissionRunsOffTheOwnerThread() {
         Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); const auto base=f.backend().admit;
         const auto caller=std::this_thread::get_id(); const auto offThread=std::make_shared<std::atomic_bool>(false);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "addon_source_consent.hpp"
+#include "addon_stream_lifetime.hpp"
 #include <QByteArray>
 #include <QObject>
 #include <atomic>
@@ -31,6 +32,7 @@ public:
         Current configurationCurrent;
         // This check must use memory only. It must not wait for file access.
         Current configurationLive;
+        AddonStreamLifetime::Handle lifetime;
         bool current(const QString& uri, quint64 generation) const;
         bool authorize(const QString& uri, quint64 generation) const;
     };
@@ -62,13 +64,15 @@ public:
     struct Backend {
         // Only the registered native primary-playback path calls admit.
         // Consume an exact PrimaryPlayback intent after current admission checks.
-        // This callback runs on a background thread. Capture plain owned data.
+        // This callback runs as joined Qt work. Capture owned data.
         // Do not call a QObject or retain a raw Core instance here.
         std::function<std::optional<Admission>(const QString& uri, quint64 generation)> admit;
         // Check current after each asynchronous hop. It uses memory only.
         // Run admission.authorize on a background worker before each request.
         // Return a dormant transport. The resolver attaches it before startIo.
         std::function<Cancel(const Admission&, Current, PreparedCallback)> prepare;
+        // The app must drain this owner before it destroys Qt.
+        AddonStreamLifetime::Handle lifetime;
     };
     struct Limits { unsigned pending = 16, issued = 64; };
     AddonNativeSourceResolver(vlc_object_t* instance, Backend, QObject* parent = nullptr);

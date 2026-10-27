@@ -16,18 +16,19 @@ add_library(vlc_addon_host STATIC
     addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
     addon_visualizer_worker_runtime.cpp addon_visualizer_render_queue.cpp
     addon_repository_updates.cpp addon_playable_gate.cpp addon_artwork_assets.cpp addon_artwork_image.cpp addon_native_image_formats.hpp
-    addon_queue_transactions.cpp addon_discovery_service.cpp addon_player_discovery.cpp addon_source_admissions.cpp addon_source_consent.cpp addon_stream_manifest.cpp addon_websocket_codec.cpp)
+    addon_queue_transactions.cpp addon_discovery_service.cpp addon_player_discovery.cpp addon_source_admissions.cpp addon_source_consent.cpp addon_stream_manifest.cpp addon_websocket_codec.cpp
+    addon_stream_http.cpp addon_stream_policy.cpp addon_stream_sockets.cpp addon_stream_lifetime.cpp addon_stream_shutdown.cpp addon_stream_dns.cpp addon_stream_proxy.cpp)
 target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network Threads::Threads ZLIB::ZLIB)
 target_compile_definitions(vlc_addon_host PUBLIC QT_USE_QSTRINGBUILDER QT_NO_CAST_TO_ASCII QT_NO_CAST_FROM_BYTEARRAY QT_STRICT_ITERATORS)
 target_include_directories(vlc_addon_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
 if(WIN32)
-    target_link_libraries(vlc_addon_host PRIVATE Advapi32)
+    target_link_libraries(vlc_addon_host PRIVATE Advapi32 ws2_32)
 elseif(APPLE)
     target_link_libraries(vlc_addon_host PRIVATE "-framework Security")
 endif()
 add_executable(addon_visualizer_process "../tests/fixtures/addon_visualizer_process.c")
 set_target_properties(addon_visualizer_process PROPERTIES AUTOMOC OFF)
-foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest websocket_codec)
+foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest websocket_codec stream_http stream_proxy stream_shutdown)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
@@ -64,6 +65,7 @@ if(VLC_BUILD_DIR)
         addon_native_library_targets.cpp addon_native_library_targets.hpp
         addon_native_artwork_assets.cpp addon_native_artwork_assets.hpp
         addon_native_source_resolver.cpp addon_native_source_resolver.hpp
+        addon_stream_proxy_native.cpp addon_stream_proxy_native.hpp
         addon_native_player_analysis.cpp addon_native_player_analysis.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
@@ -85,6 +87,17 @@ if(VLC_BUILD_DIR)
     find_library(VLC_PUBLIC_LIBRARY NAMES vlc
         PATHS "${VLC_BUILD_DIR}/lib" "${VLC_BUILD_DIR}/lib/.libs" NO_DEFAULT_PATH REQUIRED)
     target_link_libraries(test_addon_native_artwork_assets PRIVATE "${VLC_PUBLIC_LIBRARY}")
+    add_executable(test_addon_stream_native "../tests/test_addon_stream_proxy.cpp")
+    target_compile_definitions(test_addon_stream_native PRIVATE VLC_ADDON_NATIVE_STREAM_TESTS HAVE_CONFIG_H VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
+    target_include_directories(test_addon_stream_native PRIVATE "${VLC_SOURCE_ROOT}")
+    target_link_libraries(test_addon_stream_native PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
+    add_test(NAME addon_stream_native COMMAND test_addon_stream_native
+        nativeHelperReplacesCallerAuthorityWithTheCapturedAdmission
+        corePlaybackDecodesPinnedTlsWaveAndReplaysTheSameStableItem
+        corePlaybackDecodesAnHlsSegmentThroughOpaqueRoutes
+        coreTeardownCancelsAReadWithoutNetworkOrGuiDelivery)
+    set_tests_properties(addon_stream_native PROPERTIES TIMEOUT 90)
+
     target_compile_definitions(test_addon_visualizer_worker_runtime PRIVATE VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
     foreach(name native_source_resolver native_player_analysis visualizer_clock)
         add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
@@ -118,3 +131,5 @@ if(VLC_BUILD_DIR)
 else()
     message(STATUS "Set VLC_BUILD_DIR to add native metadata tests and the provider probe.")
 endif()
+
+set_tests_properties(addon_stream_http addon_stream_proxy addon_stream_shutdown PROPERTIES TIMEOUT 90)

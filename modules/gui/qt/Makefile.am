@@ -150,6 +150,22 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_source_admissions.hpp \
 	addons/addon_stream_manifest.cpp \
 	addons/addon_stream_manifest.hpp \
+	addons/addon_stream_http.cpp \
+	addons/addon_stream_http.hpp \
+	addons/addon_stream_policy.cpp \
+	addons/addon_stream_policy.hpp \
+	addons/addon_stream_sockets.cpp \
+	addons/addon_stream_sockets.hpp \
+	addons/addon_stream_lifetime.cpp \
+	addons/addon_stream_lifetime.hpp \
+	addons/addon_stream_shutdown.cpp \
+	addons/addon_stream_shutdown.hpp \
+	addons/addon_stream_dns.cpp \
+	addons/addon_stream_dns.hpp \
+	addons/addon_stream_proxy.cpp \
+	addons/addon_stream_proxy.hpp \
+	addons/addon_stream_proxy_native.cpp \
+	addons/addon_stream_proxy_native.hpp \
 	addons/addon_websocket_codec.cpp \
 	addons/addon_websocket_codec.hpp \
 	addons/addon_source_consent.cpp \
@@ -243,7 +259,7 @@ libqt_addon_host_la_CXXFLAGS = $(libqt_plugin_la_CXXFLAGS)
 ADDON_PLATFORM_LIBS =
 ADDON_PLATFORM_LDFLAGS =
 if HAVE_WIN32
-ADDON_PLATFORM_LIBS += -ladvapi32
+ADDON_PLATFORM_LIBS += -ladvapi32 -lws2_32
 endif
 if HAVE_OSX
 ADDON_PLATFORM_LDFLAGS += -framework Security
@@ -2157,6 +2173,40 @@ endif
 
 if HAVE_QT_QTEST
 
+test_qt_addon_stream_http_SOURCES = tests/test_addon_stream_http.cpp
+nodist_test_qt_addon_stream_http_SOURCES = tests/test_addon_stream_http.moc
+BUILT_SOURCES += tests/test_addon_stream_http.moc
+CLEANFILES += tests/test_addon_stream_http.moc
+test_qt_addon_stream_http_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_stream_http_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_stream_http_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_stream_http_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_stream_http
+TESTS += test_qt_addon_stream_http
+
+test_qt_addon_stream_proxy_SOURCES = tests/test_addon_stream_proxy.cpp
+nodist_test_qt_addon_stream_proxy_SOURCES = tests/test_addon_stream_proxy.moc
+BUILT_SOURCES += tests/test_addon_stream_proxy.moc
+CLEANFILES += tests/test_addon_stream_proxy.moc
+test_qt_addon_stream_proxy_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_stream_proxy_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_stream_proxy_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_stream_proxy_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_stream_proxy
+TESTS += test_qt_addon_stream_proxy
+
+test_qt_addon_stream_shutdown_SOURCES = tests/test_addon_stream_shutdown.cpp
+nodist_test_qt_addon_stream_shutdown_SOURCES = tests/test_addon_stream_shutdown.moc
+BUILT_SOURCES += tests/test_addon_stream_shutdown.moc
+CLEANFILES += tests/test_addon_stream_shutdown.moc
+test_qt_addon_stream_shutdown_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_stream_shutdown_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_stream_shutdown_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_stream_shutdown_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_stream_shutdown
+TESTS += test_qt_addon_stream_shutdown
+
+
 test_qt_addon_packages_SOURCES = tests/test_addon_packages.cpp
 nodist_test_qt_addon_packages_SOURCES = tests/test_addon_packages.moc
 BUILT_SOURCES += tests/test_addon_packages.moc
@@ -3323,3 +3373,5 @@ EXTRA_DIST += $(addon_musicbrainz_DATA) $(addon_musicbrainz_dist_DATA) $(addon_l
 EXTRA_DIST += $(addon_french_tv_DATA) $(addon_french_tv_dist_DATA) $(addon_google_images_DATA) $(addon_google_images_dist_DATA)
 EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/test_addon_artwork_consumers.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp util/artwork_approval.hpp
 EXTRA_DIST += tests/build_addon_native_library_tests.py tests/test_addon_native_library_store.cpp
+
+EXTRA_DIST += tests/stream-proxy/CMakeLists.txt
