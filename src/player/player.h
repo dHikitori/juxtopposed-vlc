@@ -151,6 +151,7 @@ struct vlc_player_metadata_listener_id
     void *cbs_data;
 
     enum vlc_player_metadata_option option;
+    audio_output_t *samples_aout;
     union
     {
         vlc_audio_meter_plugin *audio_meter;

@@ -49,6 +49,7 @@ check_PROGRAMS = \
     test_src_input_addon_source \
     test_src_input_addon_source_playback \
     test_src_misc_medialibrary_work \
+    test_src_player_audio_samples_lifecycle \
     test_src_input_source_owner \
     test_src_misc_media_library_startup \
 	test_src_misc_iso_language \
@@ -298,6 +299,9 @@ test_src_input_addon_source_playback_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_misc_medialibrary_work_SOURCES = src/misc/medialibrary_work.c
 test_src_misc_medialibrary_work_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+test_src_player_audio_samples_lifecycle_SOURCES = src/player/audio_samples_lifecycle.c
+test_src_player_audio_samples_lifecycle_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_input_source_owner_SOURCES = src/input/source_owner.c
 test_src_input_source_owner_LDADD = $(LIBVLCCORE)

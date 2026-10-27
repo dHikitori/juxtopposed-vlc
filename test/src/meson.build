@@ -122,6 +122,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_player_audio_samples_lifecycle',
+    'sources': files('player/audio_samples_lifecycle.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_misc_file_logger',
     'sources': files('misc/file_logger.c'),
     'suite': ['src', 'test_src'],
