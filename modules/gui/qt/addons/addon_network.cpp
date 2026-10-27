@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_network.hpp"
+#include "addon_public_network_policy.hpp"
 #include <QHostInfo>
 #include <QJsonArray>
 #include <QNetworkProxy>
@@ -109,31 +110,7 @@ NetworkBroker::~NetworkBroker()
 }
 
 bool NetworkBroker::publicAddress(const QHostAddress& address)
-{
-    if (address.isNull() || address.isLoopback() || address.isMulticast()) return false;
-    if (address.protocol() == QAbstractSocket::IPv4Protocol) {
-        const quint32 ip = address.toIPv4Address();
-        const QList<QPair<quint32, int>> excluded = {
-            {0x00000000,8}, {0x0a000000,8}, {0x64400000,10}, {0x7f000000,8},
-            {0xa9fe0000,16}, {0xac100000,12}, {0xc0000000,24}, {0xc0000200,24},
-            {0xc0a80000,16}, {0xc6120000,15}, {0xc6336400,24}, {0xcb007100,24},
-            {0xe0000000,4}, {0xf0000000,4}
-        };
-        for (const auto& range : excluded) {
-            const quint32 mask = 0xffffffffu << (32 - range.second);
-            if ((ip & mask) == range.first) return false;
-        }
-        return true;
-    }
-    if (address.protocol() != QAbstractSocket::IPv6Protocol) return false;
-    // Only global unicast. This excludes mapped IPv4, link-local, ULA,
-    // unspecified, multicast and special transition ranges.
-    if (!address.isInSubnet(QHostAddress(QStringLiteral("2000::")), 3)) return false;
-    if (address.isInSubnet(QHostAddress(QStringLiteral("2001::")), 23)
-        || address.isInSubnet(QHostAddress(QStringLiteral("2001:db8::")), 32)
-        || address.isInSubnet(QHostAddress(QStringLiteral("2002::")), 16)) return false;
-    return true;
-}
+{ return AddonPublicNetworkPolicy::address(address); }
 
 bool NetworkBroker::permittedUrl(const Manifest& manifest, const QJsonObject& grants, const QUrl& url)
 {

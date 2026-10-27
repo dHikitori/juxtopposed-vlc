@@ -126,6 +126,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_manager.hpp \
 	addons/addon_network.cpp \
 	addons/addon_network.hpp \
+	addons/addon_public_network_policy.cpp \
+	addons/addon_public_network_policy.hpp \
 	addons/addon_worker.cpp \
 	addons/addon_worker.hpp \
 	addons/addon_metadata_coordinator.cpp \
