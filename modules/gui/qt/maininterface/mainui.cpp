@@ -77,6 +77,8 @@
 #include "addon_distribution_paths.hpp"
 #include "addons/addon_theme_service.hpp"
 #include "addons/addon_ui_registry.hpp"
+#include "addons/addon_ui_assets.hpp"
+#include "addons/addon_asset_image_provider.hpp"
 #include "addons/addon_player_visualizers.hpp"
 #include "addons/addon_visualizer_surface.hpp"
 #include "addons/addon_discovery_service.hpp"
@@ -199,6 +201,8 @@ bool MainUI::setup(QQmlEngine* engine)
     engine->rootContext()->setContextProperty(QStringLiteral("redesignAppearance"), m_mainCtx);
     engine->rootContext()->setContextProperty(QStringLiteral("redesignThemeService"), vlc::addons::AddonThemeService::instance());
     engine->rootContext()->setContextProperty(QStringLiteral("redesignAddonUi"), findChild<vlc::addons::AddonUiRegistry*>());
+    if (auto* assets = findChild<vlc::addons::AddonUiAssets*>())
+        engine->addImageProvider(QStringLiteral("addonassets"), new vlc::addons::AddonAssetImageProvider(assets));
     engine->rootContext()->setContextProperty(QStringLiteral("redesignDiscoveryService"), findChild<vlc::addons::AddonDiscoveryService*>());
     engine->addImageProvider(QStringLiteral("vlcaccess"), new VLCAccessImageProvider());
     engine->addImageProvider(QStringLiteral("seekpreview"), new SeekPreviewImageProvider());
@@ -392,6 +396,8 @@ void MainUI::registerQMLTypes()
             connect(m_mainCtx, &MainCtx::redesignPlayerPreferencesChanged, themes, updateThemeAccent);
             qmlRegisterSingletonInstance<vlc::addons::AddonThemeService>(uri, versionMajor, versionMinor, "AddonThemes", themes);
             auto* addonUi = new vlc::addons::AddonUiRegistry(addonManager, this);
+            auto* uiAssets = new vlc::addons::AddonUiAssets(addonManager, this);
+            addonUi->setAssetService(uiAssets);
             qmlRegisterSingletonInstance<vlc::addons::AddonUiRegistry>(uri, versionMajor, versionMinor, "AddonUiRegistry", addonUi);
             auto* visualizers = vlc::addons::createPlayerVisualizers(addonManager, m_intf->p_mainPlayerController, this);
             qmlRegisterSingletonInstance<vlc::addons::AddonVisualizers>(uri, versionMajor, versionMinor, "AddonVisualizers", visualizers);

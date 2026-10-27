@@ -11,6 +11,8 @@ Item {
     property var registeredCommands: []
     // Supplied by the host asset broker, never by a package document/state patch.
     property var assetUrls: ({})
+    property var registry: null
+    property string sessionId: ""
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
@@ -42,7 +44,13 @@ Item {
     function assetFor(handle) {
         if (typeof handle !== "string" || !Contract.own(assetUrls, handle)) return ""
         const url = String(assetUrls[handle])
-        return /^(?:image:\/\/addonassets\/|qrc:\/|file:\/\/\/)/.test(url) ? url : ""
+        return /^image:\/\/addonassets\/[A-Za-z0-9_-]{1,96}$/.test(url) ? url : ""
+    }
+    function claimedAssetFor(handle, claim) {
+        const base = assetFor(handle)
+        if (!base.length || typeof claim !== "string" || !claim.length || !registry || typeof registry.assetUrlForClaim !== "function") return ""
+        const url = registry.assetUrlForClaim(sessionId, handle, claim)
+        return url === base + "/" + claim && /^[A-Za-z0-9_-]{1,96}$/.test(claim) ? url : ""
     }
     function dispatch(action, item) {
         if (!valid || Contract.actionError(action, registeredCommands)) return

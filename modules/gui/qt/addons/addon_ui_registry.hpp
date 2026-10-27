@@ -6,6 +6,7 @@
 #include <functional>
 
 namespace vlc::addons {
+class AddonUiAssets;
 // The registry names surfaces and commands; package data never names Qt objects.
 class AddonUiRegistry : public QObject
 {
@@ -22,6 +23,7 @@ public:
     explicit AddonUiRegistry(AddonManager*, QObject* parent = nullptr);
     AddonUiRegistry(AddonManager*, Backend, QObject* parent = nullptr);
     ~AddonUiRegistry() override;
+    void setAssetService(AddonUiAssets*);
     int revision() const { return m_revision; }
     QString errorMessage() const { return m_error; }
     QVariantList routes() const;
@@ -47,6 +49,10 @@ public:
     Q_INVOKABLE void cancelModal(const QString& ticket);
     Q_INVOKABLE bool canUseSelection(const QString& contributionId, const QString& hook) const;
     Q_INVOKABLE bool validateSessionResult(const QString& sessionId, const QVariantMap& result) const;
+    Q_INVOKABLE bool bindSessionOwner(const QString& sessionId, QObject* owner);
+    Q_INVOKABLE QString claimImage(const QString& sessionId, QObject* owner);
+    Q_INVOKABLE void releaseImage(const QString& claim);
+    Q_INVOKABLE QString assetUrlForClaim(const QString& sessionId, const QString& alias, const QString& claim) const;
     static bool validViewDocument(const QJsonObject&);
 public slots:
     void operationFinished(const QString& request, const QString& contribution, const QString& status, const QVariantMap& data, const QString& error);
@@ -60,8 +66,14 @@ signals:
     void replacementFinished(const QString& ticket, bool success);
     void modalSessionRequested(const QString& ticket, const QString& contribution, const QVariantMap& parameters);
     void modalFinished(const QString& ticket, bool accepted, const QVariantMap& result);
+    void imageBudgetChanged();
 private:
-    struct Session { QString contribution; QVariantMap descriptor, parameters, context; quint64 generation = 0; bool suspended = false; };
+    struct Session {
+        QString contribution; QVariantMap descriptor, parameters, context;
+        quint64 generation = 0; bool suspended = false;
+        QPointer<QObject> owner = nullptr;
+        QMetaObject::Connection ownerDestroyed{};
+    };
     struct Pending { QString command, session, replacement; quint64 generation = 0; };
     bool dispatch(const QString& command, const QVariantMap& arguments, const QString& session, const QString& replacement);
     QVariantMap projectContext(const QVariantMap& entry, const QVariantMap& context) const;
@@ -71,6 +83,7 @@ private:
     static bool replaceable(const QString& hook);
     static bool parametersValid(const QVariantMap&, const QJsonObject& schema);
     QPointer<AddonManager> m_manager;
+    QPointer<AddonUiAssets> m_assets;
     QMap<QString, QVariantMap> m_entries;
     QJsonObject m_selected;
     QSet<QString> m_failed;

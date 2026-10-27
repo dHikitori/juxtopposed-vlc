@@ -10,6 +10,7 @@
 
 namespace vlc::addons {
 class AddonStorage;
+struct UiAssetCapture;
 class AddonManager : public QObject
 {
     Q_OBJECT
@@ -32,6 +33,7 @@ public:
     QVariantList contributionsOfType(const QString& type, bool includeDisabled = false) const;
     QJsonObject contributionResource(const QString& globalId, const QString& resourceField) const;
     QByteArray contributionFile(const QString& globalId, const QString& path, qint64 maximumBytes) const;
+    std::function<UiAssetCapture()> uiAssetReader(const QString& globalId) const;
     QJsonObject grantedScope(const QString& packageId, const QString& capability) const;
     bool credentialPersistenceAvailable() const { return CredentialStore::persistentAvailable(); }
     bool busy() const { return m_repositoryThread != nullptr; }

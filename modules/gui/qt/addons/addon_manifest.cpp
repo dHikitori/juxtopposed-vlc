@@ -305,7 +305,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     for (const auto& value : root.value("contributions").toArray()) {
         if (!value.isObject()) return fail(error, QStringLiteral("The contribution is not correct."));
         Contribution contribution; contribution.document = value.toObject(); const auto item = contribution.document;
-        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "qualityTiers", "analysisChannels", "extensions"}, error, "contribution")
+        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "qualityTiers", "analysisChannels", "assets", "extensions"}, error, "contribution")
             || !text(item,"id",&contribution.id,error) || !text(item,"type",&contribution.type,error) || !text(item,"contract",&contribution.contract,error)) return false;
         if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9.-]{0,63}$")).match(contribution.id).hasMatch() || identifiers.contains(contribution.id)
             || !types.contains(contribution.type)) return fail(error, QStringLiteral("A contribution ID or type is not correct or occurs more than once."));
@@ -327,6 +327,20 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
         }
         for (const auto& key : {QStringLiteral("resource"), QStringLiteral("view"), QStringLiteral("theme"), QStringLiteral("scene"), QStringLiteral("icon")})
             if (item.contains(key) && (!item.value(key).isString() || !requiredResource(item.value(key).toString(),result.files,error))) return false;
+        if (item.contains("assets")) {
+            if (!QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement"}.contains(contribution.type)
+                || !item.value("assets").isObject() || item.value("assets").toObject().size() > 64)
+                return fail(error, QStringLiteral("The UI image map is not correct."));
+            static const QRegularExpression assetId(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}$"));
+            const auto assets = item.value("assets").toObject();
+            for (auto asset = assets.begin(); asset != assets.end(); ++asset) {
+                const auto declaration = asset.value().toObject(); const auto path = declaration.value("path").toString();
+                if (!assetId.match(asset.key()).hasMatch() || QStringList{"__proto__", "prototype", "constructor"}.contains(asset.key())
+                    || !asset.value().isObject() || declaration.size() != 1 || !declaration.value("path").isString() || path.isEmpty()
+                    || !requiredResource(path, result.files, error) || !QStringList{"png", "jpg", "jpeg", "webp"}.contains(QFileInfo(path).suffix().toLower()))
+                    return fail(error, QStringLiteral("A UI image declaration is not correct."));
+            }
+        }
         if ((contribution.type == QStringLiteral("metadata.provider") || contribution.type == QStringLiteral("discovery.source") || contribution.type == QStringLiteral("session.controller")) && result.runtimeEntry.isEmpty())
             return fail(error, QStringLiteral("The executable contribution needs a runtime."));
         result.contributions.append(contribution);
@@ -407,6 +421,15 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
         data.insert(path,bytes);
     }
     // Validate secret-binding declarations against the protected input schema.
+    for (const auto& contribution : manifest.contributions) {
+        qint64 images = 0;
+        const auto assets = contribution.document.value(QStringLiteral("assets")).toObject();
+        for (const auto& value : assets) {
+            const auto bytes = data.value(value.toObject().value(QStringLiteral("path")).toString());
+            if (bytes.isEmpty() || bytes.size() > 1024 * 1024 || (images += bytes.size()) > 8 * 1024 * 1024)
+                return fail(error, QStringLiteral("The UI images exceed the byte limit or an image is empty."));
+        }
+    }
     if (!manifest.settingsSchema.isEmpty()) {
         QJsonParseError schemaError;
         const auto schema = QJsonDocument::fromJson(data.value(manifest.settingsSchema),&schemaError);

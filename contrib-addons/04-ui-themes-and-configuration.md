@@ -108,7 +108,7 @@ Keyboard shortcuts are assigned by the host shortcut editor with conflict detect
 
 ## Theme contract
 
-A theme is a declarative `theme` contribution with no executable logic or network access. It contains light/dark variants, semantic palette overrides and constrained shape/effect tokens. Optional assets use validated PNG/WebP or a restricted static vector subset decoded through host asset services. No scripts, external URLs, arbitrary fonts, QML or arbitrary shaders.
+A theme is a declarative `theme` contribution with no executable logic or network access. It contains light/dark variants, semantic palette overrides, and constrained shape/effect tokens. Themes contain tokens only. Static raster images belong to a UI contribution's [asset map](sdk/static-ui-images.md). A theme cannot supply images, scripts, external URLs, fonts, QML, or shaders.
 
 Example partial theme, merged with required host defaults:
 

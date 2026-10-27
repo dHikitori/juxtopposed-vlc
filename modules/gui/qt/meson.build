@@ -24,6 +24,8 @@ addon_host_sources = files(
     'addons/addon_metadata_coordinator.hpp',
     'addons/addon_ui_registry.cpp',
     'addons/addon_ui_registry.hpp',
+    'addons/addon_ui_assets.cpp',
+    'addons/addon_ui_assets.hpp',
     'addons/addon_metadata_service.cpp',
     'addons/addon_metadata_service.hpp',
     'addons/addon_discovery_coordinator.cpp',
@@ -69,6 +71,7 @@ addon_host_moc_headers = files(
     'addons/addon_worker.hpp',
     'addons/addon_metadata_coordinator.hpp',
     'addons/addon_ui_registry.hpp',
+    'addons/addon_ui_assets.hpp',
     'addons/addon_metadata_service.hpp',
     'addons/addon_discovery_coordinator.hpp',
     'addons/addon_queue_transactions.hpp',
@@ -426,6 +429,8 @@ qt_plugin_sources = files(
     'maininterface/mainctx_submodels.cpp',
     'maininterface/mainctx_submodels.hpp',
     'maininterface/mainui.cpp',
+    'addons/addon_asset_image_provider.cpp',
+    'addons/addon_asset_image_provider.hpp',
     'maininterface/mainui.hpp',
     'maininterface/navigationmodel.cpp',
     'maininterface/navigationmodel.hpp',
@@ -958,6 +963,7 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonSelection.qml',
        'player/qml/redesign/RedesignAddonRecovery.qml',
        'player/qml/redesign/RedesignAddonNode.qml',
+       'player/qml/redesign/RedesignAddonAssetImage.qml',
        'player/qml/redesign/RedesignAddonProviders.qml',
        'player/qml/redesign/RedesignAddonSettings.qml',
        'player/qml/redesign/RedesignAddonSettingsDialog.qml',
@@ -1768,6 +1774,18 @@ if qt6_dep.found()
                 'env': addon_worker_environment,
             }
         endforeach
+        vlc_tests += {
+            'name': 'test_qt_addon_ui_assets',
+            'sources': files('tests/test_addon_ui_assets.cpp', 'addons/addon_asset_image_provider.cpp'),
+            'moc_sources': files('tests/test_addon_ui_assets.cpp'),
+            'link_with': [addon_host_library, libvlccore],
+            'suite': ['qt', 'addons'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"'],
+            'link_args': qt_link_args,
+            'env': ['QT_QPA_PLATFORM=offscreen', 'QT_QUICK_BACKEND=software'],
+        }
         vlc_tests += {
             'name': 'test_qt_addon_native_queue_store',
             'sources': files('tests/test_addon_native_queue_store.cpp'),

@@ -17,6 +17,7 @@ public:
     QByteArray read(const QString& packageId, const QString& reference) const;
     bool present(const QString& packageId, const QString& reference) const;
     bool sessionOnly(const QString& reference) const;
+    QHash<QString, QHash<QString, bool>> presenceSnapshot() const;
     void remove(const QString& packageId, const QString& reference);
     void clearSession();
 private:

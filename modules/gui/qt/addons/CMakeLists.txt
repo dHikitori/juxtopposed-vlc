@@ -9,7 +9,7 @@ enable_testing()
 get_filename_component(VLC_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
 add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_credentials.cpp
-    addon_network.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp
+    addon_network.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
     addon_visual_scene.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_repository_updates.cpp addon_playable_gate.cpp addon_artwork_assets.cpp
@@ -28,6 +28,14 @@ foreach(name packages runtime metadata broker ui_registry discovery theme sessio
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
     add_test(NAME addon_${name} COMMAND test_addon_${name})
 endforeach()
+find_package(Qt6 6.2 QUIET COMPONENTS Quick Qml)
+if(TARGET Qt6::Quick AND TARGET Qt6::Qml)
+    add_executable(test_addon_ui_assets "../tests/test_addon_ui_assets.cpp" addon_asset_image_provider.cpp)
+    target_link_libraries(test_addon_ui_assets PRIVATE vlc_addon_host Qt6::Quick Qt6::Qml Qt6::Test)
+    target_compile_definitions(test_addon_ui_assets PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
+    add_test(NAME addon_ui_assets COMMAND test_addon_ui_assets)
+    set_tests_properties(addon_ui_assets PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+endif()
 set(VLC_BUILD_DIR "" CACHE PATH "VLC build directory for native metadata tests.")
 if(VLC_BUILD_DIR)
     if(NOT EXISTS "${VLC_BUILD_DIR}/config.h")

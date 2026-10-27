@@ -11,61 +11,72 @@ Item {
     property color accentColor: "#d37918"
     property bool lightTheme: false
     property string sessionId: ""
+    property var sessionRegistry: null
     property var descriptor: ({})
     property bool ready: false
     readonly property bool usable: sessionId.length > 0 && view.valid
-    onUsableChanged: if (usable && registry) registry.acknowledgeSession(sessionId)
+    onUsableChanged: if (usable && sessionRegistry) sessionRegistry.acknowledgeSession(sessionId)
     implicitHeight: usable ? view.implicitHeight : 0
     signal failed()
 
     function release() {
-        if (registry && sessionId.length) registry.closeSession(sessionId)
-        sessionId = ""; descriptor = ({})
+        const backend = sessionRegistry, old = sessionId
+        sessionId = ""; descriptor = ({}); sessionRegistry = null
+        if (backend && old.length) backend.closeSession(old)
     }
     function restart() {
         if (!ready) return
         release()
         if (!registry || !contributionId.length) return
-        sessionId = registry.createSession(contributionId, parameters, hostContext)
-        if (!sessionId.length) { descriptor = ({}); failed(); return }
-        descriptor = sessionId.length ? registry.session(sessionId) : ({})
-        if (!visible && sessionId.length) registry.suspendSession(sessionId, true)
+        sessionRegistry = registry
+        sessionId = sessionRegistry.createSession(contributionId, parameters, hostContext)
+        if (!sessionId.length) { descriptor = ({}); sessionRegistry = null; failed(); return }
+        if (typeof sessionRegistry.bindSessionOwner === "function" && !sessionRegistry.bindSessionOwner(sessionId, root)) { fail(); return }
+        if (!loadDescriptor()) return
+        if (!visible) sessionRegistry.suspendSession(sessionId, true)
+    }
+    function loadDescriptor() {
+        // Convert native value lists to JSON arrays before renderer validation.
+        try { descriptor = JSON.parse(JSON.stringify(sessionRegistry.session(sessionId))); return true }
+        catch (error) { fail(); return false }
     }
     function fail() {
         if (!sessionId.length) return
-        const id = contributionId
+        const id = contributionId, backend = sessionRegistry
         release()
         failed()
-        if (registry) registry.reportViewFailure(id)
+        if (backend) backend.reportViewFailure(id)
     }
     onContributionIdChanged: restartTimer.restart()
     onParametersChanged: restartTimer.restart()
     onHostContextChanged: restartTimer.restart()
     onRegistryChanged: restartTimer.restart()
-    onVisibleChanged: if (registry && sessionId.length) {
-        registry.suspendSession(sessionId, !visible)
-        if (visible && usable) registry.acknowledgeSession(sessionId)
+    onVisibleChanged: if (sessionRegistry && sessionId.length) {
+        sessionRegistry.suspendSession(sessionId, !visible)
+        if (visible && usable) sessionRegistry.acknowledgeSession(sessionId)
     }
     Component.onCompleted: { ready = true; restart() }
     Component.onDestruction: release()
     Timer { id: restartTimer; interval: 0; onTriggered: root.restart() }
     Connections {
-        target: root.registry
+        target: root.sessionRegistry || root.registry
         function onChanged() { restartTimer.restart() }
-        function onSessionChanged(id) { if (id === root.sessionId) root.descriptor = root.registry.session(id) }
+        function onSessionChanged(id) { if (id === root.sessionId && root.sessionRegistry) root.loadDescriptor() }
         function onSessionFailed(id) { if (id === root.sessionId) root.fail() }
     }
     RedesignAddonView {
         id: view
+        objectName: "addonUiRenderer"
         width: parent.width; height: implicitHeight
         document: root.descriptor.document || null
         state: root.descriptor.state || ({})
         messages: root.descriptor.messages || ({})
         registeredCommands: root.descriptor.registeredCommands || []
         assetUrls: root.descriptor.assetUrls || ({})
+        registry: root.sessionRegistry; sessionId: root.sessionId
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         onCommandRequested: (command, arguments) => {
-            if (!root.registry.dispatchSession(root.sessionId, command, arguments)) root.fail()
+            if (!root.sessionRegistry || !root.sessionRegistry.dispatchSession(root.sessionId, command, arguments)) root.fail()
         }
         onErrorMessageChanged: if (errorMessage.length) failureTimer.start()
     }

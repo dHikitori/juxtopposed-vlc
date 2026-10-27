@@ -78,6 +78,8 @@ A binding is one property path. It starts with `state.` or `item.`. Each path pa
 
 An artwork value is a host asset handle. A package URL or file path does not become an image source. The host must resolve the handle through its asset service.
 
+For packaged images, declare the contribution's `assets` map and use an `asset:` alias. See [Static UI images](static-ui-images.md) for the resource schema, format limits, and session rules.
+
 ## Commands
 
 An action has a `command` and optional `arguments`. The command must be in the host command registry for the package. Its identifier has the form `package.id/command-id`. Arguments can contain JSON data and the value bindings above.

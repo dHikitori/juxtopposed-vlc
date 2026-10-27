@@ -130,6 +130,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_metadata_coordinator.hpp \
 	addons/addon_ui_registry.cpp \
 	addons/addon_ui_registry.hpp \
+	addons/addon_ui_assets.cpp \
+	addons/addon_ui_assets.hpp \
 	addons/addon_metadata_service.cpp \
 	addons/addon_metadata_service.hpp \
 	addons/addon_discovery_coordinator.cpp \
@@ -174,6 +176,7 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_worker.moc.cpp \
 	addons/addon_metadata_coordinator.moc.cpp \
 	addons/addon_ui_registry.moc.cpp \
+	addons/addon_ui_assets.moc.cpp \
 	addons/addon_metadata_service.moc.cpp \
 	addons/addon_discovery_coordinator.moc.cpp \
 	addons/addon_queue_transactions.moc.cpp \
@@ -313,6 +316,8 @@ libqt_plugin_la_SOURCES = \
 	maininterface/window_csd_geometry.hpp \
 	maininterface/mainctx_submodels.cpp maininterface/mainctx_submodels.hpp \
 	maininterface/mainui.cpp \
+	addons/addon_asset_image_provider.cpp \
+	addons/addon_asset_image_provider.hpp \
 	maininterface/mainui.hpp \
 	maininterface/navigationmodel.cpp maininterface/navigationmodel.hpp \
 	maininterface/videobackdrop.cpp maininterface/videobackdrop.hpp \
@@ -1432,6 +1437,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonSelection.qml \
 	player/qml/redesign/RedesignAddonRecovery.qml \
 	player/qml/redesign/RedesignAddonNode.qml \
+	player/qml/redesign/RedesignAddonAssetImage.qml \
 	player/qml/redesign/RedesignAddonProviders.qml \
 	player/qml/redesign/RedesignAddonSettings.qml \
 	player/qml/redesign/RedesignAddonSettingsDialog.qml \
@@ -2164,6 +2170,18 @@ test_qt_addon_ui_registry_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $
 test_qt_addon_ui_registry_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_ui_registry
 TESTS += test_qt_addon_ui_registry
+
+test_qt_addon_ui_assets_SOURCES = tests/test_addon_ui_assets.cpp tests/addon_ui_asset_io_probe.hpp addons/addon_asset_image_provider.cpp addons/addon_asset_image_provider.hpp
+nodist_test_qt_addon_ui_assets_SOURCES = tests/test_addon_ui_assets.moc
+BUILT_SOURCES += tests/test_addon_ui_assets.moc
+CLEANFILES += tests/test_addon_ui_assets.moc
+test_qt_addon_ui_assets_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_ui_assets_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_ui_assets_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_ui_assets_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_ui_assets
+TESTS += test_qt_addon_ui_assets
+
 
 test_qt_addon_metadata_service_SOURCES = tests/test_addon_metadata_service.cpp
 nodist_test_qt_addon_metadata_service_SOURCES = tests/test_addon_metadata_service.moc

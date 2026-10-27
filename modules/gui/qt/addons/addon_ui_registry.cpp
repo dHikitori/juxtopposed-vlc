@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_ui_registry.hpp"
+#include "addon_ui_assets.hpp"
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -65,7 +66,43 @@ AddonUiRegistry::AddonUiRegistry(AddonManager* manager, Backend backend, QObject
     reload();
 }
 AddonUiRegistry::~AddonUiRegistry()
-{ for (const auto& request : m_runningCommands.keys()) m_backend.cancel(request); }
+{
+    for (const auto& session : m_sessions) disconnect(session.ownerDestroyed);
+    if (m_assets) {
+        disconnect(m_assets, nullptr, this, nullptr);
+        for (const auto& session : m_sessions.keys()) m_assets->closeSession(session, false);
+    }
+    for (const auto& request : m_runningCommands.keys()) m_backend.cancel(request);
+}
+void AddonUiRegistry::setAssetService(AddonUiAssets* assets)
+{
+    QPointer<AddonUiRegistry> guard(this);
+    if (m_assets == assets) return;
+    if (m_assets) disconnect(m_assets, nullptr, this, nullptr);
+    const auto sessions = m_sessions.keys();
+    if (m_assets) for (const auto& session : sessions) m_assets->closeSession(session, false);
+    m_assets = assets;
+    if (assets) {
+        connect(assets, &AddonUiAssets::imageBudgetChanged, this, &AddonUiRegistry::imageBudgetChanged);
+        connect(assets, &AddonUiAssets::sessionAssetsChanged, this, [this](const QString& id) {
+            auto session = m_sessions.find(id); if (session == m_sessions.end()) return;
+            session->descriptor.insert(QStringLiteral("assetUrls"), m_assets ? m_assets->sessionAssets(id) : QVariantMap{});
+            emit sessionChanged(id);
+        });
+        connect(assets, &QObject::destroyed, this, [this] {
+            const auto ids = m_sessions.keys(); QPointer<AddonUiRegistry> guard(this);
+            for (const auto& id : ids) {
+                if (!m_sessions.contains(id)) continue;
+                m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"), QVariantMap{}); emit sessionChanged(id); if (!guard) return;
+            }
+        });
+    }
+    for (const auto& id : sessions) {
+        if (m_assets) m_assets->openSession(id, m_sessions.value(id).contribution);
+        if (!guard) return;
+        if (m_sessions.contains(id)) m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"), m_assets ? m_assets->sessionAssets(id) : QVariantMap{});
+    }
+}
 void AddonUiRegistry::reload()
 {
     const auto sessions = m_sessions.keys();
@@ -307,7 +344,42 @@ QString AddonUiRegistry::createSession(const QString& id, const QVariantMap& par
     state.insert(QStringLiteral("parameters"), parameters); state.insert(QStringLiteral("context"), session.context);
     session.descriptor.insert(QStringLiteral("state"), state);
     m_sessions.insert(key, session);
+    if (m_assets) {
+        QPointer<AddonUiRegistry> guard(this); m_assets->openSession(key, id);
+        if (!guard) return {};
+        if (m_sessions.contains(key)) m_sessions[key].descriptor.insert(QStringLiteral("assetUrls"), m_assets ? m_assets->sessionAssets(key) : QVariantMap{});
+    }
     return key;
+}
+bool AddonUiRegistry::bindSessionOwner(const QString& id, QObject* owner)
+{
+    auto session = m_sessions.find(id);
+    if (session == m_sessions.end() || !owner || (session->owner && session->owner != owner)) return false;
+    if (!session->owner) {
+        session->owner = owner;
+        session->ownerDestroyed = connect(owner, &QObject::destroyed, this, [this, id] { closeSession(id); });
+    }
+    return true;
+}
+QString AddonUiRegistry::claimImage(const QString& id, QObject* owner)
+{
+    const auto session = m_sessions.constFind(id);
+    if (!m_assets || session == m_sessions.cend() || session->suspended || !session->owner || !owner || owner == session->owner) return {};
+    QObject* parent = owner; QSet<QObject*> visited;
+    for (int depth = 0; parent && depth < 128 && !visited.contains(parent); ++depth) {
+        if (parent == session->owner) return m_assets->claimImage(id, owner);
+        visited.insert(parent);
+        const auto visual = parent->inherits("QQuickItem") ? parent->property("parent").value<QObject*>() : nullptr;
+        parent = visual ? visual : parent->parent();
+    }
+    return {};
+}
+void AddonUiRegistry::releaseImage(const QString& claim)
+{ if (m_assets) m_assets->releaseImage(claim); }
+QString AddonUiRegistry::assetUrlForClaim(const QString& id, const QString& alias, const QString& claim) const
+{
+    const auto session = m_sessions.constFind(id);
+    return m_assets && session != m_sessions.cend() && !session->suspended && session->owner ? m_assets->assetUrlForClaim(id, alias, claim) : QString{};
 }
 QVariantMap AddonUiRegistry::session(const QString& id) const
 { return m_sessions.contains(id) ? m_sessions.value(id).descriptor : QVariantMap{}; }
@@ -322,18 +394,26 @@ bool AddonUiRegistry::dispatchSession(const QString& id, const QString& command,
 void AddonUiRegistry::cancelSessionJobs(const QString& id)
 {
     const auto requests = m_runningCommands.keys();
+    const auto cancel = m_backend.cancel; QPointer<AddonUiRegistry> guard(this);
     for (const auto& request : requests) if (m_runningCommands.value(request).session == id) {
-        m_runningCommands.remove(request); m_backend.cancel(request);
+        m_runningCommands.remove(request); cancel(request); if (!guard) return;
     }
 }
 void AddonUiRegistry::suspendSession(const QString& id, bool suspended)
 {
     auto it = m_sessions.find(id); if (it == m_sessions.end() || it->suspended == suspended) return;
     it->suspended = suspended; it->generation = ++m_generation;
-    if (suspended) cancelSessionJobs(id);
+    QPointer<AddonUiRegistry> guard(this);
+    if (m_assets) m_assets->suspendSession(id, suspended);
+    if (guard && suspended) cancelSessionJobs(id);
 }
 void AddonUiRegistry::closeSession(const QString& id)
-{ m_sessions.remove(id); cancelSessionJobs(id); }
+{
+    const auto session = m_sessions.constFind(id); if (session != m_sessions.cend()) disconnect(session->ownerDestroyed);
+    m_sessions.remove(id); QPointer<AddonUiRegistry> guard(this);
+    if (m_assets) m_assets->closeSession(id);
+    if (guard) cancelSessionJobs(id);
+}
 QString AddonUiRegistry::executeReplacement(const QString& hook, const QVariantMap& arguments)
 {
     if (hook != QLatin1String("actions.subtitles.open@1")) return {};

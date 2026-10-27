@@ -76,6 +76,13 @@ bool CredentialStore::present(const QString& package, const QString& reference) 
 { return !read(package, reference).isEmpty(); }
 bool CredentialStore::sessionOnly(const QString& reference) const
 { const auto it = m_session.constFind(reference); return it != m_session.cend() && !it->persistent; }
+QHash<QString, QHash<QString, bool>> CredentialStore::presenceSnapshot() const
+{
+    QHash<QString, QHash<QString, bool>> result;
+    for (auto it = m_session.cbegin(); it != m_session.cend(); ++it)
+        result[it->packageId].insert(it.key(), !it->value.isEmpty());
+    return result;
+}
 void CredentialStore::remove(const QString& package, const QString& reference)
 {
     if (!validReference(reference)) return;

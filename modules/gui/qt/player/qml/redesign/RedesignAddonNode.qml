@@ -111,10 +111,9 @@ Item {
         Item {
             implicitHeight: root.theme.dp(160)
             Accessible.role: Accessible.Graphic; Accessible.name: root.text(root.node.text)
-            Image {
+            RedesignAddonAssetImage {
                 anchors.fill: parent
-                source: root.renderer.assetFor(root.text(root.node.artwork))
-                sourceSize: Qt.size(512, 512); asynchronous: true; fillMode: Image.PreserveAspectFit
+                renderer: root.renderer; artworkHandle: root.text(root.node.artwork)
                 Accessible.ignored: true
             }
         }
@@ -128,10 +127,10 @@ Item {
             onClicked: if (root.node.primaryAction) root.renderer.dispatch(root.node.primaryAction, root.itemContext)
             contentItem: RowLayout {
                 spacing: root.theme.dp(10)
-                RedesignLibraryArtwork {
+                RedesignAddonAssetImage {
                     Layout.preferredWidth: root.theme.dp(48); Layout.preferredHeight: root.theme.dp(48)
-                    source: root.renderer.assetFor(root.text(root.node.artwork)); iconName: "music"
-                    scaleFactor: root.renderer.scaleFactor; lightTheme: root.renderer.lightTheme; accentColor: root.renderer.accentColor
+                    renderer: root.renderer; artworkHandle: root.text(root.node.artwork); iconName: "music"
+                    fillMode: Image.PreserveAspectCrop
                 }
                 ColumnLayout {
                     id: labels

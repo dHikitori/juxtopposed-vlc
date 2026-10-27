@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
 #include "addon_storage.hpp"
+#include "addon_ui_assets.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -376,6 +377,86 @@ QByteArray AddonManager::contributionFile(const QString& global, const QString& 
     const auto bytes = file.read(maximumBytes + 1);
     return bytes.size() <= maximumBytes ? bytes : QByteArray{};
 }
+std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& global) const
+{
+    // This preparation reads memory only. The detached reader owns no QObject.
+    const auto store = m_store;
+    const auto presence = m_secrets.presenceSnapshot();
+    return [store, presence, global]() {
+        UiAssetCapture result;
+        const auto rejected = [&result] {
+            result.error = QStringLiteral("The image package or its permissions changed.");
+            result.registration.clear(); result.assets.clear(); result.current = {};
+            return result;
+        };
+        InstalledPackage package;
+        if (!store.installed(packagePart(global), &package) || !package.enabled) return rejected();
+        const auto* contribution = package.manifest.contribution(localPart(global));
+        if (!contribution || !QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement"}.contains(contribution->type)) return rejected();
+        const auto scope = package.grants.value(QStringLiteral("ui.contribute")).toObject();
+        const auto hook = contribution->document.value(QStringLiteral("hook")).toString();
+        if (scope.isEmpty() || (!hook.isEmpty() && !scope.value(QStringLiteral("hooks")).toArray().contains(hook))) return rejected();
+        QJsonObject settings; quint64 settingsRevision = 0;
+        if (!store.networkConfiguration(package, &settings, &settingsRevision)) return rejected();
+        Manifest verified; QMap<QString, QByteArray> contents;
+        if (!Manifest::loadDirectory(package.directory, &verified, &contents, &result.error)
+            || packageDigest(contents) != package.digest || verified.id != package.manifest.id) return rejected();
+        const auto document = verified.settingsSchema.isEmpty()
+            ? QJsonObject{{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}}
+            : QJsonDocument::fromJson(contents.value(verified.settingsSchema)).object();
+        if (document.value("type").toString() != QLatin1String("object")) return rejected();
+        const auto properties = document.value("properties").toObject();
+        const auto references = settings.value(QStringLiteral("_credentials")).toObject();
+        CredentialStore secrets;
+        const auto present = [&presence, &secrets, &package](const QString& reference) {
+            const auto known = presence.value(package.manifest.id);
+            return known.contains(reference) ? known.value(reference) : secrets.present(package.manifest.id, reference);
+        };
+        for (const auto& required : document.value("required").toArray()) {
+            const auto name = required.toString(); const auto field = properties.value(name).toObject();
+            if (secretField(field)) { if (!present(references.value(name).toString())) return rejected(); }
+            else if (!valueValid(settings.contains(name) ? settings.value(name) : field.value(QStringLiteral("default")), field)) return rejected();
+        }
+        QJsonObject accountFields, accountReferences; bool connected = true, protectedAccount = false;
+        const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
+        for (const auto& binding : verified.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray()) {
+            if (!approved.contains(binding)) continue;
+            protectedAccount = true;
+            const auto name = binding.toObject().value(QStringLiteral("field")).toString(), reference = references.value(name).toString();
+            accountReferences.insert(name, reference); connected &= present(reference);
+        }
+        for (const auto& name : verified.accountFields) {
+            const auto field = properties.value(name).toObject();
+            if (!field.isEmpty() && !secretField(field)) {
+                const auto value = settings.contains(name) ? settings.value(name) : field.value(QStringLiteral("default"));
+                accountFields.insert(name, value.isUndefined() ? QJsonValue(QJsonValue::Null) : value);
+            }
+        }
+        const QJsonObject accountIdentity{{"package", verified.id}, {"source", package.identity.source},
+            {"references", accountReferences}, {"account", accountFields}};
+        const QByteArray accountBytes = QByteArray("vlc-addon-account-v1\n") + QJsonDocument(accountIdentity).toJson(QJsonDocument::Compact);
+        const auto accountHash = QString::fromLatin1(QCryptographicHash::hash(accountBytes, QCryptographicHash::Sha256).toHex());
+        const QString account = (!connected && protectedAccount ? QStringLiteral("disconnected:")
+            : !protectedAccount && accountFields.isEmpty() ? QStringLiteral("public:") : QStringLiteral("account:")) + accountHash;
+        const QJsonObject identity{{"contribution", global}, {"release", QString::fromLatin1(package.digest)},
+            {"generation", QString::number(package.generation)}, {"account", account}, {"scope", scope}};
+        const QByteArray identityBytes = QByteArray("vlc-ui-assets-v1\n") + QJsonDocument(identity).toJson(QJsonDocument::Compact);
+        const auto stamp = QString::fromLatin1(QCryptographicHash::hash(identityBytes, QCryptographicHash::Sha256).toHex());
+        const auto* verifiedContribution = verified.contribution(localPart(global));
+        if (!verifiedContribution) return rejected();
+        const auto declarations = verifiedContribution->document.value(QStringLiteral("assets")).toObject(); qint64 total = 0;
+        for (auto it = declarations.begin(); it != declarations.end(); ++it) {
+            const auto bytes = contents.value(it.value().toObject().value(QStringLiteral("path")).toString());
+            if (bytes.isEmpty() || bytes.size() > 1024 * 1024 || (total += bytes.size()) > 8 * 1024 * 1024) return rejected();
+            result.assets.insert(it.key(), bytes);
+        }
+        result.current = [store, package, settings, settingsRevision] { return store.networkConfigurationMatches(package, settings, settingsRevision); };
+        if (!result.current()) return rejected();
+        result.registration = {{"id", global}, {"packageId", verified.id}, {"enabled", true}, {"configured", true},
+            {"accountReference", account}, {"assetStamp", stamp}, {"assets", declarations.toVariantMap()}};
+        return result;
+    };
+}
 QVariantList AddonManager::providersForFeature(const QString& feature) const
 {
     QVariantList result;
@@ -387,6 +468,7 @@ QVariantList AddonManager::providersForFeature(const QString& feature) const
             if (contribution.type != QLatin1String("metadata.provider") || !contribution.features.contains(feature)) continue;
             result.append(QVariantMap{{"id", QString(id + '/' + contribution.id)}, {"packageId", id}, {"name", package.manifest.name},
                 {"enabled", package.enabled}, {"configured", configured(package)}, {"features", contribution.features},
+                {"operations", contribution.operations},
                 {"accountReference", account},
                 {"mediaKinds", contribution.mediaKinds}, {"status", !package.enabled ? tr("Disabled") : configured(package) ? tr("Ready") : tr("Setup required")},
                 {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + ':' + QString::number(settingsRevision))}});
