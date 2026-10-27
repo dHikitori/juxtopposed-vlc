@@ -148,6 +148,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_source_admissions.hpp \
 	addons/addon_stream_manifest.cpp \
 	addons/addon_stream_manifest.hpp \
+	addons/addon_websocket_codec.cpp \
+	addons/addon_websocket_codec.hpp \
 	addons/addon_source_consent.cpp \
 	addons/addon_source_consent.hpp \
 	addons/addon_visualizer_catalog.cpp \
@@ -2319,6 +2321,17 @@ test_qt_addon_stream_manifest_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldad
 test_qt_addon_stream_manifest_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_stream_manifest
 TESTS += test_qt_addon_stream_manifest
+
+test_qt_addon_websocket_codec_SOURCES = tests/test_addon_websocket_codec.cpp
+nodist_test_qt_addon_websocket_codec_SOURCES = tests/test_addon_websocket_codec.moc
+BUILT_SOURCES += tests/test_addon_websocket_codec.moc
+CLEANFILES += tests/test_addon_websocket_codec.moc
+test_qt_addon_websocket_codec_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_websocket_codec_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_websocket_codec_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_websocket_codec_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_websocket_codec
+TESTS += test_qt_addon_websocket_codec
 
 check_PROGRAMS += addon_visualizer_process
 addon_visualizer_process_SOURCES = tests/fixtures/addon_visualizer_process.c
