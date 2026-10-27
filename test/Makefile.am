@@ -273,7 +273,7 @@ test_src_misc_metadata_artwork_LDADD = $(LIBVLCCORE)
 
 if HAVE_LINUX
 check_PROGRAMS += test_src_misc_metadata_commit_limit
-test_src_misc_metadata_commit_limit_SOURCES = src/misc/metadata_commit_limit.c
+test_src_misc_metadata_commit_limit_SOURCES = src/misc/metadata_commit_limit.c ../src/input/item_parse.c
 test_src_misc_metadata_commit_limit_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
 test_src_misc_metadata_commit_limit_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
 test_src_misc_metadata_commit_limit_LDADD = $(LIBVLCCORE)
@@ -1065,4 +1065,21 @@ test_src_player_addon_session_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_player_addon_session_LDFLAGS = $(AM_LDFLAGS) -Wl,--export-dynamic
 test_src_player_addon_session_LDADD = $(LIBVLC) $(LIBVLCCORE)
 test_src_player_addon_session_LOG_COMPILER = env VLC_TEST_TIMEOUT=90
+endif
+
+
+test_src_misc_metadata_local_SOURCES = src/misc/metadata_local.c src/misc/metadata_local_setters.c
+test_src_misc_metadata_local_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_local_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_local_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_local_LDADD = $(LIBVLCCORE)
+
+if HAVE_LINUX
+check_PROGRAMS += test_src_misc_metadata_local test_src_misc_metadata_local_limit
+test_src_misc_metadata_local_limit_SOURCES = src/misc/metadata_local_limit.c ../src/input/item.c
+test_src_misc_metadata_local_limit_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src \
+    -Dinput_item_ApplyOptions=metadata_local_unused_options -Dinput_item_CreateFilename=metadata_local_unused_filename
+test_src_misc_metadata_local_limit_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_local_limit_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_local_limit_LDADD = $(LIBVLCCORE)
 endif

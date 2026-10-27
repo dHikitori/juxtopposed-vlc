@@ -298,6 +298,7 @@ libvlccore_la_SOURCES = \
 	preparser/metadata_owner.h \
 	preparser/metadata_pipeline.c \
 	preparser/metadata_pipeline.h \
+	preparser/metadata_local.h \
 	preparser/metadata_requests.c \
 	preparser/metadata_requests.h \
 	preparser/metadata_snapshot.c \
@@ -305,6 +306,8 @@ libvlccore_la_SOURCES = \
 	preparser/preparser.h \
 	preparser/external.c \
 	input/item.c \
+	input/item_parse.c \
+	input/item_parse.h \
 	input/artwork_policy.c \
 	input/artwork_policy.h \
 	input/policy.c \

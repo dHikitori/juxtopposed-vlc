@@ -20,7 +20,7 @@ void vlc_artwork_item_SwapApprovalLocked(input_item_t *, struct vlc_artwork_appr
 void vlc_artwork_approval_Clear(struct vlc_artwork_approval *);
 
 /* The source lock is held. The destination is a new, unpublished item. */
-void vlc_artwork_item_CopyApprovalLocked(input_item_t *destination, input_item_t *source);
+bool vlc_artwork_item_CopyApprovalLocked(input_item_t *destination, input_item_t *source);
 /* Call only after the final item reference ends. */
 void vlc_artwork_item_ClearApproval(input_item_t *);
 #endif

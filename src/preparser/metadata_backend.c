@@ -9,9 +9,12 @@
 #include <vlc_input_policy.h>
 #include <vlc_metadata_revision.h>
 #include <vlc_threads.h>
+#include <vlc_input.h>
 #include "../input/item.h"
+#include "../input/item_parse.h"
 #include "../input/artwork_policy.h"
 #include "../input/metadata_revision.h"
+#include "metadata_local.h"
 
 #define MAX_JSON (1024u * 1024u)
 #define MAX_FIELDS 64u
@@ -39,6 +42,12 @@ struct vlc_metadata_job {
     char *uri;
     vlc_input_policy_t *policy;
     struct vlc_metadata_revisions baseline;
+    struct vlc_item_parse_revisions native_baseline;
+    uint64_t status_baseline;
+    input_item_t *local_item;
+    struct vlc_item_parse_delta local_delta;
+    struct vlc_metadata_local_events local_events;
+    bool local_prepared, local_admitted, local_events_taken, local_name_missing;
     struct vlc_metadata_result result;
     struct vlc_metadata_field_patch patches[VLC_META_TYPE_COUNT];
     vlc_metadata_ended_cb ended;
@@ -99,6 +108,9 @@ void vlc_metadata_job_Release(vlc_metadata_job_t *job)
     free((char *)job->request.context_json);
     if (job->request.item != NULL) input_item_Release(job->request.item);
     if (job->target != NULL) input_item_Release(job->target);
+    if (job->local_item != NULL) input_item_Release(job->local_item);
+    vlc_item_parse_Clear(&job->local_delta);
+    vlc_metadata_local_events_Clear(&job->local_events);
     free(job->uri);
     vlc_input_policy_Release(job->policy);
     if (job->result.item != NULL) input_item_Release(job->result.item);
@@ -130,6 +142,8 @@ static bool capture_item(vlc_metadata_job_t *job, input_item_t *item)
         vlc_mutex_lock(&item->lock);
         if (item->p_meta == NULL) item->p_meta = vlc_meta_New();
         const bool available = revisions_locked(item, &before);
+        const struct vlc_item_parse_revisions native_before = item_owner(item)->parse_revisions;
+        const uint64_t status_before = vlc_meta_StatusRevision(item->p_meta);
         const bool has_uri = item->psz_uri != NULL;
         char *uri = has_uri ? strdup(item->psz_uri) : NULL;
         vlc_input_policy_t *policy = vlc_input_policy_Hold(item_owner(item)->input_policy);
@@ -150,7 +164,8 @@ static bool capture_item(vlc_metadata_job_t *job, input_item_t *item)
         vlc_mutex_unlock(&copy->lock);
         if (current) {
             job->request.item = copy; job->target = input_item_Hold(item);
-            job->uri = uri; job->policy = policy; job->baseline = before; return true;
+            job->uri = uri; job->policy = policy; job->baseline = before;
+            job->native_baseline = native_before; job->status_baseline = status_before; return true;
         }
         input_item_Release(copy); free(uri); vlc_input_policy_Release(policy);
     }
@@ -204,6 +219,154 @@ error:
 
 const struct vlc_metadata_request *vlc_metadata_job_GetRequest(const vlc_metadata_job_t *job)
 { return &job->request; }
+
+void vlc_metadata_local_events_Clear(struct vlc_metadata_local_events *events)
+{
+    for (size_t i = 0; i < events->subtree_count; ++i) input_item_node_Delete(events->subtrees[i]);
+    for (size_t i = 0; i < events->attachment_count; ++i) vlc_input_attachment_Release(events->attachments[i]);
+    free(events->subtrees); free(events->attachments); memset(events, 0, sizeof(*events));
+}
+static input_item_node_t *copy_local_tree(const input_item_node_t *source, unsigned depth, size_t *nodes, size_t *bytes)
+{
+    if (source == NULL || source->p_item == NULL || depth > 32 || ++*nodes > VLC_ITEM_PARSE_MAX_ENTRIES
+        || source->i_children < 0 || (unsigned)source->i_children > VLC_ITEM_PARSE_MAX_ENTRIES) return NULL;
+    const size_t node_bytes = sizeof(input_item_node_t) + source->i_children * sizeof(input_item_node_t *);
+    if (node_bytes > *bytes) return NULL;
+    *bytes -= node_bytes;
+    vlc_mutex_lock(&source->p_item->lock);
+    input_item_t *item = vlc_item_parse_CopyBudgetLocked(source->p_item, bytes);
+    vlc_mutex_unlock(&source->p_item->lock);
+    if (item == NULL) return NULL;
+    input_item_node_t *copy = input_item_node_Create(item); input_item_Release(item);
+    if (copy == NULL) return NULL;
+    if (source->i_children != 0) {
+        copy->pp_children = calloc(source->i_children, sizeof(*copy->pp_children));
+        if (copy->pp_children == NULL) goto error;
+    }
+    for (int i = 0; i < source->i_children; ++i) {
+        input_item_node_t *child = copy_local_tree(source->pp_children[i], depth + 1, nodes, bytes);
+        if (child == NULL) goto error;
+        copy->pp_children[copy->i_children++] = child;
+    }
+    return copy;
+error:
+    input_item_node_Delete(copy); return NULL;
+}
+static int copy_local_events(struct vlc_metadata_local_events *target, const struct vlc_metadata_local_events *source)
+{
+    if (source == NULL) return VLC_SUCCESS;
+    if (source->subtree_count > VLC_ITEM_PARSE_MAX_ENTRIES || source->attachment_count > VLC_ITEM_PARSE_MAX_ENTRIES
+        || (source->subtree_count != 0 && source->subtrees == NULL)
+        || (source->attachment_count != 0 && source->attachments == NULL)) return VLC_EINVAL;
+    if (source->subtree_count != 0) {
+        target->subtrees = calloc(source->subtree_count, sizeof(*target->subtrees));
+        if (target->subtrees == NULL) return VLC_ENOMEM;
+    }
+    if (source->attachment_count != 0) {
+        target->attachments = calloc(source->attachment_count, sizeof(*target->attachments));
+        if (target->attachments == NULL) return VLC_ENOMEM;
+    }
+    size_t nodes = 0, bytes = 0;
+    size_t tree_bytes = VLC_ITEM_PARSE_MAX_BYTES - source->subtree_count * sizeof(*target->subtrees);
+    for (size_t i = 0; i < source->subtree_count; ++i) {
+        input_item_node_t *tree = copy_local_tree(source->subtrees[i], 1, &nodes, &tree_bytes);
+        if (tree == NULL) return VLC_ENOMEM;
+        target->subtrees[target->subtree_count++] = tree;
+    }
+    for (size_t i = 0; i < source->attachment_count; ++i) {
+        input_attachment_t *attachment = source->attachments[i];
+        if (attachment == NULL || attachment->i_data > VLC_ITEM_PARSE_MAX_BYTES - bytes) return VLC_EINVAL;
+        bytes += attachment->i_data;
+        target->attachments[target->attachment_count++] = vlc_input_attachment_Hold(attachment);
+    }
+    return VLC_SUCCESS;
+}
+static bool original_snapshot_locked(vlc_metadata_job_t *job)
+{
+    input_item_t *target = job->target;
+    struct vlc_metadata_revisions current;
+    bool native_current = true;
+    for (unsigned i = 0; i < VLC_ITEM_PARSE_FIELD_COUNT; ++i)
+        if (i != VLC_ITEM_PARSE_EPG && (job->native_baseline.fields[i] == UINT64_MAX
+            || item_owner(target)->parse_revisions.fields[i] != job->native_baseline.fields[i])) native_current = false;
+    return revisions_locked(target, &current) && !memcmp(&current, &job->baseline, sizeof(current)) && native_current
+        && same_string(job->uri, target->psz_uri) && job->policy == item_owner(target)->input_policy
+        && !vlc_input_policy_IsRevoked(job->policy);
+}
+input_item_t *vlc_metadata_job_CopyLocalItem(vlc_metadata_job_t *job)
+{
+    if (job == NULL || job->target == NULL) return NULL;
+    vlc_metadata_job_Hold(job);
+    vlc_mutex_lock(&job->backend->lock);
+    bool ready = job->local && job->started && !job->terminal && !job->commit_cancelled
+        && !job->backend->closed && job->local_item == NULL;
+    vlc_mutex_unlock(&job->backend->lock);
+    input_item_t *copy = NULL;
+    if (ready) {
+        vlc_mutex_lock(&job->target->lock);
+        if (original_snapshot_locked(job)) copy = vlc_item_parse_CopyLocked(job->target);
+        vlc_mutex_unlock(&job->target->lock);
+    }
+    if (copy != NULL) {
+        vlc_mutex_lock(&job->backend->lock);
+        ready = job->local && !job->terminal && !job->commit_cancelled && !job->backend->closed && job->local_item == NULL;
+        if (ready) { job->local_item = input_item_Hold(copy); job->local_name_missing = copy->psz_name == NULL; }
+        vlc_mutex_unlock(&job->backend->lock);
+        if (!ready) { input_item_Release(copy); copy = NULL; }
+    }
+    vlc_metadata_job_Release(job); return copy;
+}
+int vlc_metadata_job_PrepareLocal(vlc_metadata_job_t *job, input_item_t *parsed,
+                                const struct vlc_metadata_local_events *events)
+{
+    if (job == NULL || parsed == NULL) return VLC_EINVAL;
+    vlc_metadata_job_Hold(job);
+    vlc_mutex_lock(&job->backend->lock);
+    bool ready = job->local && job->started && !job->terminal && !job->commit_cancelled
+        && !job->backend->closed && !job->local_prepared && parsed == job->local_item;
+    vlc_mutex_unlock(&job->backend->lock);
+    int status = ready ? VLC_SUCCESS : VLC_EINVAL;
+    struct vlc_item_parse_delta delta = {0}; struct vlc_metadata_local_events staged = {0};
+    if (!ready) goto out;
+    vlc_mutex_lock(&parsed->lock);
+    if (!same_string(job->uri, parsed->psz_uri) || job->policy != item_owner(parsed)->input_policy)
+        status = -EAGAIN;
+    else if ((delta.item = vlc_item_parse_CopyLocked(parsed)) == NULL) status = VLC_ENOMEM;
+    vlc_mutex_unlock(&parsed->lock);
+    if (status != VLC_SUCCESS) goto out;
+    for (unsigned i = 0; i < VLC_ITEM_PARSE_FIELD_COUNT; ++i)
+        if (item_owner(delta.item)->parse_revisions.fields[i] != job->native_baseline.fields[i]) delta.fields |= VLC_ITEM_PARSE_BIT(i);
+    if (delta.fields & (VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_URI) | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_OPTIONS))) { status = -EAGAIN; goto out; }
+    /* Names supplied by the current target have precedence. */
+    if (!job->local_name_missing) delta.fields &= ~VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_NAME);
+    delta.extras = vlc_meta_ExtraRevision(delta.item->p_meta) != job->baseline.extra;
+    delta.status = vlc_meta_StatusRevision(delta.item->p_meta) != job->status_baseline;
+    vlc_mutex_lock(&job->target->lock);
+    if (item_owner(job->target)->parse_revisions.fields[VLC_ITEM_PARSE_SLAVES] != job->native_baseline.fields[VLC_ITEM_PARSE_SLAVES]) status = -EAGAIN;
+    else status = vlc_item_parse_PrepareLinksLocked(&delta, job->target);
+    vlc_mutex_unlock(&job->target->lock);
+    if (status == VLC_SUCCESS) status = copy_local_events(&staged, events);
+    if (status != VLC_SUCCESS) goto out;
+    vlc_mutex_lock(&job->backend->lock);
+    ready = !job->terminal && !job->commit_cancelled && !job->backend->closed && !job->local_prepared;
+    if (ready) {
+        job->local_delta = delta; memset(&delta, 0, sizeof(delta));
+        job->local_events = staged; memset(&staged, 0, sizeof(staged)); job->local_prepared = true;
+    }
+    vlc_mutex_unlock(&job->backend->lock);
+    if (!ready) status = -EINTR;
+out:
+    vlc_item_parse_Clear(&delta); vlc_metadata_local_events_Clear(&staged);
+    vlc_metadata_job_Release(job); return status;
+}
+bool vlc_metadata_job_TakeLocalEvents(vlc_metadata_job_t *job, struct vlc_metadata_local_events *events)
+{
+    if (job == NULL || events == NULL) return false;
+    vlc_mutex_lock(&job->backend->lock);
+    const bool ready = job->local_admitted && !job->local_events_taken;
+    if (ready) { *events = job->local_events; memset(&job->local_events, 0, sizeof(job->local_events)); job->local_events_taken = true; }
+    vlc_mutex_unlock(&job->backend->lock); return ready;
+}
 const struct vlc_metadata_result *vlc_metadata_job_GetResult(vlc_metadata_job_t *job)
 {
     vlc_mutex_lock(&job->backend->lock);
@@ -395,8 +558,28 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
             || vlc_meta_FieldRevision(target->p_meta, field->type) != field->expected_revision
             || !same_string(field->expected_value, vlc_meta_Get(target->p_meta, field->type))) status = -EAGAIN;
     }
+    uint32_t native_fields = job->local_prepared ? job->local_delta.fields : 0;
+    const bool extra = job->local_prepared && job->local_delta.extras;
+    const bool local_status = job->local_prepared && job->local_delta.status && target->p_meta != NULL
+        && vlc_meta_StatusRevision(target->p_meta) == job->status_baseline;
+    if (job->local_prepared && status == VLC_SUCCESS) {
+        const uint32_t guarded = (native_fields & ~VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_EPG))
+            | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_URI) | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_NAME)
+            | VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_OPTIONS);
+        for (unsigned i = 0; i < VLC_ITEM_PARSE_FIELD_COUNT; ++i) {
+            const uint64_t current = item_owner(target)->parse_revisions.fields[i];
+            if ((guarded & VLC_ITEM_PARSE_BIT(i)) && (current == UINT64_MAX
+                || current != job->native_baseline.fields[i])) status = -EAGAIN;
+            if (i != VLC_ITEM_PARSE_EPG && (native_fields & VLC_ITEM_PARSE_BIT(i))
+                && current >= UINT64_MAX - 1) status = -EAGAIN;
+        }
+        /* A live EPG update has precedence. It does not block other facts. */
+        const uint64_t epg = item_owner(target)->parse_revisions.fields[VLC_ITEM_PARSE_EPG];
+        if (epg >= UINT64_MAX - 1 || epg != job->native_baseline.fields[VLC_ITEM_PARSE_EPG])
+            native_fields &= ~VLC_ITEM_PARSE_BIT(VLC_ITEM_PARSE_EPG);
+    }
     uint64_t first = 0;
-    if (status == VLC_SUCCESS && !vlc_meta_ReserveRevisions(count, &first)) status = -EAGAIN;
+    if (status == VLC_SUCCESS && !vlc_meta_ReserveRevisions(count + extra + local_status, &first)) status = -EAGAIN;
     if (status == VLC_SUCCESS && vlc_input_policy_IsRevoked(job->policy)) status = -EACCES;
     if (status == VLC_SUCCESS) {
         for (size_t i = 0; i < job->result.field_count; ++i) {
@@ -406,6 +589,13 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
             vlc_meta_SetOwnedRevision(target->p_meta, field->type, values[i], revision); values[i] = NULL;
             if (field->type == vlc_meta_ArtworkURL) vlc_artwork_item_SwapApprovalLocked(target, &artwork, revision);
             if (applied != NULL) ++*applied;
+        }
+        if (job->local_prepared) {
+            vlc_item_parse_SwapLocked(&job->local_delta, target, native_fields);
+            if (extra) vlc_meta_SwapExtraOwned(target->p_meta, job->local_delta.item->p_meta, first++);
+            if (local_status) vlc_meta_SetStatusOwned(target->p_meta,
+                vlc_meta_GetStatus(target->p_meta) | vlc_meta_GetStatus(job->local_delta.item->p_meta), first++);
+            job->local_admitted = true;
         }
     }
     vlc_mutex_unlock(&target->lock);

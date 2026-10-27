@@ -908,6 +908,7 @@ static void InitProperties( input_thread_t *input )
     {
         vlc_mutex_lock( &priv->p_item->lock );
         priv->p_item->i_type = input_type;
+        vlc_item_parse_TouchLocked(priv->p_item, VLC_ITEM_PARSE_TYPE);
         vlc_mutex_unlock( &priv->p_item->lock );
     }
 }
@@ -1155,6 +1156,7 @@ static void LoadSlaves( input_thread_t *p_input )
     {
         if (p_item->pp_slaves[i]->i_priority == SLAVE_PRIORITY_FOLDER_RULE)
         {
+            vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_SLAVES);
             input_item_slave_Delete(p_item->pp_slaves[i]);
             TAB_ERASE(p_item->i_slaves, p_item->pp_slaves, i);
         }
@@ -1217,6 +1219,7 @@ static void LoadSlaves( input_thread_t *p_input )
     vlc_mutex_lock( &p_item->lock );
 
     /* Move item slaves to local pp_slaves */
+    if (p_item->i_slaves != 0) vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_SLAVES);
     for( int i = 0; i < p_item->i_slaves; i++ )
     {
         input_item_slave_t *p_slave = p_item->pp_slaves[i];

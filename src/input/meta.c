@@ -51,7 +51,7 @@ static uint64_t vlc_metadata_revision_Next(void)
 }
 bool vlc_meta_ReserveRevisions(unsigned count, uint64_t *first)
 {
-    if (first == NULL || count > VLC_META_TYPE_COUNT) return false;
+    if (first == NULL || count > VLC_META_TYPE_COUNT + 2) return false;
     if (count == 0) { *first = 0; return true; }
     uint_fast64_t current = atomic_load_explicit(&metadata_revision_sequence, memory_order_relaxed);
     while (current < UINT64_MAX) {
@@ -79,6 +79,7 @@ struct vlc_meta_t
     vlc_dictionary_t extra_tags;
 
     int i_status;
+    uint64_t status_revision;
 };
 
 const char *vlc_meta_TypeToString(vlc_meta_type_t meta_type)
@@ -138,6 +139,7 @@ vlc_meta_t *vlc_meta_New( void )
         return NULL;
     const uint64_t initial_revision = vlc_metadata_revision_Next();
     m->extra_revision = initial_revision;
+    m->status_revision = initial_revision;
     for( int i = 0; i < VLC_META_TYPE_COUNT ; i++ )
     {
         m->meta[i].value = NULL;
@@ -277,6 +279,83 @@ int vlc_meta_GetStatus( const vlc_meta_t *m )
 void vlc_meta_SetStatus( vlc_meta_t *m, int status )
 {
     m->i_status = status;
+    m->status_revision = vlc_metadata_revision_Next();
+}
+
+uint64_t vlc_meta_StatusRevision(const vlc_meta_t *meta)
+{ return meta != NULL ? meta->status_revision : 0; }
+
+void vlc_meta_SetStatusOwned(vlc_meta_t *meta, int status, uint64_t revision)
+{
+    assert(revision != 0 && revision != UINT64_MAX);
+    meta->i_status = status; meta->status_revision = revision;
+}
+
+void vlc_meta_SwapExtraOwned(vlc_meta_t *target, vlc_meta_t *prepared, uint64_t revision)
+{
+    assert(revision != 0 && revision != UINT64_MAX);
+    vlc_dictionary_t old = target->extra_tags;
+    target->extra_tags = prepared->extra_tags; prepared->extra_tags = old;
+    target->extra_revision = revision;
+}
+
+static char *copy_native_string(const char *source, size_t *remaining)
+{
+    if (source == NULL) return NULL;
+    const size_t length = strnlen(source, *remaining);
+    if (length == *remaining) return NULL;
+    char *value = strdup(source);
+    if (value != NULL) *remaining -= length + 1;
+    return value;
+}
+
+vlc_meta_t *vlc_meta_CopyNative(const vlc_meta_t *source, size_t *remaining)
+{
+    if (source == NULL || remaining == NULL || *remaining < sizeof(vlc_meta_t)) return NULL;
+    *remaining -= sizeof(vlc_meta_t);
+    vlc_meta_t *copy = vlc_meta_New();
+    if (copy == NULL) return NULL;
+    for (unsigned i = 0; i < VLC_META_TYPE_COUNT; ++i) {
+        copy->meta[i].value = copy_native_string(source->meta[i].value, remaining);
+        if (source->meta[i].value != NULL && copy->meta[i].value == NULL) goto error;
+        copy->meta[i].priority = source->meta[i].priority;
+        copy->revisions[i] = source->revisions[i];
+    }
+    const size_t count = vlc_dictionary_keys_count(&source->extra_tags);
+    if (count > 4096 || source->extra_tags.i_size > 16384) goto error;
+    /* The generic dictionary insert has no allocation-error result. Prepare
+     * each entry directly, so a failed copy cannot become a partial delta. */
+    if (count != 0) {
+        if (count > *remaining / sizeof(*copy->extra_tags.p_entries)) goto error;
+        *remaining -= count * sizeof(*copy->extra_tags.p_entries);
+        copy->extra_tags.i_size = count;
+        copy->extra_tags.p_entries = calloc(count, sizeof(*copy->extra_tags.p_entries));
+        if (copy->extra_tags.p_entries == NULL) { copy->extra_tags.i_size = 0; goto error; }
+    }
+    for (size_t bucket = 0; bucket < source->extra_tags.i_size; ++bucket) {
+        for (vlc_dictionary_entry_t *entry = source->extra_tags.p_entries[bucket]; entry != NULL; entry = entry->p_next) {
+            struct vlc_meta_value *original = entry->p_value;
+            if (*remaining < sizeof(vlc_dictionary_entry_t) + sizeof(struct vlc_meta_value)) goto error;
+            *remaining -= sizeof(vlc_dictionary_entry_t) + sizeof(struct vlc_meta_value);
+            vlc_dictionary_entry_t *next = calloc(1, sizeof(*next));
+            struct vlc_meta_value *value = calloc(1, sizeof(*value));
+            if (next == NULL || value == NULL) { free(next); free(value); goto error; }
+            next->psz_key = copy_native_string(entry->psz_key, remaining);
+            value->value = copy_native_string(original->value, remaining);
+            if (next->psz_key == NULL || (original->value != NULL && value->value == NULL)) {
+                free(next->psz_key); free(next); free(value->value); free(value); goto error;
+            }
+            value->priority = original->priority; next->p_value = value;
+            const size_t index = DictHash(next->psz_key, count);
+            next->p_next = copy->extra_tags.p_entries[index]; copy->extra_tags.p_entries[index] = next;
+        }
+    }
+    copy->extra_revision = source->extra_revision;
+    copy->status_revision = source->status_revision;
+    copy->i_status = source->i_status;
+    return copy;
+error:
+    vlc_meta_Delete(copy); return NULL;
 }
 
 
@@ -325,6 +404,7 @@ void vlc_meta_Merge( vlc_meta_t *dst, const vlc_meta_t *src )
     }
     free( ppsz_all_keys );
     dst->i_status |= src->i_status;
+    dst->status_revision = vlc_metadata_revision_Next();
 }
 
 

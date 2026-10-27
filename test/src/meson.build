@@ -28,7 +28,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_misc_metadata_commit_limit',
-    'sources': files('misc/metadata_commit_limit.c'),
+    'sources': files('misc/metadata_commit_limit.c', '../../src/input/item_parse.c'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
     'c_args': ['-ffunction-sections', '-fdata-sections'],
@@ -945,5 +945,29 @@ vlc_tests += {
     'link_args': ['-Wl,--export-dynamic'],
     'module_depends': ['araw', 'adummy'],
     'env': ['VLC_TEST_TIMEOUT=90'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_local',
+    'sources': files('misc/metadata_local.c', 'misc/metadata_local_setters.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_local_limit',
+    'sources': files('misc/metadata_local_limit.c', '../../src/input/item.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections',
+        '-Dinput_item_ApplyOptions=metadata_local_unused_options',
+        '-Dinput_item_CreateFilename=metadata_local_unused_filename'],
+    'link_args': ['-Wl,--gc-sections'],
     'enabled': host_system == 'linux',
 }

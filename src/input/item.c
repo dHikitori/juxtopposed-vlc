@@ -167,6 +167,7 @@ void input_item_CopyOptions( input_item_t *p_child,
                 memcpy( p_child->optflagv + p_child->i_options, flagv,
                         optc * sizeof (*flagv) );
                 p_child->i_options += optc;
+                vlc_item_parse_TouchLocked(p_child, VLC_ITEM_PARSE_OPTIONS);
                 p_child->optflagc += optc;
             }
         }
@@ -270,6 +271,7 @@ void input_item_SetName( input_item_t *p_item, const char *psz_name )
 
     free( p_item->psz_name );
     p_item->psz_name = strdup( psz_name );
+    vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_NAME);
 
     vlc_mutex_unlock( &p_item->lock );
 }
@@ -294,6 +296,9 @@ void input_item_SetURI( input_item_t *p_i, const char *psz_uri )
                  __func__, psz_uri );
 #endif
     vlc_mutex_lock( &p_i->lock );
+    vlc_item_parse_TouchLocked(p_i, VLC_ITEM_PARSE_URI);
+    vlc_item_parse_TouchLocked(p_i, VLC_ITEM_PARSE_NAME);
+    vlc_item_parse_TouchLocked(p_i, VLC_ITEM_PARSE_TYPE);
     free( p_i->psz_uri );
     p_i->psz_uri = strdup( psz_uri );
 
@@ -369,6 +374,7 @@ vlc_tick_t input_item_GetDuration( input_item_t *p_i )
 void input_item_SetDuration( input_item_t *p_i, vlc_tick_t i_duration )
 {
     vlc_mutex_lock( &p_i->lock );
+    vlc_item_parse_TouchLocked(p_i, VLC_ITEM_PARSE_DURATION);
     if( p_i->i_duration != i_duration )
         p_i->i_duration = i_duration;
     vlc_mutex_unlock( &p_i->lock );
@@ -517,6 +523,7 @@ int input_item_AddOption( input_item_t *p_input, const char *psz_option,
     TAB_APPEND(p_input->i_options, p_input->ppsz_options, psz_option_dup);
 
     flagv[p_input->optflagc++] = flags;
+    vlc_item_parse_TouchLocked(p_input, VLC_ITEM_PARSE_OPTIONS);
 
 out:
     vlc_mutex_unlock( &p_input->lock );
@@ -681,6 +688,7 @@ int input_item_AddSlave(input_item_t *p_item, input_item_slave_t *p_slave)
     vlc_mutex_lock( &p_item->lock );
 
     TAB_APPEND(p_item->i_slaves, p_item->pp_slaves, p_slave);
+    vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_SLAVES);
 
     vlc_mutex_unlock( &p_item->lock );
     return VLC_SUCCESS;
@@ -761,6 +769,7 @@ static int InputItemVaAddInfo( input_item_t *p_i,
                                const char *psz_format, va_list args )
 {
     vlc_mutex_assert( &p_i->lock );
+    vlc_item_parse_TouchLocked(p_i, VLC_ITEM_PARSE_INFOS);
 
     info_category_t *p_cat = InputItemFindCat( p_i, psz_cat );
     if( !p_cat )
@@ -799,6 +808,7 @@ int input_item_DelInfo( input_item_t *p_i,
                         const char *psz_name )
 {
     vlc_mutex_lock( &p_i->lock );
+    vlc_item_parse_TouchLocked(p_i, VLC_ITEM_PARSE_INFOS);
     info_category_t *p_cat = InputItemFindCat( p_i, psz_cat );
     if( !p_cat )
     {
@@ -829,6 +839,7 @@ int input_item_DelInfo( input_item_t *p_i,
 void input_item_ReplaceInfos( input_item_t *p_item, info_category_t *p_cat )
 {
     vlc_mutex_lock( &p_item->lock );
+    vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_INFOS);
     info_category_t *p_old = InputItemFindCat( p_item, p_cat->psz_name );
     if( p_old )
     {
@@ -844,6 +855,7 @@ void input_item_ReplaceInfos( input_item_t *p_item, info_category_t *p_cat )
 void input_item_MergeInfos( input_item_t *p_item, info_category_t *p_cat )
 {
     vlc_mutex_lock( &p_item->lock );
+    vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_INFOS);
     info_category_t *p_old = InputItemFindCat( p_item, p_cat->psz_name );
     if( p_old )
     {
@@ -862,6 +874,7 @@ void input_item_MergeInfos( input_item_t *p_item, info_category_t *p_cat )
 void input_item_SetEpgEvent( input_item_t *p_item, const vlc_epg_event_t *p_epg_evt )
 {
     vlc_mutex_lock( &p_item->lock );
+    vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_EPG);
 
     for( int i = 0; i < p_item->i_epg; i++ )
     {
@@ -910,6 +923,7 @@ void input_item_SetEpg( input_item_t *p_item, const vlc_epg_t *p_update, bool b_
         return;
 
     vlc_mutex_lock( &p_item->lock );
+    vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_EPG);
 
     /* */
     vlc_epg_t **pp_epg = NULL;
@@ -980,6 +994,7 @@ void input_item_SetEpg( input_item_t *p_item, const vlc_epg_t *p_update, bool b_
 void input_item_ChangeEPGSource( input_item_t *p_item, int i_source_id )
 {
     vlc_mutex_lock( &p_item->lock );
+    vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_EPG);
     p_item->p_epg_table = NULL;
     if( i_source_id > 0 )
     {
@@ -1172,6 +1187,10 @@ int input_item_Update(input_item_t *dst, input_item_t *src)
     }
 
     vlc_mutex_lock(&dst->lock);
+    vlc_item_parse_TouchLocked(dst, VLC_ITEM_PARSE_NAME);
+    vlc_item_parse_TouchLocked(dst, VLC_ITEM_PARSE_DURATION);
+    vlc_item_parse_TouchLocked(dst, VLC_ITEM_PARSE_TRACKS);
+    vlc_item_parse_TouchLocked(dst, VLC_ITEM_PARSE_SLAVES);
     if (dst->psz_name == NULL) {
         dst->psz_name = tmp->psz_name;
         tmp->psz_name = NULL;
@@ -1377,6 +1396,7 @@ void input_item_UpdateTracksInfo(input_item_t *item, const es_format_t *fmt,
 {
     assert( es_id != NULL );
     vlc_mutex_lock( &item->lock );
+    vlc_item_parse_TouchLocked(item, VLC_ITEM_PARSE_TRACKS);
 
     for( size_t i = 0; i < item->es_vec.size; ++i )
     {

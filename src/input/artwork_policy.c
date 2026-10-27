@@ -126,20 +126,21 @@ void vlc_artwork_approval_Clear(struct vlc_artwork_approval *approval)
     free(approval->uri); free(approval->source_uri); vlc_input_policy_Release(approval->policy);
     memset(approval, 0, sizeof(*approval));
 }
-void vlc_artwork_item_CopyApprovalLocked(input_item_t *destination, input_item_t *source)
+bool vlc_artwork_item_CopyApprovalLocked(input_item_t *destination, input_item_t *source)
 {
-    if (!current_locked(source)) return;
+    if (!current_locked(source)) return true;
     input_item_owner_t *owner = item_owner(destination);
     const uint64_t revision = vlc_meta_FieldRevision(destination->p_meta, vlc_meta_ArtworkURL);
-    if (revision == UINT64_MAX) return;
+    if (revision == UINT64_MAX) return false;
     char *uri = strdup(item_owner(source)->artwork_uri);
-    if (uri == NULL) return;
+    if (uri == NULL) return false;
     const char *original = item_owner(source)->artwork_source_uri;
     char *source_uri = original != NULL ? strdup(original) : NULL;
-    if (original != NULL && source_uri == NULL) { free(uri); return; }
+    if (original != NULL && source_uri == NULL) { free(uri); return false; }
     owner->artwork_uri = uri; owner->artwork_revision = revision;
     owner->artwork_source_uri = source_uri;
     owner->artwork_policy = vlc_input_policy_Hold(item_owner(source)->artwork_policy);
+    return true;
 }
 void vlc_artwork_item_ClearApproval(input_item_t *item)
 {
