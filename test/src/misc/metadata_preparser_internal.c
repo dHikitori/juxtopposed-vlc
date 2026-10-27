@@ -78,7 +78,8 @@ struct request_fixture {
     struct vlc_preparser_req *req;
     unsigned ended, trees, attachments, remote;
     int status;
-    bool release_in_callback, cancel_in_tree;
+    bool release_in_callback, cancel_in_tree, use_engine;
+    unsigned engine_calls, engine_cancels;
 };
 static int remote_dispatch(void *opaque, vlc_metadata_job_t *job)
 {
@@ -106,6 +107,24 @@ static void request_attachments(struct vlc_preparser_req *req, input_attachment_
     (void)req; struct request_fixture *fixture = opaque; ++fixture->attachments;
     assert(count == 1 && array[0]->i_data == 4 && !memcmp(array[0]->p_data, "data", 4));
 }
+struct injected_cancel { struct request_fixture *fixture; vlc_preparser_req *request; vlc_sem_t resume; };
+static void injected_cancel(void *opaque)
+{
+    struct injected_cancel *cancel = opaque; ++cancel->fixture->engine_cancels;
+    assert(preparser_Cancel(cancel->fixture->sys, cancel->request) == 0);
+    vlc_sem_post(&cancel->resume);
+}
+static int injected_parse(void *opaque, input_item_t *item, const struct input_item_parser_cfg *cfg,
+    vlc_tick_t deadline, vlc_interrupt_t *interrupt)
+{
+    (void)deadline; struct request_fixture *fixture = opaque; ++fixture->engine_calls; assert(interrupt != NULL);
+    struct injected_cancel cancel = {.fixture=fixture,.request=cfg->cbs_data}; vlc_sem_init(&cancel.resume, 0);
+    vlc_interrupt_t *previous = vlc_interrupt_set(interrupt); vlc_interrupt_register(injected_cancel, &cancel);
+    input_item_parser_id_t *id = native_parse(VLC_OBJECT(fixture->instance), item, cfg);
+    if (parse_block) vlc_sem_wait(&cancel.resume);
+    const int status = vlc_killed() ? -EINTR : parse_status;
+    vlc_interrupt_unregister(); vlc_interrupt_set(previous); native_parser_release(id); return status;
+}
 static void request_init(struct request_fixture *fixture, bool owned)
 {
     parse_calls = 0; parse_block = false; parse_status = VLC_SUCCESS; local_art = false;
@@ -120,7 +139,9 @@ static void request_init(struct request_fixture *fixture, bool owned)
     fixture->backend = vlc_metadata_backend_New(&ops, fixture); assert(fixture->backend != NULL);
     if (owned) assert(vlc_metadata_owner_Set(VLC_OBJECT(fixture->instance), fixture->backend) == VLC_SUCCESS);
     const struct vlc_preparser_cfg cfg = {.types=VLC_PREPARSER_TYPE_PARSE | VLC_PREPARSER_TYPE_FETCHMETA_ALL};
-    fixture->sys = vlc_preparser_internal_New(&fixture->handle, VLC_OBJECT(fixture->instance), &cfg); assert(fixture->sys != NULL);
+    const struct vlc_preparser_parse_engine engine = {.run=injected_parse,.opaque=fixture};
+    fixture->sys = vlc_preparser_internal_NewWithEngine(&fixture->handle, VLC_OBJECT(fixture->instance), &cfg,
+        fixture->use_engine ? &engine : NULL); assert(fixture->sys != NULL);
     fixture->item = input_item_New("file:///private/song.flac", "Song"); assert(fixture->item != NULL); original = fixture->item;
     input_item_SetTitle(fixture->item, "Song");
     assert(input_item_AddInfo(fixture->item, "Existing", "Baseline", "%s", "Preserved") == VLC_SUCCESS);
@@ -270,8 +291,27 @@ static void delete_cancels_queued_work_before_native_waits(void)
     assert(vlc_preparser_req_GetItem(fixture.req) == fixture.item);
     request_destroy(&fixture);
 }
+static void a_private_engine_uses_the_same_admission_and_cancel_lifetime(void)
+{
+    for (unsigned cancel = 0; cancel < 2; ++cancel) {
+        struct request_fixture fixture = {.use_engine=true}; request_init(&fixture, true);
+        if (cancel) { parse_block = true; vlc_sem_init(&parse_entered, 0); }
+        request_submit(&fixture, VLC_PREPARSER_TYPE_PARSE);
+        if (cancel) {
+            vlc_thread_t thread; assert(vlc_clone(&thread, run_parser, fixture.sys->parser) == 0);
+            vlc_sem_wait(&parse_entered); assert(preparser_Cancel(fixture.sys, fixture.req) == 1); vlc_join(thread, NULL);
+            assert(fixture.ended == 1 && fixture.status == -EINTR && fixture.engine_cancels != 0);
+            assert(fixture.trees == 0 && fixture.attachments == 0);
+        } else {
+            run_next(fixture.sys->parser);
+            assert(fixture.ended == 1 && fixture.status == VLC_SUCCESS && fixture.trees == 1 && fixture.attachments == 1);
+        }
+        assert(fixture.engine_calls == 1 && fixture.remote == 0); request_destroy(&fixture);
+    }
+}
 int main(void)
 {
+    a_private_engine_uses_the_same_admission_and_cancel_lifetime();
     local_and_attachment_results_keep_native_fetched_status();
     native_parse_errors_keep_status_and_timeout_discards_output();
     delete_cancels_queued_work_before_native_waits();

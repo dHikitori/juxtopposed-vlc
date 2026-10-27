@@ -26,6 +26,11 @@ struct vlc_metadata_pipeline_operations {
      * worker can do that after its interrupt completes. No Qt event is needed.
      */
     void (*cancel_local)(void *, vlc_metadata_pipeline_stage_t *);
+    /* Optional native key lifetime. Supply both hooks or neither. Retain is
+     * callback-free. Release runs outside pipeline locks after the last entry
+     * reference, including a concurrent cancellation callback, has ended. */
+    void (*retain_key)(void *, const void *);
+    void (*release_key)(void *, const void *);
 };
 typedef void (*vlc_metadata_pipeline_ended_cb)(input_item_t *, int status, void *);
 vlc_metadata_pipeline_t *vlc_metadata_pipeline_New(vlc_object_t *,

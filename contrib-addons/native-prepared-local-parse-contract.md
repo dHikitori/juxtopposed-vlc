@@ -148,7 +148,7 @@ The controlled internal fixture uses the real request, fetcher, pipeline,
 backend, snapshot, delta, and final Apply code. Its native parser, module I/O,
 and executor schedule are controlled. Its unused thumbnail entry points
 abort. The thin item-source closure supplies the real private status setters;
-shared Core owns the metadata token sequence. Ten groups and 19 scenarios
+shared Core owns the metadata token sequence. Eleven groups and 21 scenarios
 pass normally and with ASAN/UBSAN and leak diagnostics. Native file and
 attachment results retain their fetched status without a downloader. The
 existing native shutdown fixture also passes 60 cases with real executors.
@@ -163,9 +163,10 @@ internal request fixture, legacy artwork fallback, native shutdown, pipeline,
 fetcher, local-result, and standard commit tests.
 
 Request release and cancellation retain their callback-safe behavior. Call
-preparser Delete outside its running executor callbacks. A synchronous Delete
-from that same worker can wait on itself in the existing executor. This mount
-does not grant that broader callback contract.
+preparser Delete outside every callback from that preparser. This rule includes
+queued cancellation callbacks on the caller thread. The owner must schedule
+Delete after its callback returns. A synchronous Delete from an executor
+callback can wait on that same executor.
 
 ## Native prewrite query
 
@@ -184,10 +185,10 @@ the anchor. The five-group native query fixture has 17 scenarios.
 
 ## Remaining mount gates
 
-- Use the full native snapshot at the external parent entry. Keep the remote
-  stage visible to parent cancellation, including the external child handoff.
-- Strip fetch flags from external child configuration and requests. Only the
-  parent can select remote work. A fetch-only request must bypass the child.
+- The external parent now uses the full native snapshot and the same request
+  owner. Its child carries no fetch flags. Fetch-only work stays in the parent.
+  The [external preparser contract](native-external-preparser-contract.md)
+  records the actual child, cancellation, and parity tests.
 - Complete native artwork format parity and the native embedded HTTP/LAN asset
   adapter before global owner activation. Keep every native provider family
   until its actual consumer replacement passes.

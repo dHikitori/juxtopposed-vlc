@@ -1112,4 +1112,31 @@ test_src_misc_metadata_preparser_internal_LDADD = $(LIBVLC) $(LIBVLCCORE)
 test_src_misc_metadata_preparser_runtime_SOURCES = src/misc/metadata_preparser_runtime.c
 test_src_misc_metadata_preparser_runtime_LDADD = $(LIBVLC) $(LIBVLCCORE)
 test_src_misc_metadata_preparser_runtime_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_TIMEOUT=90
+
+check_PROGRAMS += test_src_misc_metadata_pipeline_key test_src_preparser_native_ipc
+test_src_misc_metadata_pipeline_key_SOURCES = src/misc/metadata_pipeline_key.c
+test_src_misc_metadata_pipeline_key_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_pipeline_key_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_preparser_native_ipc_SOURCES = src/preparser/native_ipc.c src/misc/metadata_local_setters.c
+test_src_preparser_native_ipc_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_preparser_native_ipc_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_preparser_native_ipc_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_preparser_native_ipc_LDADD = $(LIBVLCCORE) ../modules/libvlc_json.la
+
+check_PROGRAMS += test_src_preparser_native_import
+test_src_preparser_native_import_SOURCES = src/preparser/native_import.c ../src/input/item.c
+test_src_preparser_native_import_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src \
+    -Dinput_item_ApplyOptions=metadata_local_unused_options -Dinput_item_CreateFilename=metadata_local_unused_filename
+test_src_preparser_native_import_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_preparser_native_import_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_preparser_native_import_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+if HAVE_EXTERNAL_PREPARSER
+check_PROGRAMS += test_src_preparser_owned_pipeline
+test_src_preparser_owned_pipeline_SOURCES = src/preparser/owned_pipeline.c
+test_src_preparser_owned_pipeline_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_preparser_owned_pipeline_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_preparser_owned_pipeline_DEPENDENCIES = $(LIBVLC) $(LIBVLCCORE) $(top_builddir)/bin/vlc-preparser$(EXEEXT)
+test_src_preparser_owned_pipeline_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_TIMEOUT=90
+endif
 endif

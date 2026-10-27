@@ -57,7 +57,7 @@ serdes_buf_write(struct serdes_sys *sys, const void *_data, size_t size)
         int ret = sys->parent->owner.cbs->write(sys->buffer, sys->size,
                                                 sys->userdata);
         if (ret < 0) {
-            if (errno == EINTR) {
+            if (errno == EINTR && !vlc_killed()) {
                 continue;
             }
             serdes_set_error(-errno);
@@ -95,7 +95,7 @@ serdes_buf_putc(struct serdes_sys *sys, char c)
         ssize_t ret = sys->parent->owner.cbs->write(sys->buffer, sys->size,
                                                     sys->userdata);
         if (ret < 0) {
-            if (errno == EINTR) {
+            if (errno == EINTR && !vlc_killed()) {
                 continue;
             }
             serdes_set_error(-errno);
@@ -170,7 +170,7 @@ serdes_buf_flush(struct serdes_sys *sys)
     while (size != 0) {
         ret = sys->parent->owner.cbs->write(ptr, size, sys->userdata);
         if (ret < 0) {
-            if (errno == EINTR) {
+            if (errno == EINTR && !vlc_killed()) {
                 continue;
             }
             serdes_set_error(-errno);
@@ -223,7 +223,7 @@ serdes_buf_read(struct serdes_sys *sys, void *_data, size_t size, bool eod)
             ret = sys->parent->owner.cbs->read(sys->buffer, sys->cap,
                                                sys->userdata);
             if (ret < 0) {
-                if (errno == EINTR) {
+                if (errno == EINTR && !vlc_killed()) {
                     continue;
                 }
                 serdes_set_error(-errno);
@@ -248,7 +248,7 @@ serdes_buf_read(struct serdes_sys *sys, void *_data, size_t size, bool eod)
         while (size != 0) {
             ret = sys->parent->owner.cbs->read(ptr, size, sys->userdata);
             if (ret < 0) {
-                if (errno == EINTR) {
+                if (errno == EINTR && !vlc_killed()) {
                     continue;
                 }
                 serdes_set_error(-errno);
@@ -333,6 +333,21 @@ size_t json_read(void *opaque, void *buf, size_t max)
     if (ret < 0) {
         return 0;
     }
+    const unsigned char *bytes = buf;
+    for (ssize_t i = 0; i < ret; ++i) {
+        const unsigned char byte = bytes[i];
+        if (sys->json_string) {
+            if (sys->json_escape) sys->json_escape = false;
+            else if (byte == '\\') sys->json_escape = true;
+            else if (byte == '"') sys->json_string = false;
+        } else if (byte == '"') sys->json_string = true;
+        else if (byte == '{' || byte == '[') {
+            if (++sys->json_depth > 128) { serdes_set_error(VLC_EINVAL); return 0; }
+        } else if (byte == '}' || byte == ']') {
+            if (sys->json_depth == 0) { serdes_set_error(VLC_EINVAL); return 0; }
+            --sys->json_depth;
+        }
+    }
     return ret;
 }
 
@@ -353,6 +368,9 @@ serdes_Deserialize(struct vlc_preparser_msg_serdes *serdes,
 
     assert(serdes->owner.sys != NULL);
     struct serdes_sys *sys = serdes->owner.sys;
+    sys->json_depth = sys->tree_depth = sys->tree_nodes = 0;
+    sys->attachment_bytes = 0;
+    sys->json_string = sys->json_escape = false;
     sys->userdata = userdata;
     sys->current_type = VLC_PREPARSER_MSG_SERDES_TYPE_DATA;
     sys->error = VLC_SUCCESS;

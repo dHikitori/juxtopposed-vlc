@@ -87,6 +87,10 @@ struct vlc_preparser_msg_req {
      * NULL before a `vlc_preparser_msg_Clean` call. */
     char *uri;
 
+    /* Native Parse baseline only. The message owns this reference. The codec
+     * excludes policy, approval records, backend state, and opaque data. */
+    input_item_t *baseline;
+
     /** Ordered input options, including their original trust flags.
      * Values are owned by the request and freed by vlc_preparser_msg_Clean(). */
     struct VLC_VECTOR(struct vlc_preparser_input_option) input_options;
@@ -107,6 +111,8 @@ struct vlc_preparser_msg_res {
      */
     struct VLC_VECTOR(input_attachment_t *) attachments;
     input_item_node_t *subtree;
+    /* Further native subtree callbacks, in their original order. */
+    struct VLC_VECTOR(input_item_node_t *) subtrees;
 
     /**
      * Used only by request of type `VLC_PREPARSER_MSG_REQ_TYPE_THUMBNAIL`.

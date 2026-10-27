@@ -368,12 +368,29 @@ vlc_tests += {
     'module_depends' : ['preparserserializer_json'],
 }
 
+preparser_test_depends = []
+if is_variable('vlc_preparser_static_dep')
+    preparser_test_depends += vlc_preparser_static_dep
+endif
+
+vlc_tests += {
+    'name': 'test_src_preparser_cmp_internal_external',
+    'sources': files('preparser/cmp_internal_external.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['demux_mock', 'preparserserializer_json'],
+    'depends': preparser_test_depends,
+    'timeout': 90,
+    'enabled': cdata.has('HAVE_VLC_EXTERNAL_PREPARSER'),
+}
+
 vlc_tests += {
     'name' : 'test_src_preparser_folder_options',
     'sources' : files('preparser/folder_options.c'),
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
     'module_depends' : ['filesystem', 'preparserserializer_json'],
+    'depends': preparser_test_depends,
 }
 
 vlc_tests += {
@@ -381,7 +398,8 @@ vlc_tests += {
     'sources' : files('preparser/subtree_identity.c'),
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
-    'module_depends' : ['demux_mock'],
+    'module_depends' : ['demux_mock', 'preparserserializer_json'],
+    'depends': preparser_test_depends,
 }
 
 vlc_tests += {
@@ -1021,9 +1039,55 @@ vlc_tests += {
     'sources': files('misc/metadata_preparser_runtime.c'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlc, libvlccore],
-    'module_depends': ['filesystem', 'wav', 'playlist', 'lua'],
+    'module_depends': ['filesystem', 'wav', 'playlist', 'lua', 'preparserserializer_json'],
     'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules', 'VLC_TEST_TIMEOUT=90'],
-    'depends': lua_filename_reader,
+    'depends': [lua_filename_reader] + preparser_test_depends,
     'timeout': 90,
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_pipeline_key',
+    'sources': files('misc/metadata_pipeline_key.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_preparser_native_ipc',
+    'sources': files('preparser/native_ipc.c', 'misc/metadata_local_setters.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore, vlc_json_lib],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_preparser_owned_pipeline',
+    'sources': files('preparser/owned_pipeline.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['filesystem', 'wav', 'http', 'https', 'preparserserializer_json', 'lua'],
+    'depends': [lua_filename_reader] + preparser_test_depends,
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules', 'VLC_TEST_TIMEOUT=90'],
+    'timeout': 90,
+    'enabled': host_system == 'linux' and cdata.has('HAVE_VLC_EXTERNAL_PREPARSER'),
+}
+
+vlc_tests += {
+    'name': 'test_src_preparser_native_import',
+    'sources': files('preparser/native_import.c', '../../src/input/item.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections',
+        '-Dinput_item_ApplyOptions=metadata_local_unused_options',
+        '-Dinput_item_CreateFilename=metadata_local_unused_filename'],
+    'link_args': ['-Wl,--gc-sections'],
     'enabled': host_system == 'linux',
 }

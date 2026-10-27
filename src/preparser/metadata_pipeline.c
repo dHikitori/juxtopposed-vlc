@@ -53,7 +53,7 @@ struct pipeline_entry {
     uint64_t generation;
     unsigned stage;
     int options, status;
-    bool listed, retained, terminal, notified, native_artwork_replace;
+    bool listed, retained, terminal, notified, native_artwork_replace, key_held;
     bool request_mode, remote_owned, legacy_allowed, local_prepared;
     char *provenance[STAGE_COUNT];
     size_t provenance_sizes[STAGE_COUNT], provenance_bytes;
@@ -94,7 +94,10 @@ static void entry_release(struct pipeline_entry *entry)
     vlc_mutex_lock(&owner->lock);
     if (entry->retained) --owner->retained;
     vlc_cond_broadcast(&owner->idle); vlc_mutex_unlock(&owner->lock);
-    free(entry); owner_release(owner);
+    const void *key = entry->key; const bool key_held = entry->key_held;
+    free(entry);
+    if (key_held) owner->ops.release_key(owner->stage_context, key);
+    owner_release(owner);
 }
 static bool entry_current(struct pipeline_entry *entry)
 {
@@ -329,7 +332,8 @@ static int local_only_dispatch(void *opaque, vlc_metadata_job_t *job)
 vlc_metadata_pipeline_t *vlc_metadata_pipeline_New(vlc_object_t *object,
     const struct vlc_metadata_pipeline_operations *ops, void *context)
 {
-    if (object == NULL || ops == NULL || ops->local == NULL || ops->cancel_local == NULL) return NULL;
+    if (object == NULL || ops == NULL || ops->local == NULL || ops->cancel_local == NULL
+        || (ops->retain_key == NULL) != (ops->release_key == NULL)) return NULL;
     vlc_metadata_pipeline_t *owner = calloc(1, sizeof(*owner)); if (owner == NULL) return NULL;
     static const struct vlc_metadata_backend_operations local_ops = {.dispatch=local_only_dispatch};
     owner->local_backend = vlc_metadata_backend_New(&local_ops, NULL);
@@ -363,6 +367,9 @@ static int push_request(vlc_metadata_pipeline_t *owner, input_item_t *item, int 
     vlc_atomic_rc_init(&entry->refs); entry->owner = owner_hold(owner); entry->backend = backend;
     entry->parent_guard = parent_guard != NULL ? vlc_metadata_pipeline_guard_Hold(parent_guard) : vlc_metadata_pipeline_guard_New();
     entry->target = input_item_Hold(item); entry->key = key; entry->ended = ended;
+    if (key != NULL && owner->ops.retain_key != NULL) {
+        owner->ops.retain_key(owner->stage_context, key); entry->key_held = true;
+    }
     entry->request_ended = request_ended; entry->userdata = userdata; entry->options = options; entry->request_mode = request_mode;
     entry->remote_owned = ready && (options & VLC_PREPARSER_TYPE_FETCHMETA_ALL);
     entry->legacy_allowed = request_mode && selection == VLC_ENOENT;

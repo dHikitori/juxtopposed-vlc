@@ -7,6 +7,8 @@ vlc_modules += {
     'sources' : files(
         'json/serializer.c',
         'json/serializer.h',
+        'json/native_facts_tojson.h',
+        'json/native_facts_fromjson.h',
         'json/fromjson.c',
         'json/tojson.c',
     ),

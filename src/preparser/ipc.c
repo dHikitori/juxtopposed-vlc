@@ -90,11 +90,13 @@ vlc_preparser_msg_Init(struct vlc_preparser_msg *msg, int msg_type,
         vlc_vector_init(&msg->req.outputs);
         vlc_vector_init(&msg->req.outputs_path);
         msg->req.uri = NULL;
+        msg->req.baseline = NULL;
         vlc_vector_init(&msg->req.input_options);
     } else {
         msg->res.type = req_type;
         vlc_vector_init(&msg->res.attachments);
         msg->res.subtree = NULL;
+        vlc_vector_init(&msg->res.subtrees);
         msg->res.pic = NULL;
         vlc_vector_init(&msg->res.result);
         msg->res.status = -1;
@@ -118,6 +120,9 @@ vlc_preparser_msg_Clean(struct vlc_preparser_msg *msg)
             free(ptr);
         }
         vlc_vector_clear(&msg->req.outputs_path);
+        if (msg->req.baseline != NULL) {
+            input_item_Release(msg->req.baseline); msg->req.baseline = NULL;
+        }
         if (msg->req.uri != NULL) {
             free(msg->req.uri);
             msg->req.uri = NULL;
@@ -132,6 +137,9 @@ vlc_preparser_msg_Clean(struct vlc_preparser_msg *msg)
             input_item_node_Delete(msg->res.subtree);
             msg->res.subtree = NULL;
         }
+        input_item_node_t *tree;
+        vlc_vector_foreach(tree, &msg->res.subtrees) if (tree != NULL) input_item_node_Delete(tree);
+        vlc_vector_clear(&msg->res.subtrees);
         if (msg->res.pic != NULL) {
             picture_Release(msg->res.pic);
             msg->res.pic = NULL;

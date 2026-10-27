@@ -889,6 +889,8 @@ static void toJSON_input_item_slave(struct serdes_sys *sys,
     json_stringify_last(string, sys, "psz_uri", (*slave)->psz_uri);
 }
 
+#include "native_facts_tojson.h"
+
 static inline void toJSON_input_item(struct serdes_sys *sys,
                                      const input_item_t *item,
                                      const char *name)
@@ -926,7 +928,9 @@ static inline void toJSON_input_item(struct serdes_sys *sys,
         return;
     }
     json_stringify(number, sys, "i_type", item->i_type);
-    json_stringify_last(boolean, sys, "b_net", item->b_net);
+    json_stringify(boolean, sys, "b_net", item->b_net);
+    native_write_facts(sys, item);
+    serdes_buf_putc(sys, '}');
 }
 
 static inline void toJSON_input_item_node(struct serdes_sys *sys,
@@ -1167,7 +1171,9 @@ toJSON_vlc_preparser_msg_req(struct serdes_sys *sys,
                          "input_options", req->input_options.data);
     if (serdes_buf_puts(sys, ", ") < 0)
         return;
-    json_stringify_last(string, sys, "uri", req->uri);
+    json_stringify(string, sys, "uri", req->uri);
+    toJSON_input_item(sys, req->baseline, "baseline");
+    serdes_buf_putc(sys, '}');
 }
 
 /*
@@ -1203,6 +1209,8 @@ toJSON_vlc_preparser_msg_res(struct serdes_sys *sys,
                 return;
             }
             toJSON_input_item_node(sys, &res->subtree, "subtree");
+            if (serdes_buf_putc(sys, ',') < 0) return;
+            json_stringify_array(toJSON_input_item_node, res->subtrees.size, sys, "subtrees", res->subtrees.data);
             break;
         case VLC_PREPARSER_MSG_REQ_TYPE_THUMBNAIL:
             toJSON_picture(sys, res->pic, "pic");

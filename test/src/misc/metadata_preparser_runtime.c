@@ -55,6 +55,7 @@ static void parse_file(const char *path, bool playlist, unsigned owner_state, bo
     if (owner_state == 3) assert(vlc_metadata_backend_Suspend(backend));
     char *uri = vlc_path2uri(path, NULL); assert(uri != NULL);
     output.item = input_item_New(uri, "Native file"); free(uri); assert(output.item != NULL);
+    input_item_SetTitle(output.item, "User title"); input_item_SetMetaExtra(output.item, "User extra", "Preserved extra");
     assert(input_item_AddInfo(output.item, "Existing", "Baseline", "%s", "Preserved") == VLC_SUCCESS);
     const int options = VLC_PREPARSER_TYPE_PARSE | VLC_PREPARSER_TYPE_FETCHMETA_ALL | VLC_PREPARSER_OPTION_SUBITEMS;
     const struct vlc_preparser_cfg cfg = {.types=VLC_PREPARSER_TYPE_PARSE | VLC_PREPARSER_TYPE_FETCHMETA_ALL, .timeout=VLC_TICK_FROM_SEC(5), .external_process=external};
@@ -66,6 +67,8 @@ static void parse_file(const char *path, bool playlist, unsigned owner_state, bo
     assert(output.ended == 1 && output.status == VLC_SUCCESS && input_item_IsPreparsed(output.item));
     assert(output.remote == (owner_state == 1 ? 1u : 0u));
     char *info = input_item_GetInfo(output.item, "Existing", "Baseline"); assert(info != NULL && !strcmp(info, "Preserved")); free(info);
+    char *title = input_item_GetTitle(output.item), *extra = input_item_GetMetaExtra(output.item, "User extra");
+    assert(title != NULL && !strcmp(title, "User title") && extra != NULL && !strcmp(extra, "Preserved extra")); free(title); free(extra);
     if (playlist) assert(output.trees != 0 && output.children == 1);
     else {
         assert(input_item_GetDuration(output.item) >= VLC_TICK_FROM_MS(900));
@@ -86,8 +89,13 @@ int main(void)
     create_wave(wave);
     FILE *file = fopen(playlist, "wb"); assert(file != NULL);
     assert(fprintf(file, "#EXTM3U\n#EXTINF:1,Child\n%s\n", wave) > 0 && fclose(file) == 0);
-    for (unsigned owner = 0; owner < 4; ++owner) {
-        parse_file(wave, false, owner, false); parse_file(playlist, true, owner, false);
+    for (unsigned external = 0; external < 2; ++external) {
+#ifndef HAVE_VLC_EXTERNAL_PREPARSER
+        if (external) break;
+#endif
+        for (unsigned owner = 0; owner < 4; ++owner) {
+            parse_file(wave, false, owner, external); parse_file(playlist, true, owner, external);
+        }
     }
     assert(unlink(wave) == 0 && unlink(playlist) == 0 && rmdir(directory) == 0);
     free(wave); free(playlist); return 0;
