@@ -23,6 +23,12 @@ Do not close consent on the GUI thread while a saved-file check can hold its mut
 The retiring and joined hooks each run once.
 Retiring-hook reentry cannot start the joined phase before that hook returns.
 
+MainUI binds its metadata service to the exact app handle before it exposes the
+service to consumers. A refused binding closes the service. Both app retirement
+and Manager retirement close its native posting gate before worker shutdown.
+The native queue owner also removes its playlist listener at these early hooks.
+MainUI destruction closes both owners before automatic child destruction.
+
 ## Quit paths
 
 The dialog provider first requests add-on retirement.

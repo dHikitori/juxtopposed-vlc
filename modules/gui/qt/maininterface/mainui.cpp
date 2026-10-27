@@ -167,6 +167,8 @@ MainUI::MainUI(qt_intf_t *p_intf, MainCtx *mainCtx, QWindow* interfaceWindow,  Q
 
 MainUI::~MainUI()
 {
+    for (auto* service:findChildren<AddonMetadataService*>(QString(),Qt::FindDirectChildrenOnly)) service->shutdown();
+    for (auto* queue:findChildren<vlc::addons::AddonNativeQueueStore*>(QString(),Qt::FindDirectChildrenOnly)) queue->close();
     for (auto* picker:findChildren<vlc::addons::AddonNativeLibraryTargets*>(QString(),Qt::FindDirectChildrenOnly)) picker->close();
     for (auto* library:findChildren<vlc::addons::AddonNativeLibraryStore*>(QString(),Qt::FindDirectChildrenOnly)) library->close();
     if (!m_engineBound)
@@ -388,6 +390,12 @@ void MainUI::registerQMLTypes()
                     ? installedReference : buildReference, QStringLiteral("org.videolan.") + name);
             }
             metadataService = new AddonMetadataService(addonManager, this);
+            if (!metadataService->bindApplicationLifetime(m_mainCtx->addonStreamLifetime()))
+                metadataService->shutdown();
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                metadataService, &AddonMetadataService::shutdown, Qt::DirectConnection);
+            connect(addonManager, &vlc::addons::AddonManager::retiring,
+                metadataService, &AddonMetadataService::shutdown, Qt::DirectConnection);
             metadataService->setAutomaticNetworkAllowed(var_InheritBool(m_intf, "metadata-network-access"));
             m_intf->p_mainPlayerController->setMetadataService(metadataService);
             connect(m_intf->p_mainPlayerController, &PlayerController::metadataNetworkAccessChanged,
@@ -415,6 +423,10 @@ void MainUI::registerQMLTypes()
             auto admissions = std::make_shared<vlc::addons::AddonSourceAdmissions>(addonManager->storageDirectory(),
                 [managerOwner](const QVariantMap& reference) { return vlc::addons::discoveryReferenceAvailable(managerOwner, reference); });
             auto* nativeQueue = new vlc::addons::AddonNativeQueueStore(m_intf->p_mainPlaylistController ? m_intf->p_mainPlaylistController->getPlaylist().m_playlist : nullptr, admissions, this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                nativeQueue, &vlc::addons::AddonNativeQueueStore::close, Qt::DirectConnection);
+            connect(addonManager, &vlc::addons::AddonManager::retiring,
+                nativeQueue, &vlc::addons::AddonNativeQueueStore::close, Qt::DirectConnection);
             nativeQueue->setObjectName(QStringLiteral("addonNativeQueueStore"));
             auto* playableGate = new vlc::addons::AddonPlayableGate(addonManager, this);
             playableGate->setObjectName(QStringLiteral("addonPlayableGate"));
