@@ -69,6 +69,72 @@ static void final_lease_release_can_reenter_cancel(void)
     struct vlc_source_result result = result_new(&state); state.lease = result.lease;
     result_release(&result); assert(state.lease_cancelled == 1 && state.lease_destroyed == 1);
 }
+struct lease_barrier {
+    vlc_source_lease_t *lease;
+    vlc_sem_t entered, release, second_started, second_done;
+    atomic_uint callbacks, destroyed;
+    atomic_bool finished, second_returned;
+};
+static void barrier_cancel(void *opaque)
+{
+    struct lease_barrier *state = opaque;
+    ++state->callbacks;
+    vlc_source_lease_Cancel(state->lease); /* Same-thread recursion must return. */
+    vlc_sem_post(&state->entered); vlc_sem_wait(&state->release);
+    atomic_store_explicit(&state->finished, true, memory_order_release);
+}
+static void barrier_destroy(void *opaque) { ++((struct lease_barrier *)opaque)->destroyed; }
+static void *first_lease_cancel(void *opaque)
+{
+    struct lease_barrier *state = opaque;
+    vlc_source_lease_Cancel(state->lease); vlc_source_lease_Release(state->lease); return NULL;
+}
+static void *second_lease_cancel(void *opaque)
+{
+    struct lease_barrier *state = opaque; vlc_sem_post(&state->second_started);
+    vlc_source_lease_Cancel(state->lease);
+    assert(atomic_load_explicit(&state->finished, memory_order_acquire));
+    atomic_store_explicit(&state->second_returned, true, memory_order_release);
+    vlc_sem_post(&state->second_done); vlc_source_lease_Release(state->lease); return NULL;
+}
+static void concurrent_lease_cancellation(bool release_caller)
+{
+    struct lease_barrier state = {0};
+    vlc_sem_init(&state.entered, 0); vlc_sem_init(&state.release, 0);
+    vlc_sem_init(&state.second_started, 0); vlc_sem_init(&state.second_done, 0);
+    static const struct vlc_source_lease_operations ops = {barrier_cancel, barrier_destroy};
+    state.lease = vlc_source_lease_New(&ops, &state); assert(state.lease != NULL);
+    vlc_source_lease_Hold(state.lease); vlc_thread_t first, second;
+    assert(vlc_clone(&first, first_lease_cancel, &state) == 0); vlc_sem_wait(&state.entered);
+    vlc_source_lease_Hold(state.lease);
+    assert(vlc_clone(&second, second_lease_cancel, &state) == 0); vlc_sem_wait(&state.second_started);
+    if (release_caller) vlc_source_lease_Release(state.lease);
+    assert(vlc_sem_timedwait(&state.second_done, vlc_tick_now() + VLC_TICK_FROM_MS(100)) == ETIMEDOUT);
+    assert(!atomic_load_explicit(&state.second_returned, memory_order_acquire));
+    assert(state.callbacks == 1 && state.destroyed == 0);
+    vlc_sem_post(&state.release); vlc_join(first, NULL); vlc_join(second, NULL);
+    assert(state.callbacks == 1 && atomic_load_explicit(&state.second_returned, memory_order_acquire));
+    if (!release_caller) { assert(state.destroyed == 0); vlc_source_lease_Release(state.lease); }
+    assert(state.destroyed == 1);
+}
+struct retained_lease { vlc_source_lease_t *lease, *retained; unsigned canceled, destroyed; };
+static void retained_cancel(void *opaque)
+{
+    struct retained_lease *state = opaque; ++state->canceled;
+    state->retained = vlc_source_lease_Hold(state->lease);
+    vlc_source_lease_Cancel(state->lease);
+}
+static void retained_destroy(void *opaque) { ++((struct retained_lease *)opaque)->destroyed; }
+static void final_release_can_retain_a_live_cleanup_reference(void)
+{
+    struct retained_lease state = {0};
+    static const struct vlc_source_lease_operations ops = {retained_cancel, retained_destroy};
+    state.lease = vlc_source_lease_New(&ops, &state); assert(state.lease != NULL);
+    vlc_source_lease_Release(state.lease);
+    assert(state.retained != NULL && state.canceled == 1 && state.destroyed == 0);
+    vlc_source_lease_Cancel(state.retained); assert(state.canceled == 1);
+    vlc_source_lease_Release(state.retained); assert(state.destroyed == 1);
+}
 static void success_and_lifetimes(void)
 {
     struct state state = { .lease_reentrant = true }; vlc_source_backend_t *backend = backend_new(&state);
@@ -207,5 +273,7 @@ int main(void)
     success_and_lifetimes(); cancellation_and_close(); errors_and_reentrant_close();
     invalid_results_and_requests(); result_cancel_races(); active_limit(); close_revokes_issued_and_pending_transports();
     final_lease_release_can_reenter_cancel(); transport_has_one_job_owner(); idle_cancel_prevents_dispatch();
-    completed_cancel_revokes_transport(); return 0;
+    completed_cancel_revokes_transport();
+    concurrent_lease_cancellation(false); concurrent_lease_cancellation(true);
+    final_release_can_retain_a_live_cleanup_reference(); return 0;
 }

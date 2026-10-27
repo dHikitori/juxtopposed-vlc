@@ -54,6 +54,11 @@ mutex protects their owner pointer. Destruction clears that pointer before it
 closes the native backend. Native Close and Cancel end input waits and close
 attached transports without a GUI event.
 
+Concurrent lease cancellation waits for the native transport callback to
+finish. Same-thread callback reentry does not wait for itself. See
+[native lease retirement](native-source-lease-retirement.md) for the reference
+lifetime rule and the controlled concurrent-caller checks.
+
 The default limits are 16 pending host jobs, 64 issued transports, and 256
 queued host deliveries. A prepare or startup completion has one use. Stopped
 transports leave the issued set at the next host admission. The guard uses weak

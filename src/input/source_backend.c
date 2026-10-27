@@ -16,6 +16,10 @@ struct vlc_source_lease {
     vlc_atomic_rc_t refs;
     atomic_bool cancelled;
     atomic_bool attached;
+    vlc_mutex_t cancel_lock;
+    vlc_cond_t cancel_ended;
+    unsigned long cancel_owner;
+    bool cancel_finished;
     struct vlc_source_lease_operations ops;
     void *opaque;
 };
@@ -55,6 +59,8 @@ vlc_source_lease_t *vlc_source_lease_New(const struct vlc_source_lease_operation
     if (lease == NULL) return NULL;
     vlc_atomic_rc_init(&lease->refs);
     atomic_init(&lease->cancelled, false); atomic_init(&lease->attached, false);
+    vlc_mutex_init(&lease->cancel_lock); vlc_cond_init(&lease->cancel_ended);
+    lease->cancel_owner = 0; lease->cancel_finished = false;
     lease->ops = *ops; lease->opaque = opaque;
     return lease;
 }
@@ -62,21 +68,48 @@ vlc_source_lease_t *vlc_source_lease_Hold(vlc_source_lease_t *lease)
 { vlc_atomic_rc_inc(&lease->refs); return lease; }
 static void cancel_lease(vlc_source_lease_t *lease)
 {
-    if (!atomic_exchange_explicit(&lease->cancelled, true, memory_order_acq_rel))
-        lease->ops.cancel(lease->opaque);
+    const unsigned long self = vlc_thread_id();
+    vlc_mutex_lock(&lease->cancel_lock);
+    if (atomic_load_explicit(&lease->cancelled, memory_order_acquire)) {
+        while (!lease->cancel_finished && lease->cancel_owner != self)
+            vlc_cond_wait(&lease->cancel_ended, &lease->cancel_lock);
+        vlc_mutex_unlock(&lease->cancel_lock);
+        return;
+    }
+    atomic_store_explicit(&lease->cancelled, true, memory_order_release);
+    lease->cancel_owner = self;
+    vlc_mutex_unlock(&lease->cancel_lock);
+    lease->ops.cancel(lease->opaque);
+    vlc_mutex_lock(&lease->cancel_lock);
+    lease->cancel_finished = true; lease->cancel_owner = 0;
+    vlc_cond_broadcast(&lease->cancel_ended);
+    vlc_mutex_unlock(&lease->cancel_lock);
 }
 void vlc_source_lease_Cancel(vlc_source_lease_t *lease)
 {
-    vlc_source_lease_Hold(lease); cancel_lease(lease); vlc_source_lease_Release(lease);
+    const int cancel_state = vlc_savecancel();
+    vlc_source_lease_Hold(lease);
+    cancel_lease(lease);
+    vlc_source_lease_Release(lease);
+    vlc_restorecancel(cancel_state);
 }
 void vlc_source_lease_Release(vlc_source_lease_t *lease)
 {
-    if (!vlc_atomic_rc_dec(&lease->refs)) return;
-    vlc_atomic_rc_init(&lease->refs);
+    uintptr_t count = atomic_load_explicit(&lease->refs.refs, memory_order_acquire);
+    for (;;) {
+        vlc_assert(count != 0);
+        if (count == 1) break;
+        if (atomic_compare_exchange_weak_explicit(&lease->refs.refs, &count, count - 1,
+                                                memory_order_acq_rel, memory_order_acquire)) return;
+    }
+    // Keep the last reference through callback reentry. Never revive zero refs.
+    const int cancel_state = vlc_savecancel();
     cancel_lease(lease);
-    if (!vlc_atomic_rc_dec(&lease->refs)) return;
-    if (lease->ops.destroy != NULL) lease->ops.destroy(lease->opaque);
-    free(lease);
+    if (vlc_atomic_rc_dec(&lease->refs)) {
+        if (lease->ops.destroy != NULL) lease->ops.destroy(lease->opaque);
+        free(lease);
+    }
+    vlc_restorecancel(cancel_state);
 }
 vlc_source_backend_t *vlc_source_backend_New(const struct vlc_source_backend_operations *ops, void *opaque)
 {

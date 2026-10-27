@@ -21,6 +21,9 @@ struct vlc_source_lease_operations {
 };
 VLC_API vlc_source_lease_t *vlc_source_lease_New(const struct vlc_source_lease_operations *, void *opaque);
 VLC_API vlc_source_lease_t *vlc_source_lease_Hold(vlc_source_lease_t *);
+/** Cancel the transport and wait for its cancel callback to finish. A nested
+ * call from that same callback returns without waiting for itself.
+ */
 VLC_API void vlc_source_lease_Cancel(vlc_source_lease_t *);
 /** The last release also cancels the transport. */
 VLC_API void vlc_source_lease_Release(vlc_source_lease_t *);
