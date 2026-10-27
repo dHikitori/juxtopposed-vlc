@@ -83,6 +83,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_meta_fetcher.h \
 	../include/vlc_metadata_backend.h \
 	../include/vlc_metadata_owner.h \
+	../include/vlc_medialibrary_work.h \
 	../include/vlc_addon_medialibrary.h \
 	../include/vlc_metadata_revision.h \
 	../include/vlc_mime.h \
@@ -473,6 +474,8 @@ libvlccore_la_SOURCES = \
 	misc/subpicture.c \
 	misc/subpicture.h \
 	misc/medialibrary.c \
+	misc/medialibrary_work.c \
+	misc/medialibrary_work.h \
 	misc/viewpoint.c
 libvlccore_la_LIBADD = $(LIBS_libvlccore) \
 	../compat/libcompat.la \

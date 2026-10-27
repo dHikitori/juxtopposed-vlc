@@ -28,6 +28,7 @@
 #include <vlc_list.h>
 #include <vlc_threads.h>
 #include "../libvlc.h"
+#include "medialibrary_work.h"
 
 #include <assert.h>
 
@@ -41,6 +42,7 @@ struct vlc_ml_event_callback_t
 struct vlc_medialibrary_t
 {
     vlc_medialibrary_module_t m;
+    struct vlc_ml_work_owner *work;
 
     vlc_mutex_t lock;
     struct vlc_list cbs;
@@ -107,10 +109,13 @@ vlc_medialibrary_t* libvlc_MlCreate( libvlc_int_t* p_libvlc  )
         return NULL;
     vlc_mutex_init( &p_ml->lock );
     vlc_list_init( &p_ml->cbs );
+    p_ml->work=vlc_ml_work_owner_New(p_ml);
+    if (p_ml->work == NULL) { vlc_object_delete(&p_ml->m); return NULL; }
     p_ml->m.cbs = &callbacks;
     p_ml->m.p_module = module_need( &p_ml->m, "medialibrary", NULL, false );
     if ( p_ml->m.p_module == NULL )
     {
+        vlc_ml_work_owner_Retire(p_ml->work); vlc_ml_work_owner_Release(p_ml->work);
         vlc_object_delete(&p_ml->m);
         return NULL;
     }
@@ -120,10 +125,16 @@ vlc_medialibrary_t* libvlc_MlCreate( libvlc_int_t* p_libvlc  )
 void libvlc_MlRelease( vlc_medialibrary_t* p_ml )
 {
     assert( p_ml != NULL );
+    /* Do not hold the event callback lock while native work ends. */
+    vlc_ml_work_owner_Retire(p_ml->work);
     module_unneed( &p_ml->m, p_ml->m.p_module );
     assert( vlc_list_is_empty( &p_ml->cbs ) );
+    vlc_ml_work_owner_Release(p_ml->work);
     vlc_object_delete(&p_ml->m);
 }
+
+vlc_ml_work_t *vlc_ml_work_Acquire(vlc_medialibrary_t *library)
+{ return library != NULL ? vlc_ml_work_owner_Acquire(library->work) : NULL; }
 
 #undef vlc_ml_instance_get
 vlc_medialibrary_t* vlc_ml_instance_get( vlc_object_t* p_obj )

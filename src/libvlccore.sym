@@ -649,6 +649,10 @@ vlc_latch_count_down
 vlc_latch_count_down_and_wait
 vlc_latch_wait
 vlc_ml_instance_get
+vlc_ml_work_Acquire
+vlc_ml_work_Begin
+vlc_ml_work_End
+vlc_ml_work_Release
 vlc_ml_get
 vlc_ml_control
 vlc_ml_list

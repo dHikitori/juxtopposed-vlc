@@ -324,6 +324,8 @@ libvlccore_sources_base = files(
     'misc/subpicture.c',
     'misc/subpicture.h',
     'misc/medialibrary.c',
+    'misc/medialibrary_work.c',
+    'misc/medialibrary_work.h',
     'misc/viewpoint.c',
     'misc/rcu.c',
     'misc/tracer.c',

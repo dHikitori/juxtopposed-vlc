@@ -81,6 +81,7 @@ install_headers(
     'vlc_meta_fetcher.h',
     'vlc_metadata_backend.h',
     'vlc_metadata_owner.h',
+    'vlc_medialibrary_work.h',
     'vlc_addon_medialibrary.h',
     'vlc_metadata_revision.h',
     'vlc_mime.h',

@@ -38,6 +38,7 @@ check_PROGRAMS = \
     test_src_misc_metadata_backend \
     test_src_misc_metadata_owner \
     test_src_misc_metadata_requests \
+    test_src_misc_medialibrary_work \
     test_src_misc_addon_medialibrary \
     test_src_misc_metadata_commit \
     test_src_misc_metadata_revision \
@@ -254,6 +255,9 @@ test_src_misc_metadata_owner_LDADD = $(LIBVLCCORE)
 
 test_src_misc_metadata_requests_SOURCES = src/misc/metadata_requests.c
 test_src_misc_metadata_requests_LDADD = $(LIBVLCCORE)
+
+test_src_misc_medialibrary_work_SOURCES = src/misc/medialibrary_work.c
+test_src_misc_medialibrary_work_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_misc_addon_medialibrary_SOURCES = src/misc/addon_medialibrary.c
 
