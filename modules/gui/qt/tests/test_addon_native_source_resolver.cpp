@@ -6,6 +6,8 @@
 #include <QTemporaryDir>
 #include <QDir>
 #include <QPointer>
+#include <QSemaphore>
+#include <QScopeGuard>
 #include <atomic>
 #include <thread>
 #include <vlc_common.h>
@@ -74,23 +76,29 @@ struct NativeJob {
     }
 };
 struct Fixture {
+    struct State { std::atomic_bool enabled{true}; std::atomic_uint revision{1}; std::atomic_int admitted{0}; };
     QTemporaryDir profile;
     libvlc_int_t* instance = libvlc_InternalCreate();
     Binding binding{AddonSourceConsent::SourceKind::Git, QStringLiteral("https://example.org/radio.git"),
         QStringLiteral("org.example.radio/source"), QStringLiteral("account-1")};
-    std::atomic_bool enabled{true};
-    std::atomic_uint revision{1};
-    std::atomic_int admitted{0}, preparations{0}, preparationCanceled{0};
+    std::shared_ptr<State> state=std::make_shared<State>();
+    std::atomic_bool& enabled=state->enabled;
+    std::atomic_uint& revision=state->revision;
+    std::atomic_int& admitted=state->admitted;
+    std::atomic_int preparations{0}, preparationCanceled{0};
     std::shared_ptr<AddonSourceAdmissions> admissions;
     std::shared_ptr<AddonSourceConsent> consent;
     std::unique_ptr<Resolver> owner;
+    std::function<std::optional<Resolver::Admission>(const QString&,quint64)> admit;
     std::function<Resolver::Cancel(const Resolver::Admission&, Resolver::Current, Resolver::PreparedCallback)> prepare;
     Fixture() {
+        const auto source=state; const auto key=binding;
         admissions = std::make_shared<AddonSourceAdmissions>(profile.filePath(QStringLiteral("admissions")),
-            [this](const QVariantMap& value) { return enabled.load() && value.value("source").toString() == binding.contribution; });
+            [source,key](const QVariantMap& value) { return source->enabled.load() && value.value("source").toString() == key.contribution; });
+        const auto records=admissions;
         consent = std::make_shared<AddonSourceConsent>(profile.path(), AddonSourceConsent::Checks{
-            [this](const Binding& value) { return enabled.load() && value.identity == binding.identity && value.contribution == binding.contribution; },
-            [this](const Binding&, const QString& uri) { return !admissions->currentReference(uri).isEmpty(); }});
+            [source,key](const Binding& value) { return source->enabled.load() && value.identity == key.identity && value.contribution == key.contribution; },
+            [records](const Binding&, const QString& uri) { return !records->currentReference(uri).isEmpty(); }});
     }
     ~Fixture() { owner.reset(); if (instance) libvlc_InternalDestroy(instance); }
     vlc_object_t* root() const { return VLC_OBJECT(instance); }
@@ -104,15 +112,20 @@ struct Fixture {
         const auto ticket = consent->capture(value); return ticket && consent->grant(ticket->id);
     }
     Resolver::Backend backend() {
-        return {[this](const QString& uri, quint64 generation) -> std::optional<Resolver::Admission> {
-            ++admitted; const auto ref = admissions->currentReference(uri); if (ref.isEmpty()) return {};
-            auto value = binding; value.accountReference = ref.value("accountReference").toString();
-            const auto token = consent->mintIntent(value, uri, generation, Reason::PrimaryPlayback);
-            const auto authorization = consent->consumeIntent(token, value, uri, generation, Reason::PrimaryPlayback);
+        const auto source=state; const auto records=admissions; const auto approvals=consent; const auto key=binding;
+        auto admission=admit;
+        if(!admission) admission=[source,records,approvals,key](const QString& uri, quint64 generation) -> std::optional<Resolver::Admission> {
+            ++source->admitted; const auto ref = records->currentReference(uri); if (ref.isEmpty()) return {};
+            auto value = key; value.accountReference = ref.value("accountReference").toString();
+            const auto token = approvals->mintIntent(value, uri, generation, Reason::PrimaryPlayback);
+            const auto authorization = approvals->consumeIntent(token, value, uri, generation, Reason::PrimaryPlayback);
             if (!authorization) return {};
-            const auto captured = revision.load();
-            return Resolver::Admission{consent, *authorization, [this, captured] { return revision.load() == captured; }};
-        }, [this](const auto& admission, auto current, auto done) -> Resolver::Cancel {
+            const auto captured = source->revision.load();
+            return Resolver::Admission{approvals, *authorization,
+                [source, captured] { return source->revision.load() == captured; },
+                [source, captured] { return source->revision.load() == captured; }};
+        };
+        return {std::move(admission), [this](const auto& admission, auto current, auto done) -> Resolver::Cancel {
             ++preparations; return prepare ? prepare(admission, std::move(current), std::move(done)) : Resolver::Cancel{};
         }};
     }
@@ -126,6 +139,101 @@ class TestAddonNativeSourceResolver : public QObject
 {
     Q_OBJECT
 private slots:
+    void cleanup() { QTRY_COMPARE_WITH_TIMEOUT(Resolver::admissionWorkCount(),0u,5000); }
+    void savedAdmissionRunsOffTheOwnerThread() {
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); const auto base=f.backend().admit;
+        const auto caller=std::this_thread::get_id(); const auto offThread=std::make_shared<std::atomic_bool>(false);
+        f.admit=[base,caller,offThread](const QString& uri,quint64 generation) {
+            offThread->store(std::this_thread::get_id()!=caller); return base(uri,generation);
+        };
+        auto transport=std::make_shared<Transport>(); f.automatic(uri,transport); f.create();
+        NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1);
+        QCOMPARE(job.status.load(),VLC_SUCCESS); QVERIFY(offThread->load()); QCOMPARE(transport->io.load(),1);
+    }
+    void pendingAdmissionEndsWithoutOwnerDelivery_data() {
+        QTest::addColumn<int>("action"); QTest::newRow("cancel")<<0;
+        QTest::newRow("close")<<1; QTest::newRow("destroy")<<2;
+    }
+    void pendingAdmissionEndsWithoutOwnerDelivery() {
+        QFETCH(int,action);
+        struct Wait { QSemaphore release; std::atomic_bool entered{false},returned{false}; };
+        const auto wait=std::make_shared<Wait>(); const auto release=qScopeGuard([wait] { wait->release.release(); });
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); const auto base=f.backend().admit;
+        f.admit=[base,wait](const QString& uri,quint64 generation) {
+            auto result=base(uri,generation); wait->entered=true; wait->release.acquire(); wait->returned=true; return result;
+        };
+        auto transport=std::make_shared<Transport>(); f.automatic(uri,transport); f.create();
+        NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_VERIFY(wait->entered.load());
+        QCOMPARE(Resolver::admissionWorkCount(),1u); QCOMPARE(f.preparations.load(),0);
+        if(action==0) { std::thread native([&] { vlc_source_job_Cancel(job.value); }); native.join(); }
+        else if(action==1) f.owner->close(); else f.owner.reset();
+        QCOMPARE(job.ended.load(),1); QCOMPARE(job.status.load(),-EINTR);
+        QCOMPARE(Resolver::admissionWorkCount(),1u); QVERIFY(!wait->returned.load());
+        wait->release.release(); QTRY_COMPARE(Resolver::admissionWorkCount(),0u);
+        QCoreApplication::sendPostedEvents(); QCOMPARE(f.preparations.load(),0); QCOMPARE(transport->io.load(),0);
+    }
+    void retiringAdmissionsKeepTheProcessLimitAcrossOwnerReplacement() {
+        struct Wait { QSemaphore release; std::atomic_uint entered{0}; };
+        const auto wait=std::make_shared<Wait>(); const auto release=qScopeGuard([wait] { wait->release.release(int(Resolver::admissionWorkLimit())); });
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve());
+        f.admit=[wait](const QString&,quint64)->std::optional<Resolver::Admission> { ++wait->entered; wait->release.acquire(); return {}; };
+        f.create(); std::vector<std::unique_ptr<NativeJob>> jobs;
+        for(unsigned n=0;n<Resolver::admissionWorkLimit();++n) {
+            jobs.emplace_back(std::make_unique<NativeJob>(f.root(),uri,n+1)); QCOMPARE(jobs.back()->start(),VLC_SUCCESS);
+            QTRY_COMPARE(wait->entered.load(),n+1);
+        }
+        NativeJob full(f.root(),uri,100); QCOMPARE(full.start(),VLC_SUCCESS); QTRY_COMPARE(full.ended.load(),1);
+        QCOMPARE(full.status.load(),VLC_ENOMEM); f.owner.reset();
+        for(const auto& job:jobs) { QCOMPARE(job->ended.load(),1); QCOMPARE(job->status.load(),-EINTR); }
+        QCOMPARE(Resolver::admissionWorkCount(),Resolver::admissionWorkLimit());
+        const auto calls=std::make_shared<std::atomic_uint>(0);
+        f.admit=[calls](const QString&,quint64)->std::optional<Resolver::Admission> { ++*calls; return {}; }; f.create();
+        NativeJob retired(f.root(),uri,101); QCOMPARE(retired.start(),VLC_SUCCESS); QTRY_COMPARE(retired.ended.load(),1);
+        QCOMPARE(retired.status.load(),VLC_ENOMEM); QCOMPARE(calls->load(),0u);
+        wait->release.release(int(Resolver::admissionWorkLimit())); QTRY_COMPARE(Resolver::admissionWorkCount(),0u);
+        NativeJob next(f.root(),uri,102); QCOMPARE(next.start(),VLC_SUCCESS); QTRY_COMPARE(next.ended.load(),1);
+        QCOMPARE(next.status.load(),-EACCES); QCOMPARE(calls->load(),1u);
+    }
+    void withdrawalCancelsOnlyTheMatchingPendingAccount() {
+        struct Wait { QSemaphore release; std::atomic_bool entered{false}; };
+        const auto wait=std::make_shared<Wait>(); const auto release=qScopeGuard([wait] { wait->release.release(); });
+        Fixture f; const auto first=f.uri(),second=f.uri(QStringLiteral("account-2")); QVERIFY(f.approve()); QVERIFY(f.approve(QStringLiteral("account-2")));
+        const auto base=f.backend().admit;
+        f.admit=[base,wait](const QString& uri,quint64 generation) {
+            auto result=base(uri,generation); if(generation==1) { wait->entered=true; wait->release.acquire(); } return result;
+        };
+        auto transport=std::make_shared<Transport>(); f.automatic(second,transport); f.create();
+        NativeJob a(f.root(),first,1); QCOMPARE(a.start(),VLC_SUCCESS); QTRY_VERIFY(wait->entered.load());
+        NativeJob b(f.root(),second,2); QCOMPARE(b.start(),VLC_SUCCESS); QTRY_COMPARE(b.ended.load(),1); QCOMPARE(b.status.load(),VLC_SUCCESS);
+        f.owner->withdraw(f.binding); QCOMPARE(a.ended.load(),1); QCOMPARE(a.status.load(),-EINTR);
+        QVERIFY(transport->current()); QCOMPARE(transport->canceled.load(),0);
+        wait->release.release(); QTRY_COMPARE(Resolver::admissionWorkCount(),0u); QCoreApplication::sendPostedEvents();
+        QCOMPARE(f.preparations.load(),1); QCOMPARE(f.owner->issuedCount(),1u);
+    }
+    void liveAdmissionChecksDoNotCallTheSavedConfigurationReader() {
+        Fixture f; const auto uri = f.uri(); QVERIFY(f.approve());
+        auto admission = f.backend().admit(uri, 7); QVERIFY(admission);
+        std::atomic_int reads{0};
+        admission->configurationCurrent = [&] { ++reads; return true; };
+        QVERIFY(admission->current(uri, 7)); QCOMPARE(reads.load(), 0);
+        QVERIFY(!admission->current(uri, 8));
+        QVERIFY(!admission->current(uri + QStringLiteral("other"), 7));
+        QVERIFY(admission->authorize(uri, 7)); QCOMPARE(reads.load(), 1);
+        QVERIFY(f.consent->revoke(f.binding));
+        QVERIFY(!admission->current(uri, 7)); QCOMPARE(reads.load(), 1);
+        QVERIFY(!admission->authorize(uri, 7)); QCOMPARE(reads.load(), 1);
+    }
+    void liveConfigurationIsRequiredAndRejectsEachTransportHop() {
+        Fixture f; const auto uri = f.uri(); QVERIFY(f.approve());
+        auto admission = f.backend().admit(uri, 3); QVERIFY(admission);
+        admission->configurationLive = {}; QVERIFY(!admission->current(uri, 3));
+        QVERIFY(!admission->authorize(uri, 3));
+        admission->configurationLive = [] { return false; };
+        QVERIFY(!admission->current(uri, 3));
+        admission->configurationLive = [] { return true; };
+        admission->configurationCurrent = [] { return false; };
+        QVERIFY(admission->current(uri, 3)); QVERIFY(!admission->authorize(uri, 3));
+    }
     void nativeOwnerHasOneBindingAndClosedOwnersCanBeReplaced() {
         Fixture f; QVERIFY(f.instance); f.create(); QVERIFY(f.owner->bound());
         Resolver second(f.root(), f.backend()); QVERIFY(!second.bound());
@@ -205,7 +313,8 @@ private slots:
     void hostLimitsRejectWorkAndPruneStoppedTransports() {
         Fixture f; const auto uri = f.uri(); QVERIFY(f.approve()); Resolver::PreparedCallback done;
         f.prepare = [&](const auto&, auto, auto callback) -> Resolver::Cancel { done = std::move(callback); return {}; };
-        f.create({1,1}); NativeJob a(f.root(), uri, 1); QCOMPARE(a.start(), VLC_SUCCESS); QTRY_COMPARE(f.owner->pendingCount(), 1u);
+        f.create({1,1}); NativeJob a(f.root(), uri, 1); QCOMPARE(a.start(), VLC_SUCCESS); QTRY_COMPARE(f.preparations.load(), 1);
+        QCOMPARE(f.owner->pendingCount(),1u);
         NativeJob b(f.root(), uri, 2); QCOMPARE(b.start(), VLC_SUCCESS); QTRY_COMPARE(b.ended.load(), 1); QCOMPARE(b.status.load(), VLC_ENOMEM);
         auto first = std::make_shared<Transport>(); done(dormant(uri, first)); QTRY_COMPARE(a.ended.load(), 1);
         NativeJob c(f.root(), uri, 3); QCOMPARE(c.start(), VLC_SUCCESS); QTRY_COMPARE(c.ended.load(), 1); QCOMPARE(c.status.load(), VLC_ENOMEM);

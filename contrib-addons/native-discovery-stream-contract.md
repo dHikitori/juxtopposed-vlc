@@ -102,6 +102,12 @@ Preparse, import, artwork fetch, and background browsing cannot create it.
 An imported URI does not install or enable its source.
 Missing consent leaves the item unavailable until the user approves playback.
 
+An authorization also has a `LiveToken`. Its `current()` method reads retained atomics only. It does not read files, acquire a mutex, call Qt, or use the consent owner pointer. Close and owner destruction invalidate that owner's receipts. Revoke, reset, or replacement approval invalidates old receipts from other owners of the same profile. Approval for a different binding keeps existing receipts. Package state changes use the retained store authority token.
+
+The full consent `current()` method remains a background source, account, admission, and saved-file check. Run it before a new remote request or redirect. A failed full check closes that receipt. External file or credential-store changes have this background admission boundary; the memory token does not give immediate notice of edits from another process. Failed revoke and reset writes remain denied in the current process until explicit approval or a successful reset.
+
+Initial source admission also runs on a background thread. It uses plain owned state and retains no interface object or raw Core instance. A process-wide limit of eight active or retiring jobs remains in force across owner replacement. Cancellation and close finish native requests without waiting for blocked admission work. Late results cannot prepare a transport for a cancelled request. The current native resolver suite passes 28 cases; saved consent passes 21 cases. The production mount still needs the application shutdown boundary.
+
 ## Public media and CDN origins
 
 The public media profile permits changing station and CDN hosts for one selected media item.

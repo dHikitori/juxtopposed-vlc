@@ -7,6 +7,14 @@
 #include <QUuid>
 #include <atomic>
 #include <thread>
+#include <QScopeGuard>
+#include <QElapsedTimer>
+#include "addons/addon_package_store.hpp"
+#ifdef Q_OS_UNIX
+# include <fcntl.h>
+# include <sys/stat.h>
+# include <unistd.h>
+#endif
 #include "addons/addon_source_consent.hpp"
 #include "addons/addon_source_admissions.hpp"
 
@@ -152,6 +160,90 @@ private slots:
         }};
         std::thread a(worker,1),b(worker,5); a.join(); b.join(); QCOMPARE(passed.load(),8);
     }
+    void liveReceiptsCloseOnOwnerDestructionWithoutAStorePointer() {
+        Fixture f; AddonSourceConsent::LiveToken empty; QVERIFY(!empty.current());
+        auto store=std::make_unique<AddonSourceConsent>(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(*store)); const auto uri=f.uri();
+        const auto intent=store->mintIntent(f.binding,uri,1,Reason::PrimaryPlayback);
+        const auto authorization=store->consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(authorization);
+        const auto live=authorization->liveToken(); QVERIFY(live.current()); store.reset(); QVERIFY(!live.current());
+    }
+    void aPeerOwnerCloseDoesNotCloseOtherOwnersReceipts() {
+        Fixture f; AddonSourceConsent one(f.profile.path(),f.checks(),f.options()),two(f.profile.path(),f.checks(),f.options());
+        QVERIFY(f.approve(one)); const auto uri=f.uri();
+        const auto first=one.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback),second=two.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback);
+        const auto a=one.consumeIntent(first,f.binding,uri,1,Reason::PrimaryPlayback),b=two.consumeIntent(second,f.binding,uri,1,Reason::PrimaryPlayback);
+        QVERIFY(a && b); two.close(); QVERIFY(a->liveToken().current()); QVERIFY(!b->liveToken().current());
+        QVERIFY(one.current(*a,uri,1));
+    }
+    void peerRevokeRegrantAndResetCannotReviveLiveReceipts() {
+        Fixture f; AddonSourceConsent one(f.profile.path(),f.checks(),f.options()),peer(f.profile.path()+"/./",f.checks(),f.options());
+        QVERIFY(f.approve(one)); const auto uri=f.uri(); auto intent=one.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback);
+        const auto original=one.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(original); QVERIFY(original->liveToken().current());
+        QVERIFY(peer.revoke(f.binding)); QVERIFY(!original->liveToken().current()); QVERIFY(!one.approved(f.binding));
+        QVERIFY(f.approve(peer)); QVERIFY(!original->liveToken().current());
+        intent=one.mintIntent(f.binding,uri,2,Reason::Replay); const auto renewed=one.consumeIntent(intent,f.binding,uri,2,Reason::Replay); QVERIFY(renewed);
+        QVERIFY(renewed->liveToken().current()); QVERIFY(f.approve(peer)); QVERIFY(!renewed->liveToken().current());
+        intent=one.mintIntent(f.binding,uri,3,Reason::Replay); const auto fresh=one.consumeIntent(intent,f.binding,uri,3,Reason::Replay); QVERIFY(fresh);
+        QVERIFY(peer.reset()); QVERIFY(!fresh->liveToken().current()); QVERIFY(f.approve(peer)); QVERIFY(!fresh->liveToken().current());
+    }
+    void approvingAnotherBindingKeepsTheExistingReceipt() {
+        Fixture f; const auto uri=f.uri(); auto checks=f.checks();
+        checks.current=[](const auto& value) { return AddonSourceConsent::canonical(value).has_value(); };
+        checks.admitted=[uri](const auto&,const QString& value) { return value==uri; };
+        AddonSourceConsent store(f.profile.path(),checks,f.options()),peer(f.profile.path(),checks,f.options()); QVERIFY(f.approve(store));
+        const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback); const auto authorization=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(authorization);
+        const auto original=f.binding; f.binding.contribution=QStringLiteral("org.example.radio/other"); QVERIFY(f.approve(peer)); f.binding=original;
+        QVERIFY(authorization->liveToken().current()); QVERIFY(store.current(*authorization,uri,1));
+    }
+    void failedPeerRevocationDeniesNewReceiptsUntilExplicitApproval() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()),peer(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store)); const auto uri=f.uri();
+        const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback); const auto authorization=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(authorization);
+        QLockFile lock(f.profile.filePath("source-consent/approvals.lock")); QVERIFY(lock.tryLock(0));
+        QVERIFY(!peer.revoke(f.binding)); QVERIFY(!authorization->liveToken().current()); QVERIFY(!store.approved(f.binding));
+        QVERIFY(store.mintIntent(f.binding,uri,2,Reason::Replay).isEmpty()); lock.unlock(); QVERIFY(f.approve(peer));
+        QVERIFY(store.approved(f.binding)); QVERIFY(!authorization->liveToken().current());
+    }
+    void failedRevocationSurvivesOwnerRecreationInTheSameProcess() {
+        Fixture f;
+        {
+            AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store));
+            QLockFile lock(f.profile.filePath("source-consent/approvals.lock")); QVERIFY(lock.tryLock(0)); QVERIFY(!store.revoke(f.binding));
+        }
+        AddonSourceConsent recreated(f.profile.path(),f.checks(),f.options()); QVERIFY(!recreated.approved(f.binding));
+        QVERIFY(f.approve(recreated)); QVERIFY(recreated.approved(f.binding));
+    }
+    void packageStoreChangesInvalidateLiveReceiptsImmediately() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store)); const auto uri=f.uri();
+        const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback); const auto authorization=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(authorization);
+        const auto live=authorization->liveToken(); QVERIFY(live.current()); PackageStore peer(f.profile.path()); QVERIFY(peer.setSafeMode(true));
+        QVERIFY(!live.current()); QVERIFY(peer.setSafeMode(false)); QVERIFY(!live.current());
+    }
+    void externalFileChangesRequireTheFullCheckAndPermanentlyCloseThatReceipt() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store)); const auto uri=f.uri();
+        const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback); const auto authorization=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(authorization);
+        const auto live=authorization->liveToken(); const auto saved=read(f.file()); QVERIFY(write(f.file(),"invalid JSON"));
+        QVERIFY(live.current()); QVERIFY(!store.current(*authorization,uri,1)); QVERIFY(!live.current());
+        QVERIFY(write(f.file(),QJsonDocument(saved).toJson())); QVERIFY(!live.current());
+    }
+#ifdef Q_OS_UNIX
+    void liveRevocationDoesNotWaitForABlockedDiskCheck() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store)); const auto uri=f.uri();
+        const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback); const auto authorization=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(authorization);
+        const auto live=authorization->liveToken(); const QString saved=f.file()+QStringLiteral(".saved"); QVERIFY(QFile::rename(f.file(),saved));
+        const auto path=QFile::encodeName(f.file()); QVERIFY(::mkfifo(path.constData(),0600)==0);
+        int writer=-1; std::thread reader,revoker; std::atomic_bool readDone{false},revokeDone{false};
+        const auto cleanup=qScopeGuard([&] {
+            if (writer<0) writer=::open(path.constData(),O_RDWR|O_NONBLOCK);
+            QFile::remove(f.file()); QFile::rename(saved,f.file()); if (writer>=0) ::close(writer);
+            if (reader.joinable()) reader.join(); if (revoker.joinable()) revoker.join();
+        });
+        reader=std::thread([&] { store.current(*authorization,uri,1); readDone.store(true); });
+        QTRY_VERIFY_WITH_TIMEOUT([&] { if (writer<0) writer=::open(path.constData(),O_WRONLY|O_NONBLOCK); return writer>=0; }(),5000);
+        QVERIFY(!readDone.load()); QVERIFY(live.current());
+        revoker=std::thread([&] { store.revoke(f.binding); revokeDone.store(true); });
+        QTRY_VERIFY_WITH_TIMEOUT(!live.current(),1000); QVERIFY(!readDone.load()); QVERIFY(!revokeDone.load());
+    }
+#endif
 };
 QTEST_GUILESS_MAIN(TestAddonSourceConsent)
 #include "test_addon_source_consent.moc"

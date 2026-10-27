@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <atomic>
 
 namespace vlc::addons {
 namespace {
@@ -64,6 +65,103 @@ bool uriMatches(const AddonSourceConsent::Binding& binding,const QString& uri)
     return !ref.isEmpty() && ref.value("source").toString()==binding.contribution
         && ref.value("accountReference").toString()==binding.accountReference;
 }
+QString profilePath(const QString& directory)
+{
+    QString path=QDir::cleanPath(QFileInfo(directory).absoluteFilePath()); QStringList suffix;
+    while (true) {
+        const QFileInfo info(path); const auto canonical=info.canonicalFilePath();
+        if (!canonical.isEmpty()) { path=canonical; for (const auto& part:suffix) path=QDir(path).filePath(part); break; }
+        const auto parent=info.absolutePath(); if (parent==path) break;
+        suffix.prepend(info.fileName()); path=parent;
+    }
+#ifdef Q_OS_WIN
+    path=path.toCaseFolded();
+#endif
+    return QDir::cleanPath(path);
+}
+template<class Epoch> void advance(const std::shared_ptr<Epoch>& value) noexcept
+{
+    auto revision=value->revision.load(std::memory_order_relaxed);
+    while (revision!=std::numeric_limits<quint64>::max())
+        if (value->revision.compare_exchange_weak(revision,revision+1,std::memory_order_release,std::memory_order_relaxed)) return;
+    value->retired.store(true,std::memory_order_release);
+}
+template<class Epoch> bool live(const Epoch& value,quint64 revision) noexcept
+{
+    return value.allowed.load(std::memory_order_acquire) && !value.retired.load(std::memory_order_acquire)
+        && !value.writers.load(std::memory_order_acquire) && value.revision.load(std::memory_order_acquire)==revision;
+}
+template<class Epoch> struct LiveMutation {
+    std::shared_ptr<Epoch> value;
+    explicit LiveMutation(std::shared_ptr<Epoch> epoch):value(std::move(epoch)) { value->writers.fetch_add(1,std::memory_order_acq_rel); advance(value); }
+    ~LiveMutation() { advance(value); value->writers.fetch_sub(1,std::memory_order_release); }
+};
+}
+struct AddonSourceConsent::LiveEpoch {
+    std::atomic<quint64> revision{0};
+    std::atomic_uint writers{0};
+    std::atomic_bool allowed{true},retired{false};
+};
+struct AddonSourceConsent::LiveOwner { std::atomic_bool open{true},allowed{true}; };
+struct AddonSourceConsent::LiveProfile {
+    std::shared_ptr<LiveEpoch> reset=std::make_shared<LiveEpoch>();
+    std::mutex mutex;
+    QHash<QString,std::shared_ptr<LiveEpoch>> entries;
+};
+std::shared_ptr<AddonSourceConsent::LiveProfile> AddonSourceConsent::liveProfile(const QString& directory)
+{
+    struct Registry { std::mutex mutex; QHash<QString,std::shared_ptr<LiveProfile>> profiles; };
+    static Registry registry;
+    const auto key=profilePath(directory); std::lock_guard<std::mutex> lock(registry.mutex);
+    for (auto it=registry.profiles.begin();it!=registry.profiles.end();) {
+        bool denied=false; const bool idle=it.value().use_count()==1;
+        if (idle) {
+            auto& profile=*it.value(); std::lock_guard<std::mutex> entries(profile.mutex);
+            denied=!profile.reset->allowed.load(std::memory_order_acquire);
+            for (const auto& entry:profile.entries) denied|=!entry->allowed.load(std::memory_order_acquire);
+        }
+        if (idle && (!denied || !QFileInfo::exists(it.key()))) it=registry.profiles.erase(it); else ++it;
+    }
+    auto profile=registry.profiles.value(key);
+    if (!profile && registry.profiles.size()>=64) {
+        static const auto unavailable=[] { auto value=std::make_shared<LiveProfile>(); value->reset->allowed.store(false); value->reset->retired.store(true); return value; }();
+        return unavailable;
+    }
+    if (!profile) { profile=std::make_shared<LiveProfile>(); registry.profiles.insert(key,profile); }
+    return profile;
+}
+std::shared_ptr<AddonSourceConsent::LiveEpoch> AddonSourceConsent::liveEntry(const QString& key) const
+{
+    std::lock_guard<std::mutex> lock(m_liveProfile->mutex); auto entry=m_liveProfile->entries.value(key);
+    if (!entry && m_liveProfile->entries.size()>=512) {
+        m_liveProfile->reset->allowed.store(false,std::memory_order_release); advance(m_liveProfile->reset); return {};
+    }
+    if (!entry) { entry=std::make_shared<LiveEpoch>(); m_liveProfile->entries.insert(key,entry); }
+    return entry;
+}
+bool AddonSourceConsent::liveAllowed(const QString& key) const
+{
+    if (!m_liveOwner->open.load(std::memory_order_acquire)) return false;
+    const auto reset=m_liveProfile->reset;
+    if (!live(*reset,reset->revision.load(std::memory_order_acquire))) return false;
+    std::lock_guard<std::mutex> lock(m_liveProfile->mutex); const auto entry=m_liveProfile->entries.value(key);
+    return !entry || live(*entry,entry->revision.load(std::memory_order_acquire));
+}
+AddonSourceConsent::LiveToken AddonSourceConsent::liveToken(const QString& key,const StoreAuthorityToken& package) const
+{
+    LiveToken token; token.m_owner=m_liveOwner; token.m_receipt=std::make_shared<LiveOwner>(); token.m_profile=m_liveProfile;
+    token.m_entry=liveEntry(key); token.m_package=package;
+    token.m_profileRevision=m_liveProfile->reset->revision.load(std::memory_order_acquire);
+    if (token.m_entry) token.m_entryRevision=token.m_entry->revision.load(std::memory_order_acquire);
+    return token;
+}
+bool AddonSourceConsent::LiveToken::current() const noexcept
+{
+    return m_owner && m_receipt && m_profile && m_entry && m_owner->open.load(std::memory_order_acquire) && m_owner->allowed.load(std::memory_order_acquire)
+        && m_receipt->open.load(std::memory_order_acquire) && m_package.current()
+        && live(*m_profile->reset,m_profileRevision) && live(*m_entry,m_entryRevision)
+        && m_owner->open.load(std::memory_order_acquire) && m_owner->allowed.load(std::memory_order_acquire) && m_receipt->open.load(std::memory_order_acquire)
+        && live(*m_profile->reset,m_profileRevision) && live(*m_entry,m_entryRevision) && m_package.current();
 }
 struct AddonSourceConsent::State {
     QString epoch;
@@ -76,13 +174,15 @@ AddonSourceConsent::AddonSourceConsent(QString path,Checks checks)
     : AddonSourceConsent(std::move(path),std::move(checks),Options{}) {}
 AddonSourceConsent::AddonSourceConsent(QString path,Checks checks,Options options)
     : m_directory(QDir(path).filePath(QStringLiteral("source-consent"))),
-      m_file(QDir(m_directory).filePath(QStringLiteral("approvals.json"))),m_owner(uuid()),m_checks(std::move(checks)),m_options(std::move(options))
+      m_file(QDir(m_directory).filePath(QStringLiteral("approvals.json"))),m_owner(uuid()),m_packageAuthority(path),
+      m_liveProfile(liveProfile(m_directory)),m_liveOwner(std::make_shared<LiveOwner>()),m_checks(std::move(checks)),m_options(std::move(options))
 {
     m_options.approvals=std::clamp(m_options.approvals,1,256); m_options.tickets=std::clamp(m_options.tickets,1,64); m_options.intents=std::clamp(m_options.intents,1,128);
     m_options.ticketLifetimeMs=std::clamp<qint64>(m_options.ticketLifetimeMs,1,300000);
     m_options.intentLifetimeMs=std::clamp<qint64>(m_options.intentLifetimeMs,1,30000);
     if (!m_options.now) m_options.now=monotonic;
 }
+AddonSourceConsent::~AddonSourceConsent() { close(); }
 std::optional<AddonSourceConsent::Binding> AddonSourceConsent::canonical(const Binding& input)
 {
     static const QRegularExpression contribution(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}$"));
@@ -172,11 +272,12 @@ std::optional<AddonSourceConsent::Ticket> AddonSourceConsent::capture(const Bind
     const auto binding=canonical(value);
     if (!binding || !sourceCurrent(*binding)) { fail(error,QObject::tr("The source or account is not available.")); return {}; }
     std::lock_guard<std::mutex> guard(m_mutex); const auto now=prune();
-    if (m_closed || m_denyAll || now<0 || m_tickets.size()>=m_options.tickets || now>std::numeric_limits<qint64>::max()-m_options.ticketLifetimeMs) return {};
+    if (m_closed || m_denyAll || !m_liveProfile->reset->allowed.load(std::memory_order_acquire) || m_liveProfile->reset->retired.load(std::memory_order_acquire)
+        || now<0 || m_tickets.size()>=m_options.tickets || now>std::numeric_limits<qint64>::max()-m_options.ticketLifetimeMs) return {};
     if (!directory(error)) return {};
     QLockFile lock(QDir(m_directory).filePath(QStringLiteral("approvals.lock"))); if (!lock.tryLock(0)) { fail(error,QObject::tr("The source approval store is busy. Try again.")); return {}; }
     State state; if (!load(&state,error)) return {};
-    if (state.epoch.isEmpty()) { state.epoch=uuid(); if (!save(state,error)) return {}; }
+    if (state.epoch.isEmpty()) { LiveMutation mutation(m_liveProfile->reset); state.epoch=uuid(); if (!save(state,error)) return {}; }
     Ticket ticket{uuid(),*binding}; m_tickets.insert(ticket.id,{ticket,state.epoch,state.revision,now+m_options.ticketLifetimeMs,m_ticketEpoch}); return ticket;
 }
 bool AddonSourceConsent::grant(const QString& token,QString* error)
@@ -186,29 +287,36 @@ bool AddonSourceConsent::grant(const QString& token,QString* error)
     if (!sourceCurrent(dialog.ticket.binding)) return fail(error,QObject::tr("The source or account changed. Open approval again."));
     std::lock_guard<std::mutex> guard(m_mutex);
     const auto now=prune();
-    if (m_closed || m_denyAll || now<0 || now>=dialog.expires || dialog.localEpoch!=m_ticketEpoch || !directory(error)) return false;
+    if (m_closed || m_denyAll || !m_liveProfile->reset->allowed.load(std::memory_order_acquire) || m_liveProfile->reset->retired.load(std::memory_order_acquire)
+        || now<0 || now>=dialog.expires || dialog.localEpoch!=m_ticketEpoch || !directory(error)) return false;
     QLockFile lock(QDir(m_directory).filePath(QStringLiteral("approvals.lock"))); if (!lock.tryLock(0)) return fail(error,QObject::tr("The source approval store is busy. Try again."));
     State state; if (!load(&state,error)) return false;
     if (state.epoch!=dialog.epoch || state.revision!=dialog.revision || state.revision>=MaximumRevision) return fail(error,QObject::tr("The saved approval changed. Open approval again."));
     const auto id=key(dialog.ticket.binding);
     if (!state.approvals.contains(id) && state.approvals.size()>=m_options.approvals) return fail(error,QObject::tr("The source approval limit was reached."));
+    const auto entry=liveEntry(id); if (!entry) return fail(error,savedError());
+    LiveMutation mutation(entry);
     state.approvals.insert(id,QJsonObject{{"binding",bindingJson(dialog.ticket.binding)},{"id",uuid()}}); ++state.revision;
     if (!save(state,error)) return false;
-    m_withdrawn.remove(id); return true;
+    entry->allowed.store(true,std::memory_order_release); m_withdrawn.remove(id); return true;
 }
 bool AddonSourceConsent::approved(const Binding& value) const
 {
     const auto binding=canonical(value); if (!binding || !sourceCurrent(*binding)) return false;
     std::lock_guard<std::mutex> guard(m_mutex); const auto id=key(*binding); State state;
+    if (!liveAllowed(id)) return false;
     return !m_closed && !m_denyAll && !m_withdrawn.contains(id) && load(&state) && state.approvals.contains(id);
 }
 bool AddonSourceConsent::revoke(const Binding& value,QString* error)
 {
     const auto binding=canonical(value); if (!binding) return fail(error,savedError());
+    if (!m_liveOwner->open.load(std::memory_order_acquire)) return false;
+    const auto id=key(*binding); const auto entry=liveEntry(id); if (!entry) return fail(error,savedError());
+    LiveMutation mutation(entry); entry->allowed.store(false,std::memory_order_release);
     std::lock_guard<std::mutex> guard(m_mutex); if (m_closed) return false;
     ++m_ticketEpoch;
-    const auto id=key(*binding);
-    if (m_withdrawn.size()<256) m_withdrawn.insert(id); else m_denyAll=true;
+    if (m_withdrawn.size()<256) m_withdrawn.insert(id);
+    else { m_denyAll=true; m_liveOwner->allowed.store(false,std::memory_order_release); }
     for (auto it=m_tickets.begin();it!=m_tickets.end();) if (key(it->ticket.binding)==id) it=m_tickets.erase(it); else ++it;
     for (auto it=m_intents.begin();it!=m_intents.end();) if (key(it->authorization.m_binding)==id) it=m_intents.erase(it); else ++it;
     if (!directory(error)) return false;
@@ -217,23 +325,30 @@ bool AddonSourceConsent::revoke(const Binding& value,QString* error)
     if (state.epoch.isEmpty()) state.epoch=uuid();
     if (state.revision>=MaximumRevision) return fail(error,savedError());
     state.approvals.remove(id); ++state.revision; if (!save(state,error)) return false;
+    { std::lock_guard<std::mutex> lock(m_liveProfile->mutex); if (m_liveProfile->entries.value(id)==entry) m_liveProfile->entries.remove(id); }
     m_withdrawn.remove(id); return true;
 }
 bool AddonSourceConsent::reset(QString* error)
 {
+    if (!m_liveOwner->open.load(std::memory_order_acquire)) return false;
+    if (m_liveProfile->reset->retired.load(std::memory_order_acquire)) return fail(error,savedError());
+    LiveMutation mutation(m_liveProfile->reset); m_liveProfile->reset->allowed.store(false,std::memory_order_release);
     std::lock_guard<std::mutex> guard(m_mutex); if (m_closed) return false;
     ++m_reset; ++m_ticketEpoch; m_tickets.clear(); m_intents.clear(); m_denyAll=true;
     if (!directory(error)) return false;
     QLockFile lock(QDir(m_directory).filePath(QStringLiteral("approvals.lock"))); if (!lock.tryLock(0)) return fail(error,QObject::tr("The source approval store is busy. Try again."));
     State state; state.epoch=uuid(); if (!save(state,error)) return false;
-    m_withdrawn.clear(); m_denyAll=false; return true;
+    { std::lock_guard<std::mutex> lock(m_liveProfile->mutex); m_liveProfile->entries.clear(); }
+    m_liveProfile->reset->allowed.store(true,std::memory_order_release);
+    m_liveOwner->allowed.store(true,std::memory_order_release); m_withdrawn.clear(); m_denyAll=false; return true;
 }
 QString AddonSourceConsent::mintIntent(const Binding& value,const QString& uri,quint64 generation,IntentReason reason)
 {
+    const auto package=m_packageAuthority.capture();
     const auto binding=canonical(value);
-    if (!binding || !generation || !reasonValid(reason) || !sourceCurrent(*binding) || !admissionCurrent(*binding,uri)) return {};
+    if (!package.current() || !binding || !generation || !reasonValid(reason) || !sourceCurrent(*binding) || !admissionCurrent(*binding,uri)) return {};
     std::lock_guard<std::mutex> guard(m_mutex); const auto now=prune(); const auto id=key(*binding); State state;
-    if (m_closed || m_denyAll || m_withdrawn.contains(id) || now<0 || m_intents.size()>=m_options.intents
+    if (m_closed || m_denyAll || !liveAllowed(id) || m_withdrawn.contains(id) || now<0 || m_intents.size()>=m_options.intents
         || now>std::numeric_limits<qint64>::max()-m_options.intentLifetimeMs || generation<=m_floor || m_issued.contains(generation)
         || !load(&state) || !state.approvals.contains(id)) return {};
     m_highest=std::max(m_highest,generation); m_floor=m_highest>GenerationWindow?m_highest-GenerationWindow:0;
@@ -242,6 +357,7 @@ QString AddonSourceConsent::mintIntent(const Binding& value,const QString& uri,q
     m_issued.insert(generation); Authorization authorization; authorization.m_binding=*binding; authorization.m_uri=uri;
     authorization.m_generation=generation; authorization.m_reason=reason; authorization.m_epoch=state.epoch;
     authorization.m_approval=state.approvals.value(id).toObject().value("id").toString(); authorization.m_owner=m_owner; authorization.m_reset=m_reset;
+    authorization.m_live=liveToken(id,package); if (!authorization.m_live.current()) return {};
     const auto token=uuid(); m_intents.insert(token,{authorization,now+m_options.intentLifetimeMs}); return token;
 }
 std::optional<AddonSourceConsent::Authorization> AddonSourceConsent::consumeIntent(const QString& token,const Binding& value,
@@ -257,12 +373,17 @@ std::optional<AddonSourceConsent::Authorization> AddonSourceConsent::consumeInte
 }
 bool AddonSourceConsent::current(const Authorization& authorization,const QString& uri,quint64 generation) const
 {
-    if (authorization.m_owner!=m_owner || authorization.m_uri!=uri || authorization.m_generation!=generation
-        || !sourceCurrent(authorization.m_binding) || !admissionCurrent(authorization.m_binding,uri)) return false;
+    if (authorization.m_owner!=m_owner || authorization.m_uri!=uri || authorization.m_generation!=generation) return false;
+    if (!authorization.m_live.current()) return false;
+    const auto reject=[&authorization] { authorization.m_live.m_receipt->open.store(false,std::memory_order_release); return false; };
+    if (!sourceCurrent(authorization.m_binding) || !admissionCurrent(authorization.m_binding,uri)) return reject();
     std::lock_guard<std::mutex> guard(m_mutex); const auto id=key(authorization.m_binding); State state;
-    return !m_closed && !m_denyAll && authorization.m_reset==m_reset && !m_withdrawn.contains(id) && load(&state)
-        && state.epoch==authorization.m_epoch && state.approvals.value(id).toObject().value("id").toString()==authorization.m_approval;
+    const bool valid=!m_closed && !m_denyAll && authorization.m_reset==m_reset && !m_withdrawn.contains(id) && load(&state)
+        && state.epoch==authorization.m_epoch && state.approvals.value(id).toObject().value("id").toString()==authorization.m_approval
+        && authorization.m_live.current();
+    return valid || reject();
 }
 void AddonSourceConsent::close()
-{ std::lock_guard<std::mutex> guard(m_mutex); m_closed=true; ++m_reset; ++m_ticketEpoch; m_tickets.clear(); m_intents.clear(); m_issued.clear(); }
+{ m_liveOwner->open.store(false,std::memory_order_release); std::lock_guard<std::mutex> guard(m_mutex); if (m_closed) return;
+  m_closed=true; ++m_reset; ++m_ticketEpoch; m_tickets.clear(); m_intents.clear(); m_issued.clear(); }
 }

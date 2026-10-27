@@ -26,9 +26,13 @@ public:
     struct Admission {
         std::shared_ptr<AddonSourceConsent> consent;
         AddonSourceConsent::Authorization authorization;
-        // Use immutable captured host data. Do not call a QObject here.
+        // Use captured host data. Do not call a QObject here.
+        // Run the full check on a background admission worker.
         Current configurationCurrent;
+        // This check must use memory only. It must not wait for file access.
+        Current configurationLive;
         bool current(const QString& uri, quint64 generation) const;
+        bool authorize(const QString& uri, quint64 generation) const;
     };
     class Prepared final
     {
@@ -58,8 +62,11 @@ public:
     struct Backend {
         // Only the registered native primary-playback path calls admit.
         // Consume an exact PrimaryPlayback intent after current admission checks.
+        // This callback runs on a background thread. Capture plain owned data.
+        // Do not call a QObject or retain a raw Core instance here.
         std::function<std::optional<Admission>(const QString& uri, quint64 generation)> admit;
-        // Check current before each request and after each asynchronous hop.
+        // Check current after each asynchronous hop. It uses memory only.
+        // Run admission.authorize on a background worker before each request.
         // Return a dormant transport. The resolver attaches it before startIo.
         std::function<Cancel(const Admission&, Current, PreparedCallback)> prepare;
     };
@@ -72,6 +79,8 @@ public:
     void close();
     unsigned pendingCount() const { return unsigned(m_jobs.size()); }
     unsigned issuedCount();
+    static unsigned admissionWorkCount() noexcept;
+    static unsigned admissionWorkLimit() noexcept;
 private:
     struct Gate;
     struct Guard;
@@ -82,6 +91,7 @@ private:
     static void nativeCancel(void*, vlc_source_job*);
     static void nativeDestroy(void*);
     void dispatch(std::shared_ptr<vlc_source_job>);
+    void admitted(const std::shared_ptr<Pending>&, std::optional<Admission>);
     void prepared(const std::shared_ptr<Pending>&, std::unique_ptr<Prepared>);
     void started(const std::shared_ptr<Pending>&, int);
     void canceled(vlc_source_job*);

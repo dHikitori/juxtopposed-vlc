@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "addon_store_authority.hpp"
 #include <QHash>
 #include <QSet>
 #include <QString>
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <memory>
 
 namespace vlc::addons {
 // Trusted host code owns this store. It has no QObject, QML, or worker API.
 class AddonSourceConsent final
 {
+    struct LiveEpoch;
+    struct LiveOwner;
+    struct LiveProfile;
 public:
     enum class SourceKind { Git, Developer, Distribution };
     enum class IntentReason { PrimaryPlayback, QueueAdvance, Replay };
@@ -21,18 +26,31 @@ public:
         bool operator==(const Binding&) const;
     };
     struct Ticket { QString id; Binding binding; };
+    class LiveToken {
+    public:
+        bool current() const noexcept;
+    private:
+        friend class AddonSourceConsent;
+        std::shared_ptr<LiveOwner> m_owner, m_receipt;
+        std::shared_ptr<LiveProfile> m_profile;
+        std::shared_ptr<LiveEpoch> m_entry;
+        StoreAuthorityToken m_package;
+        quint64 m_profileRevision=0, m_entryRevision=0;
+    };
     class Authorization {
     public:
         const Binding& binding() const { return m_binding; }
         const QString& uri() const { return m_uri; }
         quint64 generation() const { return m_generation; }
         IntentReason reason() const { return m_reason; }
+        LiveToken liveToken() const noexcept { return m_live; }
     private:
         friend class AddonSourceConsent;
         Binding m_binding;
         QString m_uri, m_approval, m_epoch, m_owner;
         quint64 m_generation=0, m_reset=0;
         IntentReason m_reason=IntentReason::PrimaryPlayback;
+        LiveToken m_live;
     };
     struct Checks {
         // Both callbacks must be thread-safe. They must not call a QObject.
@@ -48,6 +66,7 @@ public:
     };
     AddonSourceConsent(QString hostDirectory,Checks);
     AddonSourceConsent(QString hostDirectory,Checks,Options);
+    ~AddonSourceConsent();
     static std::optional<Binding> canonical(const Binding&);
     std::optional<Ticket> capture(const Binding&,QString* error=nullptr);
     bool grant(const QString& ticket,QString* error=nullptr);
@@ -74,7 +93,14 @@ private:
     qint64 prune();
     static QString key(const Binding&);
     static bool reasonValid(IntentReason);
+    static std::shared_ptr<LiveProfile> liveProfile(const QString&);
+    std::shared_ptr<LiveEpoch> liveEntry(const QString&) const;
+    bool liveAllowed(const QString&) const;
+    LiveToken liveToken(const QString&,const StoreAuthorityToken&) const;
     QString m_directory, m_file, m_owner;
+    StoreAuthority m_packageAuthority;
+    std::shared_ptr<LiveProfile> m_liveProfile;
+    std::shared_ptr<LiveOwner> m_liveOwner;
     Checks m_checks;
     Options m_options;
     mutable std::mutex m_mutex;

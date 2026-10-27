@@ -3,6 +3,7 @@
 #include "config.h"
 #endif
 #include "addon_native_source_resolver.hpp"
+#include "addon_source_admissions.hpp"
 #include <QMetaObject>
 #include <QPointer>
 #include <QRegularExpression>
@@ -10,6 +11,7 @@
 #include <cerrno>
 #include <mutex>
 #include <new>
+#include <thread>
 #include <vlc_common.h>
 #include <vlc_input_policy.h>
 #include <vlc_source_backend.h>
@@ -18,6 +20,19 @@
 namespace vlc::addons {
 namespace {
 using Job = std::shared_ptr<vlc_source_job_t>;
+constexpr unsigned MaximumAdmissionWork=8;
+std::atomic_uint admissionWork{0};
+struct AdmissionWork {
+    ~AdmissionWork() { admissionWork.fetch_sub(1,std::memory_order_release); }
+};
+std::shared_ptr<AdmissionWork> acquireAdmissionWork()
+{
+    auto count=admissionWork.load(std::memory_order_relaxed);
+    do { if(count>=MaximumAdmissionWork) return {}; }
+    while(!admissionWork.compare_exchange_weak(count,count+1,std::memory_order_acq_rel,std::memory_order_relaxed));
+    try { return std::make_shared<AdmissionWork>(); }
+    catch(...) { admissionWork.fetch_sub(1,std::memory_order_release); throw; }
+}
 Job hold(vlc_source_job_t* value) { return {vlc_source_job_Hold(value), vlc_source_job_Release}; }
 void cancel(const AddonNativeSourceResolver::Cancel& value) noexcept
 { if (value) try { value(); } catch (...) {} }
@@ -42,10 +57,16 @@ struct AddonNativeSourceResolver::Guard {
     std::shared_ptr<Gate> gate;
     Admission admission;
     QString uri;
+    QString sourceHint,accountHint;
     quint64 generation = 0;
     std::atomic_int phase{0}; // Pending, issued, or revoked.
     std::shared_ptr<std::atomic_bool> active;
     std::shared_ptr<vlc_input_policy_t> policy;
+    bool admissionReady=false;
+    bool pending() const {
+        return phase.load(std::memory_order_acquire)==0 && !gate->closed.load(std::memory_order_acquire)
+            && !vlc_source_backend_IsClosed(native.get()) && vlc_source_job_IsPending(job.get());
+    }
     bool current() const {
         const auto valid = [this] {
             const auto state = phase.load(std::memory_order_acquire);
@@ -73,8 +94,15 @@ struct AddonNativeSourceResolver::Issued {
 };
 bool AddonNativeSourceResolver::Admission::current(const QString& uri, quint64 generation) const
 {
-    try { return consent && configurationCurrent && configurationCurrent()
-        && consent->current(authorization, uri, generation); } catch (...) { return false; }
+    try { return consent && authorization.uri() == uri && authorization.generation() == generation
+        && authorization.liveToken().current() && configurationLive && configurationLive()
+        && authorization.liveToken().current(); } catch (...) { return false; }
+}
+bool AddonNativeSourceResolver::Admission::authorize(const QString& uri, quint64 generation) const
+{
+    try { return current(uri, generation) && configurationCurrent && configurationCurrent()
+        && consent->current(authorization, uri, generation) && current(uri, generation); }
+    catch (...) { return false; }
 }
 std::unique_ptr<AddonNativeSourceResolver::Prepared> AddonNativeSourceResolver::Prepared::adopt(
     QByteArray uri, vlc_input_policy_t* policy, vlc_source_lease_t* lease,
@@ -176,6 +204,10 @@ bool AddonNativeSourceResolver::prune()
 }
 unsigned AddonNativeSourceResolver::issuedCount()
 { return prune() ? unsigned(m_issued.size()) : 0; }
+unsigned AddonNativeSourceResolver::admissionWorkCount() noexcept
+{ return admissionWork.load(std::memory_order_acquire); }
+unsigned AddonNativeSourceResolver::admissionWorkLimit() noexcept
+{ return MaximumAdmissionWork; }
 void AddonNativeSourceResolver::dispatch(Job job)
 {
     if (!prune() || !vlc_source_job_IsPending(job.get())) return;
@@ -184,16 +216,37 @@ void AddonNativeSourceResolver::dispatch(Job job)
     }
     const auto* request = vlc_source_job_GetRequest(job.get());
     const auto uri = QString::fromUtf8(request->source_uri); const auto generation = request->input_generation;
-    const QPointer<AddonNativeSourceResolver> owner(this); const auto admit = m_backend.admit;
-    std::optional<Admission> admission;
-    try { admission = admit(uri, generation); } catch (...) {}
-    if (!owner) return;
-    if (!bound() || !admission || !admission->current(uri, generation) || !vlc_source_job_IsPending(job.get())) {
-        vlc_source_job_Complete(job.get(), -EACCES, nullptr); return;
-    }
     auto pending = std::make_shared<Pending>(); auto guard = std::make_shared<Guard>(); pending->guard = guard;
-    guard->job = job; guard->native = m_native; guard->gate = m_gate; guard->admission = std::move(*admission);
+    guard->job = job; guard->native = m_native; guard->gate = m_gate;
+    // Use these untrusted fields only to cancel pending work.
+    const auto hint=AddonSourceAdmissions::decodeUntrusted(uri);
+    guard->sourceHint=hint.value(QStringLiteral("source")).toString(); guard->accountHint=hint.value(QStringLiteral("accountReference")).toString();
     guard->uri = uri; guard->generation = generation; m_jobs.emplace(job.get(), pending);
+    const auto gate=m_gate; const auto admit=m_backend.admit;
+    try {
+        const auto work=acquireAdmissionWork(); if(!work) { fail(pending,VLC_ENOMEM); return; }
+        std::thread([pending,guard,gate,admit,work] {
+            (void)work; // Keep the process permit until this worker ends.
+            if(!guard->pending()) return;
+            std::optional<Admission> admission;
+            try { admission=admit(guard->uri,guard->generation); } catch(...) {}
+            if(!guard->pending()) return;
+            try {
+                if(!post(gate,[pending,admission=std::move(admission)](auto* target) mutable { target->admitted(pending,std::move(admission)); }))
+                    vlc_source_job_Cancel(guard->job.get());
+            } catch(...) { vlc_source_job_Cancel(guard->job.get()); }
+        }).detach();
+    } catch(...) { fail(pending,VLC_ENOMEM); }
+}
+void AddonNativeSourceResolver::admitted(const std::shared_ptr<Pending>& pending,std::optional<Admission> admission)
+{
+    const auto guard=pending->guard; const auto job=guard->job;
+    const auto found=m_jobs.find(job.get()); if(found==m_jobs.end() || found->second!=pending) return;
+    if(!bound() || !guard->pending() || !admission || !admission->current(guard->uri,guard->generation)) {
+        fail(pending,-EACCES); return;
+    }
+    guard->admission=std::move(*admission); guard->admissionReady=true;
+    const QPointer<AddonNativeSourceResolver> owner(this);
     const auto prepare = m_backend.prepare; const auto gate = m_gate;
     const std::weak_ptr<Pending> weakPending = pending; const std::weak_ptr<Guard> weakGuard = guard;
     Cancel cancellation;
@@ -284,7 +337,10 @@ void AddonNativeSourceResolver::withdraw(const AddonSourceConsent::Binding& bind
     const auto canonical = AddonSourceConsent::canonical(binding); if (!canonical) return;
     std::vector<std::shared_ptr<Pending>> pending; std::vector<Issued> issued;
     for (auto it = m_jobs.begin(); it != m_jobs.end();) {
-        if (it->second->guard->admission.authorization.binding() == *canonical) {
+        const auto& guard=*it->second->guard;
+        const bool match=guard.admissionReady ? guard.admission.authorization.binding()==*canonical
+            : guard.sourceHint==canonical->contribution && guard.accountHint==canonical->accountReference;
+        if (match) {
             it->second->guard->phase.store(2, std::memory_order_release); pending.push_back(it->second); it = m_jobs.erase(it);
         } else ++it;
     }
