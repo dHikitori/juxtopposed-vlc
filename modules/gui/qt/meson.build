@@ -40,6 +40,10 @@ addon_host_sources = files(
     'addons/addon_player_discovery.hpp',
     'addons/addon_source_admissions.cpp',
     'addons/addon_source_admissions.hpp',
+    'addons/addon_source_consent.cpp',
+    'addons/addon_source_consent.hpp',
+    'addons/addon_native_source_resolver.cpp',
+    'addons/addon_native_source_resolver.hpp',
     'addons/addon_stream_manifest.cpp',
     'addons/addon_stream_manifest.hpp',
     'addons/addon_native_queue_store.cpp',
@@ -1789,14 +1793,14 @@ if qt6_dep.found()
 
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
-        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'stream_manifest', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage']
+        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'stream_manifest', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'source_consent', 'native_source_resolver']
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,
                 'sources': files('tests/test_addon_' + addon_test + '.cpp'),
                 'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
-                'link_with': addon_test == 'native_artwork_assets' ? [addon_host_library, libvlccore, libvlc] : [addon_host_library, libvlccore],
+                'link_with': addon_test in ['native_artwork_assets', 'native_source_resolver'] ? [addon_host_library, libvlccore, libvlc] : [addon_host_library, libvlccore],
                 'suite': ['qt', 'addons'],
-                'include_directories': addon_test == 'native_artwork_assets' ? [qt_include_dir, include_directories('../../..')] : qt_include_dir,
+                'include_directories': addon_test in ['native_artwork_assets', 'native_source_resolver'] ? [qt_include_dir, include_directories('../../..')] : qt_include_dir,
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
                 'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'],
                 'link_args': qt_link_args,

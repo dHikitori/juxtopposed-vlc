@@ -146,6 +146,10 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_player_discovery.hpp \
 	addons/addon_source_admissions.cpp \
 	addons/addon_source_admissions.hpp \
+	addons/addon_source_consent.cpp \
+	addons/addon_source_consent.hpp \
+	addons/addon_native_source_resolver.cpp \
+	addons/addon_native_source_resolver.hpp \
 	addons/addon_stream_manifest.cpp \
 	addons/addon_stream_manifest.hpp \
 	addons/addon_native_queue_store.cpp \
@@ -2298,6 +2302,28 @@ test_qt_addon_stream_manifest_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldad
 test_qt_addon_stream_manifest_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_stream_manifest
 TESTS += test_qt_addon_stream_manifest
+
+test_qt_addon_source_consent_SOURCES = tests/test_addon_source_consent.cpp
+nodist_test_qt_addon_source_consent_SOURCES = tests/test_addon_source_consent.moc
+BUILT_SOURCES += tests/test_addon_source_consent.moc
+CLEANFILES += tests/test_addon_source_consent.moc
+test_qt_addon_source_consent_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_source_consent_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_source_consent_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_source_consent_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_source_consent
+TESTS += test_qt_addon_source_consent
+
+test_qt_addon_native_source_resolver_SOURCES = tests/test_addon_native_source_resolver.cpp
+nodist_test_qt_addon_native_source_resolver_SOURCES = tests/test_addon_native_source_resolver.moc
+BUILT_SOURCES += tests/test_addon_native_source_resolver.moc
+CLEANFILES += tests/test_addon_native_source_resolver.moc
+test_qt_addon_native_source_resolver_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_native_source_resolver_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_native_source_resolver_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_native_source_resolver_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_native_source_resolver
+TESTS += test_qt_addon_native_source_resolver
 
 test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.cpp
 nodist_test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.moc
