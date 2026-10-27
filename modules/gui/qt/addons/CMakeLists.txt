@@ -13,6 +13,8 @@ add_library(vlc_addon_host STATIC
     addon_network.cpp addon_worker.cpp addon_manager.cpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
+    addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
+    addon_visualizer_worker_runtime.cpp addon_visualizer_render_queue.cpp
     addon_repository_updates.cpp addon_playable_gate.cpp addon_artwork_assets.cpp addon_artwork_image.cpp
     addon_queue_transactions.cpp addon_discovery_service.cpp addon_player_discovery.cpp addon_source_admissions.cpp addon_source_consent.cpp addon_stream_manifest.cpp)
 target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network Threads::Threads ZLIB::ZLIB)
@@ -23,11 +25,17 @@ if(WIN32)
 elseif(APPLE)
     target_link_libraries(vlc_addon_host PRIVATE "-framework Security")
 endif()
-foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest)
+add_executable(addon_visualizer_process "../tests/fixtures/addon_visualizer_process.c")
+set_target_properties(addon_visualizer_process PROPERTIES AUTOMOC OFF)
+foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
     add_test(NAME addon_${name} COMMAND test_addon_${name})
+endforeach()
+foreach(name visualizers visualizer_worker_runtime)
+    target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_VISUALIZER_PROCESS_FIXTURE="$<TARGET_FILE:addon_visualizer_process>")
+    add_dependencies(test_addon_${name} addon_visualizer_process)
 endforeach()
 find_package(Qt6 6.2 QUIET COMPONENTS Quick Qml)
 if(TARGET Qt6::Quick AND TARGET Qt6::Qml)
@@ -36,6 +44,10 @@ if(TARGET Qt6::Quick AND TARGET Qt6::Qml)
     target_compile_definitions(test_addon_ui_assets PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
     add_test(NAME addon_ui_assets COMMAND test_addon_ui_assets)
     set_tests_properties(addon_ui_assets PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_addon_visualizer_surface "../tests/test_addon_visualizer_surface.cpp" addon_visualizer_surface.cpp)
+    target_link_libraries(test_addon_visualizer_surface PRIVATE vlc_addon_host Qt6::Quick Qt6::Qml Qt6::Test)
+    add_test(NAME addon_visualizer_surface COMMAND test_addon_visualizer_surface)
+    set_tests_properties(addon_visualizer_surface PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()
 set(VLC_BUILD_DIR "" CACHE PATH "VLC build directory for native metadata tests.")
 if(VLC_BUILD_DIR)
@@ -51,7 +63,8 @@ if(VLC_BUILD_DIR)
         addon_native_library_store.cpp addon_native_library_store.hpp
         addon_native_library_targets.cpp addon_native_library_targets.hpp
         addon_native_artwork_assets.cpp addon_native_artwork_assets.hpp
-        addon_native_source_resolver.cpp addon_native_source_resolver.hpp)
+        addon_native_source_resolver.cpp addon_native_source_resolver.hpp
+        addon_native_player_analysis.cpp addon_native_player_analysis.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
@@ -72,7 +85,8 @@ if(VLC_BUILD_DIR)
     find_library(VLC_PUBLIC_LIBRARY NAMES vlc
         PATHS "${VLC_BUILD_DIR}/lib" "${VLC_BUILD_DIR}/lib/.libs" NO_DEFAULT_PATH REQUIRED)
     target_link_libraries(test_addon_native_artwork_assets PRIVATE "${VLC_PUBLIC_LIBRARY}")
-    foreach(name native_source_resolver)
+    target_compile_definitions(test_addon_visualizer_worker_runtime PRIVATE VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
+    foreach(name native_source_resolver native_player_analysis visualizer_clock)
         add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
         target_link_libraries(test_addon_${name} PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
         target_include_directories(test_addon_${name} PRIVATE "${VLC_SOURCE_ROOT}")

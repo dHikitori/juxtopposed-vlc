@@ -3,6 +3,8 @@
 #include "addon_visualizers.hpp"
 #include <QQuickPaintedItem>
 #include <QMutex>
+#include <memory>
+#include <QList>
 
 namespace vlc::addons {
 class AddonVisualizerSurface : public QQuickPaintedItem
@@ -27,9 +29,14 @@ protected:
     void itemChange(ItemChange, const ItemChangeData&) override;
     void releaseResources() override;
 private:
+    struct WindowState;
+    static void graphEvent(const std::shared_ptr<WindowState>&, int event);
+    void attachWindow();
     void synchronize();
     QPointer<AddonVisualizers> m_controller;
-    QMetaObject::Connection m_frameConnection, m_windowConnection;
+    QMetaObject::Connection m_frameConnection;
+    QList<QMetaObject::Connection> m_windowConnections;
+    std::shared_ptr<WindowState> m_windowState;
     QMutex m_imageMutex;
     QImage m_image;
     QColor m_background = Qt::black, m_foreground = Qt::white, m_accent = QColor(211, 121, 24);

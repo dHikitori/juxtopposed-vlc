@@ -146,12 +146,25 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_player_discovery.hpp \
 	addons/addon_source_admissions.cpp \
 	addons/addon_source_admissions.hpp \
-	addons/addon_source_consent.cpp \
-	addons/addon_source_consent.hpp \
-	addons/addon_native_source_resolver.cpp \
-	addons/addon_native_source_resolver.hpp \
 	addons/addon_stream_manifest.cpp \
 	addons/addon_stream_manifest.hpp \
+	addons/addon_source_consent.cpp \
+	addons/addon_source_consent.hpp \
+	addons/addon_visualizer_catalog.cpp \
+	addons/addon_visualizer_catalog.hpp \
+	addons/addon_visualizer_resources.cpp \
+	addons/addon_visualizer_resources.hpp \
+	addons/addon_visualizer_worker.cpp \
+	addons/addon_visualizer_worker.hpp \
+	addons/addon_visualizer_render_queue.cpp \
+	addons/addon_visualizer_render_queue.hpp \
+	addons/addon_native_source_resolver.cpp \
+	addons/addon_native_source_resolver.hpp \
+	addons/addon_native_player_analysis.cpp \
+	addons/addon_native_player_analysis.hpp \
+	addons/addon_visualizer_worker_runtime.cpp \
+	addons/addon_visualizer_activation.hpp \
+	addons/addon_visualizer_clock.hpp \
 	addons/addon_native_queue_store.cpp \
 	addons/addon_native_queue_store.hpp \
 	addons/addon_native_library_store.cpp \
@@ -205,6 +218,10 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_theme_service.moc.cpp \
 	addons/addon_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
+	addons/addon_visualizer_catalog.moc.cpp \
+	addons/addon_visualizer_resources.moc.cpp \
+	addons/addon_visualizer_worker.moc.cpp \
+	addons/addon_visualizer_render_queue.moc.cpp \
 	addons/addon_host_services.moc.cpp \
 	addons/addon_playable_gate.moc.cpp \
 	addons/addon_artwork_assets.moc.cpp
@@ -2303,33 +2320,116 @@ test_qt_addon_stream_manifest_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATF
 check_PROGRAMS += test_qt_addon_stream_manifest
 TESTS += test_qt_addon_stream_manifest
 
+check_PROGRAMS += addon_visualizer_process
+addon_visualizer_process_SOURCES = tests/fixtures/addon_visualizer_process.c
+EXTRA_DIST += tests/fixtures/addon_visualizer_worker.rs tests/fixtures/addon_visualizer_worker_wasm.hpp
+
 test_qt_addon_source_consent_SOURCES = tests/test_addon_source_consent.cpp
 nodist_test_qt_addon_source_consent_SOURCES = tests/test_addon_source_consent.moc
 BUILT_SOURCES += tests/test_addon_source_consent.moc
 CLEANFILES += tests/test_addon_source_consent.moc
-test_qt_addon_source_consent_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_source_consent_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_source_consent_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_source_consent_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_source_consent_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_source_consent
 TESTS += test_qt_addon_source_consent
 
+test_qt_addon_visualizer_resources_SOURCES = tests/test_addon_visualizer_resources.cpp
+nodist_test_qt_addon_visualizer_resources_SOURCES = tests/test_addon_visualizer_resources.moc
+BUILT_SOURCES += tests/test_addon_visualizer_resources.moc
+CLEANFILES += tests/test_addon_visualizer_resources.moc
+test_qt_addon_visualizer_resources_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_resources_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_visualizer_resources_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_visualizer_resources_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_visualizer_resources
+TESTS += test_qt_addon_visualizer_resources
+
+test_qt_addon_visualizer_worker_SOURCES = tests/test_addon_visualizer_worker.cpp
+nodist_test_qt_addon_visualizer_worker_SOURCES = tests/test_addon_visualizer_worker.moc
+BUILT_SOURCES += tests/test_addon_visualizer_worker.moc
+CLEANFILES += tests/test_addon_visualizer_worker.moc
+test_qt_addon_visualizer_worker_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_worker_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_visualizer_worker_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_visualizer_worker_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_visualizer_worker
+TESTS += test_qt_addon_visualizer_worker
+
+test_qt_addon_visualizer_worker_runtime_SOURCES = tests/test_addon_visualizer_worker_runtime.cpp
+nodist_test_qt_addon_visualizer_worker_runtime_SOURCES = tests/test_addon_visualizer_worker_runtime.moc
+BUILT_SOURCES += tests/test_addon_visualizer_worker_runtime.moc
+CLEANFILES += tests/test_addon_visualizer_worker_runtime.moc
+test_qt_addon_visualizer_worker_runtime_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_worker_runtime_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_visualizer_worker_runtime_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_visualizer_worker_runtime_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_visualizer_worker_runtime
+TESTS += test_qt_addon_visualizer_worker_runtime
+test_qt_addon_visualizer_worker_runtime_DEPENDENCIES = libqt_addon_host.la addon_visualizer_process
+
+test_qt_addon_visualizer_render_queue_SOURCES = tests/test_addon_visualizer_render_queue.cpp
+nodist_test_qt_addon_visualizer_render_queue_SOURCES = tests/test_addon_visualizer_render_queue.moc
+BUILT_SOURCES += tests/test_addon_visualizer_render_queue.moc
+CLEANFILES += tests/test_addon_visualizer_render_queue.moc
+test_qt_addon_visualizer_render_queue_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_render_queue_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_visualizer_render_queue_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_visualizer_render_queue_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_visualizer_render_queue
+TESTS += test_qt_addon_visualizer_render_queue
+
 test_qt_addon_native_source_resolver_SOURCES = tests/test_addon_native_source_resolver.cpp
 nodist_test_qt_addon_native_source_resolver_SOURCES = tests/test_addon_native_source_resolver.moc
 BUILT_SOURCES += tests/test_addon_native_source_resolver.moc
 CLEANFILES += tests/test_addon_native_source_resolver.moc
-test_qt_addon_native_source_resolver_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_native_source_resolver_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_native_source_resolver_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_native_source_resolver_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_native_source_resolver_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_native_source_resolver
 TESTS += test_qt_addon_native_source_resolver
 
+test_qt_addon_native_player_analysis_SOURCES = tests/test_addon_native_player_analysis.cpp
+nodist_test_qt_addon_native_player_analysis_SOURCES = tests/test_addon_native_player_analysis.moc
+BUILT_SOURCES += tests/test_addon_native_player_analysis.moc
+CLEANFILES += tests/test_addon_native_player_analysis.moc
+test_qt_addon_native_player_analysis_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_native_player_analysis_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_native_player_analysis_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_native_player_analysis_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_native_player_analysis
+TESTS += test_qt_addon_native_player_analysis
+
+test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.cpp
+nodist_test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.moc
+BUILT_SOURCES += tests/test_addon_visualizer_clock.moc
+CLEANFILES += tests/test_addon_visualizer_clock.moc
+test_qt_addon_visualizer_clock_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_clock_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_visualizer_clock_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_visualizer_clock_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_visualizer_clock
+TESTS += test_qt_addon_visualizer_clock
+
+test_qt_addon_visualizer_surface_SOURCES = tests/test_addon_visualizer_surface.cpp addons/addon_visualizer_surface.cpp addons/addon_visualizer_surface.hpp
+nodist_test_qt_addon_visualizer_surface_SOURCES = tests/test_addon_visualizer_surface.moc addons/addon_visualizer_surface.moc.cpp
+BUILT_SOURCES += tests/test_addon_visualizer_surface.moc
+CLEANFILES += tests/test_addon_visualizer_surface.moc
+test_qt_addon_visualizer_surface_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_surface_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_visualizer_surface_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_visualizer_surface_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_visualizer_surface
+TESTS += test_qt_addon_visualizer_surface
+
 test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.cpp
 nodist_test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.moc
 BUILT_SOURCES += tests/test_addon_visualizers.moc
 CLEANFILES += tests/test_addon_visualizers.moc
-test_qt_addon_visualizers_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_visualizers_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizers_DEPENDENCIES = libqt_addon_host.la addon_visualizer_process
 test_qt_addon_visualizers_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizers_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visualizers_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)

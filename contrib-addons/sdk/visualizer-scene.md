@@ -1,6 +1,6 @@
 # Visualizer scenes
 
-This file describes the first host implementation. The wider architecture also defines future parameter updates from a Wasm worker.
+This file describes the host scene contract. A scene can use static values or bounded parameter updates from a Wasm worker.
 
 A visualizer contribution uses `visualizer@1`. Its `scene` field names a declared JSON file. Its `analysisChannels` lists `bands`, `waveform`, or `levels`.
 
@@ -61,11 +61,13 @@ The complete set of decoded images has a 16 MiB limit. The scene receives decode
 
 ## Audio and time
 
-The audio callback copies at most 1024 frames from two channels. It does not allocate, wait, run FFT, or call Qt.
+The sample-copy function copies at most 1024 frames from two channels. It does not allocate, take a lock, run FFT, or call Qt.
 
 The host needs lock-free counters on this callback path. If these counters need locks, the host keeps the artwork fallback.
 
 A separate worker calculates 64 frequency bands, 256 waveform values, RMS, and peak level. It discards old input when its queue is full.
+
+Core listener and timer synchronization surrounds the copy function. The native `maximumCopyUs` counter measures the append operation only. It excludes Core lock wait. These measurements do not establish a hard deadline for the complete audio path.
 
 Each analysis frame has a media generation and timestamp. The renderer does not display future frames or frames more than 200 ms old.
 
@@ -81,4 +83,61 @@ The host reduces particle counts at lower tiers. Three slow frames reduce qualit
 
 Audio playback does not wait for scene rendering. Missing analysis, rejected assets, or unsupported output keeps artwork available.
 
-The examples in [visual-scenes](../examples/visual-scenes/README.md) show four scene types. The current controller supports data-only scenes. Worker parameter updates remain a completion gate.
+The renderer uses one global background job and one pending frame. A newer pending frame replaces the older pending frame. Close does not wait for an active render. Work that is still stopping keeps its job slot. A new timeline clears old results and feedback buffers. A scene graph loss stops the observer. A new scene graph initialization permits recovery; a late render notification cannot reopen a lost graph.
+
+The examples in [visual-scenes](../examples/visual-scenes/README.md) show four scene types.
+
+## Parameter updates
+
+A worker can change only numeric fields that the scene declares. Give the target node an `id`. Add the parameter to the scene's `parameters` object:
+
+```json
+{
+  "contract": "visualizer.scene@1",
+  "background": "theme.background",
+  "nodes": [{"type": "spectrum", "id": "bars", "count": 32, "gain": 1, "color": "theme.accent"}],
+  "parameters": {"gain": {"node": "bars", "property": "gain", "minimum": 0, "maximum": 4}}
+}
+```
+
+The declaration has exactly four fields. The node must have the property and a valid initial value. The range cannot exceed the node's normal limits. Each node ID and parameter target must be unique. IDs use an ASCII letter or underscore first, then letters, digits, underscores, or hyphens. The limit is 64 characters. The names `__proto__`, `prototype`, and `constructor` are reserved.
+
+The host accepts at most 64 parameters. The permitted properties are `opacity`; spectrum `count` and `gain`; waveform `points`, `gain`, and `lineWidth`; spectrogram `gain`; particle `count`, `seed`, `speed`, and `size`; group `rotation` and `scale`; feedback `decay` and `scale`. Integer properties remain integers. The complete scene keeps the 2,048-particle limit after each update.
+
+Declare `updateParameters` in the contribution's `operations`. Declare a `wasm-message-v1` runtime and its file in the manifest. The host starts that runtime from verified package bytes. A data-only scene needs no runtime.
+
+An invocation uses the normal worker envelope. Its context has these fields:
+
+| Field | Content |
+| --- | --- |
+| `contract` | `visualizer.parameters@1` |
+| `session` | A host session reference |
+| `generation` | A decimal string. A new timeline invalidates old requests. |
+| `parameterSchema` | The declared parameter map |
+| `clock` | `mediaTimeUs`, `rate`, and `playing` |
+| `analysis` | Only the approved and declared channels: 64 `bands`, 256 `waveform` values, or `levels` with `rms` and `peak` |
+| `viewport` | The bounded output `width` and `height` |
+| `theme` | Host `background`, `foreground`, and `accent` colors |
+| `reducedMotion` | `false`; the host stops the worker when reduced motion applies |
+
+The worker receives no PCM samples, media paths, or API key bytes. Nonsecret settings and credential presence flags use the normal worker fields. The visualizer host supplies no network, private storage, WebSocket, or core operation adapter.
+
+Return a normal `result` with status `match` or `partial`. Its data has one field:
+
+```json
+{"parameters": {"gain": 2}}
+```
+
+The host applies a valid partial update as one operation. An unknown parameter, a value outside its range, or a nonnumeric value rejects the complete update. The response data has a 16 KiB limit.
+
+The host permits one request at a time and at most ten requests per second. The first request has a two-second deadline. Later requests have a 500 ms deadline. Three failed or invalid requests stop parameter updates; the static scene continues. A host worker slot refusal can retry without changing the scene. Parameter values expire after two seconds without a valid result.
+
+Hide, close, a new timeline, or an authority change cancels old work. Native process work uses a separate host thread. The GUI does not wait for process exit. One global worker slot includes work that is still stopping.
+
+## Authority and memory limits
+
+Package reads, inventory hashing, and image decoding use bounded background jobs. A single verified capture supplies the scene, runtime, and texture bytes. The GUI uses memory tokens to reject a changed release, account, settings revision, permission, or enabled state. Owners of the same store share these tokens.
+
+The final background configuration test is the admission point for external file changes. The token rejects changes from store owners in the same process. It does not give immediate notice when another process changes a file or the secure credential store.
+
+Image input, decoded pixels, retained cache, render output, and job counts have explicit limits. Codec workspace and Qt graphics allocations are separate. The host does not change a global decoder limit for core media.
