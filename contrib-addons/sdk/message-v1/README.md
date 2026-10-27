@@ -6,6 +6,8 @@ Use the Cargo package `hakone-addon-message-v1` and Rust import `hakone_addon_me
 
 Implement `Addon::handle`. Use `Incoming::Invoke`, `Incoming::HostResult`, and `Incoming::Cancel`. Use `Pending` to bind each host call to its invocation. On cancellation, remove that invocation's pending state. Do not return a result after cancellation.
 
+A host-call ID has one use in its active invocation. A completed or canceled invocation releases its retained IDs. The worker retains at most 4,096 IDs across all active invocations. Keep IDs unique among active entries in one `Pending` map. A reused ID in a later slice still needs that slice's exact invocation ID. A late result from an earlier slice cannot consume the new pending entry.
+
 Call `export_addon!(YourState, YourState::new())` once in a `cdylib` crate. Build for `wasm32-unknown-unknown`. The macro exports `hakone_alloc`, `hakone_dealloc`, and `hakone_dispatch`, and imports only `hakone.host_send`.
 
 The buffer registry accepts exact pointer and length pairs. It rejects unknown pointers, offsets, wrong lengths, and repeated release. Each buffer is at most 1 MiB. At most 32 buffers can exist. A dispatch can emit at most 64 objects. The complete IPC envelope must fit in 1 MiB. The full batch must fit before the first message is sent.

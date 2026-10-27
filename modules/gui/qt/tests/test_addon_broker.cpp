@@ -242,6 +242,62 @@ private slots:
         worker.cancel(invocation); QCOMPARE(aborts, 1); late({{{"positionUs", 999}}, {}}); QTest::qWait(50); QVERIFY(completed.isEmpty());
 #endif
     }
+    void workerScopesReusedCallIdsToTheirExactInvocation()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("The process fixture needs the Unix test interpreter.");
+#else
+        QTemporaryDir directory; auto installed=package(directory.path(),QStringLiteral("reuse-host-call"));
+        installed.grants.insert("playback.observe",QJsonObject{}); NetworkBroker broker; AddonHostServices services; QObject owner;
+        QMap<QString,AddonHostServices::Completion> replies; int aborts=0;
+        QVERIFY(services.registerOperation(QStringLiteral("playback.observe"),&owner,[&](const auto& context,const QJsonObject&,auto done)->AddonHostServices::Cancel {
+            replies.insert(context.invocation,std::move(done)); return [&] { ++aborts; };
+        }));
+        AddonWorker worker(installed,&broker); worker.setExecutable(fixture(directory.path())); worker.setHostServices(&services);
+        QSignalSpy completed(&worker,&AddonWorker::completed),unavailable(&worker,&AddonWorker::unavailable);
+        const auto first=worker.invoke(QStringLiteral("search"),QStringLiteral("searchAssets"),{});
+        const auto second=worker.invoke(QStringLiteral("search"),QStringLiteral("searchAssets"),{}); QTRY_COMPARE(replies.size(),2);
+        worker.cancel(first); QCOMPARE(aborts,1);
+        const auto third=worker.invoke(QStringLiteral("search"),QStringLiteral("searchAssets"),{}); QTRY_COMPARE(replies.size(),3);
+        replies.value(first)({{{"marker",111}}, {}}); QTest::qWait(20); QVERIFY(completed.isEmpty());
+        replies.value(second)({{{"marker",222}}, {}}); QTRY_COMPARE(completed.size(),1);
+        QCOMPARE(completed.first()[0].toString(),second); QCOMPARE(completed.first()[2].toJsonObject().value("response").toObject().value("marker").toInt(),222);
+        replies.value(third)({{{"marker",333}}, {}}); QTRY_COMPARE(completed.size(),2);
+        QCOMPARE(completed.last()[0].toString(),third); QCOMPARE(completed.last()[2].toJsonObject().value("response").toObject().value("marker").toInt(),333);
+        QTest::qWait(30); QCOMPARE(replies.size(),3); QVERIFY(unavailable.isEmpty());
+#endif
+    }
+    void workerReleasesSeenIdsAfterEachCompletedSlice()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("The process fixture needs the Unix test interpreter.");
+#else
+        QTemporaryDir directory; NetworkBroker broker; AddonWorker worker(package(directory.path(),QStringLiteral("quota-complete")),&broker);
+        worker.setExecutable(fixture(directory.path())); QSignalSpy completed(&worker,&AddonWorker::completed),unavailable(&worker,&AddonWorker::unavailable);
+        for(int slice=0;slice<5;++slice) {
+            const auto id=worker.invoke(QStringLiteral("search"),QStringLiteral("searchAssets"),{{"count",1024}});
+            QTRY_COMPARE_WITH_TIMEOUT(completed.size(),slice+1,10000); QCOMPARE(completed.last()[0].toString(),id);
+            QCOMPARE(completed.last()[1].toString(),QStringLiteral("match")); QCOMPARE(completed.last()[2].toJsonObject().value("count").toInt(),1024);
+            QVERIFY(unavailable.isEmpty());
+        }
+#endif
+    }
+    void workerKeepsOneAggregateLimitAcrossActiveInvocations()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("The process fixture needs the Unix test interpreter.");
+#else
+        QTemporaryDir directory; const auto mode=QStringLiteral("quota-active"); NetworkBroker broker; AddonWorker worker(package(directory.path(),mode),&broker);
+        worker.setExecutable(fixture(directory.path())); QSignalSpy unavailable(&worker,&AddonWorker::unavailable);
+        const auto run=[&] { return worker.invoke(QStringLiteral("search"),QStringLiteral("searchAssets"),{{"count",2048}}); };
+        const auto drained=[&](const QString& id) { return QFileInfo::exists(directory.filePath(QString(mode+QLatin1Char('.')+id+QStringLiteral(".drained")))); };
+        const auto first=run(); QTRY_VERIFY_WITH_TIMEOUT(drained(first),10000);
+        const auto second=run(); QTRY_VERIFY_WITH_TIMEOUT(drained(second),10000); QVERIFY(unavailable.isEmpty());
+        worker.cancel(first); const auto third=run(); QTRY_VERIFY_WITH_TIMEOUT(drained(third),10000); QVERIFY(unavailable.isEmpty());
+        worker.invoke(QStringLiteral("search"),QStringLiteral("searchAssets"),{{"count",1}}); QTRY_COMPARE(unavailable.size(),1);
+        QCOMPARE(unavailable.first()[0].toString(),QStringLiteral("The add-on sent too many requests."));
+#endif
+    }
     void workerSendsCancelAndIgnoresOnlyKnownLateCalls()
     {
 #ifndef Q_OS_UNIX

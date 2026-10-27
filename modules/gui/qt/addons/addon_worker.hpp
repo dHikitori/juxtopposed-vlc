@@ -30,13 +30,14 @@ signals:
     void completed(const QString& invocation, const QString& status, const QJsonObject& data, const QString& error);
     void unavailable(const QString& error);
 private:
-    struct Invocation { QString contribution; QPointer<QTimer> deadline; QSet<quint64> jobs, serviceJobs; };
+    struct Invocation { QString contribution; QPointer<QTimer> deadline; QSet<quint64> jobs, serviceJobs; QSet<QString> hostCalls; };
     void start();
     void send(const QJsonObject&);
     void read();
     void message(const QJsonObject&);
     void fail(const QString&);
     void finish(const QString&, const QString&, const QJsonObject&, const QString&);
+    void rememberRetired(const QString&);
     InstalledPackage m_package;
     NetworkBroker* m_network;
     QPointer<AddonHostServices> m_services;
@@ -45,9 +46,9 @@ private:
     QByteArray m_buffer;
     QQueue<QJsonObject> m_queued;
     QHash<QString, Invocation> m_invocations;
-    QSet<QString> m_hostCalls;
-    QSet<QString> m_cancelled;
-    QQueue<QString> m_cancelledOrder;
+    qsizetype m_hostCallCount=0;
+    QSet<QString> m_retired;
+    QQueue<QString> m_retiredOrder;
     QJsonObject m_settings, m_credentials, m_hostCapabilities;
     NetworkBroker::CredentialResolver m_resolver;
     NetworkBroker::RequestGuard m_requestGuard;

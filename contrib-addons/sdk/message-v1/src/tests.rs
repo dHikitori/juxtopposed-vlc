@@ -160,3 +160,14 @@ fn binds_pending_calls_and_cancellation_to_invocations() {
     assert_eq!(pending.take("call-2", "job-2"), Some(20));
     assert!(pending.is_empty());
 }
+#[test]
+fn reused_pending_id_rejects_a_late_old_invocation_result() {
+    let mut pending = Pending::new(2);
+    assert!(pending.insert("call-1", "slice-1", 10).is_ok());
+    pending.cancel("slice-1");
+    assert!(pending.insert("call-1", "slice-2", 20).is_ok());
+    assert_eq!(pending.take("call-1", "slice-1"), None);
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending.take("call-1", "slice-2"), Some(20));
+    assert!(pending.is_empty());
+}
