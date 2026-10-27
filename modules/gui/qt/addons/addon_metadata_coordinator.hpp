@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QVariantMap>
 #include <functional>
+#include <optional>
 
 /** The host controls provider requests and validates results. This class
  * does not change live media. Backend callbacks run on this object's thread.
@@ -17,6 +18,11 @@ class AddonMetadataCoordinator : public QObject
 {
     Q_OBJECT
 public:
+    struct NativeArtwork {
+        QVariant descriptor;
+        QString family;
+        QVariantMap attribution;
+    };
     struct Backend {
         std::function<QVariantList(const QString&)> providersForFeature;
         std::function<QString(const QString&, const QString&, const QVariantMap&)> invoke;
@@ -25,6 +31,9 @@ public:
         // provider context or a portable request key.
         std::function<bool(const QString&)> requiresNativeScope;
         std::function<QString(const QString&, const QString&, const QVariantMap&, const QString&)> invokeNative;
+        std::function<QVariantList(const QString&, const QString&, const QVariantList&, bool)> planProviders;
+        // A native query only: no I/O, callback, target write, or Qt mutation.
+        std::function<std::optional<NativeArtwork>(const QString&, const QVariantMap&, const QString&)> validateNativeArtwork;
     };
 
     explicit AddonMetadataCoordinator(Backend backend, QObject* parent = nullptr);

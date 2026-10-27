@@ -4,6 +4,7 @@
 #endif
 #include "addon_native_artwork_assets.hpp"
 #include "addon_artwork_image.hpp"
+#include "../../../../src/preparser/metadata_native_provider.h"
 #include <vlc_artwork_policy.h>
 #include <vlc_input_item.h>
 #include <vlc_stream.h>
@@ -54,6 +55,14 @@ bool networkUri(const QUrl& url)
     // Native HTTP retains the existing native account and LAN behavior. This
     // route has no add-on permission or credential binding.
     return true;
+}
+bool missingNativeArtwork(input_item_t* item)
+{
+    vlc_mutex_lock(&item->lock);
+    const char* artwork = item->p_meta ? vlc_meta_Get(item->p_meta, vlc_meta_ArtworkURL) : nullptr;
+    const bool missing = !artwork || !artwork[0];
+    vlc_mutex_unlock(&item->lock);
+    return missing;
 }
 }
 struct AddonNativeArtworkAssets::Permit::Consent {
@@ -109,6 +118,7 @@ struct AddonNativeArtworkAssets::Work {
     std::atomic_bool finished{false};
     Clock::time_point deadline;
     Permit permit;
+    std::shared_ptr<vlc_metadata_native_claim_t> claim;
     QUrl url;
     quint64 id = 0;
     bool quota = false;
@@ -116,7 +126,9 @@ struct AddonNativeArtworkAssets::Work {
     void cancel(Reason value) { native->cancel(value); }
     bool live() {
         if (native->reason.load() != None || !permit.current()) return false;
-        const auto held = holdJob(); return held && vlc_metadata_job_IsPending(held.get());
+        const auto held = holdJob();
+        return held && vlc_metadata_job_IsPending(held.get())
+            && (!claim || vlc_metadata_native_claim_MatchesJob(claim.get(), held.get()));
     }
 };
 
@@ -356,13 +368,31 @@ AddonNativeArtworkAssets::AddonNativeArtworkAssets(vlc::addons::AddonStreamLifet
 AddonNativeArtworkAssets::~AddonNativeArtworkAssets() { close(); }
 AddonNativeArtworkAssets::Cancel AddonNativeArtworkAssets::resolve(vlc_metadata_job_t* job, Completion completion)
 {
-    const auto state = m_state;
-    if (!available() || m_sequence == UINT64_MAX || !job || !completion || state->directory.isEmpty() || !vlc_metadata_job_IsPending(job)) return {};
+    if (!job || !vlc_metadata_job_IsPending(job)) return {};
     const auto* request = vlc_metadata_job_GetRequest(job);
     if (!request->item || !(request->flags & VLC_METADATA_REQUEST_NETWORK) || vlc_artwork_item_IsRestricted(request->item)) return {};
     char* raw = input_item_GetArtURL(request->item);
     const QUrl url = raw ? QUrl::fromEncoded(QByteArray(raw), QUrl::StrictMode) : QUrl{}; free(raw);
     if (!networkUri(url)) return {};
+    return enqueue(job, url, {}, std::move(completion));
+}
+AddonNativeArtworkAssets::Cancel AddonNativeArtworkAssets::resolveProviderClaim(
+    vlc_metadata_native_claim_t* claim, vlc_metadata_job_t* job, Completion completion)
+{
+    if (!claim || !job || !vlc_metadata_native_claim_MatchesJob(claim, job)) return {};
+    const auto* request = vlc_metadata_job_GetRequest(job);
+    if (!request->item || !(request->flags & VLC_METADATA_REQUEST_NETWORK)
+        || vlc_artwork_item_IsRestricted(request->item) || !missingNativeArtwork(request->item)) return {};
+    const QUrl url = QUrl::fromEncoded(QByteArray(vlc_metadata_native_claim_GetArtworkURI(claim)), QUrl::StrictMode);
+    if (!networkUri(url)) return {};
+    return enqueue(job, url, {vlc_metadata_native_claim_Hold(claim), vlc_metadata_native_claim_Release}, std::move(completion));
+}
+AddonNativeArtworkAssets::Cancel AddonNativeArtworkAssets::enqueue(vlc_metadata_job_t* job, const QUrl& url,
+    std::shared_ptr<vlc_metadata_native_claim_t> claim, Completion completion)
+{
+    const auto state = m_state;
+    if (!available() || m_sequence == UINT64_MAX || !job || !completion || state->directory.isEmpty()
+        || !vlc_metadata_job_IsPending(job)) return {};
     Permit permit; permit.m_consent = state->consent;
     {
         std::lock_guard<std::mutex> lock(state->consent->mutex);
@@ -372,6 +402,7 @@ AddonNativeArtworkAssets::Cancel AddonNativeArtworkAssets::resolve(vlc_metadata_
     const auto work = std::make_shared<Work>();
     if (!work->native->interrupt) return {};
     work->native->job = {vlc_metadata_job_Hold(job), vlc_metadata_job_Release}; work->permit = permit;
+    work->claim = std::move(claim);
     work->url = url; work->id = ++m_sequence; work->deadline = Clock::now() + std::chrono::milliseconds(state->options.timeoutMs);
     const auto global = budget();
     { std::lock_guard<std::mutex> lock(global->mutex); if (global->jobs >= 32) return {}; ++global->jobs; work->quota = true; }

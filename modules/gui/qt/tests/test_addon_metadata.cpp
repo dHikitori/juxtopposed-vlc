@@ -407,6 +407,97 @@ private slots:
         coordinator.searchAssets("subtitles", context()); QTRY_COMPARE(fake.calls.size(), 2);
     }
 
+    void sealedNativeArtworkRetainsOnlyItsMissingArtworkFeature()
+    {
+        FakeBackend fake; fake.providers = {registration("hakone.builtin.lastfm/artwork")};
+        auto backend = fake.backend(); int validations = 0;
+        backend.requiresNativeScope = [](const QString&) { return true; };
+        backend.invokeNative = [&](const QString& provider, const QString& operation,
+                                   const QVariantMap& projected, const QString& scope) {
+            if (scope != QLatin1String("exact-native-anchor")) {
+                QTest::qFail("The native anchor does not match.", __FILE__, __LINE__); return QString{};
+            }
+            const auto id = QStringLiteral("native-call");
+            fake.calls.append({id, provider, operation, projected}); return id;
+        };
+        backend.validateNativeArtwork = [&](const QString& provider, const QVariantMap& data,
+                                             const QString& scope) -> std::optional<AddonMetadataCoordinator::NativeArtwork> {
+            ++validations;
+            if (provider != QLatin1String("hakone.builtin.lastfm/artwork")
+                || scope != QLatin1String("exact-native-anchor") || data.value("claim") != QLatin1String("host-reference")) return {};
+            return AddonMetadataCoordinator::NativeArtwork{QVariantMap{{"nativeClaim", "host-reference"}},
+                "lastfm", {{"label", "Last.fm"}, {"url", "https://www.last.fm/"}}};
+        };
+        AddonMetadataCoordinator owner(std::move(backend)); QSignalSpy results(&owner, &AddonMetadataCoordinator::finished);
+        owner.enrichNative("artwork", context(), {"artwork", "description"}, "exact-native-anchor");
+        QTRY_COMPARE(fake.calls.size(), 1);
+        complete(owner, fake.calls.first(), "match", {{"claim", "host-reference"}, {"fields", QVariantMap{{"description", "Untrusted field"}}}});
+        QTRY_COMPARE(results.size(), 1); QCOMPARE(validations, 1);
+        const auto data = results.first().at(2).toMap();
+        QCOMPARE(data.value("fields").toMap(), QVariantMap({{"artwork", QVariantMap{{"nativeClaim", "host-reference"}}}}));
+        const auto proof = data.value("provenance").toMap().value("artwork").toMap();
+        QCOMPARE(proof.value("nativeFamily").toString(), QStringLiteral("lastfm"));
+        QCOMPARE(proof.value("compatibilityPolicy").toString(), QStringLiteral("native-family-artwork@1"));
+        QCOMPARE(proof.value("matchEvidence").toString(), QStringLiteral("retained-native-compatibility"));
+        QVERIFY(!proof.value("strong").toBool()); QVERIFY(!data.contains("identity"));
+    }
+
+    void nativeArtworkCannotReplaceProtectedFieldsOrInventPortableIdentity()
+    {
+        for (int row = 0; row != 5; ++row) {
+            FakeBackend fake; fake.providers = {registration("provider/artwork")}; auto backend = fake.backend();
+            const bool native = row != 4;
+            backend.requiresNativeScope = [native](const QString&) { return native; };
+            backend.invokeNative = [&](const QString& provider, const QString& operation, const QVariantMap& projected, const QString&) {
+                const auto id = QStringLiteral("native-call"); fake.calls.append({id, provider, operation, projected}); return id;
+            };
+            backend.validateNativeArtwork = [row](const QString&, const QVariantMap&, const QString&)
+                -> std::optional<AddonMetadataCoordinator::NativeArtwork> {
+                if (row == 2) return {};
+                return AddonMetadataCoordinator::NativeArtwork{QVariantMap{{"nativeClaim", "host-reference"}}, row == 3 ? "unknown-family" : "lastfm", {}};
+            };
+            AddonMetadataCoordinator owner(std::move(backend)); QSignalSpy results(&owner, &AddonMetadataCoordinator::finished);
+            auto request = context();
+            if (row == 0) request.insert("existingFields", QVariantMap{{"artwork", "file:///native/cover.png"}});
+            if (row == 1) request.insert("protectedFields", QStringList{"artwork"});
+            owner.enrichNative("artwork", request, {"artwork"}, "exact-native-anchor");
+            if (row >= 2) { QTRY_COMPARE(fake.calls.size(), 1); complete(owner, fake.calls.first(), "match", {{"nativeClaim", "host-reference"}, {"fields", QVariantMap{{"artwork", "https://images.invalid/art.png"}}}}); }
+            QTRY_COMPARE(results.size(), 1); QVERIFY(results.first().at(2).toMap().value("fields").toMap().isEmpty());
+            if (row < 2) QCOMPARE(fake.calls.size(), 0);
+        }
+    }
+
+    void aProviderPlanCannotAddAuthorityOrRetryAnExcludedFamily()
+    {
+        FakeBackend fake; fake.providers = {registration("portable/artwork"), registration("native/artwork")};
+        auto backend = fake.backend(); backend.requiresNativeScope = [](const QString& id) { return id.startsWith("native/"); };
+        backend.invokeNative = [&](const QString& provider, const QString& operation, const QVariantMap& projected, const QString&) {
+            const auto id = QStringLiteral("native-call"); fake.calls.append({id, provider, operation, projected}); return id;
+        };
+        backend.planProviders = [](const QString&, const QString&, const QVariantList& rows, bool) {
+            auto changed = rows.first().toMap(); changed.insert("cachePartition", "forged-partition");
+            return QVariantList{registration("unknown/artwork"), changed, changed};
+        };
+        AddonMetadataCoordinator owner(std::move(backend)); QSignalSpy results(&owner, &AddonMetadataCoordinator::finished);
+        owner.enrichNative("artwork", context(), {"artwork"}, "native-anchor"); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(owner, fake.calls.first(), "no_match"); QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(fake.calls.size(), 1); QCOMPARE(fake.calls.first().provider, QStringLiteral("portable/artwork"));
+    }
+
+    void aProviderPlanCanDeleteItsOwnerBeforeDispatch()
+    {
+        FakeBackend fake; fake.providers = {registration("portable/artwork")};
+        auto backend = fake.backend(); AddonMetadataCoordinator* owner = nullptr;
+        auto captured = std::make_shared<int>(1); const std::weak_ptr<int> weak(captured); bool heldDuringReturn = false;
+        backend.planProviders = [&, captured](const QString&, const QString&, const QVariantList& rows, bool) {
+            delete std::exchange(owner, nullptr); heldDuringReturn = !weak.expired(); return rows;
+        };
+        owner = new AddonMetadataCoordinator(std::move(backend)); captured.reset();
+        const auto request = owner->enrich("artwork", context(), {"artwork"});
+        QVERIFY(!owner); QVERIFY(!request.isEmpty()); QVERIFY(heldDuringReturn); QVERIFY(weak.expired());
+        QTest::qWait(1); QCOMPARE(fake.calls.size(), 0);
+    }
+
     void artworkAssetSearchRetainsLabelEvidenceForUserSelection() {
         FakeBackend fake; fake.providers = {registration("labels/art")};
         AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);

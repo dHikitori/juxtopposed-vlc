@@ -10,6 +10,8 @@
 #include <vlc_common.h>
 #include <vlc_interrupt.h>
 #include <vlc_metadata_backend.h>
+typedef struct vlc_metadata_native_claim vlc_metadata_native_claim_t;
+class AddonNativeProviderArtworkAssets;
 
 /** This adapter accepts native job snapshots only. It has no guest or QML API.
  * Call the Qt API on the owner thread. Construction requires the app lifetime.
@@ -67,8 +69,12 @@ public:
     bool joined() const noexcept { return m_retirement.joined(); }
     static Backend nativeBackend(vlc_object_t*);
 private:
+    friend class AddonNativeProviderArtworkAssets;
     struct State;
     struct Work;
+    Cancel resolveProviderClaim(vlc_metadata_native_claim_t*, vlc_metadata_job_t*, Completion);
+    Cancel enqueue(vlc_metadata_job_t*, const QUrl&,
+                   std::shared_ptr<vlc_metadata_native_claim_t>, Completion);
     void deliver(const std::shared_ptr<State>&, const std::shared_ptr<Work>&, Result);
     void poll();
     std::shared_ptr<State> m_state;

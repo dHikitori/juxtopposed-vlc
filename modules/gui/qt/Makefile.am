@@ -133,6 +133,12 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_worker.hpp \
 	addons/addon_metadata_coordinator.cpp \
 	addons/addon_metadata_coordinator.hpp \
+	addons/addon_metadata_family_plan.cpp \
+	addons/addon_metadata_family_plan.hpp \
+	addons/addon_native_provider_context.cpp \
+	addons/addon_native_provider_context.hpp \
+	addons/addon_native_provider_artwork_assets.cpp \
+	addons/addon_native_provider_artwork_assets.hpp \
 	addons/addon_ui_registry.cpp \
 	addons/addon_ui_registry.hpp \
 	addons/addon_ui_assets.cpp \
@@ -3514,3 +3520,6 @@ EXTRA_DIST += tests/source-consent-ui/CMakeLists.txt tests/test_addon_source_con
 TESTS += tests/tst_AddonSourceConsent.qml
 
 EXTRA_DIST += tests/builtin-ids/CMakeLists.txt
+
+EXTRA_DIST += tests/test_addon_metadata_family_plan.cpp tests/test_addon_native_provider_context.cpp \
+	tests/fixtures/addon_native_provider_fixture.c tests/fixtures/addon_native_provider_fixture.h

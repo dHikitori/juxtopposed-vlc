@@ -99,5 +99,59 @@ that every detached job ends exactly once. The prior coordinator implementation
 fails the returned-request cancellation control. Exact hashes and test records
 are in `/tmp/hakone-native-callback-retirement/final-proof.json`.
 
-The sealed native image route, family selection, and owner activation remain
-open.
+The app Service/factory mount and owner activation remain open.
+
+## Qt adapter boundary
+
+The new adapter sources are not active in the app. Focused runtime tests now
+pass. The following rules define this adapter boundary.
+
+`AddonNativeProviderContext` admits the app join before it creates the native
+context. Native callbacks store plain results in a bounded mailbox. Completion
+captures remain in the Qt owner map. Close retires those captures on the owner
+thread and cancels native work. The counted cleanup drains the native context
+and releases its claims and jobs before native parent teardown. A retained
+cancel function contains only a weak native state reference and a request ID.
+
+The coordinator receives a random claim reference. It receives no native
+pointer or artwork URL. Validation requires the exact job, snapshot, and
+selected family. The native image adapter consumes that reference once. It
+uses the existing bounded native reader, decoder, raster cache, consent epoch,
+and counted join. The original embedded-artwork entry cannot accept a provider
+claim. A guest descriptor cannot create native authority.
+
+The result retains its native consent permit. A direct manual caller must
+admit the final callback-free native Apply through that permit. A completed
+download does not bypass later consent withdrawal. Automatic pipeline work
+must also retain its native parent anchor through final publication. The host
+must close both GUI owners before it waits for app drain.
+
+The four retained Lua families do not supply strong entity evidence. The
+native compatibility rule can fill only missing artwork. It cannot supply a
+title, an episode field, or a replacement image. It records the native family,
+`native-family-artwork@1`, the provider cache partition, and available source
+credit. It does not copy request identity into provider evidence. Portable
+providers retain the strict identity rules.
+
+The host family table selects one eligible native or portable implementation
+for each family before execution. Saved order and enablement apply. Native
+defaults retain the original family order. A portable miss or error cannot
+start the native implementation of that same family. A higher strong match
+keeps priority; an unresolved strong ambiguity blocks automatic native art.
+
+The controlled Qt fixture passes all 15 cases normally and with focused
+AddressSanitizer, UndefinedBehaviorSanitizer, and leak detection. It covers
+opaque reference scope, native cancel, GUI capture release, blocked join,
+owner deletion, the 32-request limit, and retained cancel cleanup. It also
+proves exact image pixels, the sealed image route through real native Apply,
+refusal of existing artwork, and refusal after consent withdrawal. A delivery
+retains its local native references through callback return. A last completion
+capture can delete the GUI owner with another result ready.
+
+The coordinator passes 34 cases, and the family table passes seven cases,
+normally and with the same focused sanitizers. No sanitizer diagnostic or test
+skip occurs. The Core bridge, changed production sources, and fixture sources
+use the sanitizers; Qt, the shared Core, and unchanged image/lifetime dependency
+objects use their normal builds. These cases do not prove a live remote
+service, the Service/factory mount, or final app integration. Exact source
+hashes, commands, and logs remain in `/tmp/hakone-native-materializer/`.

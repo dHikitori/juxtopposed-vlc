@@ -193,8 +193,26 @@ QString AddonMetadataCoordinator::start(const QString& feature, const QString& o
     for (const auto& providerId : defaults) if (!order.contains(providerId)) order.append(providerId);
     for (const auto& providerId : order) {
         if (eligible.contains(providerId)) consumer.providers.append(eligible.take(providerId));
-        if (consumer.providers.size() >= MaxProviders) break;
     }
+    if (m_backend.planProviders) {
+        const auto before = consumer.providers;
+        const auto plan = m_backend.planProviders;
+        const QPointer<AddonMetadataCoordinator> alive(this);
+        const auto planned = plan(feature, operation, before, !privateScope.isEmpty());
+        if (!alive) return id;
+        consumer.providers.clear(); QSet<QString> selected;
+        for (const auto& value : planned) {
+            const auto providerId = value.toMap().value(QStringLiteral("id")).toString();
+            if (selected.contains(providerId)) continue;
+            const auto original = std::find_if(before.cbegin(), before.cend(), [&](const QVariant& entry) {
+                return entry.toMap().value(QStringLiteral("id")).toString() == providerId;
+            });
+            if (original == before.cend()) continue;
+            selected.insert(providerId); consumer.providers.append(*original);
+            if (consumer.providers.size() >= MaxProviders) break;
+        }
+    }
+    consumer.providers = consumer.providers.mid(0, MaxProviders);
     m_consumers.insert(id, consumer);
     const int timeout = std::clamp(context.value(QStringLiteral("timeoutMs"), 15000).toInt(), 100, 30000);
     QTimer::singleShot(timeout, this, [this, id] {
@@ -398,6 +416,29 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     const auto provider = registration.value(QStringLiteral("id")).toString();
     const QVariantMap provenance{{QStringLiteral("provider"), provider}, {QStringLiteral("feature"), it->feature},
         {QStringLiteral("cachePartition"), registration.value(QStringLiteral("cachePartition"))}};
+    const bool native = m_backend.requiresNativeScope && m_backend.requiresNativeScope(provider);
+    if (native && it->feature == QStringLiteral("artwork") && it->operation == QStringLiteral("enrich")) {
+        if (it->privateScope.isEmpty() || it->entityAmbiguous || !missing(*it).contains(QStringLiteral("artwork"))
+            || !m_backend.validateNativeArtwork) return;
+        const auto verified = m_backend.validateNativeArtwork(provider, data, it->privateScope);
+        static const QSet<QString> families{QStringLiteral("musicbrainz"), QStringLiteral("google-images"),
+            QStringLiteral("french-tv"), QStringLiteral("lastfm")};
+        if (!verified || !families.contains(verified->family) || !populated(verified->descriptor)
+            || QJsonDocument::fromVariant(QVariantMap{{QStringLiteral("value"), verified->descriptor}})
+                .toJson(QJsonDocument::Compact).size() > MaxCandidateBytes || it->labelArtwork.size() >= 64) return;
+        auto source = provenance;
+        source.insert(QStringLiteral("nativeFamily"), verified->family);
+        source.insert(QStringLiteral("compatibilityPolicy"), QStringLiteral("native-family-artwork@1"));
+        source.insert(QStringLiteral("matchEvidence"), QStringLiteral("retained-native-compatibility"));
+        source.insert(QStringLiteral("strong"), false);
+        const auto credit = attribution(verified->attribution);
+        if (!credit.isEmpty()) source.insert(QStringLiteral("attribution"), credit);
+        // This is a retained native behavior. It supplies no entity identity.
+        // The existing weak-result order also preserves a higher ambiguity.
+        it->labelArtwork.append(QVariantMap{{QStringLiteral("field"), QStringLiteral("artwork")},
+            {QStringLiteral("value"), verified->descriptor}, {QStringLiteral("provenance"), source}});
+        return;
+    }
     if (it->operation == QStringLiteral("searchAssets")) {
         for (const auto& value : data.value(QStringLiteral("candidates")).toList()) {
             if (it->candidates.size() >= MaxCandidates) break;
