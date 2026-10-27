@@ -4584,6 +4584,9 @@ AS_IF([test "${enable_qt}" != "no"], [
   ALIASES="${ALIASES} qvlc"
 ])
 AC_SUBST([QT_INDIRECT_LIBS])
+AS_IF([test "$enable_qt" != "no" -a "$have_zlib" != "yes"], [
+  AC_MSG_ERROR([The Qt add-on image host needs zlib. Install zlib or disable Qt.])
+])
 AM_CONDITIONAL([ENABLE_QT], [test "$enable_qt" != "no"])
 
 dnl The isolated portable add-on worker is separate from experimental Rust modules.

@@ -5,6 +5,8 @@
 #include <QImage>
 #include <QFile>
 #include <QDir>
+#include <QtEndian>
+#include <zlib.h>
 #include "addons/addon_artwork_assets.hpp"
 
 namespace {
@@ -12,6 +14,12 @@ QByteArray image(int width = 2, int height = 2, const char* format = "PNG")
 {
     QImage image(width, height, QImage::Format_RGB32); image.fill(Qt::red);
     QByteArray bytes; QBuffer buffer(&bytes); buffer.open(QIODevice::WriteOnly); image.save(&buffer, format); return bytes;
+}
+QByteArray pngChunk(const QByteArray& type, const QByteArray& payload)
+{
+    QByteArray result(4, '\0'); qToBigEndian<quint32>(quint32(payload.size()), result.data()); result += type; result += payload;
+    const auto crc = crc32(0, reinterpret_cast<const Bytef*>(result.constData() + 4), uInt(result.size() - 4));
+    QByteArray tail(4, '\0'); qToBigEndian<quint32>(quint32(crc), tail.data()); return result + tail;
 }
 struct Fake {
     struct Call { quint64 id; QString provider; QJsonObject request; vlc::addons::NetworkBroker::Callback complete; };
@@ -45,6 +53,22 @@ private slots:
         QVERIFY(!AddonArtworkAssets::imageFormat("<svg xmlns='http://www.w3.org/2000/svg'><image href='file:///private'/></svg>", options, &extension));
         QVERIFY(!AddonArtworkAssets::imageFormat(QByteArray(1024 * 1024 + 1, 'x'), options, &extension));
         QVERIFY(!AddonArtworkAssets::imageFormat("<html>not an image</html>", options, &extension));
+    }
+    void metadataAndAnimationDoNotReachTheArtworkCache()
+    {
+        QByteArray text("note\0\0", 6); text += qCompress(QByteArray(1024 * 1024, 'x')).mid(4);
+        QByteArray animation(8, '\0'); qToBigEndian<quint32>(2, animation.data());
+        for (const auto& extra : {pngChunk("zTXt", text), pngChunk("acTL", animation)}) {
+            auto bytes = image(); bytes.insert(33, extra);
+            QVERIFY(!AddonArtworkAssets::imageFormat(bytes, {}, nullptr));
+            QTemporaryDir directory; Fake fake; AddonArtworkAssets assets(fake.backend(), directory.path(), {});
+            int completed = 0;
+            assets.resolve("example/art", QStringLiteral("https://images.example.org/image.png"), [&](const QUrl& file, const QString& error) {
+                QVERIFY(file.isEmpty()); QVERIFY(!error.isEmpty()); ++completed;
+            });
+            QTRY_COMPARE(fake.calls.size(), 1); fake.complete(0, bytes); QCOMPARE(completed, 1);
+            QVERIFY(QDir(directory.path()).entryList(QDir::Files).isEmpty());
+        }
     }
     void materializationUsesManagedFilesAndSharedDownloads()
     {

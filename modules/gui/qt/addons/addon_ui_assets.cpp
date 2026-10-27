@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_ui_assets.hpp"
 #include "addon_manager.hpp"
-#include <QBuffer>
+#include "addon_artwork_image.hpp"
 #include <QCryptographicHash>
 #include <QFileInfo>
-#include <QImageReader>
 #include <QJsonDocument>
 #include <QMutex>
 #include <QMutexLocker>
@@ -12,7 +11,6 @@
 #include <QThreadPool>
 #include <QRegularExpression>
 #include <QUuid>
-#include <QtEndian>
 #include <algorithm>
 #include <cstring>
 
@@ -84,72 +82,7 @@ bool identifier(const QString& value)
         && value != QLatin1String("prototype") && value != QLatin1String("constructor");
 }
 QImage fail(QString* error, const char* message) { if (error) *error = QString::fromLatin1(message); return {}; }
-bool staticContainer(const QByteArray& bytes, const QByteArray& format)
-{
-    if (format == "png") {
-        if (!bytes.startsWith(QByteArray::fromHex("89504e470d0a1a0a"))) return false;
-        qsizetype offset = 8; bool header = false, data = false; quint64 metadata = 0;
-        while (offset + 12 <= bytes.size()) {
-            const quint32 length = qFromBigEndian<quint32>(bytes.constData() + offset);
-            if (quint64(length) + 12 > quint64(bytes.size() - offset)) return false;
-            const auto type = bytes.mid(offset + 4, 4);
-            if (!header && (type != "IHDR" || length != 13)) return false;
-            if (type == "acTL" || type == "fcTL" || type == "fdAT") return false;
-            if (type == "zTXt" || type == "iCCP") return false;
-            if (type == "iTXt") {
-                const auto payload = bytes.mid(offset + 8, length); const auto keyword = payload.indexOf('\0');
-                if (keyword < 1 || keyword + 2 >= payload.size() || payload[keyword + 1] != 0) return false;
-            }
-            if (type != "IDAT" && (metadata += length) > 16 * 1024) return false;
-            header = true; data |= type == "IDAT";
-            offset += qsizetype(length) + 12;
-            if (type == "IEND") return length == 0 && data && offset == bytes.size();
-        }
-        return false;
-    }
-    if (format == "jpeg") {
-        if (!bytes.startsWith(QByteArray::fromHex("ffd8"))) return false;
-        qsizetype offset = 2; quint64 metadata = 0; bool entropy = false, scan = false;
-        while (offset < bytes.size()) {
-            if (entropy) {
-                while (offset < bytes.size() && quint8(bytes[offset]) != 0xff) ++offset;
-                const auto markerStart = offset;
-                if (++offset >= bytes.size()) return false;
-                while (offset < bytes.size() && quint8(bytes[offset]) == 0xff) ++offset;
-                if (offset >= bytes.size()) return false;
-                const auto marker = quint8(bytes[offset]);
-                if (marker == 0 || (marker >= 0xd0 && marker <= 0xd7)) { ++offset; continue; }
-                offset = markerStart; entropy = false;
-            }
-            if (offset >= bytes.size() || quint8(bytes[offset++]) != 0xff) return false;
-            while (offset < bytes.size() && quint8(bytes[offset]) == 0xff) ++offset;
-            if (offset >= bytes.size()) return false;
-            const auto marker = quint8(bytes[offset++]);
-            if (marker == 0xd9) return scan && offset == bytes.size();
-            if (marker == 0xd8 || marker == 0) return false;
-            if (marker == 1 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-            if (offset + 2 > bytes.size()) return false;
-            const auto length = qFromBigEndian<quint16>(bytes.constData() + offset);
-            if (length < 2 || length > bytes.size() - offset) return false;
-            if (((marker >= 0xe0 && marker <= 0xef) || marker == 0xfe) && (metadata += length - 2) > 16 * 1024) return false;
-            offset += length;
-            if (marker == 0xda) { entropy = true; scan = true; }
-        }
-        return false;
-    }
-    if (format != "webp" || bytes.size() < 12 || bytes.left(4) != "RIFF" || bytes.mid(8, 4) != "WEBP"
-        || quint64(qFromLittleEndian<quint32>(bytes.constData() + 4)) + 8 != quint64(bytes.size())) return false;
-    qsizetype offset = 12; quint64 metadata = 0;
-    while (offset + 8 <= bytes.size()) {
-        const auto type = bytes.mid(offset, 4);
-        const quint32 length = qFromLittleEndian<quint32>(bytes.constData() + offset + 4);
-        if (quint64(length) + 8 + (length & 1) > quint64(bytes.size() - offset)) return false;
-        if (type == "ANIM" || type == "ANMF" || (type == "VP8X" && length && (quint8(bytes[offset + 8]) & 2))) return false;
-        if (type != "VP8 " && type != "VP8L" && type != "ALPH" && (metadata += length) > 16 * 1024) return false;
-        offset += qsizetype(length) + 8 + (length & 1);
-    }
-    return offset == bytes.size();
-}
+
 }
 AddonUiAssets::Backend AddonUiAssets::managerBackend(AddonManager* manager)
 {
@@ -223,16 +156,11 @@ QImage AddonUiAssets::decodeImage(const QByteArray& bytes, const QString& suffix
     if (bytes.isEmpty() || bytes.size() > std::clamp<qint64>(options.maximumImageBytes, 1, 1024 * 1024))
         return fail(error, "The image exceeds the byte limit or is empty.");
     const auto format = suffix.toLower() == QLatin1String("jpg") ? QByteArray("jpeg") : suffix.toLower().toLatin1();
-    if (!staticContainer(bytes, format)) return fail(error, "The image format is not permitted by the static image profile.");
-    QBuffer input; input.setData(bytes); input.open(QIODevice::ReadOnly);
-    QImageReader reader(&input, format); reader.setAutoDetectImageFormat(false); reader.setDecideFormatFromContent(false); reader.setAutoTransform(false);
-    const auto size = reader.size(); const int limit = std::clamp(options.maximumDimension, 1, 1024);
-    if (!size.isValid() || size.width() > limit || size.height() > limit || reader.imageCount() > 1)
-        return fail(error, "The image dimensions or frame count exceed the limit.");
-    auto image = reader.read();
-    if (image.isNull() || image.size() != size || image.sizeInBytes() > qint64(limit) * limit * 8)
-        return fail(error, "The app cannot decode this image within the pixel limit.");
-    image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (AddonArtworkImage::format(bytes) != format) return fail(error, "The image format is not permitted by the static image profile.");
+    const int limit = std::clamp(options.maximumDimension, 1, 1024);
+    auto image = AddonArtworkImage::decode(bytes, AddonArtworkImage::Profile::StaticAddon,
+        {options.maximumImageBytes, qint64(limit) * limit * 8, limit}, error);
+    if (image.isNull()) return {};
     const int output = std::clamp(options.maximumOutputDimension, 1, 1024);
     if (image.width() > output || image.height() > output) image = image.scaled(output, output, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     QImage pixels(image.size(), QImage::Format_ARGB32_Premultiplied);

@@ -38,7 +38,7 @@ include ../../modulelist.mk
 SUFFIXES += .ui .h .hpp .moc.cpp .qml .js .mjs .moc
 TEST_EXTENSIONS = .qml
 EXTRA_DIST = qt6.pro qtest.pro quicktest.pro scripts
-vlc_qt_libs = $(QT_LIBS)
+vlc_qt_libs = $(QT_LIBS) $(LIBZ)
 RCC_EXTRA_PARAMS =
 
 all-local: $(VLC_QT_CHECK_DEP) $(QML_MODULE_STAMPS)
@@ -179,7 +179,11 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_playable_gate.cpp \
 	addons/addon_playable_gate.hpp \
 	addons/addon_artwork_assets.cpp \
-	addons/addon_artwork_assets.hpp
+	addons/addon_artwork_assets.hpp \
+	addons/addon_artwork_image.cpp \
+	addons/addon_artwork_image.hpp \
+	addons/addon_native_artwork_assets.cpp \
+	addons/addon_native_artwork_assets.hpp
 QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
 	addons/addon_network.moc.cpp \
@@ -2342,6 +2346,28 @@ check_PROGRAMS += test_qt_addon_playable_gate
 TESTS += test_qt_addon_playable_gate
 
 
+test_qt_addon_artwork_image_SOURCES = tests/test_addon_artwork_image.cpp
+nodist_test_qt_addon_artwork_image_SOURCES = tests/test_addon_artwork_image.moc
+BUILT_SOURCES += tests/test_addon_artwork_image.moc
+CLEANFILES += tests/test_addon_artwork_image.moc
+test_qt_addon_artwork_image_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir)
+test_qt_addon_artwork_image_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_artwork_image_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_artwork_image_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_artwork_image
+TESTS += test_qt_addon_artwork_image
+
+test_qt_addon_native_artwork_assets_SOURCES = tests/test_addon_native_artwork_assets.cpp
+nodist_test_qt_addon_native_artwork_assets_SOURCES = tests/test_addon_native_artwork_assets.moc
+BUILT_SOURCES += tests/test_addon_native_artwork_assets.moc
+CLEANFILES += tests/test_addon_native_artwork_assets.moc
+test_qt_addon_native_artwork_assets_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"'
+test_qt_addon_native_artwork_assets_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_native_artwork_assets_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_native_artwork_assets_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_native_artwork_assets
+TESTS += test_qt_addon_native_artwork_assets
+
 test_qt_addon_artwork_assets_SOURCES = tests/test_addon_artwork_assets.cpp
 nodist_test_qt_addon_artwork_assets_SOURCES = tests/test_addon_artwork_assets.moc
 BUILT_SOURCES += tests/test_addon_artwork_assets.moc
@@ -2413,7 +2439,7 @@ TESTS += test_qt_addon_native_queue_store
 LIBVLC = ../../../lib/libvlc.la
 QT_QTEST_COMMON_cppflags = $(libqt_plugin_la_CPPFLAGS) -I$(builddir)/tests -DTOP_BUILDDIR=\"$(abs_top_builddir)\"
 QT_QTEST_COMMON_cxxflags = $(AM_CXXFLAGS) $(QT_CFLAGS) $(QT_QTEST_CFLAGS) -fPIC $(CXXFLAGS_qt)
-QT_QTEST_COMMON_ldadd = $(QT_LIBS) $(LIBS_qt) $(QT_QTEST_LIBS) $(LIBVLCCORE) $(LIBVLC)
+QT_QTEST_COMMON_ldadd = $(QT_LIBS) $(LIBS_qt) $(QT_QTEST_LIBS) $(LIBVLCCORE) $(LIBVLC) $(LIBZ)
 QT_QTEST_COMMON_ldflags = $(AM_LDFLAGS) $(QT_LDFLAGS) $(QT_QTEST_LDFLAGS)
 
 if HAVE_WIN32

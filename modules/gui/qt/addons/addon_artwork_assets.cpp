@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_artwork_assets.hpp"
 #include "addon_manager.hpp"
-#include <QBuffer>
+#include "addon_artwork_image.hpp"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
-#include <QImageReader>
-#include <QImage>
 #include <QJsonDocument>
 #include <QSaveFile>
 #include <QTimer>
@@ -46,14 +44,10 @@ AddonArtworkAssets::~AddonArtworkAssets() { invalidate(); }
 bool AddonArtworkAssets::imageFormat(const QByteArray& bytes, const Options& options, QString* extension)
 {
     if (bytes.isEmpty() || bytes.size() > options.maxImageBytes) return false;
-    QBuffer input; input.setData(bytes); input.open(QIODevice::ReadOnly);
-    QImageReader reader(&input); reader.setDecideFormatFromContent(true);
-    const auto format = reader.format().toLower();
-    if (format != "png" && format != "jpeg" && format != "webp") return false;
-    const auto size = reader.size();
-    if (!size.isValid() || size.width() > options.maxDimension || size.height() > options.maxDimension) return false;
-    const auto decoded = reader.read();
-    if (decoded.isNull() || decoded.size() != size) return false;
+    const vlc::addons::AddonArtworkImage::Limits limits{options.maxImageBytes,
+        qint64(std::clamp(options.maxDimension, 1, 1024)) * std::clamp(options.maxDimension, 1, 1024) * 8, options.maxDimension};
+    if (vlc::addons::AddonArtworkImage::decode(bytes, vlc::addons::AddonArtworkImage::Profile::StaticAddon, limits).isNull()) return false;
+    const auto format = vlc::addons::AddonArtworkImage::format(bytes);
     if (extension) *extension = format == "jpeg" ? QStringLiteral("jpg") : QString::fromLatin1(format);
     return true;
 }
