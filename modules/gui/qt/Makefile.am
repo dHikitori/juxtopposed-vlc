@@ -215,6 +215,9 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_host_services.hpp \
 	addons/addon_repository_updates.cpp \
 	addons/addon_repository_updates.hpp \
+	addons/addon_repository_jobs.cpp \
+	addons/addon_repository_jobs.hpp \
+	addons/addon_repository_cancellation.hpp \
 	addons/addon_playable_gate.cpp \
 	addons/addon_playable_gate.hpp \
 	addons/addon_artwork_assets.cpp \
@@ -2174,6 +2177,17 @@ TESTS += test_qt_win32_emutls
 endif
 
 if HAVE_QT_QTEST
+
+test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.cpp
+nodist_test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.moc
+BUILT_SOURCES += tests/test_addon_repository_jobs.moc
+CLEANFILES += tests/test_addon_repository_jobs.moc
+test_qt_addon_repository_jobs_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_repository_jobs_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_repository_jobs_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_repository_jobs_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_repository_jobs
+TESTS += test_qt_addon_repository_jobs
 
 test_qt_addon_app_shutdown_SOURCES = tests/test_addon_app_shutdown.cpp
 nodist_test_qt_addon_app_shutdown_SOURCES = tests/test_addon_app_shutdown.moc

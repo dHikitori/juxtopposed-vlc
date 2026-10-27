@@ -3,6 +3,7 @@
 #include "addon_storage.hpp"
 #include "addon_ui_assets.hpp"
 #include "addon_store_authority.hpp"
+#include "addon_repository_jobs.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -15,6 +16,7 @@
 #include <QSslSocket>
 #include <QMetaProperty>
 #include <QTimer>
+#include <QThread>
 #include <QUuid>
 #include <algorithm>
 
@@ -70,6 +72,7 @@ QString packagePart(const QString& global) { return global.section('/', 0, 0); }
 AddonManager::AddonManager(const QString& directory, QObject* parent)
     : QObject(parent), m_store(directory), m_network(this), m_hostServices(this)
 {
+    m_repositoryJobs=std::make_unique<AddonRepositoryJobs>(AddonStreamLifetime::applicationHandle());
     connect(&m_hostServices, &AddonHostServices::availabilityChanged, this, &AddonManager::capabilitiesChanged);
     connect(this, &AddonManager::revisionChanged, this, &AddonManager::capabilitiesChanged);
     m_storage = std::make_unique<AddonStorage>(m_store, [this](const AddonHostServices::Context& host, PrivateStorageContext* output, QString* error) {
@@ -103,12 +106,10 @@ AddonManager::~AddonManager()
     if (m_storage) m_storage->close();
     disconnect(&m_hostServices, nullptr, this, nullptr);
     for (const auto& connection : m_mediaCapabilityConnections) disconnect(connection);
-    if (m_repositoryThread) {
-        disconnect(m_repositoryThread, nullptr, this, nullptr);
-        m_repositoryThread->requestInterruption(); m_repositoryThread->wait(); delete m_repositoryThread;
-    }
+    m_repositoryJobs->close();
     const auto workers = m_workers; for (auto* worker : workers) worker->stop(); m_secrets.clearSession();
 }
+bool AddonManager::busy() const { return m_repositoryJobs->busy(); }
 void AddonManager::setWorkerExecutable(const QString& value)
 { m_workerExecutable = value; emit capabilitiesChanged(); }
 QVariantMap AddonManager::capabilities() const
@@ -580,17 +581,16 @@ bool AddonManager::stageRepository(const QString& source, const QString& tag)
     auto candidate = std::make_shared<PackageCandidate>();
     auto error = std::make_shared<QString>();
     auto success = std::make_shared<bool>(false);
-    m_repositoryThread = QThread::create([candidate, error, success, source, tag] {
+    const bool started=m_repositoryJobs->submit([candidate, error, success, source, tag] {
         *success = PackageStore::fetchGitTag(source, tag, candidate.get(), error.get());
+    }, [this, candidate, error, success](AddonRepositoryJobs::Result result) {
+        const bool canceled=result==AddonRepositoryJobs::Result::Canceled;
+        const bool finished=result==AddonRepositoryJobs::Result::Finished;
+        if (*success && finished) m_pendingPackage = candidate;
+        changed(*success && finished,canceled ? tr("The app canceled the repository request.")
+            : !finished ? tr("The repository request did not finish.") : *error);
     });
-    auto* thread = m_repositoryThread;
-    connect(thread, &QThread::finished, this, [this, thread, candidate, error, success] {
-        if (m_repositoryThread == thread) m_repositoryThread = nullptr;
-        if (*success && !thread->isInterruptionRequested()) m_pendingPackage = candidate;
-        changed(*success && !thread->isInterruptionRequested(), thread->isInterruptionRequested() ? tr("VLC canceled the repository request.") : *error);
-        thread->deleteLater();
-    });
-    thread->start(); return changed(true);
+    return changed(started,started ? QString{} : tr("The app cannot start the repository request."));
 }
 bool AddonManager::checkRepositoryUpdates(const QString& id, const QString& range, bool allowPrerelease)
 {
@@ -600,22 +600,21 @@ bool AddonManager::checkRepositoryUpdates(const QString& id, const QString& rang
     auto candidate = std::make_shared<PackageCandidate>();
     auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
     const auto directory = m_store.storageDirectory();
-    m_repositoryThread = QThread::create([candidate, error, success, directory, id, range, allowPrerelease] {
+    const bool started=m_repositoryJobs->submit([candidate, error, success, directory, id, range, allowPrerelease] {
         PackageStore store(directory);
         *success = store.fetchRepositoryUpdate(id, range, allowPrerelease, candidate.get(), error.get());
-    });
-    auto* thread = m_repositoryThread;
-    connect(thread, &QThread::finished, this, [this, thread, candidate, error, success, id] {
-        if (m_repositoryThread == thread) m_repositoryThread = nullptr;
-        const bool canceled = thread->isInterruptionRequested();
-        const bool available = *success && !canceled && !candidate->manifest.id.isEmpty();
+    }, [this, candidate, error, success, id](AddonRepositoryJobs::Result result) {
+        const bool canceled=result==AddonRepositoryJobs::Result::Canceled;
+        const bool finished=result==AddonRepositoryJobs::Result::Finished;
+        const bool available = *success && finished && !candidate->manifest.id.isEmpty();
         if (available) m_pendingPackage = candidate;
         m_updateResult = {{"packageId", id}, {"checking", false}, {"available", available}, {"canceled", canceled},
             {"tag", available ? candidate->identity.tag : QString{}}, {"publisherVerified", false}};
-        changed(*success && !canceled, canceled ? tr("VLC canceled the repository request.") : *error);
-        thread->deleteLater();
+        changed(*success && finished,canceled ? tr("The app canceled the repository request.")
+            : !finished ? tr("The repository request did not finish.") : *error);
     });
-    thread->start(); return changed(true);
+    if (!started) m_updateResult={{"packageId",id},{"checking",false},{"available",false},{"canceled",false}};
+    return changed(started,started ? QString{} : tr("The app cannot start the repository request."));
 }
 
 bool AddonManager::approvePendingPackage(bool enable)
@@ -631,7 +630,7 @@ bool AddonManager::approvePendingPackage(bool enable)
 }
 void AddonManager::discardPendingPackage()
 {
-    if (m_repositoryThread) m_repositoryThread->requestInterruption();
+    m_repositoryJobs->cancel();
     m_pendingPackage.reset(); m_updateResult.clear(); changed(true);
 }
 bool AddonManager::installLocalPackage(const QString& directory, bool approve)

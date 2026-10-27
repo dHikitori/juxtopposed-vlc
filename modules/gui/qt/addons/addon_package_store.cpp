@@ -6,6 +6,7 @@
 #include <QCryptographicHash>
 #include <cmath>
 #include "addon_repository_updates.hpp"
+#include "addon_repository_cancellation.hpp"
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -185,7 +186,7 @@ public:
     bool run(QStringList arguments, QByteArray* output, QString* error, bool repository = true,
              qint64 maximumOutput = Manifest::MaximumPackageBytes)
     {
-        if (QThread::currentThread()->isInterruptionRequested())
+        if (RepositoryCancellation::requested() || QThread::currentThread()->isInterruptionRequested())
             return fail(error, QStringLiteral("The Git request was canceled."));
         QProcess process;
         QProcessEnvironment environment;
@@ -235,7 +236,7 @@ public:
             process.waitForFinished(25);
             data += process.readAllStandardOutput();
             diagnostic += process.readAllStandardError();
-            const bool interrupted = QThread::currentThread()->isInterruptionRequested();
+            const bool interrupted = RepositoryCancellation::requested() || QThread::currentThread()->isInterruptionRequested();
             if (interrupted || data.size() > maximumOutput || diagnostic.size() > 256 * 1024
                 || m_elapsed.elapsed() > m_timeout || directoryBytes(m_temporary.path()) > 128 * 1024 * 1024) {
 #ifdef Q_OS_UNIX
@@ -250,7 +251,7 @@ public:
         }
         data += process.readAllStandardOutput();
         diagnostic += process.readAllStandardError();
-        if (QThread::currentThread()->isInterruptionRequested())
+        if (RepositoryCancellation::requested() || QThread::currentThread()->isInterruptionRequested())
             return fail(error, QStringLiteral("The Git request was canceled."));
         if (data.size() > maximumOutput || diagnostic.size() > 256 * 1024
             || m_elapsed.elapsed() > m_timeout)

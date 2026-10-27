@@ -5,8 +5,10 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <memory>
 #include "addons/addon_manager.hpp"
+#include "addons/addon_stream_lifetime.hpp"
 
 using namespace vlc::addons;
 
@@ -32,6 +34,25 @@ class TestAddonRuntime : public QObject
         return {{"apiKey", QVariantMap{{"operation", "replace"}, {"value", key}, {"sessionOnly", true}}}};
     }
 private slots:
+    void repositoryWorkRequiresAnAppOwnerAndKeepsPublicResultState()
+    {
+        QTemporaryDir firstDirectory,secondDirectory;
+        { AddonManager absent(firstDirectory.path());
+          QVERIFY(!absent.stageRepository(QStringLiteral("http://example.org/no-fetch.git"),QStringLiteral("v1.0.0")));
+          QVERIFY(!absent.busy()); QVERIFY(!absent.errorMessage().isEmpty()); }
+        AddonStreamLifetime lifetime; const auto handle=lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto retire=qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        AddonManager manager(secondDirectory.path());
+        QVERIFY(manager.stageRepository(QStringLiteral("http://example.org/no-fetch.git"),QStringLiteral("v1.0.0")));
+        QVERIFY(manager.busy()); manager.discardPendingPackage();
+        QTRY_VERIFY(!manager.busy()); QVERIFY(manager.pendingPackage().isEmpty());
+        QCOMPARE(manager.errorMessage(),QStringLiteral("The app canceled the repository request."));
+        QVERIFY(manager.checkRepositoryUpdates(QStringLiteral("org.example.absent"),QStringLiteral("^1.0.0")));
+        QCOMPARE(manager.updateResult().value("checking").toBool(),true);
+        QTRY_VERIFY(!manager.busy()); QVERIFY(!manager.updateResult().value("checking").toBool());
+        QVERIFY(!manager.updateResult().value("available").toBool()); QVERIFY(!manager.errorMessage().isEmpty());
+    }
     void accountReferencesBindCredentialsButNotDisplaySettingsOrReleaseBytes() {
         QTemporaryDir storage, update; AddonManager manager(storage.path());
         const QString id = QStringLiteral("org.hakone.thesubtitledb");

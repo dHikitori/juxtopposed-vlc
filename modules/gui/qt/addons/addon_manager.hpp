@@ -6,10 +6,10 @@
 #include "addon_worker.hpp"
 #include <QObject>
 #include <QVariantList>
-#include <QThread>
 
 namespace vlc::addons {
 class AddonStorage;
+class AddonRepositoryJobs;
 struct UiAssetCapture;
 class AddonManager : public QObject
 {
@@ -40,7 +40,7 @@ public:
     std::function<UiAssetCapture()> uiAssetReader(const QString& globalId) const;
     QJsonObject grantedScope(const QString& packageId, const QString& capability) const;
     bool credentialPersistenceAvailable() const { return CredentialStore::persistentAvailable(); }
-    bool busy() const { return m_repositoryThread != nullptr; }
+    bool busy() const;
     bool safeMode() const { return m_store.safeMode(); }
     QVariantMap pendingPackage() const;
     QVariantMap capabilities() const;
@@ -108,7 +108,7 @@ private:
     QMap<QString, QVariantMap> m_builtinProviders;
     QMap<QString, QString> m_distributionDirectories;
     std::shared_ptr<PackageCandidate> m_pendingPackage;
-    QThread* m_repositoryThread = nullptr;
+    std::unique_ptr<AddonRepositoryJobs> m_repositoryJobs;
     QString m_workerExecutable, m_error;
     int m_revision = 0;
     QPointer<QObject> m_mediaCapabilitiesSource;

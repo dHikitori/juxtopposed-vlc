@@ -11,6 +11,7 @@
 #include "addons/addon_manifest.hpp"
 #include "addons/addon_package_store.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_repository_cancellation.hpp"
 
 using namespace vlc::addons;
 
@@ -669,6 +670,16 @@ private slots:
         QVERIFY(parsed.contribution("search"));
         QVERIFY(parsed.permissionDeclared("credentials.use"));
         QCOMPARE(parsed.permissionScope("network.http").value("methods").toArray(), QJsonArray{"GET"});
+    }
+    void canceledRepositoryScopeRefusesTheGitProcess()
+    {
+        const auto flag=std::make_shared<std::atomic_bool>(true);
+        RepositoryCancellation cancellation(flag);
+        PackageCandidate candidate; QString error;
+        QVERIFY(!PackageStore::fetchGitTag(QStringLiteral("https://example.org/never-read.git"),
+            QStringLiteral("v1.0.0"),&candidate,&error));
+        QCOMPARE(error,QStringLiteral("The Git request was canceled."));
+        QVERIFY(candidate.manifest.id.isEmpty());
     }
     void exactGitTagAndNoCheckoutExecution()
     {
