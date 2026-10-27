@@ -307,7 +307,7 @@ test_src_input_artwork_policy_SOURCES = src/input/artwork_policy.c
 test_src_input_artwork_policy_LDADD = $(LIBVLCCORE)
 
 test_src_input_artwork_fetcher_SOURCES = src/input/artwork_fetcher.c \
-    ../src/preparser/metadata_owner.c ../src/preparser/metadata_pipeline.c
+    ../src/preparser/metadata_owner.c ../src/preparser/metadata_pipeline.c ../src/preparser/metadata_request_guard.c
 test_src_input_artwork_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_input_artwork_fetcher_LDADD = $(LIBVLCCORE)
 
@@ -1054,7 +1054,7 @@ test_src_misc_metadata_pipeline_SOURCES = src/misc/metadata_pipeline.c
 test_src_misc_metadata_pipeline_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_pipeline_LDADD = $(LIBVLCCORE)
 
-test_src_misc_metadata_fetcher_SOURCES = src/misc/metadata_fetcher.c
+test_src_misc_metadata_fetcher_SOURCES = src/misc/metadata_fetcher.c ../src/preparser/metadata_request_guard.c
 test_src_misc_metadata_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_fetcher_LDADD = $(LIBVLCCORE)
 
@@ -1090,3 +1090,11 @@ check_PROGRAMS += test_src_text_filesystem_sort
 test_src_text_filesystem_sort_SOURCES = src/text/filesystem_sort.c
 test_src_text_filesystem_sort_LDADD = $(LIBVLCCORE)
 endif
+
+check_PROGRAMS += test_src_misc_metadata_request_guard test_src_misc_metadata_request_events
+test_src_misc_metadata_request_guard_SOURCES = src/misc/metadata_request_guard.c
+test_src_misc_metadata_request_guard_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_request_guard_LDADD = $(LIBVLCCORE)
+test_src_misc_metadata_request_events_SOURCES = src/misc/metadata_request_events.c
+test_src_misc_metadata_request_events_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_request_events_LDADD = $(LIBVLCCORE)

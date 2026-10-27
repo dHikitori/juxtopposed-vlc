@@ -4,6 +4,8 @@
 #include <vlc_common.h>
 #include <vlc_input_item.h>
 #include <vlc_preparser.h>
+#include "metadata_local.h"
+#include "metadata_request_guard.h"
 
 /** This owner exists once per native preparser. The instance and native stage
  * context must outlive Delete and all callbacks that call Delete themselves.
@@ -12,19 +14,6 @@
  */
 typedef struct vlc_metadata_pipeline vlc_metadata_pipeline_t;
 typedef struct vlc_metadata_pipeline_stage vlc_metadata_pipeline_stage_t;
-typedef struct vlc_metadata_pipeline_guard vlc_metadata_pipeline_guard_t;
-
-/* The parent holds this native guard before it submits a request. Cancel
- * latches before the pipeline handoff. It cannot restore a cancelled guard.
- * Final native commit and Cancel use the same admission lock. If Cancel wins,
- * no target field changes. If commit wins, Cancel returns after that commit.
- * No callback runs under this lock.
- */
-vlc_metadata_pipeline_guard_t *vlc_metadata_pipeline_guard_New(void);
-vlc_metadata_pipeline_guard_t *vlc_metadata_pipeline_guard_Hold(vlc_metadata_pipeline_guard_t *);
-void vlc_metadata_pipeline_guard_Release(vlc_metadata_pipeline_guard_t *);
-void vlc_metadata_pipeline_guard_Cancel(vlc_metadata_pipeline_guard_t *);
-bool vlc_metadata_pipeline_guard_IsCurrent(vlc_metadata_pipeline_guard_t *);
 struct vlc_metadata_pipeline_operations {
     /** The token supplies a private working item. It never supplies the live
      * target. Call IsCurrent before queue submission and each I/O handoff.
@@ -53,6 +42,16 @@ vlc_metadata_pipeline_t *vlc_metadata_pipeline_New(vlc_object_t *,
  */
 int vlc_metadata_pipeline_Push(vlc_metadata_pipeline_t *, input_item_t *, int options,
     vlc_metadata_pipeline_guard_t *parent_guard, const void *request_key, vlc_metadata_pipeline_ended_cb on_ended, void *userdata);
+
+/* A native preparser request always retains its local transaction. An absent,
+ * closed, or suspended owner uses this pipeline's local-only backend. Only an
+ * explicit never-owned ENOENT decision permits the separate legacy lease.
+ * The callback owns the event arrays after it takes and zeros this container.
+ * Deliver its callbacks outside the admission lock. No public API changes. */
+typedef void (*vlc_metadata_pipeline_request_cb)(input_item_t *, int,
+    struct vlc_metadata_local_events *, void *);
+int vlc_metadata_pipeline_PushRequest(vlc_metadata_pipeline_t *, input_item_t *, int options,
+    vlc_metadata_pipeline_guard_t *, const void *request_key, vlc_metadata_pipeline_request_cb, void *userdata);
 size_t vlc_metadata_pipeline_Cancel(vlc_metadata_pipeline_t *, const void *request_key);
 void vlc_metadata_pipeline_Close(vlc_metadata_pipeline_t *);
 /** Drain native stage and terminal callbacks. Exclude callbacks on this thread
@@ -63,6 +62,11 @@ void vlc_metadata_pipeline_Delete(vlc_metadata_pipeline_t *);
 vlc_metadata_pipeline_stage_t *vlc_metadata_pipeline_stage_Hold(vlc_metadata_pipeline_stage_t *);
 void vlc_metadata_pipeline_stage_Release(vlc_metadata_pipeline_stage_t *);
 input_item_t *vlc_metadata_pipeline_stage_GetItem(vlc_metadata_pipeline_stage_t *);
+const void *vlc_metadata_pipeline_stage_GetKey(vlc_metadata_pipeline_stage_t *);
+int vlc_metadata_pipeline_stage_GetOptions(vlc_metadata_pipeline_stage_t *);
+bool vlc_metadata_pipeline_stage_LegacyAllowed(vlc_metadata_pipeline_stage_t *);
+int vlc_metadata_pipeline_stage_PrepareLocal(vlc_metadata_pipeline_stage_t *,
+    const struct vlc_metadata_local_events *);
 bool vlc_metadata_pipeline_stage_IsCurrent(vlc_metadata_pipeline_stage_t *);
 void vlc_metadata_pipeline_stage_Done(vlc_metadata_pipeline_stage_t *, int status);
 #endif

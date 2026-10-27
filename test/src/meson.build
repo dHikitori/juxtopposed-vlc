@@ -88,7 +88,8 @@ vlc_tests += {
 vlc_tests += {
     'name': 'test_src_input_artwork_fetcher',
     'sources': files('input/artwork_fetcher.c',
-        '../../src/preparser/metadata_owner.c', '../../src/preparser/metadata_pipeline.c'),
+        '../../src/preparser/metadata_owner.c', '../../src/preparser/metadata_pipeline.c',
+        '../../src/preparser/metadata_request_guard.c'),
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
@@ -922,7 +923,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_misc_metadata_fetcher',
-    'sources': files('misc/metadata_fetcher.c'),
+    'sources': files('misc/metadata_fetcher.c', '../../src/preparser/metadata_request_guard.c'),
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
@@ -978,4 +979,20 @@ vlc_tests += {
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
     'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_request_guard',
+    'sources': files('misc/metadata_request_guard.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_request_events',
+    'sources': files('misc/metadata_request_events.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
 }

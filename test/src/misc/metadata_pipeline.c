@@ -14,6 +14,7 @@
 #include <assert.h>
 #include "../../../lib/libvlc_internal.h"
 #include "../../../src/preparser/metadata_owner.c"
+#include "../../../src/preparser/metadata_request_guard.c"
 static _Thread_local bool pause_child_start;
 static _Thread_local bool pause_anchor_complete;
 static vlc_sem_t child_listed, resume_child;
@@ -48,7 +49,7 @@ struct fixture {
     vlc_metadata_job_t *held[512];
     struct observed observed[2048];
     unsigned local_count, local_cancels, held_count, calls, remote_calls;
-    bool synchronous_local, synchronous_remote, complete_local_cancel;
+    bool synchronous_local, synchronous_remote, complete_local_cancel, prepare_events;
     bool materialize, force_native_replacement, mutate_uri, close_on_cancel;
 };
 struct result { struct fixture *fixture; unsigned calls; int status; bool delete_owner; };
@@ -72,6 +73,15 @@ static int local_start(void *opaque, vlc_metadata_pipeline_stage_t *stage)
     fixture->locals[index] = stage;
     input_item_t *working = vlc_metadata_pipeline_stage_GetItem(stage); assert(working != fixture->item);
     input_item_SetDescription(working, "Local observation");
+    if (fixture->prepare_events) {
+        struct vlc_metadata_local_events events = {.subtree_count=1};
+        events.subtrees = calloc(1, sizeof(*events.subtrees)); assert(events.subtrees != NULL);
+        events.subtrees[0] = input_item_node_Create(working); assert(events.subtrees[0] != NULL);
+        assert(input_item_AddInfo(working, "Native facts", "Source", "%s", "Local parser") == VLC_SUCCESS);
+        input_item_SetDuration(working, VLC_TICK_FROM_SEC(42));
+        assert(vlc_metadata_pipeline_stage_PrepareLocal(stage, &events) == VLC_SUCCESS);
+        vlc_metadata_local_events_Clear(&events);
+    }
     if (fixture->mutate_uri) input_item_SetURI(working, "file:///different/source.flac");
     if (fixture->synchronous_local) local_done(fixture, index, VLC_SUCCESS);
     return VLC_SUCCESS;
@@ -310,8 +320,72 @@ static void cancelled_local_tokens_keep_the_retained_limit_until_done(void)
     for (unsigned i = 0; i <= MAX_ENTRIES; ++i) assert(results[i].calls == 1);
     destroy(&fixture);
 }
+static void request_ended(input_item_t *item, int status,
+    struct vlc_metadata_local_events *events, void *opaque)
+{
+    struct result *result = opaque;
+    assert(events->subtree_count == (result->fixture->prepare_events && status == VLC_SUCCESS ? 1u : 0u));
+    assert(events->attachment_count == 0);
+    on_ended(item, status, result);
+}
+static int push_native_request(struct fixture *fixture, struct result *result, int options)
+{
+    result->fixture = fixture;
+    return vlc_metadata_pipeline_PushRequest(fixture->pipeline, fixture->item,
+        options, NULL, result, request_ended, result);
+}
+static void native_requests_keep_local_parse_with_absent_closed_or_suspended_owner(void)
+{
+    for (unsigned state = 0; state < 4; ++state) {
+        struct fixture fixture = {.synchronous_remote=true}; create(&fixture, state != 0);
+        if (state == 1) vlc_metadata_owner_Close(VLC_OBJECT(fixture.instance));
+        if (state == 2) vlc_metadata_backend_Suspend(fixture.backend);
+        struct result result = {0};
+        assert(push_native_request(&fixture, &result, VLC_PREPARSER_TYPE_PARSE) == VLC_SUCCESS);
+        assert(fixture.local_count == 1 && fixture.calls == 0);
+        assert(vlc_metadata_pipeline_stage_LegacyAllowed(fixture.locals[0]) == false);
+        local_done(&fixture, 0, VLC_SUCCESS);
+        assert(result.calls == 1 && result.status == VLC_SUCCESS && fixture.calls == 0);
+        char *description = input_item_GetDescription(fixture.item);
+        assert(description != NULL && !strcmp(description, "Local observation")); free(description);
+        destroy(&fixture);
+    }
+}
+static void request_sidebands_wait_for_complete_native_admission(void)
+{
+    for (unsigned stale = 0; stale < 2; ++stale) {
+        struct fixture fixture = {.prepare_events=true}; create(&fixture, false);
+        struct result result = {0};
+        assert(push_native_request(&fixture, &result, VLC_PREPARSER_TYPE_PARSE) == VLC_SUCCESS);
+        assert(input_item_GetDuration(fixture.item) == VLC_TICK_INVALID && result.calls == 0);
+        if (stale) input_item_SetTitle(fixture.item, "Song");
+        local_done(&fixture, 0, VLC_SUCCESS);
+        assert(result.calls == 1 && result.status == (stale ? -EAGAIN : VLC_SUCCESS));
+        assert(input_item_GetDuration(fixture.item) == (stale ? VLC_TICK_INVALID : VLC_TICK_FROM_SEC(42)));
+        char *info = input_item_GetInfo(fixture.item, "Native facts", "Source");
+        assert(info != NULL && !strcmp(info, stale ? "" : "Local parser")); free(info);
+        destroy(&fixture);
+    }
+}
+static void only_never_owned_requests_offer_the_native_legacy_stage(void)
+{
+    for (unsigned state = 0; state < 3; ++state) {
+        struct fixture fixture = {.synchronous_remote=true}; create(&fixture, state != 0);
+        if (state == 1) vlc_metadata_owner_Close(VLC_OBJECT(fixture.instance));
+        if (state == 2) vlc_metadata_backend_Suspend(fixture.backend);
+        struct result result = {0};
+        assert(push_native_request(&fixture, &result, VLC_PREPARSER_TYPE_FETCHMETA_ALL) == VLC_SUCCESS);
+        assert(vlc_metadata_pipeline_stage_LegacyAllowed(fixture.locals[0]) == (state == 0));
+        local_done(&fixture, 0, VLC_SUCCESS);
+        assert(result.calls == 1 && result.status == VLC_SUCCESS && fixture.calls == 0);
+        destroy(&fixture);
+    }
+}
 int main(void)
 {
+    request_sidebands_wait_for_complete_native_admission();
+    native_requests_keep_local_parse_with_absent_closed_or_suspended_owner();
+    only_never_owned_requests_offer_the_native_legacy_stage();
     original_snapshot_and_stage_order();
     a_same_value_user_edit_refuses_the_whole_staged_patch();
     protected_native_artwork_is_not_an_automatic_replacement();

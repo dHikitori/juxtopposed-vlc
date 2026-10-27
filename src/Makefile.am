@@ -298,6 +298,10 @@ libvlccore_la_SOURCES = \
 	preparser/metadata_owner.h \
 	preparser/metadata_pipeline.c \
 	preparser/metadata_pipeline.h \
+	preparser/metadata_request_guard.c \
+	preparser/metadata_request_guard.h \
+	preparser/metadata_request_events.c \
+	preparser/metadata_request_events.h \
 	preparser/metadata_local.h \
 	preparser/metadata_requests.c \
 	preparser/metadata_requests.h \

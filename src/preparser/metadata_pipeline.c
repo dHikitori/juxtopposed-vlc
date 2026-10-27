@@ -15,31 +15,6 @@
 #define MAX_ENTRIES 256u
 #define MAX_PROVENANCE (1024u * 1024u)
 #define STAGE_COUNT 5u
-struct vlc_metadata_pipeline_guard {
-    vlc_atomic_rc_t refs;
-    vlc_mutex_t lock;
-    atomic_bool cancelled;
-};
-vlc_metadata_pipeline_guard_t *vlc_metadata_pipeline_guard_New(void)
-{
-    vlc_metadata_pipeline_guard_t *guard = malloc(sizeof(*guard));
-    if (guard != NULL) {
-        vlc_atomic_rc_init(&guard->refs); vlc_mutex_init(&guard->lock);
-        atomic_init(&guard->cancelled, false);
-    }
-    return guard;
-}
-vlc_metadata_pipeline_guard_t *vlc_metadata_pipeline_guard_Hold(vlc_metadata_pipeline_guard_t *guard)
-{ if (guard != NULL) vlc_atomic_rc_inc(&guard->refs); return guard; }
-void vlc_metadata_pipeline_guard_Release(vlc_metadata_pipeline_guard_t *guard)
-{ if (guard != NULL && vlc_atomic_rc_dec(&guard->refs)) free(guard); }
-void vlc_metadata_pipeline_guard_Cancel(vlc_metadata_pipeline_guard_t *guard)
-{
-    if (guard == NULL) return;
-    vlc_mutex_lock(&guard->lock); atomic_store(&guard->cancelled, true); vlc_mutex_unlock(&guard->lock);
-}
-bool vlc_metadata_pipeline_guard_IsCurrent(vlc_metadata_pipeline_guard_t *guard)
-{ return guard == NULL || !atomic_load(&guard->cancelled); }
 struct pipeline_entry;
 struct vlc_metadata_pipeline_stage {
     vlc_atomic_rc_t refs;
@@ -51,6 +26,7 @@ struct vlc_metadata_pipeline {
     vlc_object_t *instance;
     struct vlc_metadata_pipeline_operations ops;
     void *stage_context;
+    vlc_metadata_backend_t *local_backend;
     vlc_mutex_t lock;
     vlc_cond_t idle;
     struct pipeline_entry *entries;
@@ -71,11 +47,14 @@ struct pipeline_entry {
     vlc_metadata_pipeline_stage_t *local;
     const void *key;
     vlc_metadata_pipeline_ended_cb ended;
+    vlc_metadata_pipeline_request_cb request_ended;
+    struct vlc_metadata_local_events events;
     void *userdata;
     uint64_t generation;
     unsigned stage;
     int options, status;
     bool listed, retained, terminal, notified, native_artwork_replace;
+    bool request_mode, remote_owned, legacy_allowed, local_prepared;
     char *provenance[STAGE_COUNT];
     size_t provenance_sizes[STAGE_COUNT], provenance_bytes;
 };
@@ -95,7 +74,7 @@ static void owner_release(vlc_metadata_pipeline_t *owner)
 {
     if (!vlc_atomic_rc_dec(&owner->refs)) return;
     assert(owner->entries == NULL && owner->retained == 0 && owner->pending_callbacks == 0 && owner->user_callbacks == 0);
-    free(owner);
+    vlc_metadata_backend_Release(owner->local_backend); free(owner);
 }
 static struct pipeline_entry *entry_hold(struct pipeline_entry *entry)
 { vlc_atomic_rc_inc(&entry->refs); return entry; }
@@ -110,6 +89,7 @@ static void entry_release(struct pipeline_entry *entry)
     if (entry->target != NULL) input_item_Release(entry->target);
     vlc_input_policy_Release(entry->policy); free(entry->source_uri);
     vlc_metadata_pipeline_guard_Release(entry->parent_guard);
+    vlc_metadata_local_events_Clear(&entry->events);
     for (unsigned i = 0; i < STAGE_COUNT; ++i) free(entry->provenance[i]);
     vlc_mutex_lock(&owner->lock);
     if (entry->retained) --owner->retained;
@@ -144,6 +124,21 @@ void vlc_metadata_pipeline_stage_Release(vlc_metadata_pipeline_stage_t *stage)
 }
 input_item_t *vlc_metadata_pipeline_stage_GetItem(vlc_metadata_pipeline_stage_t *stage)
 { return stage->entry->working; }
+const void *vlc_metadata_pipeline_stage_GetKey(vlc_metadata_pipeline_stage_t *stage)
+{ return stage->entry->key; }
+int vlc_metadata_pipeline_stage_GetOptions(vlc_metadata_pipeline_stage_t *stage)
+{ return stage->entry->options; }
+bool vlc_metadata_pipeline_stage_LegacyAllowed(vlc_metadata_pipeline_stage_t *stage)
+{ return stage->entry->legacy_allowed && (stage->entry->options & VLC_PREPARSER_TYPE_FETCHMETA_NET); }
+int vlc_metadata_pipeline_stage_PrepareLocal(vlc_metadata_pipeline_stage_t *stage,
+    const struct vlc_metadata_local_events *events)
+{
+    if (!vlc_metadata_pipeline_stage_IsCurrent(stage)) return -EINTR;
+    struct pipeline_entry *entry = stage->entry;
+    const int status = vlc_metadata_job_PrepareLocal(entry->anchor, entry->working, events);
+    if (status == VLC_SUCCESS) entry->local_prepared = true;
+    return status;
+}
 bool vlc_metadata_pipeline_stage_IsCurrent(vlc_metadata_pipeline_stage_t *stage)
 { return !atomic_load(&stage->cancelled) && !atomic_load(&stage->done) && entry_current(stage->entry); }
 static bool remove_entry_locked(struct pipeline_entry *entry)
@@ -158,6 +153,7 @@ static void entry_finish(struct pipeline_entry *entry, int status)
 {
     entry_hold(entry); vlc_metadata_pipeline_t *owner = entry->owner;
     vlc_mutex_lock(&owner->lock);
+    status = vlc_metadata_pipeline_guard_Finish(entry->parent_guard, status);
     if (!entry->terminal) { entry->terminal = true; entry->status = status; }
     vlc_metadata_pipeline_stage_t *local = entry->local != NULL ? vlc_metadata_pipeline_stage_Hold(entry->local) : NULL;
     vlc_metadata_job_t *child = entry->child != NULL ? vlc_metadata_job_Hold(entry->child) : NULL;
@@ -178,7 +174,8 @@ static void entry_finish(struct pipeline_entry *entry, int status)
     vlc_mutex_unlock(&owner->lock);
     if (notify) {
         struct pipeline_frame frame = {owner, callback_frame, false}; callback_frame = &frame;
-        entry->ended(entry->target, entry->status, entry->userdata);
+        if (entry->request_ended != NULL) entry->request_ended(entry->target, entry->status, &entry->events, entry->userdata);
+        else entry->ended(entry->target, entry->status, entry->userdata);
         callback_frame = frame.previous;
         vlc_mutex_lock(&owner->lock); --owner->user_callbacks;
         vlc_cond_broadcast(&owner->idle); vlc_mutex_unlock(&owner->lock);
@@ -271,16 +268,13 @@ static void entry_next(struct pipeline_entry *entry)
     if (!entry_current(entry)) { entry_finish(entry, vlc_input_policy_IsRevoked(entry->policy) ? -EACCES : -EINTR); return; }
     vlc_metadata_pipeline_t *owner = entry->owner;
     vlc_mutex_lock(&owner->lock); const unsigned stage = entry->stage++; vlc_mutex_unlock(&owner->lock);
-    if (stage >= STAGE_COUNT || (stage != 0 && !(entry->options & VLC_PREPARSER_TYPE_FETCHMETA_NET))) {
+    if (!entry->remote_owned || stage >= STAGE_COUNT || (stage != 0 && !(entry->options & VLC_PREPARSER_TYPE_FETCHMETA_NET))) {
         size_t size; char *json = provenance(entry, &size);
         if (json == NULL) { entry_finish(entry, VLC_ENOMEM); return; }
         const bool completed = vlc_metadata_job_Complete(entry->anchor, VLC_SUCCESS, entry->working, json, size); free(json);
-        vlc_metadata_pipeline_guard_t *guard = entry->parent_guard;
-        if (guard != NULL) vlc_mutex_lock(&guard->lock);
-        const int status = completed && vlc_metadata_pipeline_guard_IsCurrent(guard)
-            ? vlc_metadata_job_Apply(entry->anchor, entry->target,
-                entry->native_artwork_replace ? UINT32_C(1) << vlc_meta_ArtworkURL : 0, NULL) : -EINTR;
-        if (guard != NULL) vlc_mutex_unlock(&guard->lock);
+        const int status = completed ? vlc_metadata_pipeline_guard_Commit(entry->parent_guard,
+            entry->anchor, entry->target, entry->native_artwork_replace ? UINT32_C(1) << vlc_meta_ArtworkURL : 0,
+            NULL, &entry->events) : -EINTR;
         entry_finish(entry, status); return;
     }
     static const char *const features[STAGE_COUNT] = {"artwork", "video.details", "music.details", "podcast.details", "artwork"};
@@ -320,47 +314,67 @@ void vlc_metadata_pipeline_stage_Done(vlc_metadata_pipeline_stage_t *stage, int 
     vlc_mutex_unlock(&owner->lock);
     if (held) vlc_metadata_pipeline_stage_Release(stage);
     if (entry_current(entry)) {
-        if (status == -EINTR || status == VLC_ENOMEM) entry_finish(entry, status);
-        else entry_next(entry);
+        if (status == -EINTR || status == VLC_ENOMEM || status == VLC_ETIMEOUT) entry_finish(entry, status);
+        else {
+            const int prepared = entry->local_prepared ? VLC_SUCCESS
+                : vlc_metadata_job_PrepareLocal(entry->anchor, entry->working, NULL);
+            if (prepared != VLC_SUCCESS) entry_finish(entry, prepared);
+            else { entry->local_prepared = true; entry_next(entry); }
+        }
     } else entry_finish(entry, vlc_input_policy_IsRevoked(entry->policy) ? -EACCES : -EINTR);
     callback_frame = frame.previous; pending_end(owner); vlc_metadata_pipeline_stage_Release(stage);
 }
+static int local_only_dispatch(void *opaque, vlc_metadata_job_t *job)
+{ (void)opaque; (void)job; return VLC_ENOENT; }
 vlc_metadata_pipeline_t *vlc_metadata_pipeline_New(vlc_object_t *object,
     const struct vlc_metadata_pipeline_operations *ops, void *context)
 {
     if (object == NULL || ops == NULL || ops->local == NULL || ops->cancel_local == NULL) return NULL;
     vlc_metadata_pipeline_t *owner = calloc(1, sizeof(*owner)); if (owner == NULL) return NULL;
+    static const struct vlc_metadata_backend_operations local_ops = {.dispatch=local_only_dispatch};
+    owner->local_backend = vlc_metadata_backend_New(&local_ops, NULL);
+    if (owner->local_backend == NULL) { free(owner); return NULL; }
     vlc_atomic_rc_init(&owner->refs); owner->instance = VLC_OBJECT(vlc_object_instance(object));
     owner->ops = *ops; owner->stage_context = context; vlc_mutex_init(&owner->lock); vlc_cond_init(&owner->idle); return owner;
 }
-int vlc_metadata_pipeline_Push(vlc_metadata_pipeline_t *owner, input_item_t *item, int options,
-    vlc_metadata_pipeline_guard_t *parent_guard, const void *key, vlc_metadata_pipeline_ended_cb ended, void *userdata)
+static int push_request(vlc_metadata_pipeline_t *owner, input_item_t *item, int options,
+    vlc_metadata_pipeline_guard_t *parent_guard, const void *key, vlc_metadata_pipeline_ended_cb ended,
+    vlc_metadata_pipeline_request_cb request_ended, void *userdata, bool request_mode)
 {
-    if (owner == NULL || item == NULL || ended == NULL || !(options & VLC_PREPARSER_TYPE_FETCHMETA_ALL)) return VLC_EINVAL;
+    const int required = request_mode ? VLC_PREPARSER_TYPE_PARSE | VLC_PREPARSER_TYPE_FETCHMETA_ALL : VLC_PREPARSER_TYPE_FETCHMETA_ALL;
+    if (owner == NULL || item == NULL || (ended == NULL && request_ended == NULL) || !(options & required)) return VLC_EINVAL;
     if (!vlc_metadata_pipeline_guard_IsCurrent(parent_guard)) return -EINTR;
     owner_hold(owner);
     bool owned = false; vlc_metadata_backend_t *backend = vlc_metadata_owner_Hold(owner->instance, &owned);
     vlc_mutex_lock(&owner->lock); const bool closed = owner->closed; vlc_mutex_unlock(&owner->lock);
-    if (closed || !owned || backend == NULL || !vlc_metadata_backend_IsReady(backend)) {
-        const int status = closed || (owned && (backend == NULL || vlc_metadata_backend_IsClosed(backend))) ? -EINTR
-            : !owned ? VLC_ENOENT : -EAGAIN;
+    const bool ready = backend != NULL && vlc_metadata_backend_IsReady(backend);
+    const int selection = closed || (owned && (backend == NULL || vlc_metadata_backend_IsClosed(backend))) ? -EINTR
+        : !owned ? VLC_ENOENT : !ready ? -EAGAIN : VLC_SUCCESS;
+    if (closed || (!request_mode && selection != VLC_SUCCESS)) {
         if (backend != NULL) vlc_metadata_backend_Release(backend);
-        owner_release(owner); return status;
+        owner_release(owner); return selection;
+    }
+    if (!ready) {
+        if (backend != NULL) vlc_metadata_backend_Release(backend);
+        backend = vlc_metadata_backend_Hold(owner->local_backend);
     }
     struct pipeline_entry *entry = calloc(1, sizeof(*entry));
     if (entry == NULL) { vlc_metadata_backend_Release(backend); owner_release(owner); return VLC_ENOMEM; }
     vlc_atomic_rc_init(&entry->refs); entry->owner = owner_hold(owner); entry->backend = backend;
-    entry->parent_guard = vlc_metadata_pipeline_guard_Hold(parent_guard);
-    entry->target = input_item_Hold(item); entry->key = key; entry->ended = ended; entry->userdata = userdata; entry->options = options;
+    entry->parent_guard = parent_guard != NULL ? vlc_metadata_pipeline_guard_Hold(parent_guard) : vlc_metadata_pipeline_guard_New();
+    entry->target = input_item_Hold(item); entry->key = key; entry->ended = ended;
+    entry->request_ended = request_ended; entry->userdata = userdata; entry->options = options; entry->request_mode = request_mode;
+    entry->remote_owned = ready && (options & VLC_PREPARSER_TYPE_FETCHMETA_ALL);
+    entry->legacy_allowed = request_mode && selection == VLC_ENOENT;
+    if (request_mode && owned && !ready) entry->options &= ~VLC_PREPARSER_TYPE_FETCHMETA_NET;
     const struct vlc_metadata_request request = {.feature="native.transaction", .operation="anchor", .item=item,
         .flags=options & VLC_PREPARSER_TYPE_FETCHMETA_NET ? VLC_METADATA_REQUEST_NETWORK | VLC_METADATA_REQUEST_AUTOMATIC : 0};
-    entry->anchor = vlc_metadata_job_New(backend, &request, anchor_ended, entry);
+    if (entry->parent_guard != NULL) entry->anchor = vlc_metadata_job_New(backend, &request, anchor_ended, entry);
     if (entry->anchor != NULL) {
         input_item_t *snapshot = vlc_metadata_job_GetRequest(entry->anchor)->item;
-        entry->working = input_item_Copy(snapshot); entry->source_uri = input_item_GetURI(snapshot);
-        entry->policy = vlc_input_policy_HoldItem(snapshot);
+        entry->source_uri = input_item_GetURI(snapshot); entry->policy = vlc_input_policy_HoldItem(snapshot);
     }
-    if (entry->anchor == NULL || entry->working == NULL) { entry_release(entry); owner_release(owner); return VLC_ENOMEM; }
+    if (entry->anchor == NULL) { entry_release(entry); owner_release(owner); return VLC_ENOMEM; }
     vlc_mutex_lock(&owner->lock);
     const bool refused_closed = owner->closed;
     const bool accepted = !refused_closed && owner->retained < MAX_ENTRIES && owner->generation != UINT64_MAX;
@@ -374,11 +388,13 @@ int vlc_metadata_pipeline_Push(vlc_metadata_pipeline_t *owner, input_item_t *ite
     const int started = vlc_metadata_job_StartLocal(entry->anchor);
     if (started != VLC_SUCCESS) { pending_end(owner); entry_release(entry); entry_finish(entry, started); }
     else {
-        // A request with no network consent still has its local stage. Keep
-        // this decision. A later consent grant must not add remote work.
+        /* Read consent after the retained anchor starts. Do not revive remote
+         * work when consent becomes available after this decision. */
         if ((options & VLC_PREPARSER_TYPE_FETCHMETA_NET) && !var_InheritBool(owner->instance, "metadata-network-access"))
             entry->options = (entry->options & ~VLC_PREPARSER_TYPE_FETCHMETA_NET) | VLC_PREPARSER_TYPE_FETCHMETA_LOCAL;
-        if (!entry_current(entry)) entry_finish(entry, vlc_input_policy_IsRevoked(entry->policy) ? -EACCES : -EINTR);
+        entry->working = vlc_metadata_job_CopyLocalItem(entry->anchor);
+        if (entry->working == NULL) entry_finish(entry, vlc_metadata_pipeline_guard_IsCurrent(entry->parent_guard) ? VLC_ENOMEM : -EINTR);
+        else if (!entry_current(entry)) entry_finish(entry, vlc_input_policy_IsRevoked(entry->policy) ? -EACCES : -EINTR);
         else {
             vlc_metadata_pipeline_stage_t *stage = calloc(1, sizeof(*stage));
             if (stage == NULL) entry_finish(entry, VLC_ENOMEM);
@@ -396,6 +412,12 @@ int vlc_metadata_pipeline_Push(vlc_metadata_pipeline_t *owner, input_item_t *ite
     }
     entry_release(entry); owner_release(owner); return VLC_SUCCESS;
 }
+int vlc_metadata_pipeline_Push(vlc_metadata_pipeline_t *owner, input_item_t *item, int options,
+    vlc_metadata_pipeline_guard_t *guard, const void *key, vlc_metadata_pipeline_ended_cb callback, void *userdata)
+{ return push_request(owner, item, options, guard, key, callback, NULL, userdata, false); }
+int vlc_metadata_pipeline_PushRequest(vlc_metadata_pipeline_t *owner, input_item_t *item, int options,
+    vlc_metadata_pipeline_guard_t *guard, const void *key, vlc_metadata_pipeline_request_cb callback, void *userdata)
+{ return push_request(owner, item, options, guard, key, NULL, callback, userdata, true); }
 size_t vlc_metadata_pipeline_Cancel(vlc_metadata_pipeline_t *owner, const void *key)
 {
     owner_hold(owner); struct pipeline_entry *entries[MAX_ENTRIES]; size_t count = 0;
@@ -403,13 +425,16 @@ size_t vlc_metadata_pipeline_Cancel(vlc_metadata_pipeline_t *owner, const void *
     for (struct pipeline_entry *entry = owner->entries; entry != NULL; entry = entry->next)
         if (key == NULL || key == entry->key) entries[count++] = entry_hold(entry);
     vlc_mutex_unlock(&owner->lock);
-    for (size_t i = 0; i < count; ++i) { entry_finish(entries[i], -EINTR); entry_release(entries[i]); }
+    for (size_t i = 0; i < count; ++i) {
+        vlc_metadata_pipeline_guard_TryCancel(entries[i]->parent_guard);
+        entry_finish(entries[i], -EINTR); entry_release(entries[i]);
+    }
     owner_release(owner); return count;
 }
 void vlc_metadata_pipeline_Close(vlc_metadata_pipeline_t *owner)
 {
     owner_hold(owner); vlc_mutex_lock(&owner->lock); owner->closed = true; vlc_mutex_unlock(&owner->lock);
-    vlc_metadata_pipeline_Cancel(owner, NULL); owner_release(owner);
+    vlc_metadata_pipeline_Cancel(owner, NULL); vlc_metadata_backend_Close(owner->local_backend); owner_release(owner);
 }
 void vlc_metadata_pipeline_Delete(vlc_metadata_pipeline_t *owner)
 {
