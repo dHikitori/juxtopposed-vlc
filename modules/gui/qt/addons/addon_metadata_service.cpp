@@ -7,6 +7,7 @@
 #include <vlc_artwork_policy.h>
 #include "addon_manager.hpp"
 #include "addon_artwork_assets.hpp"
+#include "addon_native_artwork_assets.hpp"
 #include "util/media_identity_vlc.hpp"
 #include <QCryptographicHash>
 #include <QFileInfo>
@@ -52,6 +53,7 @@ struct AddonMetadataService::CoreState {
     AddonMetadataService* owner = nullptr;
     QHash<quint64, NativeJob> jobs;
     QHash<vlc_metadata_job_t*, quint64> keys;
+    QHash<quint64, AddonNativeArtworkAssets::Cancel> nativeCancels;
     quint64 sequence = 0;
     std::atomic_bool automaticAllowed{false};
 
@@ -80,15 +82,21 @@ struct AddonMetadataService::CoreState {
     {
         const auto state = *static_cast<std::shared_ptr<CoreState>*>(opaque);
         NativeJob held;
-        std::lock_guard<std::mutex> guard(state->lock);
-        const auto key = state->keys.take(job);
-        if (!key) return;
-        held = state->jobs.take(key);
-        if (state->owner) QMetaObject::invokeMethod(state->owner, [state, key] {
-            AddonMetadataService* owner;
-            { std::lock_guard<std::mutex> guard(state->lock); owner = state->owner; }
-            if (owner) owner->cancelCore(key);
-        }, Qt::QueuedConnection);
+        AddonNativeArtworkAssets::Cancel cancelNative;
+        {
+            std::lock_guard<std::mutex> guard(state->lock);
+            const auto key = state->keys.take(job);
+            if (!key) return;
+            held = state->jobs.take(key);
+            cancelNative = state->nativeCancels.take(key);
+            if (state->owner) QMetaObject::invokeMethod(state->owner, [state, key] {
+                AddonMetadataService* owner;
+                { std::lock_guard<std::mutex> guard(state->lock); owner = state->owner; }
+                if (owner) owner->cancelCore(key);
+            }, Qt::QueuedConnection);
+        }
+        // Native cancellation must not wait for delivery on the GUI thread.
+        if (cancelNative) cancelNative();
         // held has no Qt dependency. Its reference ends when this call ends.
     }
     static void destroy(void* opaque)
@@ -97,10 +105,24 @@ struct AddonMetadataService::CoreState {
     { std::lock_guard<std::mutex> guard(lock); return jobs.value(key); }
     NativeJob take(quint64 key)
     {
-        std::lock_guard<std::mutex> guard(lock);
-        auto job = jobs.take(key);
-        if (job) keys.remove(job.get());
+        NativeJob job;
+        AddonNativeArtworkAssets::Cancel retired;
+        {
+            std::lock_guard<std::mutex> guard(lock);
+            job = jobs.take(key);
+            if (job) keys.remove(job.get());
+            retired = nativeCancels.take(key);
+        }
         return job;
+    }
+    void setNativeCancel(quint64 key, AddonNativeArtworkAssets::Cancel cancel)
+    {
+        {
+            std::lock_guard<std::mutex> guard(lock);
+            if (jobs.contains(key)) { nativeCancels.insert(key, std::move(cancel)); return; }
+        }
+        // Cancellation can win between resolve() and callback registration.
+        if (cancel) cancel();
     }
 };
 
@@ -337,6 +359,21 @@ void AddonMetadataService::setArtworkAdapter(ArtworkResolver resolver, std::func
     m_backend.resolveArtwork = std::move(resolver);
     m_backend.cancelArtwork = std::move(cancel);
 }
+void AddonMetadataService::setNativeArtworkAdapter(AddonNativeArtworkAssets* adapter)
+{
+    if (m_closed || m_nativeArtwork == adapter) return;
+    QPointer<AddonMetadataService> guard(this);
+    QList<NativeJob> jobs;
+    {
+        std::lock_guard<std::mutex> lock(m_core->lock);
+        for (auto it = m_core->nativeCancels.cbegin(); it != m_core->nativeCancels.cend(); ++it)
+            if (const auto job = m_core->jobs.value(it.key())) jobs.append(job);
+    }
+    m_nativeArtwork = adapter;
+    if (adapter) adapter->setNetworkAllowed(automaticNetworkAllowed());
+    if (!guard) return;
+    for (const auto& job : jobs) { vlc_metadata_job_Cancel(job.get()); if (!guard) return; }
+}
 bool AddonMetadataService::automaticNetworkAllowed() const { return m_core->automaticAllowed.load(); }
 int AddonMetadataService::nativeJobCount() const
 { std::lock_guard<std::mutex> guard(m_core->lock); return m_core->jobs.size(); }
@@ -344,13 +381,15 @@ void AddonMetadataService::setAutomaticNetworkAllowed(bool allowed)
 {
     QPointer<AddonMetadataService> guard(this);
     if (m_core->automaticAllowed.exchange(allowed) == allowed) return;
-    if (!allowed) {
-        QList<NativeJob> jobs;
-        { std::lock_guard<std::mutex> guard(m_core->lock);
-          for (const auto& job : m_core->jobs)
-              if (vlc_metadata_job_GetRequest(job.get())->flags & VLC_METADATA_REQUEST_AUTOMATIC) jobs.append(job); }
-        for (const auto& job : jobs) { vlc_metadata_job_Cancel(job.get()); if (!guard) return; }
+    if (!allowed && m_coreBackend) {
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(
+            vlc_metadata_backend_Hold(m_coreBackend), vlc_metadata_backend_Release);
+        // Include native anchors which never enter the Qt dispatch map.
+        vlc_metadata_backend_CancelAutomatic(backend.get());
+        if (!guard) return;
     }
+    if (m_nativeArtwork) m_nativeArtwork->setNetworkAllowed(allowed);
+    if (!guard) return;
     invalidate();
 }
 vlc_metadata_backend_t* AddonMetadataService::holdCoreBackend() const
@@ -438,6 +477,7 @@ void AddonMetadataService::startCore(quint64 key)
     if (m_closed || ((request->flags & VLC_METADATA_REQUEST_AUTOMATIC) && !automaticNetworkAllowed())) {
         auto owned = m_core->take(key); if (owned) vlc_metadata_job_Cancel(owned.get()); return;
     }
+    if (!strcmp(request->operation, "materializeNativeArtwork")) { startNativeArtwork(key); return; }
     QVariantMap context;
     if (request->context_size) {
         QJsonParseError error;
@@ -485,6 +525,43 @@ void AddonMetadataService::startCore(quint64 key)
     releaseMedia(media);
     m_consumers[consumer].core = key; m_coreConsumers.insert(key, consumer);
     if (!vlc_metadata_job_IsPending(job.get())) cancelCore(key);
+}
+void AddonMetadataService::startNativeArtwork(quint64 key)
+{
+    const auto job = m_core->find(key);
+    if (!job || !vlc_metadata_job_IsPending(job.get())) return;
+    const auto* request = vlc_metadata_job_GetRequest(job.get());
+    const bool valid = !strcmp(request->feature, "artwork") && request->item
+        && (request->flags & VLC_METADATA_REQUEST_AUTOMATIC)
+        && request->field_count == 1 && !strcmp(request->fields[0], "artwork");
+    if (!valid || !m_nativeArtwork) {
+        const auto owned = m_core->take(key);
+        if (owned) vlc_metadata_job_Complete(owned.get(), valid ? VLC_ENOTSUP : VLC_EINVAL, nullptr, nullptr, 0);
+        return;
+    }
+    const auto state = m_core;
+    auto cancel = m_nativeArtwork->resolve(job.get(), [state, key](const AddonNativeArtworkAssets::Result& asset) {
+        const auto owned = state->take(key);
+        if (!owned || !vlc_metadata_job_IsPending(owned.get())) return;
+        if (!asset.permit.current()) { vlc_metadata_job_Cancel(owned.get()); return; }
+        const auto* request = vlc_metadata_job_GetRequest(owned.get());
+        auto* result = asset.error.isEmpty() && asset.file.isLocalFile() ? input_item_Copy(request->item) : nullptr;
+        int status = result ? VLC_SUCCESS : VLC_EGENERIC;
+        if (result) {
+            const auto file = asset.file.toEncoded();
+            status = vlc_artwork_item_SetApprovedURI(result, file.constData());
+        }
+        // The parent anchor remains cancel-visible through final publication.
+        // Complete can call a native consumer which destroys the Qt service.
+        constexpr char provenance[] = "{\"source\":\"native-artwork\"}";
+        vlc_metadata_job_Complete(owned.get(), status, result, provenance, sizeof(provenance) - 1);
+        if (result) input_item_Release(result);
+    });
+    if (cancel) state->setNativeCancel(key, std::move(cancel));
+    else {
+        const auto owned = state->take(key);
+        if (owned) vlc_metadata_job_Complete(owned.get(), VLC_ENOTSUP, nullptr, nullptr, 0);
+    }
 }
 void AddonMetadataService::cancelCore(quint64 key)
 {

@@ -6,6 +6,7 @@
 #include <QUrl>
 #include <memory>
 typedef struct vlc_metadata_backend vlc_metadata_backend_t;
+class AddonNativeArtworkAssets;
 
 namespace vlc::addons { class AddonManager; }
 
@@ -51,6 +52,9 @@ public:
     void cancel(const QString& consumer);
     void invalidate();
     void setArtworkAdapter(ArtworkResolver, std::function<void(const QString&)> cancel);
+    // This host-only stage uses the pipeline's retained native commit anchor.
+    // It never sends the original native artwork address to a provider.
+    void setNativeArtworkAdapter(AddonNativeArtworkAssets*);
     void setAutomaticNetworkAllowed(bool allowed);
     bool automaticNetworkAllowed() const;
     int nativeJobCount() const;
@@ -94,6 +98,7 @@ private:
     void artworkFinished(const QString& consumer, const QString& field, const QUrl&, const QString&);
     void deliver(const QString&, const QString&, const QVariantMap&, const QString&);
     void startCore(quint64 key);
+    void startNativeArtwork(quint64 key);
     void cancelCore(quint64 key);
     void finishCore(quint64 key, const QString&, const QVariantMap&);
     bool holdMedia(const QString&);
@@ -109,6 +114,7 @@ private:
     QHash<QString, PendingResult> m_results;
     QHash<quint64, QString> m_coreConsumers;
     std::shared_ptr<CoreState> m_core;
+    QPointer<AddonNativeArtworkAssets> m_nativeArtwork;
     vlc_metadata_backend_t* m_coreBackend = nullptr;
     bool m_closed = false;
 };

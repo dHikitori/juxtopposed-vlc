@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <atomic>
+#include <chrono>
 #include <thread>
 #include <vlc_common.h>
 #include <vlc_cxx_helpers.hpp>
@@ -20,6 +21,7 @@
 #include <vlc_artwork_policy.h>
 #include "addons/addon_artwork_assets.hpp"
 #include "addons/addon_metadata_service.hpp"
+#include "addons/addon_native_artwork_assets.hpp"
 #include "util/media_identity_vlc.hpp"
 
 namespace {
@@ -84,6 +86,16 @@ vlc_metadata_job_t* coreJob(vlc_metadata_backend_t* backend, Ended& ended, input
     request.context_json = context.constData(); request.context_size = context.size();
     request.item = item; request.generation = 17; request.target_revision = 23; request.flags = flags;
     return vlc_metadata_job_New(backend, &request, Ended::callback, &ended);
+}
+std::shared_ptr<vlc_metadata_job_t> nativeArtworkJob(vlc_metadata_backend_t* backend, Ended& ended,
+    input_item_t* item, const char* operation = "materializeNativeArtwork")
+{
+    const char* fields[]{"artwork"};
+    vlc_metadata_request request{};
+    request.feature = "artwork"; request.operation = operation; request.item = item;
+    request.fields = fields; request.field_count = 1;
+    request.flags = VLC_METADATA_REQUEST_NETWORK | VLC_METADATA_REQUEST_AUTOMATIC;
+    return {vlc_metadata_job_New(backend, &request, Ended::callback, &ended), vlc_metadata_job_Release};
 }
 }
 
@@ -245,6 +257,104 @@ private slots:
         service.setAutomaticNetworkAllowed(false);
         QCOMPARE(active.count.load(), 1); QCOMPARE(active.status.load(), -EINTR); QCOMPARE(service.nativeJobCount(), 0);
         vlc_metadata_job_Release(first); vlc_metadata_job_Release(second); vlc_metadata_backend_Release(backend);
+    }
+
+    void automaticRevocationFindsCompletedNativeAnchors()
+    {
+        Ended automaticEnded, manualEnded;
+        Fake fake; AddonMetadataService service(fake.backend()); service.setAutomaticNetworkAllowed(true);
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        const auto automaticItem = std::shared_ptr<input_item_t>(input_item_New("file:///automatic.mkv", "Automatic"), input_item_Release);
+        const auto manualItem = std::shared_ptr<input_item_t>(input_item_New("file:///manual.mkv", "Manual"), input_item_Release);
+        QVERIFY(automaticItem); QVERIFY(manualItem);
+        const auto automatic = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), automaticEnded,
+            automaticItem.get(), VLC_METADATA_REQUEST_NETWORK | VLC_METADATA_REQUEST_AUTOMATIC), vlc_metadata_job_Release);
+        const auto manual = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), manualEnded,
+            manualItem.get()), vlc_metadata_job_Release);
+        QVERIFY(automatic); QVERIFY(manual);
+        for (const auto& job : {automatic, manual}) {
+            QCOMPARE(vlc_metadata_job_StartLocal(job.get()), VLC_SUCCESS);
+            auto* result = input_item_Copy(vlc_metadata_job_GetRequest(job.get())->item); QVERIFY(result);
+            input_item_SetDescription(result, "Native result");
+            QVERIFY(vlc_metadata_job_Complete(job.get(), VLC_SUCCESS, result, nullptr, 0)); input_item_Release(result);
+        }
+        QCOMPARE(service.nativeJobCount(), 0); QVERIFY(fake.calls.isEmpty());
+        service.setAutomaticNetworkAllowed(false);
+        QCOMPARE(vlc_metadata_job_Apply(automatic.get(), automaticItem.get(), 0, nullptr), -EINTR);
+        QCOMPARE(vlc_metadata_job_Apply(manual.get(), manualItem.get(), 0, nullptr), VLC_SUCCESS);
+        QCOMPARE(automaticEnded.count.load(), 1); QCOMPARE(manualEnded.count.load(), 1);
+        char* automaticText = input_item_GetDescription(automaticItem.get()); QVERIFY(!automaticText);
+        char* manualText = input_item_GetDescription(manualItem.get());
+        QCOMPARE(QByteArray(manualText), QByteArray("Native result")); free(manualText);
+    }
+
+    void nativeArtworkStageKeepsTheOriginalAddressOutOfProviders_data()
+    {
+        QTest::addColumn<bool>("withdraw"); QTest::addColumn<bool>("edit");
+        QTest::newRow("publish") << false << false;
+        QTest::newRow("withdraw") << true << false;
+        QTest::newRow("same-value-edit") << false << true;
+    }
+    void nativeArtworkStageKeepsTheOriginalAddressOutOfProviders()
+    {
+        QFETCH(bool, withdraw); QFETCH(bool, edit);
+        QTemporaryDir directory; QVERIFY(directory.isValid());
+        Ended childEnded, anchorEnded; std::atomic_int reads{0};
+        QImage image(3, 2, QImage::Format_ARGB32); image.fill(Qt::red);
+        QByteArray bytes; QBuffer buffer(&bytes); QVERIFY(buffer.open(QIODevice::WriteOnly)); QVERIFY(image.save(&buffer, "PNG"));
+        AddonNativeArtworkAssets assets({[&](const QUrl& url, qint64, const std::function<bool()>& live) {
+            ++reads;
+            if (url != QUrl("http://192.168.1.4/native-cover.png") || !live())
+                return AddonNativeArtworkAssets::ReadResult{{}, QStringLiteral("The test request is not current.")};
+            return AddonNativeArtworkAssets::ReadResult{bytes, {}};
+        }}, directory.path(), {});
+        Fake fake; AddonMetadataService service(fake.backend()); service.setAutomaticNetworkAllowed(true);
+        service.setNativeArtworkAdapter(&assets);
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        const auto item = std::shared_ptr<input_item_t>(input_item_New("file:///private/movie.mkv", "Movie"), input_item_Release);
+        QVERIFY(item); input_item_SetArtURL(item.get(), "http://192.168.1.4/native-cover.png");
+        const auto anchor = nativeArtworkJob(backend.get(), anchorEnded, item.get(), "native-parent"); QVERIFY(anchor);
+        QCOMPARE(vlc_metadata_job_StartLocal(anchor.get()), VLC_SUCCESS);
+        const auto child = nativeArtworkJob(backend.get(), childEnded, item.get()); QVERIFY(child);
+        QCOMPARE(vlc_metadata_job_Start(child.get()), VLC_SUCCESS);
+        QTRY_COMPARE(childEnded.count.load(), 1); QCOMPARE(childEnded.status.load(), VLC_SUCCESS);
+        QCOMPARE(reads.load(), 1); QVERIFY(fake.calls.isEmpty()); QCOMPARE(service.mediaCount(), 0);
+        const auto* result = vlc_metadata_job_GetResult(child.get()); QVERIFY(result); QVERIFY(result->item);
+        char* approved = vlc_artwork_item_GetURI(result->item); QVERIFY(approved);
+        const QUrl file = QUrl::fromEncoded(QByteArray(approved)); free(approved);
+        QVERIFY(file.isLocalFile()); QVERIFY(QFileInfo::exists(file.toLocalFile()));
+        QVERIFY(!QByteArray(result->provenance_json, result->provenance_size).contains("192.168.1.4"));
+        QVERIFY(vlc_metadata_job_Complete(anchor.get(), VLC_SUCCESS, result->item, nullptr, 0));
+        // The completed child cannot remove the parent's consent boundary.
+        if (edit) input_item_SetArtURL(item.get(), "http://192.168.1.4/native-cover.png");
+        if (withdraw) service.setAutomaticNetworkAllowed(false);
+        QCOMPARE(vlc_metadata_job_Apply(anchor.get(), item.get(), uint32_t(1) << vlc_meta_ArtworkURL, nullptr),
+            withdraw ? -EINTR : edit ? -EAGAIN : VLC_SUCCESS);
+        char* unchanged = input_item_GetArtURL(item.get());
+        QCOMPARE(QByteArray(unchanged), withdraw || edit ? QByteArray("http://192.168.1.4/native-cover.png") : file.toEncoded()); free(unchanged);
+    }
+
+    void nativeArtworkCancellationInterruptsIOWithoutGuiDelivery()
+    {
+        QTemporaryDir directory; QVERIFY(directory.isValid());
+        Ended ended; std::atomic_bool entered{false}, left{false};
+        AddonNativeArtworkAssets assets({[&](const QUrl&, qint64, const std::function<bool()>&) {
+            entered.store(true); vlc_poll_i11e(nullptr, 0, 5000); left.store(true);
+            return AddonNativeArtworkAssets::ReadResult{{}, QStringLiteral("The test read has ended.")};
+        }}, directory.path(), {});
+        Fake fake; AddonMetadataService service(fake.backend()); service.setAutomaticNetworkAllowed(true);
+        service.setNativeArtworkAdapter(&assets);
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        const auto item = std::shared_ptr<input_item_t>(input_item_New("file:///private/movie.mkv", "Movie"), input_item_Release);
+        QVERIFY(item); input_item_SetArtURL(item.get(), "http://127.0.0.1/native-cover.png");
+        const auto job = nativeArtworkJob(backend.get(), ended, item.get()); QVERIFY(job);
+        QCOMPARE(vlc_metadata_job_Start(job.get()), VLC_SUCCESS); QTRY_VERIFY(entered.load());
+        std::thread canceler([job] { vlc_metadata_job_Cancel(job.get()); }); canceler.join();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        while (!left.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        QVERIFY(left.load()); QCOMPARE(ended.count.load(), 1); QCOMPARE(ended.status.load(), -EINTR);
+        QCOMPARE(service.nativeJobCount(), 0); QVERIFY(fake.calls.isEmpty());
     }
 
     void guestArtworkNeedsHostAssetAdapter()
