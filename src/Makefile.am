@@ -83,6 +83,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_meta_fetcher.h \
 	../include/vlc_metadata_backend.h \
 	../include/vlc_metadata_owner.h \
+	../include/vlc_addon_medialibrary.h \
 	../include/vlc_metadata_revision.h \
 	../include/vlc_mime.h \
 	../include/vlc_modules.h \

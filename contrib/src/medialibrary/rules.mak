@@ -23,6 +23,7 @@ medialibrary: medialibrary-$(MEDIALIBRARY_VERSION).tar.bz2 .sum-medialibrary
 	$(APPLY) $(SRC)/medialibrary/0004-replace-external-track-assignments.patch
 	$(APPLY) $(SRC)/medialibrary/0005-persist-discovered-track-selections.patch
 	$(APPLY) $(SRC)/medialibrary/0006-wake-eligible-priority-writers.patch
+	$(APPLY) $(SRC)/medialibrary/0007-atomic-addon-playlist-append.patch
 	$(MOVE)
 
 .medialibrary: medialibrary crossfile.meson

@@ -5147,6 +5147,13 @@ dnl
 PKG_ENABLE_MODULES_VLC([NOTIFY], [], [libnotify], [libnotify notification], [auto])
 
 PKG_ENABLE_MODULES_VLC([MEDIALIBRARY], [medialibrary], [medialibrary >= 0.13.0], (medialibrary support), [auto])
+vlc_addon_playlist_cas=no
+AS_IF([$PKG_CONFIG --exists medialibrary], [
+  vlc_addon_playlist_cas=`$PKG_CONFIG --variable=addon_playlist_cas medialibrary`
+])
+AS_IF([test "$vlc_addon_playlist_cas" = "1"], [
+  AC_DEFINE([VLC_ML_HAS_ADDON_PLAYLIST_CAS], [1], [The library has atomic add-on playlist append.])
+])
 
 dnl
 dnl  Endianness check

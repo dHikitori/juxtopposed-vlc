@@ -852,3 +852,9 @@ vlc_tests += {
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_misc_addon_medialibrary',
+    'sources': files('misc/addon_medialibrary.c'),
+    'suite': ['src', 'test_src', 'addons'],
+}

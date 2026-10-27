@@ -1,7 +1,15 @@
 # Native playlist transaction boundary
 
 This document specifies the library boundary for an add-on playlist append.
-The implementation needs separate approval if the active request prohibits code changes.
+The user approved this implementation and its database changes on 27 October 2026.
+
+## Implementation state
+
+The dependency patch and the VLC module boundary are implemented. The installed dependency declares `addon_playlist_cas=1`. The normal VLC build links the module with that feature. The C wrapper suite passes.
+
+The dependency tests pass 23 transaction and preparation groups plus 13 existing playlist cases. They cover rollback when a trigger skips an insert, full suffix and order checks, changed or reused playlist IDs, real database reset and restore, repeated source references, and new-record title preparation. The patch applies after the previous six patches with no fuzz or offset; all eight output files match the tested source.
+
+The host picker and store still need their final app and shutdown tests. These module tests do not establish that the host mount is complete.
 
 ## Required result
 
@@ -36,6 +44,10 @@ int vlc_addon_playlist_append_if_unchanged(
     vlc_medialibrary_t *ml,
     const vlc_addon_playlist_snapshot_t *snapshot,
     const int64_t *media_ids, size_t count);
+
+int vlc_addon_source_media_prepare(
+    vlc_medialibrary_t *ml, const char *source_uri,
+    const char *title, int64_t *media_id);
 ```
 
 Create and append run synchronously on the media library thread.
@@ -52,6 +64,8 @@ The host can append at most 1,000 media IDs in one operation.
 Every ID must be positive.
 The native library must validate all IDs within the transaction.
 A missing media record must cause a complete rollback.
+
+Source preparation uses the exact admitted `vlc-addon-source:v1:` URI. It creates the external record, file row, and initial title in one transaction. It reuses an existing exact record without changing its title. A later append failure can leave a reusable external record; it cannot leave a partial playlist append. Preparation starts no network or stream work.
 
 Use private control query values for these operations.
 The public wrappers can call the existing `vlc_ml_control()` function.

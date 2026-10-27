@@ -1,0 +1,740 @@
+Subject: [PATCH] playlist: append an add-on group in one checked transaction
+
+Use a database transaction and revision tokens for all playlist writers.
+Check the complete appended group before commit. Roll back skipped inserts,
+changed order, counters, and tokens on error.
+
+Keep snapshots independent of the library lifetime. Test reset and restore,
+writer races, schema changes, and existing playlist behavior. Retain exact
+lookup of the declared opaque add-on source references. Create a new source
+record and its first title in one transaction. Preserve existing titles.
+
+---
+diff --git a/include/medialibrary/AddonPlaylist.h b/include/medialibrary/AddonPlaylist.h
+new file mode 100644
+--- /dev/null
++++ b/include/medialibrary/AddonPlaylist.h
+@@ -0,0 +1,32 @@
++// SPDX-License-Identifier: LGPL-2.1-or-later
++#pragma once
++#include <array>
++#include <cstdint>
++#include <vector>
++#include <string>
++
++#define MEDIALIBRARY_HAS_PLAYLIST_CAS 1
++
++namespace medialibrary {
++class IMediaLibrary;
++
++// This value holds no library or database reference.
++struct AddonPlaylistSnapshot {
++    int64_t playlistId = 0;
++    std::array<char, 64> owner{};
++    std::array<char, 64> token{};
++};
++
++// Calls need an active library and no caller-owned database context.
++// A snapshot belongs to one library instance. A reset prevents use of old tokens.
++bool createAddonPlaylistSnapshot(IMediaLibrary&, int64_t playlistId,
++                                AddonPlaylistSnapshot&) noexcept;
++// Append one group of at most 1,000 positive media IDs. A failed append leaves
++// the playlist unchanged. Schema repair can prevent use of old snapshots.
++bool appendAddonPlaylistIfUnchanged(IMediaLibrary&, const AddonPlaylistSnapshot&,
++                                   const std::vector<int64_t>& mediaIds) noexcept;
++// Reuse the exact source record, or create it with its first display title.
++// Existing records retain their title. A failure creates no record.
++bool prepareAddonSourceMedia(IMediaLibrary&, const std::string& canonicalSourceUri,
++                            const std::string& title, int64_t& id) noexcept;
++}
+diff --git a/include/medialibrary/meson.build b/include/medialibrary/meson.build
+--- a/include/medialibrary/meson.build
++++ b/include/medialibrary/meson.build
+@@ -12,6 +12,7 @@
+         'IMediaLibrary.h',
+         'IMovie.h',
+         'IPlaylist.h',
++        'AddonPlaylist.h',
+         'IShowEpisode.h',
+         'IShow.h',
+         'IVideoTrack.h',
+diff --git a/medialibrary.pc.in b/medialibrary.pc.in
+--- a/medialibrary.pc.in
++++ b/medialibrary.pc.in
+@@ -2,6 +2,7 @@
+ exec_prefix=@exec_prefix@
+ libdir=${prefix}/lib
+ includedir=${prefix}/include
++addon_playlist_cas=1
+ 
+ Name: medialibrary
+ Description: cross platform medialibrary
+diff --git a/meson.build b/meson.build
+--- a/meson.build
++++ b/meson.build
+@@ -200,6 +200,32 @@
+     suite: ['unittest', 'Media'],
+   )
+ 
++  addon_playlist_fs = files('test/unittest/mocks/FileSystem.cpp',
++    'test/unittest/mocks/filesystem/MockDevice.cpp',
++    'test/unittest/mocks/filesystem/MockDirectory.cpp',
++    'test/unittest/mocks/filesystem/MockFile.cpp')
++  addon_playlist_includes = [includes, include_directories('test', 'test/unittest')]
++  addon_playlist_test = executable('addon_playlist_tests',
++    ['test/unittest/AddonPlaylistTests.cpp', addon_playlist_fs],
++    link_with: [medialib], include_directories: addon_playlist_includes,
++    dependencies: [sqlite_dep, threads_dep], build_by_default: false,
++  )
++  test('Playlist.AddonTransaction', addon_playlist_test,
++    args: [meson.current_build_dir() / 'addon-playlist'], timeout: 30,
++    suite: ['unittest', 'Playlist'],
++  )
++  addon_playlist_regressions = executable('addon_playlist_regressions',
++    ['test/unittest/PlaylistTests.cpp', 'test/unittest/MediaLibraryTester.cpp', addon_playlist_fs],
++    link_with: [medialib], include_directories: addon_playlist_includes,
++    dependencies: [sqlite_dep, threads_dep], build_by_default: false)
++  foreach case : ['AppendMany', 'InsertMany', 'MoveMany', 'RemoveMany',
++      'RemoveReAddMedia', 'InsertRemoveDuplicateMedia', 'CheckDbModel',
++      'IsReadOnly', 'NbMedia', 'Duration', 'UpdateNbMediaOnInsertAndDelete',
++      'UpdateNbMediaOnMediaRemoval', 'UpdateNbMediaOnMediaTypeChange']
++    test('Playlist.AddonRegression.' + case, addon_playlist_regressions,
++      args: [case], suite: ['unittest', 'Playlist'], timeout: 30)
++  endforeach
++
+ endif
+ 
+ # Exercise the lock independently of the parser backend and shared-library exports.
+@@ -226,5 +252,6 @@
+ pkg.generate(libraries: medialib,
+   version: meson.project_version(),
+   name: 'medialibrary',
+-  description: 'cross platform medialibrary'
++  description: 'cross platform medialibrary',
++  variables: {'addon_playlist_cas': '1'},
+ )
+diff --git a/src/AddonPlaylist.cpp b/src/AddonPlaylist.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/AddonPlaylist.cpp
+@@ -0,0 +1,240 @@
++// SPDX-License-Identifier: LGPL-2.1-or-later
++#if HAVE_CONFIG_H
++# include "config.h"
++#endif
++#include "medialibrary/AddonPlaylist.h"
++#include "MediaLibrary.h"
++#include "Playlist.h"
++#include "Media.h"
++#include "File.h"
++#include "utils/ModificationsNotifier.h"
++#include "database/SqliteTools.h"
++#include <algorithm>
++#include <map>
++#include <limits>
++#include <mutex>
++#include <stdexcept>
++#include <string>
++
++namespace medialibrary {
++namespace {
++struct Definition { std::string name, type, sql; };
++const std::vector<Definition>& definitions()
++{
++    static const auto values = [] {
++        std::vector<Definition> result{{"VlcAddonPlaylistRevision", "table",
++            "CREATE TABLE VlcAddonPlaylistRevision (playlist_id INTEGER PRIMARY KEY "
++            "REFERENCES Playlist(id_playlist) ON DELETE CASCADE ON UPDATE CASCADE, "
++            "token TEXT NOT NULL CHECK(length(token)=64))"}};
++        const auto insert = "INSERT OR REPLACE INTO VlcAddonPlaylistRevision(playlist_id,token) VALUES(";
++        const auto change = "UPDATE VlcAddonPlaylistRevision SET token=lower(hex(randomblob(32))) WHERE playlist_id=";
++        const auto trigger = [&](const std::string& name, const std::string& event,
++                                 const std::string& table, const std::string& body) {
++            result.push_back({name, "trigger", "CREATE TRIGGER " + name + " AFTER " + event
++                + " ON " + table + " BEGIN " + body + " END"});
++        };
++        trigger("vlc_addon_playlist_insert", "INSERT", "Playlist",
++            std::string(insert) + "NEW.id_playlist,lower(hex(randomblob(32))));");
++        trigger("vlc_addon_playlist_update", "UPDATE", "Playlist",
++            "DELETE FROM VlcAddonPlaylistRevision WHERE playlist_id=OLD.id_playlist AND OLD.id_playlist!=NEW.id_playlist;"
++            + std::string(insert) + "NEW.id_playlist,lower(hex(randomblob(32))));");
++        trigger("vlc_addon_playlist_delete", "DELETE", "Playlist",
++            "DELETE FROM VlcAddonPlaylistRevision WHERE playlist_id=OLD.id_playlist;");
++        for (const auto& table : {std::string("PlaylistMediaRelation"), std::string("File")}) {
++            const auto prefix = table == "File" ? "vlc_addon_playlist_file_" : "vlc_addon_playlist_member_";
++            trigger(std::string(prefix) + "insert", "INSERT", table,
++                std::string(change) + "NEW.playlist_id;");
++            trigger(std::string(prefix) + "update", "UPDATE", table,
++                std::string(change) + "OLD.playlist_id;" + change + "NEW.playlist_id;");
++            trigger(std::string(prefix) + "delete", "DELETE", table,
++                std::string(change) + "OLD.playlist_id;");
++        }
++        return result;
++    }();
++    return values;
++}
++enum class Schema { Invalid, Stable, Repaired };
++Schema schema(sqlite::Connection* connection)
++{
++    std::vector<const Definition*> missing;
++    for (const auto& expected : definitions()) {
++        sqlite::Statement statement("SELECT type,sql FROM sqlite_master WHERE name=?");
++        statement.execute(expected.name);
++        auto row = statement.row();
++        if (row == nullptr) missing.push_back(&expected);
++        else if (row.extract<std::string>() != expected.type
++            || row.extract<std::string>() != expected.sql || statement.row() != nullptr)
++            return Schema::Invalid;
++    }
++    if (missing.empty()) return Schema::Stable;
++    for (const auto* expected : missing)
++        sqlite::Tools::executeRequest(connection, expected->sql);
++    // Repair must replace every token. The absent trigger may have missed writes.
++    sqlite::Tools::executeRequest(connection, "DELETE FROM VlcAddonPlaylistRevision");
++    sqlite::Tools::executeRequest(connection, "INSERT INTO VlcAddonPlaylistRevision(playlist_id,token) "
++        "SELECT id_playlist,lower(hex(randomblob(32))) FROM Playlist");
++    return Schema::Repaired;
++}
++std::string randomToken()
++{
++    sqlite::Statement statement("SELECT lower(hex(randomblob(32)))");
++    statement.execute();
++    auto row = statement.row();
++    if (row == nullptr) throw std::runtime_error("The playlist token is missing.");
++    return row.extract<std::string>();
++}
++std::string owner(sqlite::Connection* connection)
++{
++    using Weak = std::weak_ptr<sqlite::Connection>;
++    static std::mutex mutex;
++    static std::map<Weak, std::string, std::owner_less<Weak>> owners;
++    std::lock_guard<std::mutex> lock(mutex);
++    for (auto it = owners.begin(); it != owners.end();)
++        if (it->first.expired()) it = owners.erase(it); else ++it;
++    const Weak weak = connection->shared_from_this();
++    const auto found = owners.find(weak);
++    if (found != owners.end()) return found->second;
++    if (owners.size() >= 128) throw std::runtime_error("The playlist owner limit was reached.");
++    return owners.emplace(weak, randomToken()).first->second;
++}
++bool available(int64_t id)
++{
++    sqlite::Statement statement("SELECT 1 FROM Playlist WHERE id_playlist=? AND NOT EXISTS "
++        "(SELECT 1 FROM File WHERE playlist_id=?)");
++    statement.execute(id, id);
++    return statement.row() != nullptr;
++}
++std::string token(int64_t id)
++{
++    sqlite::Statement statement("SELECT token FROM VlcAddonPlaylistRevision WHERE playlist_id=?");
++    statement.execute(id);
++    auto row = statement.row();
++    return row == nullptr ? std::string{} : row.extract<std::string>();
++}
++bool canStart()
++{
++    return !sqlite::Transaction::isInProgress()
++        && !sqlite::Connection::Context::isOpened(sqlite::Connection::Context::Type::Read)
++        && !sqlite::Connection::Context::isOpened(sqlite::Connection::Context::Type::Write);
++}
++bool validToken(const std::string& value)
++{
++    return value.size() == 64 && std::all_of(value.begin(), value.end(),
++        [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
++}
++int64_t memberCount(int64_t id)
++{
++    sqlite::Statement statement("SELECT COUNT(*) FROM PlaylistMediaRelation WHERE playlist_id=?");
++    statement.execute(id);
++    auto row = statement.row();
++    if (row == nullptr) throw std::runtime_error("The playlist count is missing.");
++    return row.extract<int64_t>();
++}
++bool completeSuffix(int64_t id, int64_t before, const std::vector<int64_t>& mediaIds)
++{
++    if (memberCount(id) != before + static_cast<int64_t>(mediaIds.size())) return false;
++    sqlite::Statement statement("SELECT media_id,position FROM PlaylistMediaRelation "
++        "WHERE playlist_id=? ORDER BY position LIMIT ? OFFSET ?");
++    statement.execute(id, static_cast<int64_t>(mediaIds.size()) + 1, before);
++    for (size_t index = 0; index < mediaIds.size(); ++index) {
++        auto row = statement.row();
++        if (row == nullptr || row.extract<int64_t>() != mediaIds[index]
++            || row.extract<int64_t>() != before + static_cast<int64_t>(index)) return false;
++    }
++    return statement.row() == nullptr;
++}
++}
++
++bool createAddonPlaylistSnapshot(IMediaLibrary& library, int64_t id,
++                                AddonPlaylistSnapshot& output) noexcept
++{
++    output = {};
++    auto* concrete = dynamic_cast<MediaLibrary*>(&library);
++    if (!concrete || id <= 0 || !canStart()) return false;
++    try {
++        auto* connection = concrete->getConn();
++        auto transaction = connection->newTransaction();
++        if (schema(connection) == Schema::Invalid) return false;
++        // Keep a repair even when this target is no longer available.
++        if (!available(id)) { transaction->commit(); return false; }
++        const auto current = token(id), identity = owner(connection);
++        if (!validToken(current) || !validToken(identity)) return false;
++        AddonPlaylistSnapshot result; result.playlistId = id;
++        std::copy(current.begin(), current.end(), result.token.begin());
++        std::copy(identity.begin(), identity.end(), result.owner.begin());
++        transaction->commit();
++        output = result;
++        return true;
++    } catch (const std::exception&) { return false; }
++}
++
++bool appendAddonPlaylistIfUnchanged(IMediaLibrary& library, const AddonPlaylistSnapshot& snapshot,
++                                   const std::vector<int64_t>& mediaIds) noexcept
++{
++    auto* concrete = dynamic_cast<MediaLibrary*>(&library);
++    if (!concrete || snapshot.playlistId <= 0 || mediaIds.empty() || mediaIds.size() > 1000
++        || std::any_of(mediaIds.begin(), mediaIds.end(), [](int64_t id) { return id <= 0; })
++        || !canStart()) return false;
++    try {
++        auto* connection = concrete->getConn();
++        auto transaction = connection->newTransaction();
++        const auto state = schema(connection);
++        if (state == Schema::Invalid) return false;
++        if (state == Schema::Repaired) { transaction->commit(); return false; }
++        if (!available(snapshot.playlistId)
++            || owner(connection) != std::string(snapshot.owner.begin(), snapshot.owner.end())
++            || token(snapshot.playlistId) != std::string(snapshot.token.begin(), snapshot.token.end())) return false;
++        for (auto id : mediaIds) {
++            sqlite::Statement statement("SELECT 1 FROM Media WHERE id_media=?");
++            statement.execute(id);
++            if (statement.row() == nullptr) return false;
++        }
++        const auto count = memberCount(snapshot.playlistId);
++        if (count < 0 || count > std::numeric_limits<int64_t>::max() - static_cast<int64_t>(mediaIds.size())) return false;
++        // fetch() creates a separate object. Rollback cannot change counters
++        // in a playlist object that another caller holds.
++        auto playlist = Playlist::fetch(concrete, snapshot.playlistId);
++        if (!playlist || !playlist->append(mediaIds)) return false;
++        // A trigger can ignore an insert without an SQL error. Verify the group
++        // before commit. A failure also rolls back counters and revision tokens.
++        if (!completeSuffix(snapshot.playlistId, count, mediaIds)) return false;
++        transaction->commit();
++        return true;
++    } catch (const std::exception&) { return false; }
++}
++
++bool prepareAddonSourceMedia(IMediaLibrary& library, const std::string& uri,
++                            const std::string& title, int64_t& output) noexcept
++{
++    output = 0;
++    auto* concrete = dynamic_cast<MediaLibrary*>(&library);
++    const auto control = [](unsigned char c) { return c < 32 || c == 127; };
++    if (!concrete || !canStart() || uri.size() <= 20 || uri.size() > 12000
++        || uri.compare(0,20,"vlc-addon-source:v1:") != 0
++        || std::any_of(uri.begin(),uri.end(),[&](unsigned char c) { return c == 32 || control(c); })
++        || title.empty() || title.size() > 2048 || std::any_of(title.begin(),title.end(),control)) return false;
++    try {
++        auto* connection = concrete->getConn(); if (!connection) return false;
++        auto transaction = connection->newTransaction();
++        const auto existing = concrete->media(uri);
++        if (existing) { const auto id = existing->id(); transaction->commit(); output = id; return id > 0; }
++        // Defer the creation notification until the whole record commits.
++        const auto now = time(nullptr);
++        const auto id = sqlite::Tools::executeInsert(connection,
++            "INSERT INTO Media(type,duration,insertion_date,title,filename,import_type) VALUES(?,?,?,?,?,?)",
++            IMedia::Type::Unknown,int64_t(-1),now,uri,uri,Media::ImportType::External);
++        if (id <= 0 || !File::createFromExternalMedia(concrete,id,IFile::Type::Main,uri,0,now)) return false;
++        const auto media = Media::fetch(concrete,id);
++        if (!media || !static_cast<IMedia&>(*media).setTitle(title)) return false;
++        sqlite::Statement verify("SELECT 1 FROM Media JOIN File ON File.media_id=Media.id_media "
++            "WHERE Media.id_media=? AND Media.title=? AND File.mrl=? AND File.folder_id IS NULL AND File.type=?");
++        verify.execute(id,title,uri,IFile::Type::Main);
++        if (verify.row() == nullptr || verify.row() != nullptr) return false;
++        transaction->commit(); output = id;
++        // Notification failure cannot undo a completed database commit.
++        try { if (auto notifier = concrete->getNotifier()) notifier->notifyMediaCreation(media); }
++        catch (const std::exception&) {}
++        return true;
++    } catch (const std::exception&) { return false; }
++}
++}
+diff --git a/src/File.cpp b/src/File.cpp
+--- a/src/File.cpp
++++ b/src/File.cpp
+@@ -633,7 +633,9 @@
+     std::string scheme;
+     try
+     {
+-        scheme = utils::url::scheme( mrl );
++        // A host admission reference has no hierarchical URL authority.
++        if ( mrl.compare( 0, 20, "vlc-addon-source:v1:" ) != 0 )
++            scheme = utils::url::scheme( mrl );
+     }
+     catch ( const fs::errors::UnhandledScheme& )
+     {
+diff --git a/src/meson.build b/src/meson.build
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -14,6 +14,7 @@
+   'MediaLibrary.cpp',
+   'Movie.cpp',
+   'Playlist.cpp',
++  'AddonPlaylist.cpp',
+   'Settings.cpp',
+   'Show.cpp',
+   'Thumbnail.cpp',
+diff --git a/test/unittest/AddonPlaylistTests.cpp b/test/unittest/AddonPlaylistTests.cpp
+new file mode 100644
+--- /dev/null
++++ b/test/unittest/AddonPlaylistTests.cpp
+@@ -0,0 +1,350 @@
++// SPDX-License-Identifier: LGPL-2.1-or-later
++#if HAVE_CONFIG_H
++# include "config.h"
++#endif
++#include "MediaLibrary.h"
++#include "medialibrary/AddonPlaylist.h"
++#include "medialibrary/IMedia.h"
++#include "medialibrary/IFile.h"
++#include "medialibrary/IPlaylist.h"
++#include "database/SqliteTools.h"
++#include "logging/IostreamLogger.h"
++#include "logging/Logger.h"
++#include "utils/Directory.h"
++#include "utils/Filename.h"
++#include "utils/Url.h"
++#include "mocks/FileSystem.h"
++#include <atomic>
++#include <chrono>
++#include <iostream>
++#include <fstream>
++#include <memory>
++#include <stdexcept>
++#include <thread>
++#include <vector>
++
++using namespace medialibrary;
++class TestLibrary : public MediaLibrary {
++public:
++    using MediaLibrary::MediaLibrary;
++    parser::Parser* getParser() const override { return nullptr; }
++    void startDeletionNotifier() override {}
++    void addLocalFsFactory() override {
++        auto factory = std::make_shared<mock::FileSystemFactory>();
++        factory->addDevice(utils::file::toMrl(m_mlFolderPath), "addon-playlist-test", false);
++        factory->addFolder(utils::file::toMrl(m_playlistPath));
++        if (!m_fsHolder.addFsFactory(factory)) throw std::runtime_error("The test filesystem must start.");
++    }
++};
++static void check(bool success, const char* description)
++{ if (!success) throw std::runtime_error(description); }
++static std::unique_ptr<TestLibrary> open(const std::string& directory)
++{
++    auto library = std::unique_ptr<TestLibrary>(new TestLibrary(directory + "/ml.db", directory));
++    check(library->initialize(nullptr) == InitializeResult::Success, "The database must start.");
++    return library;
++}
++static std::vector<int64_t> members(TestLibrary& library, int64_t id)
++{
++    auto context = library.getConn()->acquireReadContext();
++    sqlite::Statement statement("SELECT media_id FROM PlaylistMediaRelation WHERE playlist_id=? ORDER BY position");
++    statement.execute(id); std::vector<int64_t> result;
++    for (auto row = statement.row(); row != nullptr; row = statement.row()) result.push_back(row.extract<int64_t>());
++    return result;
++}
++static std::string counters(TestLibrary& library, int64_t id)
++{
++    auto context = library.getConn()->acquireReadContext();
++    sqlite::Statement statement("SELECT nb_video||','||nb_audio||','||nb_unknown||','||"
++        "nb_present_video||','||nb_present_audio||','||nb_present_unknown||','||"
++        "duration||','||nb_duration_unknown FROM Playlist WHERE id_playlist=?");
++    statement.execute(id); auto row = statement.row();
++    return row == nullptr ? std::string{} : row.extract<std::string>();
++}
++static AddonPlaylistSnapshot snapshot(TestLibrary& library, int64_t id)
++{
++    AddonPlaylistSnapshot value;
++    check(createAddonPlaylistSnapshot(library, id, value), "The snapshot must be available.");
++    return value;
++}
++static void external(const std::string& path, const std::string& sql)
++{
++    sqlite3* db = nullptr;
++    check(sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READWRITE, nullptr) == SQLITE_OK,
++        "The second connection must open.");
++    const auto close = std::unique_ptr<sqlite3, decltype(&sqlite3_close)>(db, sqlite3_close);
++    sqlite3_busy_timeout(db, 5000);
++    check(sqlite3_exec(db, "PRAGMA foreign_keys=ON", nullptr, nullptr, nullptr) == SQLITE_OK,
++        "The second connection must use foreign keys.");
++    check(sqlite3_exec(db, sql.c_str(), nullptr, nullptr, nullptr) == SQLITE_OK,
++        "The second connection must complete its write.");
++}
++int main(int argc, char** argv)
++{
++    if (argc != 2) return 2;
++    Log::SetLogger(std::make_shared<IostreamLogger>()); Log::setLogLevel(LogLevel::Error);
++    const auto directory = std::string(argv[1]) + "-" +
++        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
++    try {
++        check(utils::fs::mkdir(directory), "The test directory must be available.");
++        auto library = open(directory);
++        auto first = library->addExternalMedia("file:///cas-first.mkv", 0);
++        auto second = library->addExternalMedia("file:///cas-second.mkv", 0);
++        check(first && second, "The media fixtures must exist.");
++        const auto a = first->id(), b = second->id();
++        unsigned serial = 0, groups = 0; std::string backupDirectory;
++        const auto fixture = [&] {
++            auto playlist = library->createPlaylist("CAS " + std::to_string(++serial));
++            check(playlist && playlist->append(std::vector<int64_t>{a, b}), "The baseline playlist must exist.");
++            return playlist->id();
++        };
++        {
++            const std::string uri = "vlc-addon-source:v1:new-record-title"; int64_t id = -1;
++            check(prepareAddonSourceMedia(*library,uri,"Catalog title",id) && id > 0,
++                "A new source record and its title must commit together.");
++            const auto media = library->media(uri);
++            check(media && media->id() == id && media->title() == "Catalog title", "The new record must have its catalog title.");
++            check(media->setTitle("Manual title"), "The user title must be saved.");
++            int64_t reused = -1;
++            check(prepareAddonSourceMedia(*library,uri,"New catalog title",reused) && reused == id
++                && library->media(uri)->title() == "Manual title", "A reused source record must keep its user title.");
++            ++groups;
++        }
++        {
++            const std::string uri = "vlc-addon-source:v1:failed-title"; int64_t id = -1;
++            sqlite::Tools::executeRequest(library->getConn(),
++                "CREATE TRIGGER IgnoreAddonSourceTitle BEFORE UPDATE OF title ON Media "
++                "WHEN NEW.title='Reject source title' BEGIN SELECT RAISE(IGNORE); END");
++            check(!prepareAddonSourceMedia(*library,uri,"Reject source title",id) && id == 0 && !library->media(uri),
++                "A skipped title update must roll back the new media and file.");
++            sqlite::Tools::executeRequest(library->getConn(),"DROP TRIGGER IgnoreAddonSourceTitle");
++            check(prepareAddonSourceMedia(*library,uri,"Accepted source title",id) && id > 0,
++                "The same source must work after the title failure is removed.");
++            ++groups;
++        }
++        {
++            const std::string uri = "vlc-addon-source:v1:bounds"; int64_t id = -1;
++            const std::vector<std::pair<std::string,std::string>> bad{
++                {"https://example.org/not-a-source","Title"},{"vlc-addon-source:v1:","Title"},
++                {"vlc-addon-source:v1:space ref","Title"},{"vlc-addon-source:v1:"+std::string(11981,'a'),"Title"},
++                {uri,""},{uri,std::string(2049,'a')},{uri,"Line\nbreak"},{uri,std::string("Nul\0title",9)}};
++            for (const auto& value:bad) {
++                id = -1; check(!prepareAddonSourceMedia(*library,value.first,value.second,id) && id == 0,
++                    "Source preparation must enforce its native bounds.");
++            }
++            { auto transaction = library->getConn()->newTransaction();
++              check(!prepareAddonSourceMedia(*library,uri,"Title",id) && id == 0,
++                  "Source preparation must reject a caller transaction."); transaction->commit(); }
++            check(prepareAddonSourceMedia(*library,"vlc-addon-source:v1:"+std::string(11980,'a'),std::string(2048,'a'),id)
++                && id > 0, "The source and title byte limits must be inclusive.");
++            ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library,id);
++            const std::string mrl = "vlc-addon-source:v1:"
++                "eyJhY2NvdW50UmVmZXJlbmNlIjoicHVibGljOnRlc3QiLCJmb3JtYXQiOiJ2bGMtYWRkb24tc291cmNlLXYxIiwiaXRlbUlkIjoiaXRlbSIsInNvdXJjZSI6Im9yZy5leGFtcGxlLnNvdXJjZS9zb3VyY2UifQ"
++                ".00000000-0000-4000-8000-000000000001";
++            const auto source = library->addExternalMedia(mrl,0);
++            check(source != nullptr, "The stable source record must exist.");
++            const auto found = library->media(mrl);
++            check(found && found->id() == source->id(), "Lookup must retain the exact stable source identity.");
++            check(library->playlist(id)->append(a), "The competing writer must complete.");
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{source->id()}), "A prepared record must not bypass a stale target.");
++            const auto reused = library->media(mrl);
++            check(reused && reused->id() == source->id(), "A failed append must leave a reusable stable record.");
++            check(appendAddonPlaylistIfUnchanged(*library,snapshot(*library,id),{reused->id(),reused->id()}),
++                "A group can contain the same stable record twice.");
++            check(appendAddonPlaylistIfUnchanged(*library,snapshot(*library,id),{reused->id()}),
++                "A later append can use the same stable record.");
++            check(members(*library,id) == std::vector<int64_t>({a,b,a,reused->id(),reused->id(),reused->id()}),
++                "Repeated stable records must retain their complete order.");
++            const auto remote = library->addExternalMedia("https://example.org/source.mp3",0);
++            check(remote && library->media("https://example.org/source.mp3")->id() == remote->id(),
++                "Normal HTTPS media lookup must work.");
++            check(library->media("file:///cas-first.mkv")->id() == a, "Normal file media lookup must work.");
++            ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            check(appendAddonPlaylistIfUnchanged(*library, value, {b, a}), "The complete group must append.");
++            check(members(*library, id) == std::vector<int64_t>({a,b,b,a}), "The append order must agree.");
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {a}), "The old token must fail after append."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            check(library->playlist(id)->append(a), "The user append must complete.");
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {b}), "The old snapshot must fail after a user append."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            bool saved = false; std::thread writer([&] { saved = library->playlist(id)->append(a); }); writer.join();
++            check(saved && !appendAddonPlaylistIfUnchanged(*library, value, {b}), "The old snapshot must fail after a background write."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            external(directory + "/ml.db", "INSERT INTO PlaylistMediaRelation(media_id,playlist_id,position) VALUES(" +
++                std::to_string(a) + "," + std::to_string(id) + ",2)");
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {b}), "The old snapshot must fail after a second connection writes."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            auto playlist = library->playlist(id);
++            check(playlist->remove(0, 1) && playlist->add(a, 0), "Remove and restore must complete.");
++            check(members(*library, id) == std::vector<int64_t>({a,b}), "The original members must be restored.");
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {b}), "The old snapshot must fail after remove and restore."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            auto playlist = library->playlist(id);
++            check(playlist->move(0, 1, 1) && playlist->move(1, 0, 1), "Move and restore must complete.");
++            check(members(*library, id) == std::vector<int64_t>({a,b}), "The original order must be restored.");
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {b}), "The old snapshot must fail after move and restore."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            check(library->deletePlaylist(id), "The old playlist must be removed.");
++            auto replacement = library->createPlaylist("Replacement"); check(replacement != nullptr, "The replacement must exist.");
++            sqlite::Tools::executeRequest(library->getConn(), "UPDATE Playlist SET id_playlist=? WHERE id_playlist=?", id, replacement->id());
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {b}), "ID reuse must reject an old snapshot."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            const auto file = first->files().front()->id();
++            sqlite::Tools::executeRequest(library->getConn(), "UPDATE File SET playlist_id=? WHERE id_file=?", id, file);
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {b}), "A read-only transition must reject append.");
++            AddonPlaylistSnapshot unavailable;
++            check(!createAddonPlaylistSnapshot(*library, id, unavailable), "A read-only playlist must have no target snapshot.");
++            sqlite::Tools::executeRequest(library->getConn(), "UPDATE File SET playlist_id=NULL WHERE id_file=?", file);
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {b}), "Restore from read-only must not restore an old token."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id); const auto before = counters(*library,id);
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {a, INT64_MAX}), "A missing second media ID must fail.");
++            check(members(*library,id) == std::vector<int64_t>({a,b}) && counters(*library,id) == before,
++                "Missing media must preserve all members and counters."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id); const auto before = counters(*library,id);
++            sqlite::Tools::executeRequest(library->getConn(), "CREATE TRIGGER FailAddonAppend BEFORE INSERT ON PlaylistMediaRelation WHEN NEW.playlist_id="
++                + std::to_string(id) + " AND NEW.media_id=" + std::to_string(b) + " BEGIN SELECT RAISE(ABORT,'The test stopped this insert.'); END");
++            check(!appendAddonPlaylistIfUnchanged(*library, value, {a,b}), "The second insert error must fail the group.");
++            check(members(*library,id) == std::vector<int64_t>({a,b}) && counters(*library,id) == before,
++                "An insert error must roll back all members and counters.");
++            sqlite::Tools::executeRequest(library->getConn(), "DROP TRIGGER FailAddonAppend");
++            check(appendAddonPlaylistIfUnchanged(*library,value,{a,b}), "Rollback must retain the original token."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id); const auto before = counters(*library,id);
++            auto retained = library->playlist(id); const auto cachedCount = retained->nbMedia();
++            sqlite::Tools::executeRequest(library->getConn(), "CREATE TRIGGER IgnoreAddonAppend BEFORE INSERT ON PlaylistMediaRelation WHEN NEW.playlist_id="
++                + std::to_string(id) + " AND NEW.media_id=" + std::to_string(b) + " BEGIN SELECT RAISE(IGNORE); END");
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{a,b}), "A skipped second insert must fail the group.");
++            check(members(*library,id) == std::vector<int64_t>({a,b}) && counters(*library,id) == before
++                && retained->nbMedia() == cachedCount, "A skipped insert must preserve all members and counters.");
++            const auto after = snapshot(*library,id);
++            check(after.token == value.token && after.owner == value.owner, "A skipped insert must preserve the snapshot token.");
++            sqlite::Tools::executeRequest(library->getConn(), "DROP TRIGGER IgnoreAddonAppend");
++            check(appendAddonPlaylistIfUnchanged(*library,value,{a,b}) && members(*library,id) == std::vector<int64_t>({a,b,a,b}),
++                "The complete group must work with the original token after rollback."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library,id); const auto before = counters(*library,id);
++            sqlite::Tools::executeRequest(library->getConn(), "CREATE TRIGGER ReorderAddonAppend AFTER INSERT ON PlaylistMediaRelation WHEN NEW.playlist_id="
++                + std::to_string(id) + " AND NEW.media_id=" + std::to_string(b) + " AND NEW.position=3 BEGIN "
++                "UPDATE PlaylistMediaRelation SET media_id=CASE position WHEN 2 THEN " + std::to_string(b) + " ELSE " + std::to_string(a)
++                + " END WHERE playlist_id=" + std::to_string(id) + " AND position IN (2,3); END");
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{a,b}), "A changed append order must fail the group.");
++            check(members(*library,id) == std::vector<int64_t>({a,b}) && counters(*library,id) == before,
++                "An order error must preserve all members and counters.");
++            check(snapshot(*library,id).token == value.token, "An order error must preserve the token.");
++            sqlite::Tools::executeRequest(library->getConn(), "DROP TRIGGER ReorderAddonAppend");
++            check(appendAddonPlaylistIfUnchanged(*library,value,{a,b}), "The original token must work after an order rollback."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            std::atomic_uint ready{0}, saved{0}; std::atomic_bool start{false};
++            const auto writer = [&] { ++ready; while (!start.load()) std::this_thread::yield();
++                if (appendAddonPlaylistIfUnchanged(*library,value,{a,b})) ++saved; };
++            std::thread one(writer), two(writer);
++            while (ready.load()!=2) std::this_thread::yield();
++            start.store(true); one.join(); two.join();
++            check(saved.load()==1 && members(*library,id)==std::vector<int64_t>({a,b,a,b}),
++                "Two concurrent appends must commit exactly one group."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            sqlite::Tools::executeRequest(library->getConn(), "DROP TRIGGER vlc_addon_playlist_member_insert");
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{a}), "A missing trigger must reject the old snapshot.");
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{a}), "A schema repair must retain the new token boundary.");
++            check(appendAddonPlaylistIfUnchanged(*library,snapshot(*library,id),{a}), "A fresh snapshot must work after repair."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library, id);
++            sqlite::Tools::executeRequest(library->getConn(), "DROP TRIGGER vlc_addon_playlist_member_insert");
++            sqlite::Tools::executeRequest(library->getConn(), "CREATE TRIGGER vlc_addon_playlist_member_insert AFTER INSERT ON PlaylistMediaRelation BEGIN SELECT 1; END");
++            AddonPlaylistSnapshot invalid;
++            check(!createAddonPlaylistSnapshot(*library,id,invalid) && !appendAddonPlaylistIfUnchanged(*library,value,{a}),
++                "An unexpected trigger definition must fail closed.");
++            sqlite::Tools::executeRequest(library->getConn(), "DROP TRIGGER vlc_addon_playlist_member_insert");
++            snapshot(*library,id); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library,id);
++            auto transaction = library->getConn()->newTransaction(); AddonPlaylistSnapshot invalid;
++            check(!createAddonPlaylistSnapshot(*library,id,invalid) && !appendAddonPlaylistIfUnchanged(*library,value,{a}),
++                "A caller-owned transaction must be rejected."); transaction->commit();
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{}) && !appendAddonPlaylistIfUnchanged(*library,value,{-1})
++                && !appendAddonPlaylistIfUnchanged(*library,value,std::vector<int64_t>(1001,a)), "Bounds must reject empty, negative, and large groups."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library,id);
++            first.reset(); second.reset(); library.reset(); library = open(directory);
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{a}), "A new library instance must reject the previous owner.");
++            check(appendAddonPlaylistIfUnchanged(*library,snapshot(*library,id),{a}), "A new owner must accept its own snapshot."); ++groups;
++        }
++        {
++            const auto id = fixture(); const auto value = snapshot(*library,id);
++            check(library->clearDatabase(false), "A database reset must complete with revision rows present.");
++            auto media = library->addExternalMedia("file:///reset-first.mkv",0);
++            auto playlist = library->createPlaylist("After reset");
++            check(media && playlist, "New records must be available after reset.");
++            sqlite::Tools::executeRequest(library->getConn(),"UPDATE Playlist SET id_playlist=? WHERE id_playlist=?",id,playlist->id());
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{media->id()}), "A database reset must reject an old token after ID reuse.");
++            check(appendAddonPlaylistIfUnchanged(*library,snapshot(*library,id),{media->id()}), "A fresh token must work after reset."); ++groups;
++        }
++        {
++            auto playlist = library->createPlaylist("Reset with restore"); check(playlist != nullptr,"The reset target must exist.");
++            auto media = library->addExternalMedia("file:///restore-source.mkv",0);
++            check(media && playlist->append(media->id()), "The restore target must contain a media record.");
++            const auto value = snapshot(*library,playlist->id());
++            check(library->clearDatabase(true), "A database reset with playlist restore must complete.");
++            std::string backupMrl;
++            {
++                auto context = library->getConn()->acquireReadContext();
++                sqlite::Statement statement("SELECT mrl FROM Task ORDER BY id_task"); statement.execute();
++                for (auto row = statement.row(); row != nullptr; row = statement.row()) {
++                    const auto candidate = row.extract<std::string>();
++                    std::ifstream backup(utils::url::toLocalPath(candidate));
++                    const std::string xml((std::istreambuf_iterator<char>(backup)), std::istreambuf_iterator<char>());
++                    if (xml.find("file:///restore-source.mkv") != std::string::npos) backupMrl = candidate;
++                }
++            }
++            check(!backupMrl.empty(), "Restore must queue a real backup with the original media URI.");
++            backupDirectory = utils::url::toLocalPath(utils::file::directory(backupMrl));
++            auto nextMedia = library->addExternalMedia("file:///after-restore.mkv",0);
++            auto nextPlaylist = library->createPlaylist("After restore");
++            check(nextMedia && nextPlaylist, "New records must exist after restore.");
++            sqlite::Tools::executeRequest(library->getConn(),"UPDATE Playlist SET id_playlist=? WHERE id_playlist=?",value.playlistId,nextPlaylist->id());
++            const auto next = snapshot(*library,value.playlistId);
++            check(!appendAddonPlaylistIfUnchanged(*library,value,{nextMedia->id()}), "A restore must reject an old token after ID reuse.");
++            check(appendAddonPlaylistIfUnchanged(*library,next,{nextMedia->id()}), "A fresh snapshot must work after restore."); ++groups;
++        }
++        library.reset();
++        if (!backupDirectory.empty()) check(utils::fs::rmdir(backupDirectory), "The backup test directory must be removed.");
++        utils::fs::rmdir(directory + "/cache");
++        utils::fs::rmdir(directory + "/thumbnails"); utils::fs::rmdir(directory + "/playlists");
++        check(utils::fs::rmdir(directory), "The database test directory must be removed.");
++        std::cout << groups << " playlist transaction groups passed\n";
++        return 0;
++    } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
++}
