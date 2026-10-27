@@ -38,6 +38,11 @@ public:
     using Callback = std::function<void(const Response&)>;
     using CredentialResolver = std::function<QByteArray(const QString& field)>;
     using RequestGuard = std::function<bool()>;
+    static bool guardCurrent(const RequestGuard& guard) noexcept
+    {
+        try { return !guard || guard(); }
+        catch (...) { return false; }
+    }
     explicit NetworkBroker(QObject* parent = nullptr);
     ~NetworkBroker() override;
     quint64 fetch(const Manifest&, const QJsonObject& grants, const QJsonObject& request,
@@ -56,6 +61,7 @@ public:
     static BodyRead readBody(QIODevice*, QByteArray&, qint64 limit, bool prefix);
 private:
     struct Job;
+    bool checkCurrent(const std::shared_ptr<Job>&);
     void begin(const std::shared_ptr<Job>&);
     void resolved(const std::shared_ptr<Job>&, const QList<QHostAddress>&);
     bool readResponse(const std::shared_ptr<Job>&);

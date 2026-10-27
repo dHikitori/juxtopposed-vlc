@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QQueue>
 #include <QPointer>
+#include <atomic>
 
 namespace vlc::addons {
 class AddonWorker : public QObject
@@ -22,16 +23,28 @@ public:
     void setConfiguration(const QJsonObject& nonsecretSettings, const QJsonObject& credentialStatus,
                           NetworkBroker::CredentialResolver);
     void setRequestGuard(NetworkBroker::RequestGuard guard) { m_requestGuard = std::move(guard); }
-    bool configurationCurrent() const { return !m_requestGuard || m_requestGuard(); }
+    bool configurationCurrent() const;
     bool failed() const noexcept { return m_failed; }
     QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context);
+    // C++ only. The guard must own plain native state and must not read files.
+    QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
+                   NetworkBroker::RequestGuard);
     void cancel(const QString& invocation);
     void stop();
 signals:
     void completed(const QString& invocation, const QString& status, const QJsonObject& data, const QString& error);
     void unavailable(const QString& error);
 private:
-    struct Invocation { QString contribution; QPointer<QTimer> deadline; QSet<quint64> jobs, serviceJobs; QSet<QString> hostCalls; };
+    struct Invocation {
+        QString contribution;
+        QPointer<QTimer> deadline;
+        QSet<quint64> jobs, serviceJobs;
+        QSet<QString> hostCalls;
+        NetworkBroker::RequestGuard authority, current;
+        std::shared_ptr<std::atomic_bool> active;
+    };
+    bool invocationCurrent(const QString&);
+    void expire(const QString&);
     void start();
     void send(const QJsonObject&);
     void read();

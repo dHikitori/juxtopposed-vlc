@@ -3503,3 +3503,5 @@ TESTS += tests/tst_AddonSessions.qml
 EXTRA_DIST += tests/player-sessions/CMakeLists.txt tests/test_addon_player_sessions.cpp
 
 EXTRA_DIST += tests/package-namespaces/CMakeLists.txt
+
+EXTRA_DIST += tests/invocation-guard/CMakeLists.txt tests/test_addon_invocation_guard.cpp

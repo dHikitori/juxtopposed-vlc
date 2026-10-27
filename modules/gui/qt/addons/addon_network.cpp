@@ -216,8 +216,7 @@ quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants
 
 void NetworkBroker::begin(const std::shared_ptr<Job>& job)
 {
-    if (!m_jobs.contains(job->id)) return;
-    if (job->current && !job->current()) { finish(job, tr("The add-on release, account, or settings changed.")); return; }
+    if (!checkCurrent(job)) return;
     const auto authorization = authorize(job->manifest, job->grants, job->url, job->kind, job->redirects);
     if (!authorization.permitted) {
         finish(job, tr("VLC does not have permission to use this network address.")); return;
@@ -253,8 +252,8 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
 
 void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostAddress>& addresses)
 {
-    if (!m_jobs.contains(job->id)) return;
-    if (job->current && !job->current()) { finish(job, tr("The add-on release, account, or settings changed.")); return; }
+    if (!checkCurrent(job)) return;
+    const QPointer<NetworkBroker> alive(this);
     if (addresses.isEmpty()) { finish(job, tr("VLC cannot connect to the add-on service.")); return; }
     for (const auto& address : addresses)
         if (!publicAddress(address)) { finish(job, tr("VLC does not have permission to use a private network address.")); return; }
@@ -295,6 +294,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
             if (job->url.port(443) != 443) origin.setPort(job->url.port());
             if (exactHttpsOrigin(binding.value(QStringLiteral("origin")).toString()) != exactHttpsOrigin(origin.toString())) continue;
             const auto secret = job->credential ? job->credential(credentialField) : QByteArray{};
+            if (!alive || !checkCurrent(job)) return;
             const auto header = binding.value(QStringLiteral("header")).toString().toUtf8();
             static const QRegularExpression headerPattern(QStringLiteral("^[A-Za-z][A-Za-z0-9-]{0,63}$"));
             if (secret.isEmpty() || secret.size() > 4096 || secret.contains('\r') || secret.contains('\n')
@@ -325,6 +325,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
         return;
     }
     const bool post = job->request.value(QStringLiteral("method")).toString(QStringLiteral("GET")) == QLatin1String("POST");
+    if (!checkCurrent(job)) return;
     job->reply = post ? m_network.post(request, body) : m_network.get(request);
     job->reply->setReadBufferSize(qMin<qint64>(job->limit + 1, 64 * 1024));
     connect(job->reply, &QNetworkReply::readyRead, this, [this, job] {
@@ -361,7 +362,7 @@ void NetworkBroker::responseHeaders(const std::shared_ptr<Job>& job)
 bool NetworkBroker::readResponse(const std::shared_ptr<Job>& job)
 {
     if (!job->reply || !m_jobs.contains(job->id)) return false;
-    if (job->current && !job->current()) { finish(job, tr("The add-on release, account, or settings changed.")); return false; }
+    if (!checkCurrent(job)) return false;
     const auto reply = job->reply;
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     responseHeaders(job);
@@ -393,12 +394,21 @@ void NetworkBroker::finish(const std::shared_ptr<Job>& job, const QString& error
     if (job->paceTimer) { job->paceTimer->stop(); job->paceTimer->deleteLater(); }
     if (job->reply) { disconnect(job->reply, nullptr, this, nullptr); job->reply->abort(); job->reply->deleteLater(); }
     job->response.error = error;
-    if (job->callback && job->current && !job->current()) {
+    if (job->callback && !guardCurrent(job->current)) {
         job->response.body.clear();
         job->response.error = tr("The add-on release, account, or settings changed.");
     }
     const auto callback = std::move(job->callback);
     if (callback) callback(job->response);
+}
+bool NetworkBroker::checkCurrent(const std::shared_ptr<Job>& job)
+{
+    if (!m_jobs.contains(job->id)) return false;
+    const QPointer<NetworkBroker> alive(this);
+    const bool current = guardCurrent(job->current);
+    if (!alive || !m_jobs.contains(job->id)) return false;
+    if (!current) { finish(job, tr("The add-on release, account, or settings changed.")); return false; }
+    return true;
 }
 void NetworkBroker::cancel(quint64 id)
 {

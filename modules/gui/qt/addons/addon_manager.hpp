@@ -78,6 +78,9 @@ public:
     Q_INVOKABLE QVariantList retainedGenerations(const QString& packageId) const;
     Q_INVOKABLE bool uninstall(const QString& packageId, bool removeData);
     QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context);
+    // C++ only. Native owners supply a memory-only request guard.
+    QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context,
+                   NetworkBroker::RequestGuard);
     void cancel(const QString& invocation);
     quint64 fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
     quint64 fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);

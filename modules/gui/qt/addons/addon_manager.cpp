@@ -916,6 +916,21 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
 }
 QString AddonManager::invoke(const QString& contributionId, const QString& operation, const QVariantMap& context)
 {
+    return invoke(contributionId, operation, context, {});
+}
+QString AddonManager::invoke(const QString& contributionId, const QString& operation, const QVariantMap& context,
+                            NetworkBroker::RequestGuard current)
+{
+    const QPointer<AddonManager> alive(this);
+    const bool permitted = NetworkBroker::guardCurrent(current);
+    if (!alive) return {};
+    if (!permitted) {
+        const auto request = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QTimer::singleShot(0, this, [this, request, contributionId] {
+            emit operationFinished(request, contributionId, QStringLiteral("denied"), {}, tr("The add-on request is no longer available."));
+        });
+        return request;
+    }
     const auto packageId = packagePart(contributionId); InstalledPackage package;
     if (m_retiring || m_withdrawingPackages.contains(packageId)) return {};
     if (!m_store.installed(packageId, &package) || !package.enabled || !configured(package)) {
@@ -930,10 +945,11 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
     projected.insert("identity", permittedIdentity);
     // Local paths and consumer state never enter the portable provider projection.
     for (const auto& name : {QStringLiteral("url"), QStringLiteral("targets"), QStringLiteral("existingFields"), QStringLiteral("protectedFields"), QStringLiteral("fieldRevisions")}) projected.remove(name);
-    auto* instance = worker(package);
-    if (!instance) return {};
+    const QPointer<AddonWorker> instance = worker(package);
+    if (!alive || !instance) return {};
     instance->setHostCapabilities(QJsonObject::fromVariantMap(capabilities()));
-    const auto request = instance->invoke(localPart(contributionId), operation, projected);
+    const auto request = instance->invoke(localPart(contributionId), operation, projected, std::move(current));
+    if (!alive || !instance) return {};
     m_invocationPackages.insert(request, packageId); m_invocationContributions.insert(request, contributionId);
     return request;
 }
