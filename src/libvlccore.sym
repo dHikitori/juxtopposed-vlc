@@ -724,6 +724,7 @@ vlc_metadata_backend_New
 vlc_metadata_backend_Hold
 vlc_metadata_backend_Release
 vlc_metadata_backend_Close
+vlc_metadata_backend_CancelAutomatic
 vlc_metadata_backend_Suspend
 vlc_metadata_backend_Resume
 vlc_metadata_backend_IsReady
@@ -732,6 +733,7 @@ vlc_metadata_job_New
 vlc_metadata_job_Hold
 vlc_metadata_job_Release
 vlc_metadata_job_Start
+vlc_metadata_job_StartLocal
 vlc_metadata_job_Cancel
 vlc_metadata_job_IsPending
 vlc_metadata_job_GetRequest

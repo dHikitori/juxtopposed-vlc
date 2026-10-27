@@ -76,6 +76,15 @@ VLC_API void vlc_metadata_backend_Release(vlc_metadata_backend_t *);
  */
 VLC_API void vlc_metadata_backend_Close(vlc_metadata_backend_t *);
 VLC_API bool vlc_metadata_backend_IsClosed(vlc_metadata_backend_t *);
+/** Cancel the automatic jobs present at admission. Manual jobs stay active.
+ * Hold the bounded job set under the backend lock, then cancel outside that
+ * lock. Return the size of that set. The native host must first withdraw its
+ * automatic-network consent. Every new host commit anchor must read that
+ * consent after StartLocal, so it cannot miss a concurrent withdrawal.
+ * This function does not grant or restore network consent.
+ */
+VLC_API size_t vlc_metadata_backend_CancelAutomatic(vlc_metadata_backend_t *);
+
 /** Suspend dispatch before an ownership transition. Refuse a closed backend
  * or a backend with active dispatched work. An already suspended backend can
  * retain another suspension. Pair each successful call with Resume.
@@ -97,6 +106,18 @@ VLC_API void vlc_metadata_job_Release(vlc_metadata_job_t *);
  * error after acceptance causes an on_ended error.
  */
 VLC_API int vlc_metadata_job_Start(vlc_metadata_job_t *);
+/** Start a host-native transaction anchor without provider dispatch. Capture
+ * the target through New before the first local stage. This anchor uses the
+ * same retained-job limit and cancellation rules as Start. Refuse a suspended
+ * or closed backend. Resume never dispatches the anchor to a provider.
+ *
+ * Only trusted native code can complete this anchor from its staged result.
+ * Apply still validates the original target, URI, policy, and field tokens.
+ * A cancelled anchor cannot acquire a new result or commit a field patch.
+ * This operation is not part of the worker ABI.
+ */
+VLC_API int vlc_metadata_job_StartLocal(vlc_metadata_job_t *);
+
 /** Idle cancellation prevents Start and adds no callback. A completed result
  * keeps its status, but Cancel still prevents a later Apply. Return true only
  * when this call wins an idle or pending cancellation.

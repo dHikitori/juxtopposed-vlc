@@ -421,25 +421,43 @@ void vlc_metadata_backend_Resume(vlc_metadata_backend_t *backend)
     for (size_t i = 0; i < count; ++i) { dispatch_if_ready(pending[i]); vlc_metadata_job_Release(pending[i]); }
     vlc_metadata_backend_Release(backend);
 }
-int vlc_metadata_job_Start(vlc_metadata_job_t *job)
+static int start_job(vlc_metadata_job_t *job, bool local)
 {
     vlc_metadata_job_Hold(job);
     vlc_metadata_backend_t *backend = job->backend;
     vlc_mutex_lock(&backend->lock);
-    if (backend->closed || job->commit_cancelled || job->started || backend->active >= MAX_ACTIVE) {
-        const int error = backend->closed || job->commit_cancelled ? -EINTR : VLC_EGENERIC;
+    if (backend->closed || job->commit_cancelled || job->started || backend->active >= MAX_ACTIVE
+        || (local && backend->suspensions != 0)) {
+        const int error = backend->closed || job->commit_cancelled ? -EINTR
+            : local && backend->suspensions != 0 ? -EAGAIN : VLC_EGENERIC;
         vlc_mutex_unlock(&backend->lock); vlc_metadata_job_Release(job); return error;
     }
     job->started = true;
+    job->dispatched = local;
     job->next = backend->head;
     if (backend->head != NULL) backend->head->previous = job;
     backend->head = job;
     ++backend->active;
     vlc_metadata_job_Hold(job); // active-list reference
     vlc_mutex_unlock(&backend->lock);
-    dispatch_if_ready(job);
+    if (!local) dispatch_if_ready(job);
     vlc_metadata_job_Release(job);
     return VLC_SUCCESS;
+}
+int vlc_metadata_job_Start(vlc_metadata_job_t *job)
+{ return start_job(job, false); }
+int vlc_metadata_job_StartLocal(vlc_metadata_job_t *job)
+{ return start_job(job, true); }
+size_t vlc_metadata_backend_CancelAutomatic(vlc_metadata_backend_t *backend)
+{
+    vlc_metadata_backend_Hold(backend);
+    vlc_metadata_job_t *pending[MAX_ACTIVE]; size_t count = 0;
+    vlc_mutex_lock(&backend->lock);
+    for (vlc_metadata_job_t *job = backend->head; job != NULL; job = job->next)
+        if (job->request.flags & VLC_METADATA_REQUEST_AUTOMATIC) pending[count++] = vlc_metadata_job_Hold(job);
+    vlc_mutex_unlock(&backend->lock);
+    for (size_t i = 0; i < count; ++i) { vlc_metadata_job_Cancel(pending[i]); vlc_metadata_job_Release(pending[i]); }
+    vlc_metadata_backend_Release(backend); return count;
 }
 void vlc_metadata_backend_Close(vlc_metadata_backend_t *backend)
 {
