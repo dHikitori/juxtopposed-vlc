@@ -168,7 +168,7 @@ QVariantMap AddonManager::capabilities() const
         {"safeMode", safeMode()}, {"coreOperations", operations}, {"networkHttpAvailable", QSslSocket::supportsSsl()},
         {"mediaStreamAvailable", false},
         {"privateStorageAvailable", all({QStringLiteral("storage.get"), QStringLiteral("storage.set"), QStringLiteral("storage.remove")})},
-        {"webSocketAvailable", all({QStringLiteral("network.websocket.open"), QStringLiteral("network.websocket.send"), QStringLiteral("network.websocket.close")})},
+        {"webSocketAvailable", all({QStringLiteral("network.websocket.open"), QStringLiteral("network.websocket.send"), QStringLiteral("network.websocket.receive"), QStringLiteral("network.websocket.close")})},
         {"media", media}};
 }
 void AddonManager::setMediaCapabilitiesSource(QObject* source)

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.org/addons/session-requests-v1.schema.json",
+  "title": "Hakone session host calls",
+  "$comment": "The host also checks current authority, native stamps, canonical origins, byte limits, and base64.",
+  "type": "object",
+  "required": ["type", "id", "invocation", "operation", "request"],
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "host-call" },
+    "id": { "$ref": "#/$defs/id" },
+    "invocation": { "$ref": "#/$defs/id" },
+    "operation": { "type": "string" },
+    "request": { "type": "object" }
+  },
+  "oneOf": [
+    { "properties": {
+      "operation": { "enum": ["network.websocket.open", "network.websocket.receive", "network.websocket.close", "playback.observe", "session.renew", "session.end"] },
+      "request": { "$ref": "#/$defs/sessionRequest" }
+    } },
+    { "properties": {
+      "operation": { "const": "network.websocket.send" },
+      "request": {
+        "type": "object", "required": ["session", "kind", "data"], "additionalProperties": false,
+        "properties": { "session": { "$ref": "#/$defs/session" }, "kind": { "enum": ["text", "binary"] }, "data": { "type": "string", "maxLength": 65536 } }
+      }
+    } },
+    { "properties": {
+      "operation": { "const": "playback.command" },
+      "request": {
+        "type": "object", "required": ["session", "operation", "commandId", "sequence", "mediaEpoch", "expectedRevision", "parameters"],
+        "additionalProperties": false,
+        "properties": {
+          "session": { "$ref": "#/$defs/session" }, "operation": { "enum": ["play", "pause", "seek", "setRate"] },
+          "commandId": { "$ref": "#/$defs/id" }, "sequence": { "$ref": "#/$defs/positiveInteger" },
+          "mediaEpoch": { "type": "string", "minLength": 1, "maxLength": 128 }, "expectedRevision": { "$ref": "#/$defs/integer" },
+          "atUs": { "$ref": "#/$defs/integer" }, "parameters": { "type": "object" }
+        },
+        "oneOf": [
+          { "properties": { "operation": { "enum": ["play", "pause"] }, "parameters": { "type": "object", "maxProperties": 0 } } },
+          { "properties": { "operation": { "const": "seek" }, "parameters": { "type": "object", "required": ["positionUs"], "additionalProperties": false, "properties": { "positionUs": { "$ref": "#/$defs/integer" } } } } },
+          { "properties": { "operation": { "const": "setRate" }, "parameters": { "type": "object", "required": ["rate", "durationMs"], "additionalProperties": false, "properties": { "rate": { "type": "number", "exclusiveMinimum": 0 }, "durationMs": { "type": "integer", "minimum": 1, "maximum": 5000 } } } } }
+        ]
+      }
+    } }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$" },
+    "session": { "type": "string", "pattern": "^hakone-session:[0-9a-f]{32}$" },
+    "sessionRequest": { "type": "object", "required": ["session"], "additionalProperties": false, "properties": { "session": { "$ref": "#/$defs/session" } } },
+    "integer": { "oneOf": [{ "type": "integer", "minimum": 0, "maximum": 9007199254740991 }, { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$" }] },
+    "positiveInteger": { "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" }] },
+    "continuationResult": { "type": "object", "required": ["continue"], "additionalProperties": false, "properties": { "continue": { "type": "boolean" } } }
+  }
+}

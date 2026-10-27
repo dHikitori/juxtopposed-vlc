@@ -409,6 +409,8 @@ private slots:
         QVERIFY(!manager.capabilities().value("webSocketAvailable").toBool());
         QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("network.websocket.send"), lifetime.get(), handler));
         QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("network.websocket.close"), lifetime.get(), handler));
+        QVERIFY(!manager.capabilities().value("webSocketAvailable").toBool());
+        QVERIFY(manager.hostServices()->registerOperation(QStringLiteral("network.websocket.receive"), lifetime.get(), handler));
         QVERIFY(manager.capabilities().value("privateStorageAvailable").toBool());
         QVERIFY(manager.capabilities().value("webSocketAvailable").toBool());
         lifetime.reset(); QVERIFY(!manager.capabilities().value("webSocketAvailable").toBool());

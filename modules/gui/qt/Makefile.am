@@ -198,6 +198,15 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_theme_service.hpp \
 	addons/addon_sessions.cpp \
 	addons/addon_sessions.hpp \
+	addons/addon_session_player.hpp \
+	addons/addon_session_websocket.cpp \
+	addons/addon_session_websocket.hpp \
+	addons/addon_session_host.cpp \
+	addons/addon_session_host.hpp \
+	addons/addon_session_controller.cpp \
+	addons/addon_session_controller.hpp \
+	addons/addon_native_session_player.cpp \
+	addons/addon_native_session_player.hpp \
 	addons/addon_audio_analysis.cpp \
 	addons/addon_audio_analysis.hpp \
 	addons/addon_visual_scene.cpp \
@@ -244,6 +253,7 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_native_library_targets.moc.cpp \
 	addons/addon_theme_service.moc.cpp \
 	addons/addon_sessions.moc.cpp \
+	addons/addon_session_host.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
 	addons/addon_visualizer_catalog.moc.cpp \
 	addons/addon_visualizer_resources.moc.cpp \
@@ -3464,6 +3474,16 @@ EXTRA_DIST += tests/native-authority/CMakeLists.txt
 EXTRA_DIST += tests/store-authority/CMakeLists.txt
 
 EXTRA_DIST += tests/addon_native_artwork_test_owner.hpp
+
+EXTRA_DIST += \
+	tests/session-runtime/CMakeLists.txt \
+	tests/session-runtime/native_session_fixture.c \
+	tests/session-runtime/native_session_fixture.h \
+	tests/session-runtime/native_fixture_baseline.c \
+	tests/session-runtime/session_test_relay.hpp \
+	tests/test_addon_session_host.cpp \
+	tests/test_addon_session_websocket.cpp \
+	tests/test_addon_native_session_player.cpp
 
 EXTRA_DIST += tests/test_addon_git_objects.cpp tests/fixtures/addon-git-http-fixture.py
 

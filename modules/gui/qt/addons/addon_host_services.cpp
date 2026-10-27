@@ -36,7 +36,8 @@ QString AddonHostServices::capability(const QString& operation)
         {"library.query", "library.read"}, {"queue.snapshot", "queue.read"}, {"queue.apply", "queue.modify"},
         {"playback.observe", "playback.observe"}, {"playback.command", "playback.control"},
         {"session.renew", "playback.observe"}, {"session.end", "playback.observe"},
-        {"network.websocket.open", "network.websocket"}, {"network.websocket.send", "network.websocket"}, {"network.websocket.close", "network.websocket"},
+        {"network.websocket.open", "network.websocket"}, {"network.websocket.send", "network.websocket"},
+        {"network.websocket.receive", "network.websocket"}, {"network.websocket.close", "network.websocket"},
         {"ui.state.patch", "ui.contribute"}, {"ui.navigate", "ui.contribute"}, {"ui.modal.open", "ui.contribute"}, {"ui.modal.close", "ui.contribute"},
         {"timer.schedule", "session.background"}, {"timer.cancel", "session.background"}
     };
