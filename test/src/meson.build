@@ -945,6 +945,14 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_misc_metadata_native_provider',
+    'sources': files('misc/metadata_native_provider.c', '../../src/preparser/metadata_native_provider.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_player_addon_session_state',
     'sources': files('player/addon_session_state.c', '../../src/player/addon_session_state.c'),
     'include_directories': include_directories('../../src'),

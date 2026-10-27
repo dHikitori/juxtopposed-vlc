@@ -43,6 +43,7 @@ check_PROGRAMS = \
     test_src_misc_metadata_requests \
     test_src_misc_metadata_pipeline \
     test_src_misc_metadata_fetcher \
+    test_src_misc_metadata_native_provider \
     test_src_player_addon_session_state \
     test_src_misc_addon_medialibrary \
     test_src_input_policy \
@@ -1055,6 +1056,10 @@ test_src_misc_metadata_pipeline_LDADD = $(LIBVLCCORE)
 test_src_misc_metadata_fetcher_SOURCES = src/misc/metadata_fetcher.c ../src/preparser/metadata_request_guard.c
 test_src_misc_metadata_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_fetcher_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_native_provider_SOURCES = src/misc/metadata_native_provider.c ../src/preparser/metadata_native_provider.c
+test_src_misc_metadata_native_provider_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_native_provider_LDADD = $(LIBVLCCORE) $(LIBVLC)
 
 test_src_player_addon_session_state_SOURCES = src/player/addon_session_state.c ../src/player/addon_session_state.c
 test_src_player_addon_session_state_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src

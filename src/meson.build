@@ -150,6 +150,8 @@ libvlccore_sources_base = files(
     'preparser/ipc.c',
     'preparser/internal.c',
     'preparser/metadata_backend.c',
+    'preparser/metadata_native_provider.c',
+    'preparser/metadata_native_provider.h',
     'preparser/metadata_owner.c',
     'preparser/metadata_owner.h',
     'preparser/metadata_pipeline.c',
