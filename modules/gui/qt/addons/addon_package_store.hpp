@@ -3,6 +3,7 @@
 #define VLC_QT_ADDON_PACKAGE_STORE_HPP
 
 #include "addon_manifest.hpp"
+#include "addon_store_authority.hpp"
 #include <QJsonArray>
 #include <QVariantMap>
 #include <functional>
@@ -44,6 +45,7 @@ class PackageStore
 public:
     explicit PackageStore(QString storageDirectory);
     QString storageDirectory() const;
+    StoreAuthorityToken authorityToken() const noexcept { return m_authority.capture(); }
     static bool inspectDirectory(const QString&, const ReleaseIdentity&, PackageCandidate*, QString* error = nullptr);
     // No shell or checkout. Local fixtures require explicit developerLocalSource.
     static bool fetchGitTag(const QString& source, const QString& tag, PackageCandidate*,
@@ -76,8 +78,9 @@ public:
 
 private:
     QString m_root;
+    StoreAuthority m_authority;
     bool loadState(const QString& id, QJsonObject*, QString* error) const;
-    bool saveState(const QString& id, const QJsonObject&, QString* error) const;
+    bool saveState(const QString& id, const QJsonObject&, QString* error, bool authority = true) const;
     QString releaseDirectory(const QString& id, const QString& digest) const;
     bool validateSnapshot(const QString& id, const QJsonObject&, QString* error) const;
     QString privateStorageDirectory(const QString& id) const;

@@ -23,6 +23,7 @@
 #include <QUuid>
 #include <algorithm>
 #include <functional>
+#include <optional>
 #ifdef Q_OS_UNIX
 #include <signal.h>
 #include <unistd.h>
@@ -312,7 +313,7 @@ bool validateCandidate(const PackageCandidate& candidate, QString* error)
 }
 } // namespace
 
-PackageStore::PackageStore(QString root) : m_root(QDir::cleanPath(std::move(root))) {}
+PackageStore::PackageStore(QString root) : m_root(QDir::cleanPath(std::move(root))), m_authority(m_root) {}
 QString PackageStore::storageDirectory() const { return m_root; }
 QString PackageStore::releaseDirectory(const QString& id, const QString& digest) const
 {
@@ -501,7 +502,7 @@ bool PackageStore::loadState(const QString& id, QJsonObject* output, QString* er
     *output = state;
     return true;
 }
-bool PackageStore::saveState(const QString& id, const QJsonObject& state, QString* error) const
+bool PackageStore::saveState(const QString& id, const QJsonObject& state, QString* error, bool authority) const
 {
     if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
     const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
@@ -509,6 +510,7 @@ bool PackageStore::saveState(const QString& id, const QJsonObject& state, QStrin
     if (QJsonDocument(state).toJson(QJsonDocument::Compact).size() > 4 * 1024 * 1024)
         return fail(error, QStringLiteral("The retained package state is too large."));
     const auto path = QDir(folder).filePath(QStringLiteral("state.json"));
+    auto mutation = authority ? std::optional<StoreAuthorityMutation>(m_authority.mutation()) : std::nullopt;
     QJsonObject previous;
     if (QFileInfo::exists(path) && readJson(path, &previous, nullptr)
         && previous.value("id") == id && previous.value("current").isObject()
@@ -613,7 +615,7 @@ bool PackageStore::privateStorage(const PrivateStorageContext& context, const QS
         if (!pending() || !beginCommit || !beginCommit()) return fail(error, QStringLiteral("The private storage request was canceled."));
         current.insert("storage", QJsonObject{{"version", data.value("schemaVersion")}, {"digest", hash}, {"revision", revision + 1}});
         state.insert("current", current);
-        if (!saveState(id, state, error)) return false;
+        if (!saveState(id, state, error, false)) return false;
         result.insert(QStringLiteral("revision"), revision + 1);
     } else if (!pending()) return fail(error, QStringLiteral("The private storage request was canceled."));
     result.insert(QStringLiteral("usedBytes"), double(used));
@@ -839,6 +841,7 @@ bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
         }
     }
     const QString tombstone = folder + QStringLiteral(".removing-") + QUuid::createUuid().toString(QUuid::Id128);
+    const auto mutation = m_authority.mutation();
     if (!QDir().rename(folder, tombstone)) return fail(error, QStringLiteral("The app cannot withdraw the installed package."));
     // The manager withdraws active registrations and workers before this call.
     if (!QDir(tombstone).removeRecursively())
@@ -1014,6 +1017,7 @@ bool PackageStore::setSafeMode(bool enabled, QString* error)
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
     QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    const auto mutation = m_authority.mutation();
     return writeJson(QDir(m_root).filePath(QStringLiteral("recovery.json")), QJsonObject{{"safeMode", enabled}}, error);
 }
 
@@ -1064,6 +1068,7 @@ bool PackageStore::setDistributionSuppressed(const QString& id, bool suppressed,
     auto removed = policy.value("removed").toObject();
     if (suppressed) removed.insert(id, true); else removed.remove(id);
     policy.insert("formatVersion", 1); policy.insert("removed", removed);
+    const auto mutation = m_authority.mutation();
     return writeJson(path, policy, error);
 }
 } // namespace vlc::addons

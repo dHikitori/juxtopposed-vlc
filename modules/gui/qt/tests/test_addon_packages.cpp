@@ -7,6 +7,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QTemporaryDir>
+#include <QLockFile>
 #include "addons/addon_manifest.hpp"
 #include "addons/addon_package_store.hpp"
 #include "addons/addon_manager.hpp"
@@ -84,6 +85,40 @@ class TestAddonPackages : public QObject
         return process.waitForFinished(10000) && process.exitCode() == 0;
     }
 private slots:
+    void storeAuthorityFollowsCommittedStateAcrossOwners()
+    {
+        QTemporaryDir source, storage, other; QString error;
+        QVERIFY(populate(source.path(), manifest())); PackageCandidate first, next;
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &first, &error));
+        PackageStore store(storage.path()), peer(storage.path());
+        auto token = store.authorityToken();
+        const auto unrelated = captureStoreAuthority(other.path());
+        QVERIFY(token.current()); QVERIFY(!StoreAuthorityToken{}.current());
+        QVERIFY(store.install(first, {}, &error)); QVERIFY(!token.current()); QVERIFY(unrelated.current());
+        token = captureStoreAuthority(storage.path() + QStringLiteral("/./unused/.."));
+        QVERIFY(peer.setEnabled(first.manifest.id, true)); QVERIFY(!token.current());
+        token = captureStoreAuthority(storage.path());
+        {
+            QLockFile lock(QDir(storage.path()).filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0));
+            QVERIFY(!peer.setEnabled(first.manifest.id, false)); QVERIFY(token.current());
+        }
+        QJsonObject values; quint64 revision = 0; QVERIFY(store.settings(first.manifest.id, &values, &revision));
+        QVERIFY(!store.saveSettings(first.manifest.id, {{"language", "en"}}, revision + 1)); QVERIFY(token.current());
+        QVERIFY(store.saveSettings(first.manifest.id, {{"language", "en"}}, revision)); QVERIFY(!token.current());
+        QVERIFY(populate(source.path(), manifest(QStringLiteral("1.1.0"))));
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(QStringLiteral("1.1.0"), QLatin1Char('b')), &next, &error));
+        token = captureStoreAuthority(storage.path()); QVERIFY(store.install(next, {}, &error)); QVERIFY(!token.current());
+        token = captureStoreAuthority(storage.path()); QVERIFY(peer.rollback(first.manifest.id)); QVERIFY(!token.current());
+        token = captureStoreAuthority(storage.path()); QVERIFY(store.setSafeMode(true)); QVERIFY(!token.current());
+        token = captureStoreAuthority(storage.path()); QVERIFY(peer.setSafeMode(false)); QVERIFY(!token.current());
+        token = captureStoreAuthority(storage.path()); QVERIFY(store.setDistributionSuppressed(first.manifest.id, true)); QVERIFY(!token.current());
+        token = captureStoreAuthority(storage.path()); QVERIFY(peer.setDistributionSuppressed(first.manifest.id, false)); QVERIFY(!token.current());
+        const auto path = QDir(storage.path()).filePath(QStringLiteral("packages/") + first.manifest.id + QStringLiteral("/state.json"));
+        QVERIFY(write(path, "broken")); token = captureStoreAuthority(storage.path());
+        QVERIFY(peer.recover(first.manifest.id, &error)); QVERIFY(!token.current());
+        token = captureStoreAuthority(storage.path()); QVERIFY(store.uninstall(first.manifest.id, true)); QVERIFY(!token.current());
+        QVERIFY(unrelated.current());
+    }
     void repositoryUpdateSelectsACompatibleTagWithoutActivation()
     {
         QTemporaryDir repository, storage; QString error;

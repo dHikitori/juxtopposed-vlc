@@ -12,6 +12,8 @@ addon_host_sources = files(
     'addons/addon_manifest.hpp',
     'addons/addon_package_store.cpp',
     'addons/addon_package_store.hpp',
+    'addons/addon_store_authority.cpp',
+    'addons/addon_store_authority.hpp',
     'addons/addon_credentials.cpp',
     'addons/addon_credentials.hpp',
     'addons/addon_manager.cpp',
@@ -1774,7 +1776,7 @@ if qt6_dep.found()
 
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
-        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'stream_manifest']
+        foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'stream_manifest', 'store_authority']
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,
                 'sources': files('tests/test_addon_' + addon_test + '.cpp'),

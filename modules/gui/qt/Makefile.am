@@ -118,6 +118,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_manifest.hpp \
 	addons/addon_package_store.cpp \
 	addons/addon_package_store.hpp \
+	addons/addon_store_authority.cpp \
+	addons/addon_store_authority.hpp \
 	addons/addon_credentials.cpp \
 	addons/addon_credentials.hpp \
 	addons/addon_manager.cpp \
@@ -2268,6 +2270,17 @@ test_qt_addon_stream_manifest_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldad
 test_qt_addon_stream_manifest_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_stream_manifest
 TESTS += test_qt_addon_stream_manifest
+
+test_qt_addon_store_authority_SOURCES = tests/test_addon_store_authority.cpp
+nodist_test_qt_addon_store_authority_SOURCES = tests/test_addon_store_authority.moc
+BUILT_SOURCES += tests/test_addon_store_authority.moc
+CLEANFILES += tests/test_addon_store_authority.moc
+test_qt_addon_store_authority_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_authority_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_authority_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_authority_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_authority
+TESTS += test_qt_addon_store_authority
 
 test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.cpp
 nodist_test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.moc
