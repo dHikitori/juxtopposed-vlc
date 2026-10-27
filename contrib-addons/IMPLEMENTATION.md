@@ -10,8 +10,8 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 | Area | Implementation and evidence |
 | --- | --- |
-| Portable worker | Pinned Wasmtime 50; no WASI imports; bounded memory, dispatch, messages, and fuel; process IPC; additional Linux process restrictions. All six current Linux Rust tests pass. The final encoded IPC limit includes number normalization, the envelope, and separators. |
-| Windows worker | Rust 1.97.0 built the Windows worker. All five runtime tests ran on Windows and passed. The real worker returned `auth_required` through IPC without a key. |
+| Portable worker | Pinned Wasmtime 50; no WASI imports; bounded memory, dispatch, messages, and fuel; process IPC; additional Linux process restrictions. All seven Linux Rust tests pass, including rejection of old guest imports and exports. The final encoded IPC limit includes number normalization, the envelope, and separators. |
+| Windows worker | The earlier worker built with Rust 1.97.0 and passed five Windows runtime cases plus missing-key IPC. The Hakone guest ABI still needs a fresh Windows build and run. |
 | TheSubtitleDB | Portable Rust/Wasm package; individual API-key settings; typed subtitle search; episode scope; language and page controls; asset resolution. Fourteen unit tests and three worker fixture tests pass. |
 | Real subtitle service | The native search and Save path returned four candidates and a 40,610-byte local subtitle through the host broker. The test used the supplied key in temporary session storage. No key entered source, saved settings, worker messages, or logs. |
 | Package host | Strict manifests; repository, tag, and content identity; isolated Git object fetch; immutable release snapshots; permission approval; enable, disable, update, and rollback. Native tests pass. |
@@ -20,11 +20,11 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Metadata coordinator | Ordered providers; partial field patches; provenance; strong identity checks; protected fields; bounded cache partitions; independent cancellation. Native tests pass. |
 | Episode consumer | Eleven real consumer parity cases pass. Host results retain their per-field source credit in a separate cache namespace. The old episode cache reader and local readers remain. |
 | Subtitle integration | Native OpenSubtitles and portable providers use one provider order. Host handles resolve through the normal Save path. The latest native suite passes 53 cases. |
-| Qt build and release | The normal Linux Qt module and compiled QML runner build pass with the current image, consent, resolver, and visualizer sources. The compiled runner passes 709 cases in 27 suites, with no failures or skips. The latest full supported-platform release checks remain open. |
+| Qt build and release | The previous Linux Qt module and compiled QML checkpoint passed 709 cases in 27 suites, with no failures or skips. A new full app build and compiled UI run are required after the Hakone contracts and remaining native integrations. Supported-platform release checks remain open. |
 | Settings and install UI | Host-rendered package approval; generated settings; secret keep, replace, and delete actions; tagged repository update review; provider order; subtitle preparation and cancellation. Required-key deletion saves correctly and revokes the key. Focused QML tests pass. |
 | Native metadata bridge | A Qt-free asynchronous bridge copies requests and native field patches. The original 14 symbols and explicit Apply have core exports. Apply compares field/identity/extra tokens, original URI, exact policy, cancellation, and owner state before writes. It fills missing values by default. Only native code can request replacement. All needed tokens are reserved together. Normal commit, limit, backend, and revision suites pass; focused sanitizer runs pass. Consumer mounts remain open. |
 | Native metadata lifetime | Each VLC instance has one metadata owner. Shutdown retires that owner before interface teardown. The request list cancels work by caller and keeps callback state until callbacks return. Idle cancellation prevents later dispatch. Normal owner and request-list suites pass, including real instance cleanup, owner races, and cancellation between list insertion and Start. The preparser mount remains open. |
-| Native metadata admission | A native gate can suspend new backend dispatch, cancel earlier direct work through its native interrupt, and resume only after that work ends. Six added owner groups cover queued and running work, shared-instance counts, interrupt acknowledgement, bounds, and stale leases. Normal backend, owner, request-list, and affected native suites pass; focused normal and ASAN/UBSAN runs pass. Direct fetcher, service, and preparser use of this gate remains open. |
+| Native metadata admission | A native gate can suspend new backend dispatch, cancel earlier direct work through its native interrupt, and resume only after that work ends. Six added owner groups cover queued and running work, shared-instance counts, interrupt acknowledgement, bounds, and stale leases. Normal backend, owner, request-list, and affected native suites pass; focused normal and ASAN/UBSAN runs pass. The fetcher stage now passes 13 normal and sanitizer groups, including the real native executor transition. Service and preparser request mounts remain open. |
 | Native library transactions | The approved dependency patch adds fixed playlist snapshots, one atomic append, and exact source-record preparation. All 23 transaction/preparation groups and 13 existing playlist cases pass. The patch applies exactly after the previous six patches. The normal VLC module and C wrapper tests pass. The mounted picker/store passes all 21 cases through the real app object closure, including discovery append and active shutdown. The final service and QML suites each pass 11 cases. Source playback remains gated on its resolver and transport. |
 | Native library work lifetime | Native work acquires a pending lease before submission and calls Begin on its worker. Shutdown refuses later Begin calls and waits only for running native calls. Pending leases can outlive the library and need no Qt completion. Four real-instance groups pass. All MediaLib task overloads now use this lease. The actual app dispatcher test proves that Core cleanup waits for active work, rejects queued work, and finishes without Qt completion delivery. |
 | Session authority | Exclusive control leases; typed observations; media and revision checks; duplicate rejection; deadlines; local user priority; owned rate restoration. Nine focused cases pass. Native player and relay integration remain open. |
@@ -51,6 +51,17 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Provider text | Five core UI consumers use plain text for provider titles, artists, track names, filenames, and tooltips. All 13 load-probe cases and 249 existing affected UI cases pass. The normal app build and compiled UI run also pass. |
 | Native artwork record | A private approval binds the local URI, artwork token, source URI, and held policy. Seven record groups and seven metadata-transfer groups pass. Apply preallocates the proof and publishes it with the reserved field token. Preparation-time raw/approved edits refuse all writes. The transfer and token-limit suites also pass ASAN/UBSAN. All four record/URI exports are present. All nine actual Qt consumer cases and all 14 service cases pass, including the real asset-cache/service/Apply/getter chain. The native fetcher fixture passes normally and with sanitizers. The owned preparser/provider cutover remains open. |
 | Native artwork materialization | A host-only adapter reads the original native artwork snapshot, checks consent and item policy before I/O, and produces a local approved file. Ten native adapter cases and all 10 actual Qt consumer cases pass. The shared decoder strips metadata for native artwork and rejects compressed metadata for add-on images. Complete native format preservation and owned-pipeline activation remain open. |
+
+## Latest verified native checkpoint
+
+- The public add-on contracts use Hakone names. All nine Wasm modules have the new ABI. SDK/provider tests pass 49 cases; the worker passes seven; worker fixtures pass 18; the fresh-helper runtime suite passes 16 with no skips.
+- Renamed schema, UI, package, theme, discovery, and source-reference checks pass 117 host cases and 32 source QML cases.
+- The normal Core build passes 14 source, policy, artwork, metadata, and private player-state groups. The actual native player fixture passes 12 scenarios. Full shared-session transport and host consent integration remain open.
+- Fresh native adapters pass: resolver 28, consent 21, queue store seven, library store 19, metadata service 14, native artwork 10, and manifest conversion 22. The current library result supersedes the failed run that loaded the old dependency.
+- The native media library patch recreates all eight source files without fuzz. Its transaction group and 13 existing playlist regressions pass with the rebuilt dependency.
+- The isolated contained transport fixture passes six native cases, including actual WAV and HLS AAC decode, replay, authority refusal, and shutdown with its network loop blocked. The production mount still needs the application shutdown contract.
+
+The complete local Parse transaction, full native artwork format preservation, preparser request mounts, normal app rebuild, and supported-platform checks remain open. Current work on those gates is not part of the verified checkpoint above.
 
 The standalone test build is in `modules/gui/qt/addons/CMakeLists.txt`. Set `VLC_BUILD_DIR` to add tests that need the native core library.
 
@@ -134,7 +145,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Complete discovery subscriptions and the native lazy playback route. Enforce stream policy through redirects, nested manifests, segments, and keys before playback.
 - Keep the verified stable queue reference, native playlist CAS, and library shutdown boundary. Complete their use with contained playback and subscription updates.
 - Keep the verified visualizer worker, renderer, native clock, and window lifecycle boundaries. Repeat supported-platform app and graphics checks after the remaining integrations.
-- Connect session authority to the native player, host consent UI, and outbound WSS. Exercise two-player drift correction and competing local input.
+- Connect the verified native session authority to the Qt host, consent UI, and outbound WSS. Exercise two-player drift correction and the broad native player regression suites.
 - Complete host service adapters, author tooling, schemas, SDK text, and profile conformance tests.
 - Audit all new app English against the requested ASD-STE100 rules and technical terminology.
 - Retain the verified typed playlist recovery, target guards, and plain-text consumers. See [the review record](pending-implementation-review.md).
@@ -143,3 +154,14 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - Compare the completed implementation with every requirement in the architecture documents.
 
 Successful subtitle tests do not close the other gates. The full implementation remains active while these items are open.
+
+## Latest progress commits
+
+- `b8bb71e18d`: one public-address policy for add-on requests and contained streams.
+- `1c1d0f673b`: refuse scoped media in the external download helper.
+- `c82fe845e2`: Hakone public contracts, SDKs, guest ABI, schemas, and example package identities.
+- `498b9edce0`: native metadata transaction and fetcher stages.
+- `fae3662334`: native shared-session player authority and real input tests.
+- `8d291c7638`: Hakone source references in the retained native media library patch.
+- `780a643649`: owned bytes in strict string-builder manifest fixtures.
+- `1b6a4fea3c`: memory-only consent receipts and background source admission.
