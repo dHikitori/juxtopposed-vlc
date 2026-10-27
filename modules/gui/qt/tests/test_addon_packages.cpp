@@ -144,6 +144,28 @@ private slots:
         QVERIFY(afterDisable.ensureDistributionPackage(source.path(), id));
         QVERIFY(store.installed(id, &installed)); QVERIFY(!installed.identity.distributionSource); QVERIFY(!installed.enabled);
     }
+    void bundledArtworkPackagesHaveCompleteInventories()
+    {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        PackageStore store(storage.path());
+        for (const auto& name : {QStringLiteral("musicbrainz"), QStringLiteral("lastfm"),
+                QStringLiteral("french-tv"), QStringLiteral("google-images")}) {
+            const auto directory = QDir(QStringLiteral(VLC_ADDON_SOURCE_ROOT)).filePath(QStringLiteral("contrib-addons/examples/") + name);
+            const auto id = QStringLiteral("org.videolan.") + name;
+            Manifest manifest; QMap<QString, QByteArray> contents; QString error;
+            QVERIFY2(Manifest::loadDirectory(directory, &manifest, &contents, &error), qPrintable(error));
+            QCOMPARE(manifest.id, id);
+            QVERIFY(!contents.value(QStringLiteral("THIRD_PARTY_NOTICES.md")).isEmpty());
+            QVERIFY(contents.value(QStringLiteral("dist/addon.wasm")).startsWith(QByteArray::fromHex("0061736d01000000")));
+            QVERIFY(manager.ensureDistributionPackage(directory, id));
+            InstalledPackage installed; QVERIFY(store.installed(id, &installed));
+            QVERIFY(installed.enabled && installed.identity.distributionSource);
+            QCOMPARE(installed.digest, packageDigest(contents));
+            QVERIFY(manager.setEnabled(id, false));
+            QVERIFY(manager.ensureDistributionPackage(directory, id));
+            QVERIFY(store.installed(id, &installed)); QVERIFY(!installed.enabled);
+        }
+    }
     void settingsMigrationCommitsWithMatchingRollbackSnapshot()
     {
         QTemporaryDir source, storage; QString error;

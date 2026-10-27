@@ -19,6 +19,8 @@ Local filename readers, embedded tags, attachments, folder artwork, and local ca
 
 ## Host image adapter
 
+The app now installs MusicBrainz, Last.fm, French TV, and Google Images as separate packages, with each Wasm module, manifest, license, and notices. Startup seeds a missing distribution package and keeps an existing disabled or removed state. The package suite passes all 24 cases, including complete inventories and repeated startup. The configured install map contains all 20 required files. Distribution upgrades remain a separate open gate; existing core providers remain until their owned route passes preservation tests.
+
 `AddonArtworkAssets` accepts an image claim from an enabled, configured artwork provider. It uses that contribution's installed package, grant, release, account, and settings scope. It forces GET. It discards guest file names and request options.
 
 The host accepts a complete PNG, JPEG, or WebP image of at most 1 MiB. The decoded dimensions must not exceed 1024 by 1024 pixels. It rejects SVG, HTML, incomplete responses, and decode errors. It writes an atomic file in the host cache. The default cache limits are 8192 files and 128 MiB. A full cache stops new files. It does not remove selected files to create space.

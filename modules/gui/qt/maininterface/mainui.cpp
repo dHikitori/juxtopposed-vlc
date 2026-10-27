@@ -378,11 +378,15 @@ void MainUI::registerQMLTypes()
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
             addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
-            const auto installedReference = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference/tvmaze")) : QString();
+            const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
             free(sharedDirectory);
-            const auto buildReference = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("tvmaze"));
-            addonManager->ensureDistributionPackage(!installedReference.isEmpty() && QFileInfo::exists(installedReference) ? installedReference : buildReference,
-                QStringLiteral("org.videolan.tvmaze"));
+            for (const auto& name : {QStringLiteral("tvmaze"), QStringLiteral("musicbrainz"),
+                    QStringLiteral("lastfm"), QStringLiteral("french-tv"), QStringLiteral("google-images")}) {
+                const auto installedReference = installedRoot.isEmpty() ? QString() : QDir(installedRoot).filePath(name);
+                const auto buildReference = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(name);
+                addonManager->ensureDistributionPackage(!installedReference.isEmpty() && QFileInfo::exists(installedReference)
+                    ? installedReference : buildReference, QStringLiteral("org.videolan.") + name);
+            }
             metadataService = new AddonMetadataService(addonManager, this);
             metadataService->setAutomaticNetworkAllowed(var_InheritBool(m_intf, "metadata-network-access"));
             m_intf->p_mainPlayerController->setMetadataService(metadataService);

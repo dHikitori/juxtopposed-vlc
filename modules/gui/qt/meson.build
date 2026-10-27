@@ -1411,6 +1411,12 @@ if qt6_dep.found()
         install_data(meson.project_source_root() / 'contrib-addons/examples/tvmaze' / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/tvmaze' / fs.parent(addon_resource))
     endforeach
+    foreach artwork_provider : ['musicbrainz', 'lastfm', 'french-tv', 'google-images']
+        foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'THIRD_PARTY_NOTICES.md', 'dist/addon.wasm']
+            install_data(meson.project_source_root() / 'contrib-addons/examples' / artwork_provider / addon_resource,
+                install_dir: get_option('datadir') / 'vlc/addons/reference' / artwork_provider / fs.parent(addon_resource))
+        endforeach
+    endforeach
     modules_qrc = []
     foreach module : qml_modules
         #generates 'res.qrc', 'qmldir.qrc', 'qmldir',

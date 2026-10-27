@@ -2188,7 +2188,6 @@ test_qt_addon_ui_assets_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LD
 check_PROGRAMS += test_qt_addon_ui_assets
 TESTS += test_qt_addon_ui_assets
 
-
 test_qt_addon_metadata_service_SOURCES = tests/test_addon_metadata_service.cpp
 nodist_test_qt_addon_metadata_service_SOURCES = tests/test_addon_metadata_service.moc
 BUILT_SOURCES += tests/test_addon_metadata_service.moc
@@ -3093,9 +3092,27 @@ addon_tvmazedir = $(datadir)/vlc/addons/reference/tvmaze
 addon_tvmaze_DATA = $(top_srcdir)/contrib-addons/examples/tvmaze/addon.json $(top_srcdir)/contrib-addons/examples/tvmaze/LICENSE $(top_srcdir)/contrib-addons/examples/tvmaze/NOTICE.md
 addon_tvmaze_distdir = $(datadir)/vlc/addons/reference/tvmaze/dist
 addon_tvmaze_dist_DATA = $(top_srcdir)/contrib-addons/examples/tvmaze/dist/addon.wasm
+addon_musicbrainzdir = $(datadir)/vlc/addons/reference/musicbrainz
+addon_musicbrainz_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
+addon_musicbrainz_distdir = $(datadir)/vlc/addons/reference/musicbrainz/dist
+addon_musicbrainz_dist_DATA = $(top_srcdir)/contrib-addons/examples/musicbrainz/dist/addon.wasm
+addon_lastfmdir = $(datadir)/vlc/addons/reference/lastfm
+addon_lastfm_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/lastfm/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
+addon_lastfm_distdir = $(datadir)/vlc/addons/reference/lastfm/dist
+addon_lastfm_dist_DATA = $(top_srcdir)/contrib-addons/examples/lastfm/dist/addon.wasm
+addon_french_tvdir = $(datadir)/vlc/addons/reference/french-tv
+addon_french_tv_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/french-tv/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
+addon_french_tv_distdir = $(datadir)/vlc/addons/reference/french-tv/dist
+addon_french_tv_dist_DATA = $(top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm
+addon_google_imagesdir = $(datadir)/vlc/addons/reference/google-images
+addon_google_images_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/google-images/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
+addon_google_images_distdir = $(datadir)/vlc/addons/reference/google-images/dist
+addon_google_images_dist_DATA = $(top_srcdir)/contrib-addons/examples/google-images/dist/addon.wasm
 endif
 
 EXTRA_DIST += $(addon_reference_DATA) $(addon_reference_dist_DATA) $(addon_reference_settings_DATA) $(addon_reference_locales_DATA)
 EXTRA_DIST += $(addon_tvmaze_DATA) $(addon_tvmaze_dist_DATA)
+EXTRA_DIST += $(addon_musicbrainz_DATA) $(addon_musicbrainz_dist_DATA) $(addon_lastfm_DATA) $(addon_lastfm_dist_DATA)
+EXTRA_DIST += $(addon_french_tv_DATA) $(addon_french_tv_dist_DATA) $(addon_google_images_DATA) $(addon_google_images_dist_DATA)
 EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/test_addon_artwork_consumers.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp util/artwork_approval.hpp
 EXTRA_DIST += tests/build_addon_native_library_tests.py tests/test_addon_native_library_store.cpp
