@@ -203,6 +203,7 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_artwork_assets.hpp \
 	addons/addon_artwork_image.cpp \
 	addons/addon_artwork_image.hpp \
+	addons/addon_native_image_formats.hpp \
 	addons/addon_native_artwork_assets.cpp \
 	addons/addon_native_artwork_assets.hpp
 QT_ADDON_HOST_MOC = \
@@ -2487,7 +2488,7 @@ check_PROGRAMS += test_qt_addon_playable_gate
 TESTS += test_qt_addon_playable_gate
 
 
-test_qt_addon_artwork_image_SOURCES = tests/test_addon_artwork_image.cpp
+test_qt_addon_artwork_image_SOURCES = tests/test_addon_artwork_image.cpp tests/addon_artwork_test_images.hpp
 nodist_test_qt_addon_artwork_image_SOURCES = tests/test_addon_artwork_image.moc
 BUILT_SOURCES += tests/test_addon_artwork_image.moc
 CLEANFILES += tests/test_addon_artwork_image.moc
@@ -2498,7 +2499,7 @@ test_qt_addon_artwork_image_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFOR
 check_PROGRAMS += test_qt_addon_artwork_image
 TESTS += test_qt_addon_artwork_image
 
-test_qt_addon_native_artwork_assets_SOURCES = tests/test_addon_native_artwork_assets.cpp
+test_qt_addon_native_artwork_assets_SOURCES = tests/test_addon_native_artwork_assets.cpp tests/addon_artwork_test_images.hpp
 nodist_test_qt_addon_native_artwork_assets_SOURCES = tests/test_addon_native_artwork_assets.moc
 BUILT_SOURCES += tests/test_addon_native_artwork_assets.moc
 CLEANFILES += tests/test_addon_native_artwork_assets.moc

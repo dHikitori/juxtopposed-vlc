@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_artwork_image.hpp"
+#include "addon_native_image_formats.hpp"
 #include <QBuffer>
 #include <QImageReader>
+#include <QTransform>
 #include <QRegularExpression>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -54,9 +56,9 @@ bool png(const QByteArray& bytes, Profile profile, const Limits& limits, QByteAr
     }
     return ended;
 }
-bool jpeg(const QByteArray& bytes, Profile profile, const Limits& limits, QByteArray* clean)
+bool jpeg(const QByteArray& bytes, Profile profile, const Limits& limits, QByteArray* clean, int* orientation)
 {
-    qsizetype at = 2; qint64 metadata = 0; bool entropy = false, scan = false, size = false; int scans = 0;
+    qsizetype at = 2; qint64 metadata = 0; bool entropy = false, scan = false, size = false, exif = false; int scans = 0;
     clean->append(bytes.constData(), 2);
     while (at < bytes.size()) {
         if (entropy) {
@@ -84,6 +86,12 @@ bool jpeg(const QByteArray& bytes, Profile profile, const Limits& limits, QByteA
         const auto length = qFromBigEndian<quint16>(bytes.constData() + at);
         if (length < 2 || length > bytes.size() - at) return false;
         const bool auxiliary = (marker >= 0xe0 && marker <= 0xef) || marker == 0xfe;
+        if (profile == Profile::NativeArtwork && marker == 0xe1 && !exif
+         && bytes.mid(at + 2, 6) == QByteArray("Exif\0\0", 6)) {
+            *orientation = native_image::exifOrientation(bytes.mid(at + 2, length - 2)); exif = true;
+        }
+        const bool colorTransform = profile == Profile::NativeArtwork && marker == 0xee
+            && length == 14 && bytes.mid(at + 2, 5) == "Adobe";
         if (auxiliary && profile == Profile::StaticAddon && (metadata += length - 2) > metadataLimit) return false;
         if (marker >= 0xc0 && marker <= 0xcf && marker != 0xc4 && marker != 0xc8 && marker != 0xcc) {
             if (length < 8 || !dimensions(qFromBigEndian<quint16>(bytes.constData() + at + 5),
@@ -91,7 +99,7 @@ bool jpeg(const QByteArray& bytes, Profile profile, const Limits& limits, QByteA
             size = true;
         }
         at += length;
-        if (!auxiliary || profile == Profile::StaticAddon) clean->append(bytes.constData() + start, at - start);
+        if (!auxiliary || colorTransform || profile == Profile::StaticAddon) clean->append(bytes.constData() + start, at - start);
         if (marker == 0xda) { if (++scans > 1024) return false; entropy = true; scan = true; }
     }
     return false;
@@ -262,6 +270,17 @@ QByteArray AddonArtworkImage::format(const QByteArray& bytes)
     if (bytes.size() >= 12 && bytes.startsWith("RIFF") && bytes.mid(8, 4) == "WEBP") return "webp";
     if (bytes.startsWith("GIF87a") || bytes.startsWith("GIF89a")) return "gif";
     if (bytes.startsWith(QByteArray::fromHex("1f8b"))) return "svgz";
+    if (bytes.startsWith("BM")) return "bmp";
+    if (bytes.size() >= 6 && bytes.startsWith(QByteArray::fromHex("00000100"))) return "ico";
+    if (bytes.size() >= 6 && bytes.startsWith(QByteArray::fromHex("00000200"))) return "cur";
+    if (bytes.size() >= 3 && bytes[0] == 'P' && native_image::whitespace(bytes[2])) {
+        if (bytes[1] == '1' || bytes[1] == '4') return "pbm";
+        if (bytes[1] == '2' || bytes[1] == '5') return "pgm";
+        if (bytes[1] == '3' || bytes[1] == '6') return "ppm";
+    }
+    const auto textHeader = bytes.left(65536);
+    if (textHeader.contains("/* XPM */")) return "xpm";
+    if (textHeader.contains("#define") && textHeader.contains("_width") && textHeader.contains("_height")) return "xbm";
     const auto prefix = bytes.left(1024).trimmed();
     if (prefix.startsWith("<svg") || prefix.startsWith("<?xml") || prefix.startsWith("<!--")) return "svg";
     return {};
@@ -275,17 +294,23 @@ QImage AddonArtworkImage::decode(const QByteArray& bytes, Profile profile, const
         std::clamp<qint64>(requested.pixelBytes, 8, native ? 128 * 1024 * 1024 : 8 * 1024 * 1024),
         std::clamp(requested.dimension, 1, native ? 16384 : 1024)};
     if (bytes.isEmpty() || bytes.size() > limits.encodedBytes) return fail();
-    QByteArray clean; auto codec = format(bytes); bool valid = false;
+    QByteArray clean; auto codec = format(bytes); bool valid = false; int orientation = 1;
     if (codec == "png") valid = png(bytes, profile, limits, &clean);
-    else if (codec == "jpeg") valid = jpeg(bytes, profile, limits, &clean);
+    else if (codec == "jpeg") valid = jpeg(bytes, profile, limits, &clean, &orientation);
     else if (codec == "webp") valid = webp(bytes, profile, limits, &clean);
     else if (profile == Profile::NativeArtwork && codec == "gif") valid = gif(bytes, limits, &clean);
+    else if (native && codec == "bmp") valid = native_image::bitmap(bytes, limits, &clean);
+    else if (native && (codec == "ico" || codec == "cur"))
+        valid = native_image::icon(bytes, limits, &clean, [&](const QByteArray& frame, QByteArray* output) { return png(frame, profile, limits, output); });
+    else if (native && (codec == "pbm" || codec == "pgm" || codec == "ppm")) valid = native_image::pnm(bytes, limits, &clean);
+    else if (native && codec == "xbm") valid = native_image::xbm(bytes, limits, &clean);
+    else if (native && codec == "xpm") valid = native_image::xpm(bytes, limits, &clean);
     else if (profile == Profile::NativeArtwork && (codec == "svg" || codec == "svgz")) {
         QByteArray document = bytes;
         if (codec == "svgz") { document.clear(); if (!gunzip(bytes, &document)) return fail(); }
         valid = svg(document, limits, &clean); codec = "svg";
     }
-    if (!valid) return fail();
+    if (!valid || !QImageReader::supportedImageFormats().contains(codec)) return fail();
     QBuffer input(&clean); input.open(QIODevice::ReadOnly);
     QImageReader reader(&input, codec); reader.setAutoDetectImageFormat(false); reader.setDecideFormatFromContent(false); reader.setAutoTransform(false);
     const auto size = reader.size();
@@ -294,6 +319,18 @@ QImage AddonArtworkImage::decode(const QByteArray& bytes, Profile profile, const
     if (image.isNull() || image.size() != size || image.sizeInBytes() > limits.pixelBytes) return fail();
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     if (image.isNull() || image.sizeInBytes() > limits.pixelBytes) return fail();
+    if (native) {
+        switch (orientation) {
+            case 2: image = image.mirrored(true, false); break;
+            case 3: image = image.transformed(QTransform().rotate(180)); break;
+            case 4: image = image.mirrored(false, true); break;
+            case 5: image = image.transformed(QTransform().rotate(90)).mirrored(true, false); break;
+            case 6: image = image.transformed(QTransform().rotate(90)); break;
+            case 7: image = image.transformed(QTransform().rotate(90)).mirrored(false, true); break;
+            case 8: image = image.transformed(QTransform().rotate(270)); break;
+        }
+        if (image.isNull() || image.sizeInBytes() > limits.pixelBytes) return fail();
+    }
     QImage pixels(image.size(), QImage::Format_ARGB32_Premultiplied);
     if (pixels.isNull()) return fail();
     for (int row = 0; row < image.height(); ++row) std::memcpy(pixels.scanLine(row), image.constScanLine(row), size_t(image.width()) * 4);

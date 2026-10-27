@@ -97,6 +97,7 @@ addon_host_sources = files(
     'addons/addon_artwork_assets.hpp',
     'addons/addon_artwork_image.cpp',
     'addons/addon_artwork_image.hpp',
+    'addons/addon_native_image_formats.hpp',
     'addons/addon_native_artwork_assets.cpp',
     'addons/addon_native_artwork_assets.hpp',
 )

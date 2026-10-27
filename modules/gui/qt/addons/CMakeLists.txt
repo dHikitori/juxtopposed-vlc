@@ -15,7 +15,7 @@ add_library(vlc_addon_host STATIC
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
     addon_visualizer_worker_runtime.cpp addon_visualizer_render_queue.cpp
-    addon_repository_updates.cpp addon_playable_gate.cpp addon_artwork_assets.cpp addon_artwork_image.cpp
+    addon_repository_updates.cpp addon_playable_gate.cpp addon_artwork_assets.cpp addon_artwork_image.cpp addon_native_image_formats.hpp
     addon_queue_transactions.cpp addon_discovery_service.cpp addon_player_discovery.cpp addon_source_admissions.cpp addon_source_consent.cpp addon_stream_manifest.cpp addon_websocket_codec.cpp)
 target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network Threads::Threads ZLIB::ZLIB)
 target_compile_definitions(vlc_addon_host PUBLIC QT_USE_QSTRINGBUILDER QT_NO_CAST_TO_ASCII QT_NO_CAST_FROM_BYTEARRAY QT_STRICT_ITERATORS)

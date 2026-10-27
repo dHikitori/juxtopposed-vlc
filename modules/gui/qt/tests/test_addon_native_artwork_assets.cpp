@@ -20,6 +20,7 @@
 #include <vlc_artwork_policy.h>
 #include <vlc_input_item.h>
 #include "addons/addon_native_artwork_assets.hpp"
+#include "addon_artwork_test_images.hpp"
 
 namespace {
 using Native = AddonNativeArtworkAssets;
@@ -65,6 +66,38 @@ class TestAddonNativeArtworkAssets : public QObject
 {
     Q_OBJECT
 private slots:
+    void installedNativeFormatsKeepPixelsThroughCachePublication_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        const auto readers = QImageReader::supportedImageFormats();
+        for (const QByteArray codec : {"bmp", "cur", "gif", "ico", "jfif", "jpeg", "jpg", "pbm", "pgm", "png", "ppm", "svg", "svgz", "webp", "xbm", "xpm"}) {
+            if (!readers.contains(codec)) continue;
+            QByteArray bytes;
+            if (codec == "svg") bytes = NativeArtworkFixture::svgBytes();
+            else if (codec == "svgz") bytes = NativeArtworkFixture::compressedSvg();
+            else if (codec == "gif") bytes = QByteArray::fromBase64("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+            else bytes = NativeArtworkFixture::patterned(codec);
+            QVERIFY2(!bytes.isEmpty(), codec.constData());
+            QTest::newRow(codec.constData()) << bytes;
+        }
+        QTest::newRow("jpeg-exif") << NativeArtworkFixture::exifJpeg(6, true, true);
+    }
+    void installedNativeFormatsKeepPixelsThroughCachePublication()
+    {
+        QFETCH(QByteArray, bytes);
+        QTemporaryDir cache; Controlled source; source.bytes = bytes; source.release = true;
+        Native assets(source.backend(), cache.path(), {}); assets.setNetworkAllowed(true); Job job;
+        Native::Result result; int completed = 0;
+        QVERIFY(assets.resolve(job.job, [&](const auto& value) { result = value; ++completed; }));
+        QTRY_COMPARE(completed, 1); QCOMPARE(source.calls.load(), 1);
+        QVERIFY2(result.error.isEmpty(), qPrintable(result.error)); QVERIFY(result.file.isLocalFile());
+        QFile file(result.file.toLocalFile()); QVERIFY(file.open(QIODevice::ReadOnly)); const auto png = file.readAll();
+        QVERIFY(png.startsWith(QByteArray::fromHex("89504e470d0a1a0a")));
+        const auto pixels = NativeArtworkFixture::baseline(png);
+        QVERIFY(!pixels.isNull()); QCOMPARE(pixels, NativeArtworkFixture::baseline(bytes)); QVERIFY(pixels.textKeys().isEmpty());
+        QVERIFY(result.permit.current()); QCOMPARE(job.publish(result), VLC_SUCCESS);
+        char* art = vlc_artwork_item_GetURI(job.item); QCOMPARE(QByteArray(art), result.file.toEncoded()); free(art);
+    }
     void consentAndNativeSnapshotAdmissionPrecedeIO()
     {
         QTemporaryDir cache; Controlled source; source.release = true; Native assets(source.backend(), cache.path(), {});
