@@ -3462,3 +3462,5 @@ EXTRA_DIST += tests/ml-joined-runner/CMakeLists.txt
 EXTRA_DIST += tests/native-authority/CMakeLists.txt
 
 EXTRA_DIST += tests/store-authority/CMakeLists.txt
+
+EXTRA_DIST += tests/addon_native_artwork_test_owner.hpp

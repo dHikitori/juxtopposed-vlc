@@ -16,7 +16,15 @@ The constructor and `resolve` do no file, network, or image-decode I/O. Native w
 
 The returned cancellation function can run on a native thread. It stops the native interrupt context, cancels the native metadata job, and releases the adapter's job reference. It needs no Qt event. A cancelled result cannot reach the caller.
 
-`close` first removes the Qt owner and revokes its consent epoch. It cancels native jobs, interrupts I/O, and joins the native threads. Those threads never wait for Qt. The VLC object must remain alive until `close` returns. The owner must call the QObject API on its owner thread. A completion callback can destroy the adapter.
+Construction requires an app lifetime handle. The constructor admits one counted retirement task before it can start native workers. A closed handle or a failed admission leaves the adapter unavailable. Destruction never submits new joined work.
+
+Workers place complete results in a bounded mailbox. An owner-thread timer delivers those results. No native worker posts to a QObject. The returned cancel function holds a separate native control with a native job, interrupt, and atomic reason. It holds no Work or State reference. A late or blocked cancel cannot retain the URL, pixel data, native read backend, or Qt completion captures after the join. GUI delivery detaches the control's native job. Final retirement also detaches a timed-out job. A retained cancel function cannot keep an extra native backend reference after delivery or join. Cancel applies to pending adapter work; a native consumer retains and cancels its own metadata job or parent anchor before final Apply. Completion captures stay in an owner-thread map. GUI poll and close finish all mutations before they retire those captures outside locks.
+
+`close` revokes its consent epoch, cancels native jobs, and interrupts I/O at once. It does not join on the GUI thread. The admitted retirement task joins the workers and deadline thread, then releases queued results, callback data, and the native read context before its app ticket joins. A blocked native callback keeps the app drain pending. It cannot force teardown of data that it still uses.
+
+The real read backend owns a private VLC child object. Workers retain that context rather than a raw Core instance. Its parent must remain valid through joined cleanup. Core closes its metadata backend before interface waits. The interface retains its event loop through app drain, then releases GUI owners before Core deletes the native parent. Generic `vlc_object_hold` is not a parent reference and is not used.
+
+Call the QObject API on its owner thread. A completion callback can destroy the adapter. It cannot cancel an already admitted native write.
 
 The native I/O deadline is at most ten seconds. The deadline thread interrupts VLC access without a Qt timer. Image codecs do not have a hard CPU-time deadline. A codec can return after the deadline; its result is refused. Shutdown can wait for that native codec call. Codec workspace and Qt renderer allocations are separate from the image pixel limits.
 
@@ -61,6 +69,37 @@ The limits apply to encoded input, checked dimensions, and each tracked pixel bu
 
 The Qt6.8.3 image suite passes 29 cases with no skips. It compares native-profile output with the actual Qt reader. Its format rows use every supported reader name in the installed baseline. Its JPEG cases compare all eight visible orientations in both byte orders. A native CMYK JPEG retains its visible colors. Further cases cover malformed EXIF, eight-bit and sixteen-bit PNM data, aliased and overlapping ICO frames, raster overflow, truncated input, separate guest limits, compressed PNG text/ICC payloads, metadata caps, animation, GIF default frames, SVG resources, spoofed containers, and pixel claims.
 
-The native adapter suite passes 27 cases with no skips against the normal Core library. Its format rows compare cached PNG pixels with the original native reader, including an oriented JPEG. Its authority and lifetime cases cover native snapshot admission, disabled network preference, restricted source items, a real VLC HTTP transfer over loopback and the WSL private IPv4 interface, static local output, real native metadata commits, same-value and A-to-B-to-A writes, a changed source URI, a new user artwork approval, consent epochs, native cancellation, deadline, retained-request and active-I/O caps, cache refusal, and callback destruction. These tests do not establish the still-unmounted preparser route.
+The native adapter suite passes 34 cases with no skips against the normal Core library. Its format rows compare cached PNG pixels with the original native reader, including an oriented JPEG. Its authority and lifetime cases cover native snapshot admission, disabled network preference, restricted source items, a real VLC HTTP transfer over loopback and the WSL private IPv4 interface, static local output, real native metadata commits, same-value and A-to-B-to-A writes, a changed source URI, a new user artwork approval, consent epochs, native cancellation, deadline, retained-request and active-I/O caps, cache refusal, and callback destruction. These tests do not establish the still-unmounted preparser route.
 
 The image suite also passes all 29 cases with AddressSanitizer, UndefinedBehaviorSanitizer, and leak detection enabled. Qt and the native Core library use their existing builds. The guest UI asset suite passes 29 cases, and the guest artwork asset suite passes nine cases. Those two regression suites link the existing host archive with the new decoder object. They include real QML pixel output, handle revocation, cancellation, and zero external image loads with positive controls. A normal app build remains a separate integration gate.
+
+## Joined lifetime evidence
+
+The joined lifetime tests cover a blocked native reader, retained
+context data, immediate GUI close, completed mailbox withdrawal, closed app
+admission, native read exceptions, owner-thread capture release with reentrant
+owner destruction, a native cancel that stays active through the app join, and
+a retained cancel handle after delivery or timeout. The shared service tests cover a
+closed app post gate, an in-flight portable result, and an existing dispatch
+which cannot acquire a new lifetime binding. Further cases cover callback and
+capture destruction during provider removal, replacement, or shutdown. A native
+handler can complete inline after the coordinator records its invocation ID.
+
+The normal native adapter suite passes 34 cases. The normal shared service suite
+passes 27 cases. A focused AddressSanitizer, UndefinedBehaviorSanitizer, and leak
+detection run passes 12 adapter cases and all 27 service cases. No test fails or
+skips, and no sanitizer reports an error. Both changed production sources and
+both test sources use the sanitizer. Qt, Core, and the pinned dependency
+archives retain their normal builds. The coherent archive hashes, source
+hashes, commands, XML results, and logs are in
+`/tmp/hakone-artwork-lifetime/`. A normal full app build remains a separate gate.
+
+The service app gate uses memory only. The future native metadata owner must
+bind it before native dispatch and close its exact backend before app drain.
+Interface withdrawal does not permanently retire the Core instance. Core
+cleanup retains that separate authority. A later owner must not be affected by
+an old interface's cleanup.
+
+No owner activation or provider removal occurs in this source group. Each
+provider family still needs one selected native or portable implementation
+before execution, plus a sealed native result and its consumer parity tests.

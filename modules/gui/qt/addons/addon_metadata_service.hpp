@@ -2,6 +2,7 @@
 #pragma once
 
 #include "addon_metadata_coordinator.hpp"
+#include "addon_stream_lifetime.hpp"
 #include <QPointer>
 #include <QUrl>
 #include <memory>
@@ -55,6 +56,9 @@ public:
     // This host-only stage uses the pipeline's retained native commit anchor.
     // It never sends the original native artwork address to a provider.
     void setNativeArtworkAdapter(AddonNativeArtworkAssets*);
+    // Bind before native dispatch. The owner closes the exact backend before
+    // app drain; this memory gate prevents a late native post to Qt.
+    bool bindApplicationLifetime(vlc::addons::AddonStreamLifetime::Handle);
     void setAutomaticNetworkAllowed(bool allowed);
     bool automaticNetworkAllowed() const;
     int nativeJobCount() const;
@@ -81,7 +85,11 @@ private:
         NativeInvoke invoke;
         NativeCancel cancel;
     };
-    struct NativeCall { QString contribution; QString media; };
+    struct NativeCall {
+        QString contribution, media;
+        QPointer<QObject> lifetime;
+        NativeCancel cancel;
+    };
     struct Consumer { QString media; quint64 core = 0; bool automatic = false; };
     struct PendingResult {
         QString status, error;
@@ -102,6 +110,7 @@ private:
     void cancelCore(quint64 key);
     void finishCore(quint64 key, const QString&, const QVariantMap&);
     bool holdMedia(const QString&);
+    bool applicationCurrent() const;
     static Backend managerBackend(vlc::addons::AddonManager*);
 
     Backend m_backend;

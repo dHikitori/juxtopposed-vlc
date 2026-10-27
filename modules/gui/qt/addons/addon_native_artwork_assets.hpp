@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "addon_stream_lifetime.hpp"
 #include <QObject>
+#include <QHash>
+#include <QTimer>
 #include <QUrl>
 #include <functional>
 #include <memory>
@@ -9,9 +12,11 @@
 #include <vlc_metadata_backend.h>
 
 /** This adapter accepts native job snapshots only. It has no guest or QML API.
- * The native object must outlive close(). Call the Qt API on the owner thread.
- * A Cancel function can run on any thread. close() interrupts native I/O and
- * joins native threads. Those threads never wait for a Qt event.
+ * Call the Qt API on the owner thread. Construction requires the app lifetime.
+ * The native parent must outlive its joined cleanup. Core closes its metadata
+ * backend before interface drain; interface cleanup precedes parent teardown.
+ * A Cancel function can run on any thread. close() withdraws authority at once.
+ * Counted app work joins native threads without a Qt event or a GUI wait.
  */
 class AddonNativeArtworkAssets : public QObject
 {
@@ -29,6 +34,7 @@ public:
     struct Backend {
         // The native interrupt context is set before this call. live() reads
         // native state only. Refuse an obsolete request before each I/O step.
+        // Capture owned data. The app retains this callback through its join.
         std::function<ReadResult(const QUrl&, qint64, const std::function<bool()>& live)> read;
     };
     class Permit {
@@ -46,18 +52,29 @@ public:
     struct Result { QUrl file; QString error; Permit permit; };
     using Completion = std::function<void(const Result&)>;
     using Cancel = std::function<void()>;
-    AddonNativeArtworkAssets(vlc_object_t*, const QString& cacheDirectory, const Options&, QObject* parent = nullptr);
-    AddonNativeArtworkAssets(Backend, const QString& cacheDirectory, const Options&, QObject* parent = nullptr);
+    AddonNativeArtworkAssets(vlc::addons::AddonStreamLifetime::Handle, vlc_object_t*,
+        const QString& cacheDirectory, const Options&, QObject* parent = nullptr);
+    AddonNativeArtworkAssets(vlc::addons::AddonStreamLifetime::Handle, Backend,
+        const QString& cacheDirectory, const Options&, QObject* parent = nullptr);
     ~AddonNativeArtworkAssets() override;
     // Only original HTTP/HTTPS artwork on an ordinary native item can enter.
     // A provider result must use its own broker, even for a native target item.
     Cancel resolve(vlc_metadata_job_t*, Completion);
     void setNetworkAllowed(bool);
     void close();
+    bool available() const;
+    unsigned pendingDeliveryCount() const;
+    bool joined() const noexcept { return m_retirement.joined(); }
     static Backend nativeBackend(vlc_object_t*);
 private:
     struct State;
     struct Work;
-    static void deliver(const std::shared_ptr<State>&, const std::shared_ptr<Work>&, Result);
+    void deliver(const std::shared_ptr<State>&, const std::shared_ptr<Work>&, Result);
+    void poll();
     std::shared_ptr<State> m_state;
+    vlc::addons::AddonStreamLifetime::NetworkTicket m_retirement;
+    QTimer m_poll;
+    QHash<quint64, Completion> m_completions;
+    quint64 m_sequence = 0;
+    bool m_admitted = false;
 };

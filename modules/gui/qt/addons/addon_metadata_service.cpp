@@ -56,6 +56,9 @@ struct AddonMetadataService::CoreState {
     QHash<quint64, AddonNativeArtworkAssets::Cancel> nativeCancels;
     quint64 sequence = 0;
     std::atomic_bool automaticAllowed{false};
+    vlc::addons::AddonStreamLifetime::Handle lifetime;
+    bool applicationBound = false;
+    bool mayPostLocked() const { return !applicationBound || lifetime.current(); }
 
     static int dispatch(void* opaque, vlc_metadata_job_t* job)
     {
@@ -64,7 +67,7 @@ struct AddonMetadataService::CoreState {
         if (!(request->flags & VLC_METADATA_REQUEST_NETWORK)
             || ((request->flags & VLC_METADATA_REQUEST_AUTOMATIC) && !state->automaticAllowed.load())) return VLC_EACCES;
         std::lock_guard<std::mutex> guard(state->lock);
-        if (!state->owner) return -EINTR;
+        if (!state->owner || !state->mayPostLocked()) return -EINTR;
         const auto key = ++state->sequence;
         state->jobs.insert(key, holdJob(job)); state->keys.insert(job, key);
         if (!vlc_metadata_job_IsPending(job)) {
@@ -72,7 +75,7 @@ struct AddonMetadataService::CoreState {
         }
         const bool queued = QMetaObject::invokeMethod(state->owner, [state, key] {
             AddonMetadataService* owner;
-            { std::lock_guard<std::mutex> guard(state->lock); owner = state->owner; }
+            { std::lock_guard<std::mutex> guard(state->lock); owner = state->mayPostLocked() ? state->owner : nullptr; }
             if (owner) owner->startCore(key);
         }, Qt::QueuedConnection);
         if (!queued) { state->jobs.remove(key); state->keys.remove(job); }
@@ -89,9 +92,9 @@ struct AddonMetadataService::CoreState {
             if (!key) return;
             held = state->jobs.take(key);
             cancelNative = state->nativeCancels.take(key);
-            if (state->owner) QMetaObject::invokeMethod(state->owner, [state, key] {
+            if (state->owner && state->mayPostLocked()) QMetaObject::invokeMethod(state->owner, [state, key] {
                 AddonMetadataService* owner;
-                { std::lock_guard<std::mutex> guard(state->lock); owner = state->owner; }
+                { std::lock_guard<std::mutex> guard(state->lock); owner = state->mayPostLocked() ? state->owner : nullptr; }
                 if (owner) owner->cancelCore(key);
             }, Qt::QueuedConnection);
         }
@@ -208,10 +211,12 @@ bool AddonMetadataService::registerBuiltinProvider(const QString& feature, const
 {
     const auto id = descriptor.value(QStringLiteral("id")).toString();
     if (m_closed || !lifetime || !invoke || feature.isEmpty() || id.isEmpty() || m_builtins.size() >= 128) return false;
+    QPointer<AddonMetadataService> guard(this);
     const auto existing = m_builtins.constFind(id);
     const bool isNew = existing == m_builtins.cend();
     if (existing != m_builtins.cend() && existing->lifetime != lifetime) return false;
-    auto builtin = existing == m_builtins.cend() ? Builtin{} : *existing;
+    const auto retired = existing == m_builtins.cend() ? Builtin{} : *existing;
+    auto builtin = retired;
     if (!builtin.features.contains(feature)) builtin.features.append(feature);
     builtin.descriptor = descriptor;
     builtin.descriptor.insert(QStringLiteral("builtin"), true);
@@ -219,19 +224,25 @@ bool AddonMetadataService::registerBuiltinProvider(const QString& feature, const
     builtin.lifetime = lifetime; builtin.invoke = std::move(invoke); builtin.cancel = std::move(cancel);
     m_builtins.insert(id, builtin);
     if (isNew) connect(lifetime, &QObject::destroyed, this, [this, id] { unregisterBuiltinProvider(id); });
-    if (m_backend.registerBuiltin) m_backend.registerBuiltin(feature, builtin.descriptor);
+    const auto registerBuiltin = m_backend.registerBuiltin;
+    if (registerBuiltin) registerBuiltin(feature, builtin.descriptor);
+    if (!guard) return false;
     invalidate();
     return true;
 }
 void AddonMetadataService::unregisterBuiltinProvider(const QString& contribution)
 {
-    if (!m_builtins.remove(contribution)) return;
-    if (m_backend.unregisterBuiltin) m_backend.unregisterBuiltin(contribution);
+    QPointer<AddonMetadataService> guard(this);
+    if (!m_builtins.contains(contribution)) return;
+    const auto retired = m_builtins.take(contribution);
+    const auto unregisterBuiltin = m_backend.unregisterBuiltin;
+    if (unregisterBuiltin) unregisterBuiltin(contribution);
+    if (!guard) return;
     invalidate();
 }
 QString AddonMetadataService::invoke(const QString& contribution, const QString& operation, const QVariantMap& context)
 {
-    if (m_closed) return {};
+    if (m_closed || !applicationCurrent()) return {};
     const auto found = m_builtins.constFind(contribution);
     if (found == m_builtins.cend()) {
         auto projection = context;
@@ -240,28 +251,36 @@ QString AddonMetadataService::invoke(const QString& contribution, const QString&
     }
     if (!found->lifetime) return {};
     const auto id = nonce("native-metadata:");
-    m_nativeCalls.insert(id, {contribution, context.value(QStringLiteral("media")).toString()});
+    m_nativeCalls.insert(id, {contribution, context.value(QStringLiteral("media")).toString(), found->lifetime, found->cancel});
     const auto callback = found->invoke;
-    callback(id, operation, context);
+    // The coordinator records the returned ID before a native handler can
+    // complete inline. This event owns its capture on the Qt owner thread.
+    QTimer::singleShot(0, this, [this, id, operation, context, callback] {
+        const auto call = m_nativeCalls.constFind(id);
+        if (call == m_nativeCalls.cend()) return;
+        if (m_closed || !applicationCurrent() || !call->lifetime) {
+            completeBuiltin(id, QStringLiteral("unsupported")); return;
+        }
+        callback(id, operation, context);
+    });
     return id;
 }
 void AddonMetadataService::cancelInvocation(const QString& invocation)
 {
-    const auto call = m_nativeCalls.find(invocation);
-    if (call == m_nativeCalls.end()) { if (m_backend.providers.cancel) m_backend.providers.cancel(invocation); return; }
-    const auto contribution = call->contribution;
-    m_nativeCalls.erase(call);
-    const auto found = m_builtins.constFind(contribution);
-    if (found != m_builtins.cend() && found->lifetime && found->cancel) found->cancel(invocation);
+    const auto call = m_nativeCalls.take(invocation);
+    if (call.contribution.isEmpty()) {
+        const auto cancel = m_backend.providers.cancel;
+        if (cancel) cancel(invocation);
+        return;
+    }
+    if (call.lifetime && call.cancel) call.cancel(invocation);
 }
 void AddonMetadataService::completeBuiltin(const QString& invocation, const QString& status,
                                           const QVariantMap& data, const QString& error)
 {
-    const auto found = m_nativeCalls.find(invocation);
-    if (found == m_nativeCalls.end()) return;
-    const auto contribution = found->contribution;
-    m_nativeCalls.erase(found);
-    m_coordinator.operationFinished(invocation, contribution, status, data, error);
+    const auto call = m_nativeCalls.take(invocation);
+    if (call.contribution.isEmpty()) return;
+    m_coordinator.operationFinished(invocation, call.contribution, status, data, error);
 }
 QUrl AddonMetadataService::privateUrlForInvocation(const QString& invocation) const
 {
@@ -278,7 +297,7 @@ void AddonMetadataService::operationFinished(const QString& invocation, const QS
 QString AddonMetadataService::acquireMedia(const QUrl& url, const QVariantMap& identity)
 {
     const auto serialized = QJsonDocument::fromVariant(identity).toJson(QJsonDocument::Compact);
-    if (m_closed || !url.isValid() || url.isEmpty() || url.toEncoded().size() > 32768 || serialized.size() > 65536) return {};
+    if (m_closed || !applicationCurrent() || !url.isValid() || url.isEmpty() || url.toEncoded().size() > 32768 || serialized.size() > 65536) return {};
     const QByteArray privateKey = url.toEncoded() + '\n' + serialized;
     const QString key = QString::fromLatin1(QCryptographicHash::hash(privateKey, QCryptographicHash::Sha256).toHex());
     const auto existing = m_mediaKeys.value(key);
@@ -309,7 +328,7 @@ QString AddonMetadataService::start(const QString& feature, QVariantMap context,
 {
     const auto media = context.value(QStringLiteral("media")).toString();
     const bool automatic = context.value(QStringLiteral("automatic")).toBool();
-    if (m_closed || (automatic && !automaticNetworkAllowed()) || !holdMedia(media)) {
+    if (m_closed || !applicationCurrent() || (automatic && !automaticNetworkAllowed()) || !holdMedia(media)) {
         const auto consumer = nonce("metadata-rejected:");
         m_consumers.insert(consumer, {});
         QTimer::singleShot(0, this, [this, consumer, context] {
@@ -374,6 +393,16 @@ void AddonMetadataService::setNativeArtworkAdapter(AddonNativeArtworkAssets* ada
     if (!guard) return;
     for (const auto& job : jobs) { vlc_metadata_job_Cancel(job.get()); if (!guard) return; }
 }
+bool AddonMetadataService::bindApplicationLifetime(vlc::addons::AddonStreamLifetime::Handle lifetime)
+{
+    if (m_closed || !lifetime.current()) return false;
+    std::lock_guard<std::mutex> lock(m_core->lock);
+    if (m_core->applicationBound || !m_core->jobs.isEmpty()) return false;
+    m_core->lifetime = std::move(lifetime); m_core->applicationBound = true;
+    return true;
+}
+bool AddonMetadataService::applicationCurrent() const
+{ std::lock_guard<std::mutex> lock(m_core->lock); return m_core->mayPostLocked(); }
 bool AddonMetadataService::automaticNetworkAllowed() const { return m_core->automaticAllowed.load(); }
 int AddonMetadataService::nativeJobCount() const
 { std::lock_guard<std::mutex> guard(m_core->lock); return m_core->jobs.size(); }
@@ -404,9 +433,14 @@ void AddonMetadataService::shutdown()
     if (!guard) return;
     invalidate();
     if (!guard) return;
-    const auto builtins = m_builtins.keys();
-    m_builtins.clear();
-    for (const auto& id : builtins) if (m_backend.unregisterBuiltin) m_backend.unregisterBuiltin(id);
+    QHash<QString, Builtin> retired;
+    retired.swap(m_builtins);
+    const auto builtins = retired.keys();
+    const auto unregisterBuiltin = m_backend.unregisterBuiltin;
+    for (const auto& id : builtins) {
+        if (unregisterBuiltin) unregisterBuiltin(id);
+        if (!guard) return;
+    }
     m_media.clear(); m_mediaKeys.clear();
 }
 
@@ -414,6 +448,7 @@ void AddonMetadataService::coordinatorFinished(const QString& consumer, const QS
                                               const QVariantMap& data, const QString& error)
 {
     if (!m_consumers.contains(consumer)) return;
+    if (!applicationCurrent()) { cancel(consumer); return; }
     auto fields = data.value(QStringLiteral("fields")).toMap();
     QStringList assets;
     for (const auto& field : {QStringLiteral("artwork"), QStringLiteral("artworkUrl")}) if (fields.contains(field)) assets.append(field);
@@ -438,6 +473,7 @@ void AddonMetadataService::artworkFinished(const QString& consumer, const QStrin
 {
     auto found = m_results.find(consumer);
     if (found == m_results.end() || !found->assets.remove(field)) return;
+    if (!applicationCurrent()) { cancel(consumer); return; }
     auto fields = found->data.value(QStringLiteral("fields")).toMap();
     if (url.isLocalFile() && vlc_artwork_uri_IsLocalFile(url.toEncoded().constData())
         && QFileInfo(url.toLocalFile()).isFile() && QFileInfo(url.toLocalFile()).isReadable()) {
@@ -474,7 +510,7 @@ void AddonMetadataService::startCore(quint64 key)
     if (!job) return;
     if (!vlc_metadata_job_IsPending(job.get())) { m_core->take(key); return; }
     const auto* request = vlc_metadata_job_GetRequest(job.get());
-    if (m_closed || ((request->flags & VLC_METADATA_REQUEST_AUTOMATIC) && !automaticNetworkAllowed())) {
+    if (m_closed || !applicationCurrent() || ((request->flags & VLC_METADATA_REQUEST_AUTOMATIC) && !automaticNetworkAllowed())) {
         auto owned = m_core->take(key); if (owned) vlc_metadata_job_Cancel(owned.get()); return;
     }
     if (!strcmp(request->operation, "materializeNativeArtwork")) { startNativeArtwork(key); return; }

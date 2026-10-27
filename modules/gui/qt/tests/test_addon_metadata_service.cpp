@@ -14,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <utility>
 #include <vlc_common.h>
 #include <vlc_cxx_helpers.hpp>
 #include <vlc_input_item.h>
@@ -22,6 +23,7 @@
 #include "addons/addon_artwork_assets.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "addons/addon_native_artwork_assets.hpp"
+#include "addon_native_artwork_test_owner.hpp"
 #include "util/media_identity_vlc.hpp"
 
 namespace {
@@ -103,6 +105,123 @@ class TestAddonMetadataService : public QObject
 {
     Q_OBJECT
 private slots:
+    void appRetirementRefusesNativePostsBeforeQtDelivery()
+    {
+        vlc::addons::AddonStreamLifetime app; Fake fake; AddonMetadataService service(fake.backend());
+        QVERIFY(service.bindApplicationLifetime(app.handle()));
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        Ended first; const auto job = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), first), vlc_metadata_job_Release);
+        QCOMPARE(vlc_metadata_job_Start(job.get()), VLC_SUCCESS); QCOMPARE(service.nativeJobCount(), 1);
+        app.close();
+        Ended second; const auto late = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), second), vlc_metadata_job_Release);
+        int lateStatus = VLC_SUCCESS;
+        std::thread native([&] {
+            lateStatus = vlc_metadata_job_Start(late.get());
+            vlc_metadata_backend_Close(backend.get());
+        }); native.join();
+        QCOMPARE(lateStatus, VLC_SUCCESS);
+        QCOMPARE(first.count.load(), 1); QCOMPARE(second.count.load(), 1);
+        QCOMPARE(second.status.load(), -EINTR);
+        QCOMPARE(service.nativeJobCount(), 0);
+        QCoreApplication::processEvents(); QVERIFY(fake.calls.isEmpty()); service.shutdown();
+    }
+    void appRetirementRefusesAnInFlightPortableClaim()
+    {
+        vlc::addons::AddonStreamLifetime app; Fake fake; AddonMetadataService service(fake.backend());
+        QVERIFY(service.bindApplicationLifetime(app.handle()));
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        Ended ended; const auto job = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), ended), vlc_metadata_job_Release);
+        QCOMPARE(vlc_metadata_job_Start(job.get()), VLC_SUCCESS); QTRY_COMPARE(fake.calls.size(), 1);
+        app.close(); fake.complete(service, {{QStringLiteral("description"), QStringLiteral("Late claim")}});
+        QTRY_COMPARE(ended.count.load(), 1); QCOMPARE(ended.status.load(), -EINTR);
+        QCOMPARE(service.nativeJobCount(), 0); service.shutdown();
+    }
+    void applicationBindingCannotAdoptAnExistingNativeDispatch()
+    {
+        vlc::addons::AddonStreamLifetime app; Fake fake; AddonMetadataService service(fake.backend());
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        Ended ended; const auto job = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), ended), vlc_metadata_job_Release);
+        QCOMPARE(vlc_metadata_job_Start(job.get()), VLC_SUCCESS);
+        QVERIFY(!service.bindApplicationLifetime(app.handle()));
+        service.shutdown(); QCOMPARE(ended.count.load(), 1);
+    }
+    void shutdownRegistrationCallbacksCanDestroyTheOwner()
+    {
+        Fake fake; auto backend = fake.backend(); AddonMetadataService* service = nullptr;
+        unsigned unregisters = 0;
+        backend.unregisterBuiltin = [&](const QString&) {
+            ++unregisters; auto* deleted = std::exchange(service, nullptr); delete deleted;
+        };
+        service = new AddonMetadataService(std::move(backend)); QObject lifetime;
+        for (const auto* id : {"vlc.builtin.first/details", "vlc.builtin.second/details"})
+            QVERIFY(service->registerBuiltinProvider("video.details", provider(id), &lifetime,
+                [](const auto&, const auto&, const auto&) {}));
+        service->shutdown(); QVERIFY(!service); QCOMPARE(unregisters, 1u);
+    }
+    void singleRegistrationCallbacksCanDestroyTheOwner()
+    {
+        for (const bool registration : {false, true}) {
+            Fake fake; auto backend = fake.backend(); AddonMetadataService* service = nullptr; bool armed = false;
+            const auto destroy = [&] { if (armed) { auto* deleted = std::exchange(service, nullptr); delete deleted; } };
+            backend.registerBuiltin = [&](const QString&, const QVariantMap&) { if (registration) destroy(); };
+            backend.unregisterBuiltin = [&](const QString&) { if (!registration) destroy(); };
+            service = new AddonMetadataService(std::move(backend)); QObject lifetime;
+            armed = registration;
+            const auto registered = service->registerBuiltinProvider("video.details", provider("vlc.builtin.single/details"),
+                &lifetime, [](const auto&, const auto&, const auto&) {});
+            if (registration) QVERIFY(!registered);
+            else { QVERIFY(registered); armed = true; service->unregisterBuiltinProvider("vlc.builtin.single/details"); }
+            QVERIFY(!service);
+        }
+    }
+    void retiredBuiltinCaptureCanDestroyTheOwnerAfterMapMutation()
+    {
+        struct Capture { std::function<void()> drop; ~Capture() { drop(); } };
+        for (const int mode : {0, 1, 2}) {
+            Fake fake; auto* service = new AddonMetadataService(fake.backend()); QObject lifetime;
+            unsigned drops = 0;
+            auto capture = std::make_shared<Capture>();
+            capture->drop = [&] { ++drops; auto* deleted = std::exchange(service, nullptr); delete deleted; };
+            QVERIFY(service->registerBuiltinProvider("video.details", provider("vlc.builtin.capture/details"), &lifetime,
+                [capture](const auto&, const auto&, const auto&) {}));
+            capture.reset();
+            if (mode == 0) service->unregisterBuiltinProvider("vlc.builtin.capture/details");
+            else if (mode == 1) service->registerBuiltinProvider("video.details", provider("vlc.builtin.capture/details"),
+                &lifetime, [](const auto&, const auto&, const auto&) {});
+            else service->shutdown();
+            QVERIFY(!service); QCOMPARE(drops, 1u);
+        }
+    }
+    void nativeWithdrawalCancelsTheOriginalHandler()
+    {
+        for (const bool replace : {false, true}) {
+            Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend()); QObject lifetime;
+            QString invocation; unsigned oldCancel = 0, newCancel = 0;
+            QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.changed/details"), &lifetime,
+                [&](const auto& id, const auto&, const auto&) { invocation = id; },
+                [&](const auto& id) { QCOMPARE(id, invocation); ++oldCancel; }));
+            service.enrich("video.details", {{"identity", identity()}}, {"description"});
+            QTRY_VERIFY(!invocation.isEmpty());
+            if (replace) QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.changed/details"),
+                &lifetime, [](const auto&, const auto&, const auto&) {}, [&](const auto&) { ++newCancel; }));
+            else service.unregisterBuiltinProvider("vlc.builtin.changed/details");
+            QCOMPARE(oldCancel, 1u); QCOMPARE(newCancel, 0u);
+        }
+    }
+    void aNativeHandlerCanCompleteInlineAfterItsIDIsRecorded()
+    {
+        Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend()); QObject lifetime;
+        QVERIFY(service.registerBuiltinProvider("video.details", provider("vlc.builtin.inline/details"), &lifetime,
+            [&](const auto& id, const auto&, const auto&) {
+                service.completeBuiltin(id, "match", claims({{"description", "Inline native description"}}));
+            }));
+        QSignalSpy finished(&service, &AddonMetadataService::finished);
+        service.enrich("video.details", {{"identity", identity()}}, {"description"});
+        QTRY_COMPARE(finished.size(), 1);
+        QCOMPARE(finished.first().at(1).toString(), QStringLiteral("match"));
+        QCOMPARE(finished.first().at(2).toMap().value("fields").toMap().value("description").toString(),
+            QStringLiteral("Inline native description"));
+    }
     void nativeTagsKeepArtworkReleaseIdsAndListingType()
     {
         auto* item = input_item_New("file:///private/Song.flac", "Song"); QVERIFY(item);
@@ -302,7 +421,7 @@ private slots:
         Ended childEnded, anchorEnded; std::atomic_int reads{0};
         QImage image(3, 2, QImage::Format_ARGB32); image.fill(Qt::red);
         QByteArray bytes; QBuffer buffer(&bytes); QVERIFY(buffer.open(QIODevice::WriteOnly)); QVERIFY(image.save(&buffer, "PNG"));
-        AddonNativeArtworkAssets assets({[&](const QUrl& url, qint64, const std::function<bool()>& live) {
+        TestNativeArtwork assets({[&](const QUrl& url, qint64, const std::function<bool()>& live) {
             ++reads;
             if (url != QUrl("http://192.168.1.4/native-cover.png") || !live())
                 return AddonNativeArtworkAssets::ReadResult{{}, QStringLiteral("The test request is not current.")};
@@ -338,7 +457,7 @@ private slots:
     {
         QTemporaryDir directory; QVERIFY(directory.isValid());
         Ended ended; std::atomic_bool entered{false}, left{false};
-        AddonNativeArtworkAssets assets({[&](const QUrl&, qint64, const std::function<bool()>&) {
+        TestNativeArtwork assets({[&](const QUrl&, qint64, const std::function<bool()>&) {
             entered.store(true); vlc_poll_i11e(nullptr, 0, 5000); left.store(true);
             return AddonNativeArtworkAssets::ReadResult{{}, QStringLiteral("The test read has ended.")};
         }}, directory.path(), {});
