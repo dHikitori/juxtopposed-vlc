@@ -80,6 +80,8 @@
 #include "addons/addon_ui_assets.hpp"
 #include "addons/addon_asset_image_provider.hpp"
 #include "addons/addon_player_visualizers.hpp"
+#include "addons/addon_player_sessions.hpp"
+#include "addons/addon_session_ui.hpp"
 #include "addons/addon_visualizer_surface.hpp"
 #include "addons/addon_discovery_service.hpp"
 #include "addons/addon_native_queue_store.hpp"
@@ -167,6 +169,7 @@ MainUI::MainUI(qt_intf_t *p_intf, MainCtx *mainCtx, QWindow* interfaceWindow,  Q
 
 MainUI::~MainUI()
 {
+    for (auto* sessions:findChildren<vlc::addons::AddonPlayerSessions*>(QString(),Qt::FindDirectChildrenOnly)) sessions->close();
     for (auto* service:findChildren<AddonMetadataService*>(QString(),Qt::FindDirectChildrenOnly)) service->shutdown();
     for (auto* queue:findChildren<vlc::addons::AddonNativeQueueStore*>(QString(),Qt::FindDirectChildrenOnly)) queue->close();
     for (auto* picker:findChildren<vlc::addons::AddonNativeLibraryTargets*>(QString(),Qt::FindDirectChildrenOnly)) picker->close();
@@ -419,6 +422,14 @@ void MainUI::registerQMLTypes()
             auto* visualizers = vlc::addons::createPlayerVisualizers(addonManager, m_intf->p_mainPlayerController, this);
             connect(m_mainCtx, &MainCtx::addonWorkRetiring, visualizers, &vlc::addons::AddonVisualizers::close);
             qmlRegisterSingletonInstance<vlc::addons::AddonVisualizers>(uri, versionMajor, versionMinor, "AddonVisualizers", visualizers);
+            auto* sessions = new vlc::addons::AddonPlayerSessions(addonManager,
+                m_intf->p_mainPlayerController->getPlayer(), m_intf->p_mainPlayerController,
+                m_mainCtx->addonStreamLifetime(), this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                sessions, &vlc::addons::AddonPlayerSessions::close, Qt::DirectConnection);
+            sessions->activate();
+            if (sessions->ui())
+                qmlRegisterSingletonInstance<vlc::addons::AddonSessionUi>(uri, versionMajor, versionMinor, "AddonSessions", sessions->ui());
             const QPointer<vlc::addons::AddonManager> managerOwner(addonManager);
             auto admissions = std::make_shared<vlc::addons::AddonSourceAdmissions>(addonManager->storageDirectory(),
                 [managerOwner](const QVariantMap& reference) { return vlc::addons::discoveryReferenceAvailable(managerOwner, reference); });

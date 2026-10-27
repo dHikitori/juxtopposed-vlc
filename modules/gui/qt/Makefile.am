@@ -205,8 +205,13 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_session_host.hpp \
 	addons/addon_session_controller.cpp \
 	addons/addon_session_controller.hpp \
+	addons/addon_session_ui.cpp \
+	addons/addon_session_ui.hpp \
+	addons/addon_session_ui_manager.cpp \
 	addons/addon_native_session_player.cpp \
 	addons/addon_native_session_player.hpp \
+	addons/addon_player_sessions.cpp \
+	addons/addon_player_sessions.hpp \
 	addons/addon_audio_analysis.cpp \
 	addons/addon_audio_analysis.hpp \
 	addons/addon_visual_scene.cpp \
@@ -254,6 +259,8 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_theme_service.moc.cpp \
 	addons/addon_sessions.moc.cpp \
 	addons/addon_session_host.moc.cpp \
+	addons/addon_session_ui.moc.cpp \
+	addons/addon_player_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
 	addons/addon_visualizer_catalog.moc.cpp \
 	addons/addon_visualizer_resources.moc.cpp \
@@ -1512,6 +1519,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonManagement.qml \
 	player/qml/redesign/RedesignAddonDiscovery.qml \
 	player/qml/redesign/RedesignAddonDiscoveryWindow.qml \
+	player/qml/redesign/RedesignAddonSessions.qml \
 	player/qml/redesign/RedesignAddonSelection.qml \
 	player/qml/redesign/RedesignAddonRecovery.qml \
 	player/qml/redesign/RedesignAddonNode.qml \
@@ -3488,3 +3496,8 @@ EXTRA_DIST += \
 EXTRA_DIST += tests/test_addon_git_objects.cpp tests/fixtures/addon-git-http-fixture.py
 
 EXTRA_DIST += tests/worker-lifetime/CMakeLists.txt
+
+EXTRA_DIST += tests/session-ui/CMakeLists.txt tests/test_addon_session_ui.cpp tests/tst_AddonSessions.qml
+TESTS += tests/tst_AddonSessions.qml
+
+EXTRA_DIST += tests/player-sessions/CMakeLists.txt tests/test_addon_player_sessions.cpp

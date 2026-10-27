@@ -14,6 +14,7 @@ add_library(vlc_addon_host STATIC
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
     addon_session_websocket.cpp addon_session_websocket.hpp addon_session_host.cpp addon_session_host.hpp
     addon_session_controller.cpp addon_session_controller.hpp addon_session_player.hpp
+    addon_session_ui.cpp addon_session_ui.hpp addon_session_ui_manager.cpp
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
     addon_visualizer_worker_runtime.cpp addon_visualizer_render_queue.cpp
@@ -36,7 +37,7 @@ foreach(name packages runtime metadata broker ui_registry discovery theme sessio
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
     add_test(NAME addon_${name} COMMAND test_addon_${name})
 endforeach()
-foreach(name session_websocket session_host git_objects)
+foreach(name session_websocket session_host session_ui git_objects)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     add_test(NAME addon_${name} COMMAND test_addon_${name})
@@ -86,6 +87,7 @@ if(VLC_BUILD_DIR)
         addon_stream_proxy_native.cpp addon_stream_proxy_native.hpp
         addon_native_player_analysis.cpp addon_native_player_analysis.hpp)
     target_sources(vlc_addon_native_metadata PRIVATE addon_native_session_player.cpp addon_native_session_player.hpp)
+    target_sources(vlc_addon_native_metadata PRIVATE addon_player_sessions.cpp addon_player_sessions.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
@@ -132,6 +134,15 @@ if(VLC_BUILD_DIR)
         target_link_options(test_addon_native_session_player PRIVATE "-Wl,--export-dynamic")
         add_test(NAME addon_native_session_player COMMAND test_addon_native_session_player)
         set_tests_properties(addon_native_session_player PROPERTIES TIMEOUT 90)
+        add_executable(test_addon_player_sessions "../tests/test_addon_player_sessions.cpp"
+            "../tests/session-runtime/native_session_fixture.c")
+        target_include_directories(test_addon_player_sessions PRIVATE "${VLC_SOURCE_ROOT}/src")
+        target_compile_definitions(test_addon_player_sessions PRIVATE
+            TOP_BUILDDIR="${VLC_BUILD_DIR}" TOP_SRCDIR="${VLC_SOURCE_ROOT}")
+        target_link_libraries(test_addon_player_sessions PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
+        target_link_options(test_addon_player_sessions PRIVATE "-Wl,--export-dynamic")
+        add_test(NAME addon_player_sessions COMMAND test_addon_player_sessions)
+        set_tests_properties(addon_player_sessions PROPERTIES TIMEOUT 90)
     endif()
 
     target_compile_definitions(test_addon_visualizer_worker_runtime PRIVATE VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")

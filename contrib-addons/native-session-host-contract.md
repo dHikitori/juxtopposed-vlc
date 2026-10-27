@@ -1,8 +1,8 @@
 # Native session host
 
-This group has no app mount. It has no room service or watch-party add-on.
 The host controls approval, Resume, and End session. A package cannot create
 those choices through a guest call.
+The app mount is described in [session app owners](native-session-app-contract.md).
 
 ## App owners and order
 
@@ -193,9 +193,7 @@ The normal host build also links the registered components. The coherent
 Worker retirement and dispatcher deletion pass their separate focused
 sanitizer checks. These results still do not activate the app profile.
 
-Automatic approval review refused creation of the proposed
-`addon_player_sessions` factory. Its stated reason was that the patch mounted
-the host into Manager services and connected guest invocation and player
-control before the separate unmounted bridge checkpoint. No factory file was
-written. Root owns app assembly after component checks. This group does not
-retry that action.
+The separate component checkpoint preceded the app assembly. The app now
+creates the adapter, Host, controller, and trusted panel through one explicit
+owner. Its actual-player tests cover activation and teardown. Full app linking,
+compiled UI, two-player correction, and supported-platform checks remain open.

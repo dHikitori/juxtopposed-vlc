@@ -322,6 +322,17 @@ RedesignSettingsDialog {
                     hook: "settings.addons.sections@1"
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 }
+                Loader {
+                    objectName: "addonSessionsLoader"
+                    width: parent.width
+                    active: root.addonsVisited && typeof AddonSessions !== "undefined"
+                    visible: root.category === "extensions" && !root.search.length
+                    sourceComponent: RedesignAddonSessions {
+                        backend: typeof AddonSessions !== "undefined" ? AddonSessions : null
+                        active: root.visible && root.category === "extensions" && !root.search.length
+                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    }
+                }
                 Column {
                     visible: root.category === "general" && !root.search.length
                     width: parent.width
