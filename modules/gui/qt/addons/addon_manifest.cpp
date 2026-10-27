@@ -291,6 +291,9 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
         || !text(root,"publisher",&result.publisher,error) || !text(root,"license",&result.license,error) || !text(root,"source",&source,error)) return false;
     if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$")).match(result.id).hasMatch() || result.id.size() > 128)
         return fail(error, QStringLiteral("The package ID is not correct."));
+    for (const auto& reserved : {QStringLiteral("hakone.builtin"), QStringLiteral("vlc.builtin")})
+        if (result.id == reserved || result.id.startsWith(reserved + QLatin1Char('.')))
+            return fail(error, QStringLiteral("This package ID is reserved for the host."));
     if (!SemanticVersion::parse(result.version, nullptr)) return fail(error, QStringLiteral("The package version is not correct."));
     result.source = QUrl(source, QUrl::StrictMode);
     if (!safeSource(result.source)) return fail(error, QStringLiteral("Use an HTTPS repository without credentials."));

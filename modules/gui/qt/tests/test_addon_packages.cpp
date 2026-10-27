@@ -541,6 +541,37 @@ private slots:
         bad.insert("api", QJsonObject{{"addon", "^2.0.0"}, {"contracts", QJsonObject{{"theme", "^1.0.0"}}}});
         QVERIFY(!Manifest::parse(QJsonDocument(bad).toJson(), &parsed, &error));
     }
+    void hostProviderNamespacesCannotBeImported_data()
+    {
+        QTest::addColumn<QString>("id");
+        for (const auto* id : {"hakone.builtin", "hakone.builtin.musicbrainz", "hakone.builtin.deep.provider",
+                              "vlc.builtin", "vlc.builtin.musicbrainz", "vlc.builtin.deep.provider"})
+            QTest::newRow(id) << QString::fromLatin1(id);
+    }
+    void hostProviderNamespacesCannotBeImported()
+    {
+        QFETCH(QString, id);
+        auto document = manifest(); document.insert("id", id);
+        Manifest parsed; QString error;
+        QVERIFY(!Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error));
+        QVERIFY(error.contains(QStringLiteral("reserved for the host")));
+        QTemporaryDir source, storage; QVERIFY(populate(source.path(), document));
+        PackageCandidate candidate;
+        const ReleaseIdentity identity{document.value("source").toString(), QStringLiteral("v1.0.0"),
+            QStringLiteral("0123456789abcdef0123456789abcdef01234567"),
+            QStringLiteral("0123456789abcdef0123456789abcdef01234567")};
+        QVERIFY(!PackageStore::inspectDirectory(source.path(), identity, &candidate, &error));
+        QVERIFY(error.contains(QStringLiteral("reserved for the host")));
+        QVERIFY(PackageStore(storage.path()).installedIds().isEmpty());
+    }
+    void neighboringPackageNamespacesRemainAvailable()
+    {
+        for (const auto* id : {"org.hakone.example", "org.videolan.musicbrainz", "hakone.builtin-tools", "vlc.builtin-tools"}) {
+            auto document = manifest(); document.insert("id", QString::fromLatin1(id));
+            Manifest parsed; QString error;
+            QVERIFY2(Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error), qPrintable(error));
+        }
+    }
     void inventoryAndContentDigest()
     {
         QTemporaryDir directory;

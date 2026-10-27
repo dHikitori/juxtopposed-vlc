@@ -3501,3 +3501,5 @@ EXTRA_DIST += tests/session-ui/CMakeLists.txt tests/test_addon_session_ui.cpp te
 TESTS += tests/tst_AddonSessions.qml
 
 EXTRA_DIST += tests/player-sessions/CMakeLists.txt tests/test_addon_player_sessions.cpp
+
+EXTRA_DIST += tests/package-namespaces/CMakeLists.txt

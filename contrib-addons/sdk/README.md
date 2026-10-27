@@ -20,6 +20,14 @@ Declare each contract and operation that the package uses. A declared permission
 
 Use the [reference packages](../examples/) to inspect complete package files. Keep credentials out of package files, ordinary settings values, worker state, and saved media references. Use the generated host settings form for secret replacement or deletion.
 
+## Host package names
+
+The host reserves `hakone.builtin`, `vlc.builtin`, and every package ID below
+either dotted prefix. An installable package cannot use these names. The old
+prefix remains reserved so that a package cannot replace a host provider.
+New project add-ons use `org.hakone`. Extracted add-ons keep their approved IDs.
+See [host provider names](../host-provider-namespaces.md) for the import checks.
+
 ## Session schema checks
 
 Use Python 3.10 or later and `jsonschema==4.23.0` in a separate tool environment.
