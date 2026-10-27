@@ -9,6 +9,8 @@
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QtEndian>
+#include <zlib.h>
 #include <memory>
 #include <vlc_artwork_policy.h>
 #include <vlc_input_item.h>
@@ -158,6 +160,23 @@ private slots:
         auto *scope = policy(); QVERIFY(scope); const auto release = qScopeGuard([&] { vlc_input_policy_Release(scope); });
         QCOMPARE(vlc_input_policy_AttachItem(native.get(), scope), VLC_SUCCESS);
         QVERIFY(PlayerController::decodeArtURL(native.get()).isEmpty());
+    }
+    void scopedUserChoiceRefusesCompressedImageMetadata()
+    {
+        QTemporaryDir directory; const auto original = png(directory); QVERIFY(!original.isEmpty());
+        QFile input(original.toLocalFile()); QVERIFY(input.open(QIODevice::ReadOnly)); auto bytes = input.readAll(); input.close();
+        QByteArray payload("note\0\0", 6); payload += qCompress(QByteArray(1024 * 1024, 'x')).mid(4);
+        QByteArray chunk(4, '\0'); qToBigEndian<quint32>(quint32(payload.size()), chunk.data()); chunk += "zTXt"; chunk += payload;
+        const auto crc = crc32(0, reinterpret_cast<const Bytef*>(chunk.constData() + 4), uInt(chunk.size() - 4));
+        QByteArray tail(4, '\0'); qToBigEndian<quint32>(quint32(crc), tail.data()); chunk += tail; bytes.insert(33, chunk);
+        const auto candidate = QUrl::fromLocalFile(directory.filePath(QStringLiteral("metadata.png")));
+        QVERIFY(write(candidate.toLocalFile(), bytes)); QVERIFY(!ArtworkApproval::validUserFile(candidate));
+        SharedInputItem source(input_item_New("vlc-addon-source:v1:choice", "Source"), false);
+        QVERIFY(ArtworkApproval::userFile(source.get(), original));
+        QVERIFY(!ArtworkApproval::userFile(source.get(), candidate));
+        QCOMPARE(PlayerController::decodeArtURL(source.get()), original.toLocalFile());
+        SharedInputItem native(input_item_New("file:///native.flac", "Native"), false);
+        QVERIFY(ArtworkApproval::userFile(native.get(), candidate));
     }
     void queueArtworkUsesTheCurrentNativeRecord()
     {
