@@ -7,6 +7,7 @@
 #include <vlc_atomic.h>
 #include <vlc_input_item.h>
 #include <vlc_input_policy.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_metadata_revision.h>
 #include <vlc_threads.h>
 #include <vlc_input.h>
@@ -48,6 +49,8 @@ struct vlc_metadata_job {
     struct vlc_item_parse_delta local_delta;
     struct vlc_metadata_local_events local_events;
     bool local_prepared, local_admitted, local_events_taken, local_name_missing;
+    char *fetched_artwork;
+    uint64_t artwork_applied_revision;
     struct vlc_metadata_result result;
     struct vlc_metadata_field_patch patches[VLC_META_TYPE_COUNT];
     vlc_metadata_ended_cb ended;
@@ -111,6 +114,7 @@ void vlc_metadata_job_Release(vlc_metadata_job_t *job)
     if (job->local_item != NULL) input_item_Release(job->local_item);
     vlc_item_parse_Clear(&job->local_delta);
     vlc_metadata_local_events_Clear(&job->local_events);
+    free(job->fetched_artwork);
     free(job->uri);
     vlc_input_policy_Release(job->policy);
     if (job->result.item != NULL) input_item_Release(job->result.item);
@@ -512,6 +516,11 @@ static int target_current_locked(vlc_metadata_job_t *job, input_item_t *target,
     if (target->p_meta == NULL || !same_string(job->uri, target->psz_uri)
         || job->policy != item_owner(target)->input_policy
         || vlc_meta_ExtraRevision(target->p_meta) != job->baseline.extra) return -EAGAIN;
+    if (job->fetched_artwork != NULL
+        && (job->status_baseline == UINT64_MAX
+            || vlc_meta_StatusRevision(target->p_meta) != job->status_baseline
+            || vlc_meta_FieldRevision(target->p_meta, vlc_meta_ArtworkURL)
+                != job->baseline.fields[vlc_meta_ArtworkURL])) return -EAGAIN;
     for (size_t i = 0; i < ARRAY_SIZE(identity_fields); ++i) {
         const vlc_meta_type_t type = identity_fields[i];
         if (vlc_meta_FieldRevision(target->p_meta, type) != job->baseline.fields[type]) return -EAGAIN;
@@ -556,6 +565,94 @@ bool vlc_metadata_job_IsCurrentFor(vlc_metadata_job_t *job, input_item_t *target
     vlc_mutex_unlock(&job->backend->lock); return current;
 }
 
+int vlc_metadata_job_PrepareFetchedArtwork(vlc_metadata_job_t *anchor,
+                    vlc_metadata_job_t *child, input_item_t *working, bool replace_artwork)
+{
+    if (anchor == NULL || child == NULL || anchor == child || working == NULL)
+        return VLC_EINVAL;
+    vlc_metadata_job_Hold(anchor); vlc_metadata_job_Hold(child);
+    struct vlc_artwork_approval result_proof = {0}, working_proof = {0};
+    int status = VLC_SUCCESS;
+    const struct vlc_metadata_field_patch *field = NULL;
+    uint64_t applied_revision = 0;
+    vlc_mutex_lock(&anchor->backend->lock);
+    const bool pending = anchor->local && anchor->started && anchor->local_prepared
+        && !anchor->terminal && !anchor->commit_cancelled && !anchor->backend->closed
+        && !anchor->applying && !anchor->sealed && anchor->local_item == working;
+    vlc_mutex_unlock(&anchor->backend->lock);
+    if (!pending) { status = -EINTR; goto out; }
+    vlc_mutex_lock(&child->backend->lock);
+    const bool completed = child->terminal && child->status == VLC_SUCCESS
+        && !child->commit_cancelled && !child->backend->closed && child->target == working;
+    if (completed)
+        for (size_t i = 0; i < child->result.field_count; ++i)
+            if (child->patches[i].type == vlc_meta_ArtworkURL) { field = &child->patches[i]; break; }
+    if (completed) applied_revision = child->artwork_applied_revision;
+    vlc_mutex_unlock(&child->backend->lock);
+    if (!completed) { status = VLC_EINVAL; goto out; }
+    if (field == NULL) goto out;
+
+    vlc_mutex_lock(&working->lock);
+    const uint64_t revision = vlc_meta_FieldRevision(working->p_meta, vlc_meta_ArtworkURL);
+    const bool unchanged = revision == field->expected_revision;
+    const bool exact = working->p_meta != NULL && applied_revision != 0
+        && revision == applied_revision && revision != UINT64_MAX
+        && same_string(field->value, vlc_meta_Get(working->p_meta, vlc_meta_ArtworkURL))
+        && same_string(child->uri, working->psz_uri)
+        && child->policy == item_owner(working)->input_policy;
+    vlc_mutex_unlock(&working->lock);
+    /* Apply can preserve a current user artwork field. That is not a fetch. */
+    if (unchanged) goto out;
+    const bool missing_artwork = vlc_artwork_item_HasMissingDisplay(anchor->request.item);
+    vlc_mutex_lock(&anchor->request.item->lock);
+    const char *original = vlc_meta_Get(anchor->request.item->p_meta, vlc_meta_ArtworkURL);
+    const bool protected_artwork = !replace_artwork && !missing_artwork
+        && original != NULL && original[0] != '\0';
+    vlc_mutex_unlock(&anchor->request.item->lock);
+    if (protected_artwork) goto out;
+    if (!exact || !vlc_artwork_uri_IsLocalFile(field->value)) { status = -EAGAIN; goto out; }
+    status = vlc_artwork_item_PrepareApproval(child->result.item, child->uri,
+        child->policy, field->value, &result_proof);
+    if (status != VLC_SUCCESS) goto out;
+    status = vlc_artwork_item_PrepareApproval(working, child->uri,
+        child->policy, field->value, &working_proof);
+    if (status != VLC_SUCCESS) goto out;
+
+    vlc_mutex_lock(&anchor->backend->lock);
+    const bool ready = anchor->local && anchor->started && anchor->local_prepared
+        && !anchor->terminal && !anchor->commit_cancelled && !anchor->backend->closed
+        && !anchor->applying && !anchor->sealed && anchor->local_item == working;
+    if (!ready) status = -EINTR;
+    if (status == VLC_SUCCESS) {
+        uint32_t native_fields = anchor->local_delta.fields;
+        vlc_mutex_lock(&anchor->target->lock);
+        status = target_current_locked(anchor, anchor->target, true, &native_fields);
+        if (status == VLC_SUCCESS && (anchor->status_baseline == UINT64_MAX
+            || vlc_meta_StatusRevision(anchor->target->p_meta) != anchor->status_baseline
+            || vlc_meta_FieldRevision(anchor->target->p_meta, vlc_meta_ArtworkURL)
+                != anchor->baseline.fields[vlc_meta_ArtworkURL])) status = -EAGAIN;
+        vlc_mutex_unlock(&anchor->target->lock);
+    }
+    if (status == VLC_SUCCESS) {
+        vlc_mutex_lock(&working->lock);
+        const bool current = same_string(anchor->uri, working->psz_uri)
+            && anchor->policy == item_owner(working)->input_policy
+            && !vlc_input_policy_IsRevoked(anchor->policy)
+            && vlc_meta_FieldRevision(working->p_meta, vlc_meta_ArtworkURL) == revision
+            && same_string(field->value, vlc_meta_Get(working->p_meta, vlc_meta_ArtworkURL));
+        vlc_mutex_unlock(&working->lock);
+        if (!current) status = -EAGAIN;
+    }
+    if (status == VLC_SUCCESS) {
+        char *old = anchor->fetched_artwork;
+        anchor->fetched_artwork = result_proof.uri; result_proof.uri = old;
+    }
+    vlc_mutex_unlock(&anchor->backend->lock);
+out:
+    vlc_artwork_approval_Clear(&result_proof); vlc_artwork_approval_Clear(&working_proof);
+    vlc_metadata_job_Release(child); vlc_metadata_job_Release(anchor); return status;
+}
+
 int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
                            uint32_t replace_fields, size_t *applied)
 {
@@ -569,6 +666,7 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
     unsigned count = 0;
     int status = VLC_SUCCESS;
     bool local_attempt = false;
+    bool fetched_artwork = false;
     vlc_mutex_lock(&job->backend->lock);
     const bool ready = job->terminal && job->status == VLC_SUCCESS
         && (!job->local || (!job->applying && !job->sealed));
@@ -591,17 +689,22 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
         values[i] = strdup(value);
         if (values[i] == NULL) { status = VLC_ENOMEM; goto out; }
         if (field->type == vlc_meta_ArtworkURL) {
+            const bool fetched = job->fetched_artwork != NULL
+                && same_string(job->fetched_artwork, value);
             /* Only the exact sealed native execution can retain the ordinary
-             * native artwork route. A provider result cannot grant this path. */
+             * native artwork route. A fetched result still needs its proof. */
             const bool native_local = job->local && job->local_prepared && job->policy == NULL
                 && !vlc_input_policy_IsAddonSourceURI(job->uri)
                 && vlc_meta_FieldRevision(job->local_delta.item->p_meta, vlc_meta_ArtworkURL) != job->baseline.fields[vlc_meta_ArtworkURL]
                 && same_string(value, vlc_meta_Get(job->local_delta.item->p_meta, vlc_meta_ArtworkURL));
-            status = native_local ? VLC_SUCCESS
+            status = native_local && !fetched ? VLC_SUCCESS
                 : vlc_artwork_item_PrepareApproval(job->result.item, job->uri, job->policy, value, &artwork);
             if (status != VLC_SUCCESS) goto out;
+            fetched_artwork = fetched;
         }
     }
+
+    if (job->fetched_artwork != NULL && !fetched_artwork) { status = -EAGAIN; goto out; }
 
     vlc_mutex_lock(&job->backend->lock);
     vlc_mutex_lock(&target->lock);
@@ -610,8 +713,9 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
     const bool extra = job->local_prepared && job->local_delta.extras;
     const bool local_status = job->local_prepared && job->local_delta.status && target->p_meta != NULL
         && vlc_meta_StatusRevision(target->p_meta) == job->status_baseline;
+    const bool write_status = local_status || fetched_artwork;
     uint64_t first = 0;
-    if (status == VLC_SUCCESS && !vlc_meta_ReserveRevisions(count + extra + local_status, &first)) status = -EAGAIN;
+    if (status == VLC_SUCCESS && !vlc_meta_ReserveRevisions(count + extra + write_status, &first)) status = -EAGAIN;
     if (status == VLC_SUCCESS && vlc_input_policy_IsRevoked(job->policy)) status = -EACCES;
     if (status == VLC_SUCCESS) {
         for (size_t i = 0; i < job->result.field_count; ++i) {
@@ -619,14 +723,21 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
             if (!changes[i]) continue;
             const uint64_t revision = first++;
             vlc_meta_SetOwnedRevision(target->p_meta, field->type, values[i], revision); values[i] = NULL;
-            if (field->type == vlc_meta_ArtworkURL) vlc_artwork_item_SwapApprovalLocked(target, &artwork, revision);
+            if (field->type == vlc_meta_ArtworkURL) {
+                vlc_artwork_item_SwapApprovalLocked(target, &artwork, revision);
+                job->artwork_applied_revision = revision;
+            }
             if (applied != NULL) ++*applied;
         }
         if (job->local_prepared) {
             vlc_item_parse_SwapLocked(&job->local_delta, target, native_fields);
             if (extra) vlc_meta_SwapExtraOwned(target->p_meta, job->local_delta.item->p_meta, first++);
-            if (local_status) vlc_meta_SetStatusOwned(target->p_meta,
-                vlc_meta_GetStatus(target->p_meta) | vlc_meta_GetStatus(job->local_delta.item->p_meta), first++);
+            if (write_status) {
+                int merged = vlc_meta_GetStatus(target->p_meta);
+                if (local_status) merged |= vlc_meta_GetStatus(job->local_delta.item->p_meta);
+                if (fetched_artwork) merged |= ITEM_ART_FETCHED;
+                vlc_meta_SetStatusOwned(target->p_meta, merged, first++);
+            }
             job->local_admitted = true;
         }
     }

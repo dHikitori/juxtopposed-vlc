@@ -9,6 +9,7 @@
 #include <vlc_epg.h>
 #include <vlc_meta.h>
 #include <vlc_input_policy.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_metadata_backend.h>
 #include <vlc_metadata_revision.h>
 #include <vlc_threads.h>
@@ -309,11 +310,193 @@ static void sealed_native_artwork_does_not_authorize_scoped_or_provider_claims(v
         clean(&f); vlc_input_policy_Release(policy);
     }
 }
+struct artwork_child {
+    vlc_metadata_backend_t *backend;
+    vlc_metadata_job_t *job;
+    unsigned ended;
+};
+static void artwork_status(input_item_t *item, int set, int clear)
+{
+    vlc_mutex_lock(&item->lock);
+    vlc_meta_SetStatus(item->p_meta, (vlc_meta_GetStatus(item->p_meta) | set) & ~clear);
+    vlc_mutex_unlock(&item->lock);
+}
+static int artwork_dispatch(void *opaque, vlc_metadata_job_t *job)
+{ (void)opaque; (void)job; return VLC_SUCCESS; }
+static void artwork_ended(vlc_metadata_job_t *job, int status, void *opaque)
+{ (void)job; (void)status; ++((struct artwork_child *)opaque)->ended; }
+static void artwork_child_start(struct artwork_child *child, struct fixture *f,
+                                const char *uri, bool approved)
+{
+    memset(child, 0, sizeof(*child));
+    static const struct vlc_metadata_backend_operations ops = {.dispatch=artwork_dispatch};
+    child->backend = vlc_metadata_backend_New(&ops, child); assert(child->backend != NULL);
+    const struct vlc_metadata_request request = {.feature="artwork", .operation="enrich", .item=f->parsed};
+    child->job = vlc_metadata_job_New(child->backend, &request, artwork_ended, child); assert(child->job != NULL);
+    assert(vlc_metadata_job_Start(child->job) == VLC_SUCCESS);
+    input_item_t *result = input_item_Copy(vlc_metadata_job_GetRequest(child->job)->item); assert(result != NULL);
+    if (uri != NULL) {
+        if (approved) assert(vlc_artwork_item_SetApprovedURI(result, uri) == VLC_SUCCESS);
+        else input_item_SetArtURL(result, uri);
+    }
+    /* Native result status alone is not a fetched or not-found receipt. */
+    artwork_status(result, ITEM_ART_FETCHED | ITEM_ART_NOTFOUND, 0);
+    assert(vlc_metadata_job_Complete(child->job, VLC_SUCCESS, result, NULL, 0));
+    input_item_Release(result); assert(child->ended == 1);
+}
+static void artwork_child_clear(struct artwork_child *child)
+{
+    vlc_metadata_backend_Close(child->backend);
+    vlc_metadata_job_Release(child->job); vlc_metadata_backend_Release(child->backend);
+}
+static void prepare_fetched_artwork(struct fixture *f)
+{
+    init(f); start(f); local_facts(f->parsed); artwork_status(f->parsed, ITEM_ART_NOTFOUND, 0);
+    assert(vlc_metadata_job_PrepareLocal(f->job, f->parsed, NULL) == VLC_SUCCESS);
+    struct artwork_child child; artwork_child_start(&child, f, "file:///cache/approved.png", true);
+    assert(vlc_metadata_job_Apply(child.job, f->parsed, 0, NULL) == VLC_SUCCESS);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f->job, child.job, f->parsed, false) == VLC_SUCCESS);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f->job, child.job, f->parsed, false) == VLC_SUCCESS);
+    artwork_child_clear(&child); complete(f);
+}
+static void remote_fetched_status_joins_the_sealed_native_delta(void)
+{
+    struct fixture f; prepare_fetched_artwork(&f);
+    assert(!input_item_IsArtFetched(f.item)); field(f.item, vlc_meta_ArtworkURL, NULL);
+    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == VLC_SUCCESS);
+    assert(input_item_IsArtFetched(f.item) && input_item_IsPreparsed(f.item));
+    assert(vlc_meta_GetStatus(f.item->p_meta) & ITEM_ART_NOTFOUND);
+    assert(f.item->i_duration == VLC_TICK_FROM_SEC(123));
+    field(f.item, vlc_meta_ArtworkURL, "file:///cache/approved.png");
+    char *artwork = vlc_artwork_item_GetURI(f.item);
+    assert(artwork != NULL && !strcmp(artwork, "file:///cache/approved.png")); free(artwork);
+    field(f.item, vlc_meta_Description, "Remote description"); clean(&f);
+}
+static void protected_unchanged_and_unadmitted_artwork_have_no_remote_status(void)
+{
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        struct fixture f; init(&f);
+        if (mode == 0) assert(vlc_artwork_item_SetApprovedURI(f.item, "file:///private/user.png") == VLC_SUCCESS);
+        start(&f); assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+        struct artwork_child child;
+        artwork_child_start(&child, &f, mode == 1 ? NULL : "file:///cache/approved.png", true);
+        if (mode != 2) assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) == VLC_SUCCESS);
+        assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+        artwork_child_clear(&child); complete(&f);
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == VLC_SUCCESS);
+        assert(!input_item_IsArtFetched(f.item) && !(vlc_meta_GetStatus(f.item->p_meta) & ITEM_ART_NOTFOUND));
+        field(f.item, vlc_meta_ArtworkURL, mode == 0 ? "file:///private/user.png" : NULL);
+        clean(&f);
+    }
+}
+static void raw_artwork_text_cannot_stage_a_fetched_result(void)
+{
+    struct fixture f; init(&f); start(&f);
+    assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+    struct artwork_child child; artwork_child_start(&child, &f, "file:///cache/forged.png", false);
+    assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) == -EACCES);
+    input_item_SetArtURL(f.parsed, "file:///cache/forged.png");
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == -EAGAIN);
+    artwork_child_clear(&child); complete(&f);
+    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EACCES);
+    assert(!input_item_IsArtFetched(f.item)); field(f.item, vlc_meta_ArtworkURL, NULL);
+    field(f.item, vlc_meta_Description, NULL); clean(&f);
+}
+static void another_writer_cannot_supply_the_child_apply_receipt(void)
+{
+    struct fixture f; init(&f); start(&f);
+    assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+    struct artwork_child child; artwork_child_start(&child, &f, "file:///cache/approved.png", true);
+    assert(vlc_artwork_item_SetApprovedURI(f.parsed, "file:///cache/approved.png") == VLC_SUCCESS);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == -EAGAIN);
+    assert(!input_item_IsArtFetched(f.item)); field(f.item, vlc_meta_ArtworkURL, NULL);
+    artwork_child_clear(&child); clean(&f);
+}
+static void artwork_and_status_edits_refuse_the_complete_transaction(void)
+{
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        struct fixture f; prepare_fetched_artwork(&f);
+        if (mode == 0) artwork_status(f.item, 0, ITEM_ART_FETCHED);
+        if (mode == 1) { artwork_status(f.item, ITEM_ART_FETCHED, 0); artwork_status(f.item, 0, ITEM_ART_FETCHED); }
+        if (mode == 2) input_item_SetArtURL(f.item, NULL);
+        if (mode == 3) { input_item_SetArtURL(f.item, "file:///private/user.png"); input_item_SetArtURL(f.item, NULL); }
+        if (mode == 4) input_item_SetTitle(f.item, "Original title");
+        if (mode == 5) { input_item_SetTitle(f.item, "User title"); input_item_SetTitle(f.item, "Original title"); }
+        assert(!vlc_metadata_job_IsCurrentFor(f.job, f.item));
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EAGAIN);
+        assert(!input_item_IsArtFetched(f.item) && !input_item_IsPreparsed(f.item));
+        assert(f.item->i_duration == INPUT_DURATION_UNSET);
+        field(f.item, vlc_meta_ArtworkURL, NULL); field(f.item, vlc_meta_Description, NULL); clean(&f);
+    }
+}
+static void a_later_artwork_result_cannot_reuse_an_old_fetched_receipt(void)
+{
+    struct fixture f; init(&f); start(&f); local_facts(f.parsed);
+    assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+    struct artwork_child child; artwork_child_start(&child, &f, "file:///cache/approved.png", true);
+    assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) == VLC_SUCCESS);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+    assert(vlc_artwork_item_SetApprovedURI(f.parsed, "file:///cache/later.png") == VLC_SUCCESS);
+    artwork_child_clear(&child); complete(&f);
+    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EAGAIN);
+    assert(!input_item_IsArtFetched(f.item) && f.item->i_duration == INPUT_DURATION_UNSET);
+    field(f.item, vlc_meta_ArtworkURL, NULL); field(f.item, vlc_meta_Description, NULL); clean(&f);
+}
+static void a_sealed_native_uri_cannot_replace_a_fetched_approval(void)
+{
+    struct fixture f; init(&f); start(&f);
+    input_item_SetArtURL(f.parsed, "file:///cache/approved.png");
+    assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+    input_item_SetArtURL(f.parsed, NULL);
+    struct artwork_child child; artwork_child_start(&child, &f, "file:///cache/approved.png", true);
+    assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) == VLC_SUCCESS);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+    input_item_SetArtURL(f.parsed, "file:///cache/approved.png");
+    artwork_child_clear(&child); complete(&f);
+    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EACCES);
+    assert(!input_item_IsArtFetched(f.item)); field(f.item, vlc_meta_ArtworkURL, NULL);
+    field(f.item, vlc_meta_Description, NULL); clean(&f);
+}
+static void cancellation_keeps_the_fetched_receipt_private(void)
+{
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        struct fixture f; prepare_fetched_artwork(&f);
+        if (mode == 0) vlc_metadata_job_Cancel(f.job);
+        else vlc_metadata_backend_Close(f.backend);
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EINTR);
+        assert(!input_item_IsArtFetched(f.item) && f.item->i_duration == INPUT_DURATION_UNSET);
+        field(f.item, vlc_meta_ArtworkURL, NULL); field(f.item, vlc_meta_Description, NULL); clean(&f);
+    }
+}
+static void a_revoked_scoped_policy_refuses_artwork_and_status_together(void)
+{
+    static const struct vlc_input_policy_operations ops = {allow_url, allow_connection, NULL};
+    struct fixture f; init(&f);
+    input_item_SetURI(f.item, "hakone-addon-source:v1:artwork");
+    vlc_input_policy_t *policy = vlc_input_policy_New(&ops, NULL); assert(policy != NULL);
+    assert(vlc_input_policy_AttachItem(f.item, policy) == VLC_SUCCESS);
+    start(&f); local_facts(f.parsed);
+    assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+    struct artwork_child child; artwork_child_start(&child, &f, "file:///cache/approved.png", true);
+    assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) == VLC_SUCCESS);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+    artwork_child_clear(&child); complete(&f); vlc_input_policy_Revoke(policy);
+    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EACCES);
+    assert(!input_item_IsArtFetched(f.item) && f.item->i_duration == INPUT_DURATION_UNSET);
+    field(f.item, vlc_meta_ArtworkURL, NULL); field(f.item, vlc_meta_Description, NULL);
+    clean(&f); vlc_input_policy_Release(policy);
+}
 int main(void)
 {
     full_native_parity_and_seal(); sideband_waits_for_admission(); stale_native_same_value_and_aba();
     live_progress_has_precedence(); closed_owner_and_cancelled_local_result(); exact_draft_and_execution_identity();
     missing_name_and_native_edit_guards(); policy_identity_and_revocation(); unrelated_native_edits_keep_standard_only_path();
     sealed_native_artwork_keeps_ordinary_local_results(); sealed_native_artwork_does_not_authorize_scoped_or_provider_claims();
+    remote_fetched_status_joins_the_sealed_native_delta(); protected_unchanged_and_unadmitted_artwork_have_no_remote_status();
+    raw_artwork_text_cannot_stage_a_fetched_result(); artwork_and_status_edits_refuse_the_complete_transaction();
+    another_writer_cannot_supply_the_child_apply_receipt();
+    a_sealed_native_uri_cannot_replace_a_fetched_approval();
+    a_later_artwork_result_cannot_reuse_an_old_fetched_receipt(); cancellation_keeps_the_fetched_receipt_private();
+    a_revoked_scoped_policy_refuses_artwork_and_status_together();
     return 0;
 }

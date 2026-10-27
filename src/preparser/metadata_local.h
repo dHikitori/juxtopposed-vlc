@@ -41,6 +41,21 @@ VLC_API bool vlc_metadata_job_IsCurrentFor(vlc_metadata_job_t *, input_item_t *e
 VLC_API int vlc_metadata_job_PrepareLocal(vlc_metadata_job_t *, input_item_t *parsed,
                                 const struct vlc_metadata_local_events *);
 
+/* Stage a fetched result from a completed native child after its Apply call.
+ * working must be the anchor's exact private item and the child's exact target.
+ * An unchanged or protected artwork field adds no outcome. A changed field
+ * needs the exact local file and current native approval on both the child
+ * result and working item. Text, provenance, and remote status are not proof.
+ * replace_artwork must match the native outer Apply choice. This call does
+ * not change the target or reserve a token. Final Apply checks
+ * the original artwork and status tokens, then commits the artwork, approval,
+ * and fetched bit together. It preserves the not-found bit and all other bits.
+ * This helper cannot stage a not-found result. A remote no-match result does
+ * not prove that every eligible provider completed a search.
+ */
+VLC_API int vlc_metadata_job_PrepareFetchedArtwork(vlc_metadata_job_t *anchor,
+                    vlc_metadata_job_t *child, input_item_t *working, bool replace_artwork);
+
 /* Transfer sideband output once, after successful Apply. A failed or cancelled
  * commit has no output. The caller can now deliver callbacks outside native
  * locks. Clear releases every tree and attachment after those callbacks.

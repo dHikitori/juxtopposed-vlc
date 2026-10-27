@@ -125,6 +125,42 @@ static void cancellation_during_value_preparation_has_no_native_writes(void)
     assert(f.item->i_duration == INPUT_DURATION_UNSET && f.item->es_vec.size == 0);
     info(f.item, "Parsed", "Format", ""); field(f.item, vlc_meta_Description, NULL); clean(&f);
 }
+static void fetched_artwork_reserves_one_combined_status_token(void)
+{
+    struct fixture f; prepare_fetched_artwork(&f);
+    const uint_fast64_t saved = atomic_load(&metadata_revision_sequence);
+    atomic_store(&metadata_revision_sequence, UINT64_MAX - 4);
+    /* Artwork, description, extras, and the combined status need four tokens. */
+    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EAGAIN);
+    assert(f.item->i_duration == INPUT_DURATION_UNSET && !input_item_IsArtFetched(f.item));
+    assert(!input_item_IsPreparsed(f.item) && item_owner(f.item)->artwork_uri == NULL);
+    assert(vlc_meta_GetExtra(f.item->p_meta, "Native extra") == NULL);
+    field(f.item, vlc_meta_ArtworkURL, NULL); field(f.item, vlc_meta_Description, NULL);
+    assert(atomic_load(&metadata_revision_sequence) == UINT64_MAX - 4);
+    atomic_store(&metadata_revision_sequence, saved); clean(&f);
+}
+static void fetched_artwork_preparation_failures_leave_no_receipt(void)
+{
+    unsigned refused = 0;
+    for (size_t index = 0; index < 16; ++index) {
+        struct fixture f; init(&f); start(&f);
+        assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+        struct artwork_child child; artwork_child_start(&child, &f, "file:///cache/approved.png", true);
+        assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) == VLC_SUCCESS);
+        allocation_at = index; allocation_count = 0; allocation_fault = true;
+        const int status = vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false);
+        allocation_fault = false;
+        if (status != VLC_SUCCESS) {
+            ++refused; assert(status == VLC_ENOMEM && f.job->fetched_artwork == NULL);
+            assert(!input_item_IsArtFetched(f.item)); field(f.item, vlc_meta_ArtworkURL, NULL);
+            assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+        }
+        artwork_child_clear(&child); complete(&f);
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == VLC_SUCCESS && input_item_IsArtFetched(f.item));
+        clean(&f); if (status == VLC_SUCCESS) break;
+    }
+    assert(refused >= 4 && refused < 16);
+}
 static void saturated_native_token_has_no_partial_commit(void)
 {
     struct fixture f; init(&f);
@@ -166,6 +202,8 @@ int main(void)
 {
     allocation_failures_leave_every_fact(); failed_local_snapshot_can_retry();
     failed_extra_and_status_reservation_has_no_native_writes();
+    fetched_artwork_reserves_one_combined_status_token();
+    fetched_artwork_preparation_failures_leave_no_receipt();
     cancellation_during_value_preparation_has_no_native_writes();
     saturated_native_token_has_no_partial_commit(); limits_leave_no_attached_delta(); return 0;
 }

@@ -260,7 +260,10 @@ static void remote_ended(vlc_metadata_job_t *job, int status, void *opaque)
                     && (!strncasecmp(original, "http://", 7) || !strncasecmp(original, "https://", 8));
                 free(original); free(before);
             }
-            if (applied == -EINTR || applied == -EAGAIN || applied == -EACCES) entry_finish(entry, applied);
+            if (status == VLC_SUCCESS && applied == VLC_SUCCESS)
+                applied = vlc_metadata_job_PrepareFetchedArtwork(entry->anchor, job,
+                    entry->working, entry->native_artwork_replace);
+            if (applied != VLC_SUCCESS) entry_finish(entry, applied);
             else entry_next(entry);
         }
     } else entry_finish(entry, vlc_input_policy_IsRevoked(entry->policy) ? -EACCES : -EINTR);

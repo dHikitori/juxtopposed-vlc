@@ -162,6 +162,7 @@ static void original_snapshot_and_stage_order(void)
     description = input_item_GetDescription(fixture.item); assert(description != NULL && !strcmp(description, "Local observation")); free(description);
     char *artist = input_item_GetArtist(fixture.item); assert(artist != NULL && !strcmp(artist, "Remote artist")); free(artist);
     char *artwork = vlc_artwork_item_GetURI(fixture.item); assert(artwork != NULL && !strcmp(artwork, "file:///validated/native.png")); free(artwork);
+    assert(input_item_IsArtFetched(fixture.item));
     destroy(&fixture);
 }
 static void a_same_value_user_edit_refuses_the_whole_staged_patch(void)
@@ -179,7 +180,8 @@ static void protected_native_artwork_is_not_an_automatic_replacement(void)
     assert(vlc_artwork_item_SetApprovedURI(fixture.item, "file:///private/user.png") == VLC_SUCCESS);
     struct result result = {0}; assert(push(&fixture, &result, VLC_PREPARSER_TYPE_FETCHMETA_ALL) == VLC_SUCCESS);
     assert(result.calls == 1 && result.status == VLC_SUCCESS);
-    char *artwork = vlc_artwork_item_GetURI(fixture.item); assert(artwork != NULL && !strcmp(artwork, "file:///private/user.png")); free(artwork); destroy(&fixture);
+    char *artwork = vlc_artwork_item_GetURI(fixture.item); assert(artwork != NULL && !strcmp(artwork, "file:///private/user.png")); free(artwork);
+    assert(!input_item_IsArtFetched(fixture.item)); destroy(&fixture);
 }
 static void only_unowned_enoent_permits_the_parent_legacy_path(void)
 {
