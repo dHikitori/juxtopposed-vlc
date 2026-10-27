@@ -639,6 +639,27 @@ void DialogsProvider::quit()
     b_isDying = true;
     assert(qApp);
     qApp->setProperty("isDying", true);
+    if(p_intf->p_mi)
+    {
+        if(!p_intf->p_mi->requestAddonRetirement([intf=p_intf] {
+            libvlc_Quit(vlc_object_instance(intf));
+        }))
+        {
+            if(!m_quitRetryReported)
+            {
+                m_quitRetryReported=true;
+                msg_Err(p_intf, "The app cannot stop add-on work.");
+            }
+            b_isDying=false;
+            qApp->setProperty("isDying",false);
+            if(!m_quitRetryScheduled)
+            {
+                m_quitRetryScheduled=true;
+                QTimer::singleShot(100,this,[this] { m_quitRetryScheduled=false; quit(); });
+            }
+        }
+        return;
+    }
     libvlc_Quit( vlc_object_instance(p_intf) );
 }
 

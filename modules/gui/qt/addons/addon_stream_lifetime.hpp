@@ -63,6 +63,11 @@ public:
     AddonStreamLifetime& operator=(const AddonStreamLifetime&)=delete;
     Handle handle() const noexcept { return Handle(m_state); }
     void close() noexcept { handle().close(); }
+    // Register the one application owner before it creates add-on services.
+    // Unregister the same closed and joined owner before app destruction.
+    static bool registerApplication(const Handle&) noexcept;
+    static bool unregisterApplication(const Handle&) noexcept;
+    static Handle applicationHandle() noexcept;
     static unsigned processNetworkCount() noexcept;
     static unsigned processPlainCount() noexcept;
     static unsigned processQtWorkCount() noexcept;

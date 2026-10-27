@@ -160,6 +160,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_stream_lifetime.hpp \
 	addons/addon_stream_shutdown.cpp \
 	addons/addon_stream_shutdown.hpp \
+	addons/addon_app_shutdown.cpp \
+	addons/addon_app_shutdown.hpp \
 	addons/addon_stream_dns.cpp \
 	addons/addon_stream_dns.hpp \
 	addons/addon_stream_proxy.cpp \
@@ -2173,6 +2175,17 @@ endif
 
 if HAVE_QT_QTEST
 
+test_qt_addon_app_shutdown_SOURCES = tests/test_addon_app_shutdown.cpp
+nodist_test_qt_addon_app_shutdown_SOURCES = tests/test_addon_app_shutdown.moc
+BUILT_SOURCES += tests/test_addon_app_shutdown.moc
+CLEANFILES += tests/test_addon_app_shutdown.moc
+test_qt_addon_app_shutdown_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_app_shutdown_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_app_shutdown_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_app_shutdown_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_app_shutdown
+TESTS += test_qt_addon_app_shutdown
+
 test_qt_addon_stream_http_SOURCES = tests/test_addon_stream_http.cpp
 nodist_test_qt_addon_stream_http_SOURCES = tests/test_addon_stream_http.moc
 BUILT_SOURCES += tests/test_addon_stream_http.moc
@@ -3375,3 +3388,6 @@ EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metada
 EXTRA_DIST += tests/build_addon_native_library_tests.py tests/test_addon_native_library_store.cpp
 
 EXTRA_DIST += tests/stream-proxy/CMakeLists.txt
+EXTRA_DIST += tests/addon_test_application_work.hpp
+
+EXTRA_DIST += tests/app-shutdown/CMakeLists.txt

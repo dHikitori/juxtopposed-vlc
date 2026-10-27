@@ -55,6 +55,12 @@ extern "C" char **environ;
 #include <QFontDatabase>
 #include <QDate>
 #include <QMutex>
+#include <QScopeGuard>
+#include <QThread>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include "addons/addon_app_shutdown.hpp"
 #include <QtQuickControls2/QQuickStyle>
 #include <QLoggingCategory>
 #include <QQmlError>
@@ -565,6 +571,8 @@ Q_DECLARE_METATYPE(QQmlError)
 
 /* Ugly, but the Qt interface assumes single instance anyway */
 static qt_intf_t* g_qtIntf = nullptr;
+// Only the app thread reads or writes this pointer.
+static vlc::addons::AddonAppShutdown* g_addonAppShutdown = nullptr;
 static vlc::threads::condition_variable wait_ready;
 static vlc::threads::mutex lock;
 static bool busy = false;
@@ -583,10 +591,13 @@ enum CleanupReason {
 
 static inline void triggerQuit()
 {
+    if(!qApp) return;
     QMetaObject::invokeMethod(qApp, []() {
-            qApp->closeAllWindows();
-            //at this point both UI and Vout have ended, stop Qt mainloop
-            qApp->exit();
+            if(!g_addonAppShutdown) return;
+            g_addonAppShutdown->requestRetirement([] {
+                qApp->closeAllWindows();
+                if(g_addonAppShutdown) g_addonAppShutdown->requestExit();
+            });
         }, Qt::QueuedConnection);
 }
 
@@ -771,10 +782,19 @@ static void Close( vlc_object_t *p_this )
     auto p_intf = reinterpret_cast<qt_intf_t*>(intfThread->p_sys);
     if (p_intf)
     {
-        //cleanup the interface
-        QMetaObject::invokeMethod( p_intf->p_mi, [p_intf] () {
-            ThreadCleanup(p_intf, CLEANUP_INTF_CLOSED);
-        }, Qt::BlockingQueuedConnection);
+        // Core waits on its teardown thread. The GUI keeps its event loop.
+        struct Completion { std::mutex mutex; std::condition_variable changed; bool done=false; };
+        const auto completion=std::make_shared<Completion>();
+        QMetaObject::invokeMethod(qApp,[p_intf,completion] {
+            const auto cleanup=[p_intf,completion] {
+                ThreadCleanup(p_intf,CLEANUP_INTF_CLOSED);
+                { std::lock_guard<std::mutex> guard(completion->mutex); completion->done=true; }
+                completion->changed.notify_all();
+            };
+            if(!g_addonAppShutdown || !g_addonAppShutdown->requestNativeClose(cleanup))
+                msg_Err(p_intf,"The app cannot stop add-on work.");
+        },Qt::QueuedConnection);
+        { std::unique_lock<std::mutex> guard(completion->mutex); completion->changed.wait(guard,[&] { return completion->done; }); }
 
         bool shutdown = false;
         //mutex scope
@@ -845,6 +865,9 @@ static void *Thread( void *obj )
         if (asprintf(&psz_debug_opt, "-qmljsdebugger=%s", qmlJsDebugOpt) < 0)
         {
             free(qmlJsDebugOpt);
+            vlc::threads::mutex_locker locker(lock);
+            open_state=OPEN_STATE_ERROR;
+            wait_ready.signal();
             return NULL;
         }
         argv[argc++] = psz_debug_opt;
@@ -956,6 +979,30 @@ static void *Thread( void *obj )
 
     /* Start the QApplication here */
     QApplication app( argc, argv );
+    vlc::addons::AddonAppShutdown addonShutdown(app);
+    const auto addonLifetime=addonShutdown.handle();
+    g_addonAppShutdown=&addonShutdown;
+    const auto addonShutdownPointer=qScopeGuard([] { g_addonAppShutdown=nullptr; });
+    addonShutdown.setHooks({
+        [p_intf] { if(p_intf->p_mi) p_intf->p_mi->retireAddonWork(); },
+        [p_intf] { if(p_intf->p_mi) p_intf->p_mi->completeAddonRetirement(); },
+        [p_intf] { msg_Warn(p_intf,"The add-on work did not stop. The app will wait."); }
+    });
+    if(!vlc::addons::AddonStreamLifetime::registerApplication(addonLifetime))
+    {
+        msg_Err(p_intf,"The app cannot register add-on work.");
+        const auto previous=vlc::addons::AddonStreamLifetime::applicationHandle();
+        previous.close(); addonShutdown.requestExit(1);
+        QTimer wait; wait.setInterval(50);
+        QObject::connect(&wait,&QTimer::timeout,&app,[&] {
+            if(previous.qtDrained() && addonShutdown.canDestroyApp()) app.exit(1);
+        });
+        wait.start();
+        while(!previous.qtDrained() || !addonShutdown.canDestroyApp()) app.exec();
+        vlc::threads::mutex_locker locker(lock);
+        open_state=OPEN_STATE_ERROR; wait_ready.signal();
+        return nullptr;
+    }
     app.setProperty("initialStyle", app.style()->name());
 
     // Use the Figma design's font on every platform, including machines where
@@ -1009,10 +1056,10 @@ static void *Thread( void *obj )
      * destroyed. */
     class QuitSpy : public QObject
     {
-        qt_intf_t *m_intf;
+        vlc::addons::AddonAppShutdown& m_shutdown;
     public:
-        QuitSpy(QObject *parent, qt_intf_t *intf)
-             : QObject(parent), m_intf(intf)
+        QuitSpy(QObject *parent, vlc::addons::AddonAppShutdown& shutdown)
+             : QObject(parent), m_shutdown(shutdown)
         {
             qGuiApp->installEventFilter(this);
         }
@@ -1021,13 +1068,13 @@ static void *Thread( void *obj )
             (void)o;
             if (e->type() == QEvent::Quit)
             {
-             DialogsProvider::getInstance(m_intf)->quit();
+                m_shutdown.requestUserQuit();
                 return true;
             }
             return false;
         }
     };
-    QuitSpy quitSpy(&app, p_intf);
+    QuitSpy quitSpy(&app, addonShutdown);
 
     registerMetaTypes();
 
@@ -1388,6 +1435,7 @@ static void *Thread( void *obj )
 #else
     p_intf->p_mi = new MainCtx(p_intf);
 #endif
+    p_intf->p_mi->setAddonAppShutdown(&addonShutdown);
 
     if( !p_intf->b_isDialogProvider )
     {
@@ -1479,11 +1527,16 @@ static void *Thread( void *obj )
         if (!ret)
         {
             msg_Err(p_intf, "unable to create main interface");
-            delete p_intf->p_mi;
-            p_intf->p_mi = nullptr;
-            //process deleteLater events as the main loop will never run
+            addonShutdown.requestExit(1);
+            while(!addonShutdown.canDestroyApp())
+            {
+                app.exec();
+                if(!addonShutdown.canDestroyApp()) addonShutdown.recoverEventLoopExit();
+            }
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            return ThreadCleanup( p_intf, CLEANUP_ERROR );
+            auto* result=ThreadCleanup( p_intf, CLEANUP_ERROR );
+            vlc::addons::AddonStreamLifetime::unregisterApplication(addonLifetime);
+            return result;
         }
 
         /* Check window type from the Qt platform back-end */
@@ -1524,6 +1577,9 @@ static void *Thread( void *obj )
     /* Last settings */
     app.setQuitOnLastWindowClosed( false );
     app.setQuitLockEnabled( false );
+    addonShutdown.setUserQuit([p_intf] {
+        if(p_intf->p_mi) DialogsProvider::getInstance(p_intf)->quit();
+    });
 
     /* Loads and tries to apply the preferred QStyle */
 #define QTSTYLE_KEY "MainWindow/QtStyle"
@@ -1542,12 +1598,19 @@ static void *Thread( void *obj )
 #undef QTSTYLE_KEY
 
     /* Launch */
-    app.exec();
+    while(true)
+    {
+        app.exec();
+        if(addonShutdown.canDestroyApp()) break;
+        addonShutdown.recoverEventLoopExit();
+    }
 
     msg_Dbg( p_intf, "QApp exec() finished" );
 
     playlistModelRecoveryAgent.reset();
-    return ThreadCleanup( p_intf, CLEANUP_APP_TERMINATED );
+    auto* result=ThreadCleanup( p_intf, CLEANUP_APP_TERMINATED );
+    vlc::addons::AddonStreamLifetime::unregisterApplication(addonLifetime);
+    return result;
 }
 
 static void *ThreadCleanup( qt_intf_t *p_intf, CleanupReason cleanupReason )
@@ -1596,7 +1659,7 @@ static void *ThreadCleanup( qt_intf_t *p_intf, CleanupReason cleanupReason )
         p_intf->p_mi = nullptr;
     }
 
-    if ( p_intf->p_compositor &&  cleanupReason == CLEANUP_APP_TERMINATED)
+    if (cleanupReason != CLEANUP_INTF_CLOSED)
     {
         p_intf->p_compositor.reset();
 

@@ -32,6 +32,7 @@
 #include <QJSEngine>
 
 #include "mainctx.hpp"
+#include "addons/addon_app_shutdown.hpp"
 #include "window_fullscreen.hpp"
 #include "mainctx_submodels.hpp"
 #include "medialibrary/mlhelper.hpp"
@@ -131,6 +132,26 @@ bool loadVLCOption<bool>(vlc_object_t *obj, const char *name)
     return var_InheritBool(obj, name);
 }
 
+}
+
+void MainCtx::setAddonAppShutdown(vlc::addons::AddonAppShutdown* shutdown)
+{
+    m_addonAppShutdown=shutdown;
+    if(shutdown && !shutdown->handle().current()) retireAddonWork();
+}
+vlc::addons::AddonStreamLifetime::Handle MainCtx::addonStreamLifetime() const noexcept
+{ return m_addonAppShutdown ? m_addonAppShutdown->handle() : vlc::addons::AddonStreamLifetime::Handle{}; }
+bool MainCtx::requestAddonRetirement(std::function<void()> ready)
+{ return m_addonAppShutdown && m_addonAppShutdown->requestRetirement(std::move(ready)); }
+void MainCtx::retireAddonWork()
+{
+    if(m_addonRetiring) return;
+    m_addonRetiring=true; addonStreamLifetime().close(); emit addonWorkRetiring();
+}
+void MainCtx::completeAddonRetirement()
+{
+    if(m_addonJoined) return;
+    m_addonJoined=true; emit addonWorkJoined();
 }
 
 MainCtx::MainCtx(qt_intf_t *_p_intf)
@@ -316,6 +337,7 @@ MainCtx::MainCtx(qt_intf_t *_p_intf)
 
 MainCtx::~MainCtx()
 {
+    retireAddonWork();
     /* Save states */
 
     m_threadRunner->destroy();

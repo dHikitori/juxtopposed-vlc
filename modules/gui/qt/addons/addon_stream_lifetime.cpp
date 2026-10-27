@@ -11,6 +11,12 @@
 namespace vlc::addons {
 namespace {
 std::atomic_uint networkCount{0},plainCount{0},qtWorkCount{0};
+struct ApplicationRegistry {
+    std::mutex mutex;
+    AddonStreamLifetime::Handle handle;
+};
+ApplicationRegistry& applicationRegistry()
+{ static ApplicationRegistry registry; return registry; }
 constexpr unsigned JoinedLimit=AddonStreamLifetime::NetworkLimit+AddonStreamLifetime::QtWorkLimit;
 struct Permit {
     std::atomic_uint* count;
@@ -251,4 +257,28 @@ bool AddonStreamLifetime::Handle::startPlain(Work run,std::shared_ptr<void> reta
 unsigned AddonStreamLifetime::processNetworkCount() noexcept { return networkCount.load(std::memory_order_acquire); }
 unsigned AddonStreamLifetime::processPlainCount() noexcept { return plainCount.load(std::memory_order_acquire); }
 unsigned AddonStreamLifetime::processQtWorkCount() noexcept { return qtWorkCount.load(std::memory_order_acquire); }
+bool AddonStreamLifetime::registerApplication(const Handle& handle) noexcept
+{
+    auto& registry = applicationRegistry();
+    std::lock_guard<std::mutex> lock(registry.mutex);
+    if (!handle.current()) return false;
+    if (registry.handle.m_state) return registry.handle.m_state == handle.m_state;
+    registry.handle = handle;
+    return true;
+}
+bool AddonStreamLifetime::unregisterApplication(const Handle& handle) noexcept
+{
+    auto& registry = applicationRegistry();
+    std::lock_guard<std::mutex> lock(registry.mutex);
+    if (!handle.m_state || registry.handle.m_state != handle.m_state
+        || handle.current() || !handle.qtDrained()) return false;
+    registry.handle = {};
+    return true;
+}
+AddonStreamLifetime::Handle AddonStreamLifetime::applicationHandle() noexcept
+{
+    auto& registry = applicationRegistry();
+    std::lock_guard<std::mutex> lock(registry.mutex);
+    return registry.handle;
+}
 }

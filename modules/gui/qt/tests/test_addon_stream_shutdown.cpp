@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <QSslSocket>
 #include <QTest>
 #include <QTimer>
@@ -122,6 +123,35 @@ class TestAddonStreamShutdown : public QObject
 {
     Q_OBJECT
 private slots:
+    void applicationRegistrationRequiresTheSameClosedAndJoinedOwner()
+    {
+        QSemaphore entered, release;
+        AddonStreamLifetime first, second;
+        const auto cleanup = qScopeGuard([&] {
+            release.release(); first.close(); second.close();
+            first.handle().waitQt(std::chrono::seconds(3));
+            second.handle().waitQt(std::chrono::seconds(3));
+            AddonStreamLifetime::unregisterApplication(first.handle());
+            AddonStreamLifetime::unregisterApplication(second.handle());
+        });
+        QVERIFY(!AddonStreamLifetime::applicationHandle().current());
+        QVERIFY(AddonStreamLifetime::registerApplication(first.handle()));
+        QVERIFY(AddonStreamLifetime::registerApplication(first.handle()));
+        QVERIFY(!AddonStreamLifetime::registerApplication(second.handle()));
+        QVERIFY(!AddonStreamLifetime::unregisterApplication(first.handle()));
+        auto captured = AddonStreamLifetime::applicationHandle();
+        QVERIFY(captured.startQtWork([&] { entered.release(); release.acquire(); }, [] {}));
+        QVERIFY(entered.tryAcquire(1, 3000)); first.close();
+        QVERIFY(!captured.current());
+        QVERIFY(!AddonStreamLifetime::unregisterApplication(second.handle()));
+        QVERIFY(!AddonStreamLifetime::unregisterApplication(first.handle()));
+        QVERIFY(!AddonStreamLifetime::registerApplication(second.handle()));
+        release.release(); QVERIFY(captured.waitQt(std::chrono::seconds(3)));
+        QVERIFY(AddonStreamLifetime::unregisterApplication(first.handle()));
+        QVERIFY(!AddonStreamLifetime::applicationHandle().current());
+        QVERIFY(AddonStreamLifetime::registerApplication(second.handle()));
+        second.close(); QVERIFY(AddonStreamLifetime::unregisterApplication(second.handle()));
+    }
     void cleanup() {
         QTRY_COMPARE_WITH_TIMEOUT(Lifetime::processNetworkCount(),0u,5000);
         QTRY_COMPARE_WITH_TIMEOUT(Lifetime::processPlainCount(),0u,5000);
