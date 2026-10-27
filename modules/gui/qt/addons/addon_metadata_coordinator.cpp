@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimer>
+#include <QPointer>
 #include <algorithm>
 
 namespace {
@@ -141,18 +142,26 @@ QString AddonMetadataCoordinator::enrich(const QString& feature, const QVariantM
 {
     return start(feature, QStringLiteral("enrich"), context, fields, false);
 }
+QString AddonMetadataCoordinator::enrichNative(const QString& feature, const QVariantMap& context,
+                                              const QStringList& fields, const QString& scope)
+{
+    return start(feature, QStringLiteral("enrich"), context, fields, false, scope);
+}
 
 QString AddonMetadataCoordinator::start(const QString& feature, const QString& operation,
-                                       const QVariantMap& context, const QStringList& fields, bool aggregate)
+                                       const QVariantMap& context, const QStringList& fields, bool aggregate,
+                                       const QString& privateScope)
 {
     const auto id = QStringLiteral("metadata-%1").arg(++m_sequence);
-    if (feature.isEmpty() || feature.size() > 128 || fields.size() > 64 || m_consumers.size() >= MaxConsumers) {
+    if (feature.isEmpty() || feature.size() > 128 || fields.size() > 64
+        || privateScope.size() > 128 || m_consumers.size() >= MaxConsumers) {
         QTimer::singleShot(0, this, [this, id] { emit finished(id, QStringLiteral("error"), {}, tr("The metadata request exceeds its limits.")); });
         return id;
     }
     Consumer consumer;
     consumer.feature = feature;
     consumer.operation = operation;
+    consumer.privateScope = privateScope;
     consumer.context = context;
     consumer.context.insert(QStringLiteral("identity"), normalizedIdentity(context.value(QStringLiteral("identity")).toMap()));
     consumer.required = fields;
@@ -166,6 +175,8 @@ QString AddonMetadataCoordinator::start(const QString& feature, const QString& o
         const auto provider = registration.toMap();
         const auto providerId = provider.value(QStringLiteral("id")).toString();
         if (providerId.isEmpty() || eligible.contains(providerId) || !provider.value(QStringLiteral("enabled")).toBool()) continue;
+        if (m_backend.requiresNativeScope && m_backend.requiresNativeScope(providerId)
+            && (privateScope.isEmpty() || !m_backend.invokeNative)) continue;
         const auto kinds = provider.value(QStringLiteral("mediaKinds")).toStringList();
         if (!kinds.isEmpty() && !kinds.contains(kind)) continue;
         if (!provider.value(QStringLiteral("configured")).toBool()) {
@@ -252,9 +263,11 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
     const auto provider = registration.value(QStringLiteral("id")).toString();
     const auto context = providerContext(*it);
     const auto partition = registration.value(QStringLiteral("cachePartition")).toString();
+    const bool native = m_backend.requiresNativeScope && m_backend.requiresNativeScope(provider);
     // Do not reuse a result without a release, account, and settings identity.
-    const auto key = keyFor(provider, it->operation, context, partition, m_policy)
-        + (partition.isEmpty() ? consumerId : QString{});
+    const QString key = keyFor(provider, it->operation, context, partition, m_policy)
+        + (partition.isEmpty() ? consumerId : QString{})
+        + (native ? QStringLiteral("/native/") + it->privateScope : QString{});
     ++it->outstanding;
     it->pending.insert(key);
     const auto cached = m_cache.constFind(key);
@@ -275,6 +288,7 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
     if (existing != m_jobs.end()) { existing->waiters.insert(consumerId); return; }
     Job job;
     job.provider = provider; job.operation = it->operation; job.context = context; job.registration = registration;
+    if (native) job.privateScope = it->privateScope;
     job.waiters.insert(consumerId);
     m_jobs.insert(key, job);
     QTimer::singleShot(0, this, [this, key] {
@@ -282,7 +296,12 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
         if (job == m_jobs.end()) return;
         const auto provider = job->provider, operation = job->operation;
         const auto context = job->context;
-        const auto invocation = m_backend.invoke ? m_backend.invoke(provider, operation, context) : QString{};
+        const auto scope = job->privateScope;
+        const QPointer<AddonMetadataCoordinator> alive(this);
+        const auto invocation = !scope.isEmpty()
+            ? (m_backend.invokeNative ? m_backend.invokeNative(provider, operation, context, scope) : QString{})
+            : (m_backend.invoke ? m_backend.invoke(provider, operation, context) : QString{});
+        if (!alive) return;
         job = m_jobs.find(key);
         if (job == m_jobs.end()) { if (!invocation.isEmpty() && m_backend.cancel) m_backend.cancel(invocation); return; }
         if (invocation.isEmpty() || m_invocations.contains(invocation)) {
@@ -334,10 +353,10 @@ void AddonMetadataCoordinator::complete(const QString& invocation, const QString
         if (m_backoff.size() >= MaxCache) m_backoff.clear();
         m_backoff.insert(backoffKey, {status, data, error.left(512), m_clock.elapsed() + qint64(seconds) * 1000});
     }
-    bool cacheable = true;
+    bool cacheable = job.privateScope.isEmpty();
     if (job.operation == QStringLiteral("searchAssets")) {
         const auto candidates = data.value(QStringLiteral("candidates")).toList();
-        cacheable = candidates.size() <= MaxCandidates;
+        cacheable = cacheable && candidates.size() <= MaxCandidates;
         for (const auto& candidate : candidates)
             if (QJsonDocument(QJsonObject::fromVariantMap(candidate.toMap())).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) { cacheable = false; break; }
     }
@@ -350,8 +369,11 @@ void AddonMetadataCoordinator::complete(const QString& invocation, const QString
         auto consumer = m_consumers.find(waiter);
         if (consumer == m_consumers.end() || !consumer->pending.remove(key)) continue;
         --consumer->outstanding;
+        const QPointer<AddonMetadataCoordinator> alive(this);
         consume(waiter, job.registration, status, data, error);
+        if (!alive) return;
         advance(waiter);
+        if (!alive) return;
     }
 }
 
@@ -525,6 +547,7 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
 
 void AddonMetadataCoordinator::detach(const QString& consumerId, const QSet<QString>& keys)
 {
+    const QPointer<AddonMetadataCoordinator> alive(this);
     for (const auto& key : keys) {
         auto job = m_jobs.find(key);
         if (job == m_jobs.end()) continue;
@@ -534,6 +557,7 @@ void AddonMetadataCoordinator::detach(const QString& consumerId, const QSet<QStr
         m_jobs.erase(job);
         m_invocations.remove(invocation);
         if (!invocation.isEmpty() && m_backend.cancel) m_backend.cancel(invocation);
+        if (!alive) return;
     }
 }
 
@@ -543,7 +567,9 @@ void AddonMetadataCoordinator::cancel(const QString& consumerId)
     if (it == m_consumers.cend()) return;
     const auto keys = it->pending;
     m_consumers.remove(consumerId);
+    const QPointer<AddonMetadataCoordinator> alive(this);
     detach(consumerId, keys);
+    if (!alive) return;
     emit canceled(consumerId);
 }
 

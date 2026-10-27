@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <memory>
 typedef struct vlc_metadata_backend vlc_metadata_backend_t;
+typedef struct vlc_metadata_job vlc_metadata_job_t;
 class AddonNativeArtworkAssets;
 
 namespace vlc::addons { class AddonManager; }
@@ -42,6 +43,10 @@ public:
     void completeBuiltin(const QString& invocation, const QString& status,
                          const QVariantMap& data = {}, const QString& error = {});
     QUrl privateUrlForInvocation(const QString& invocation) const;
+    // Return a held exact native job for an active native invocation only.
+    // A URL or media reference cannot create this binding. The caller releases
+    // the job after its native work and claim have ended.
+    vlc_metadata_job_t* holdNativeJobForInvocation(const QString& invocation) const;
 
     // These references are private host data. They are not QML API methods.
     QString acquireMedia(const QUrl& privateUrl, const QVariantMap& identity);
@@ -89,6 +94,7 @@ private:
         QString contribution, media;
         QPointer<QObject> lifetime;
         NativeCancel cancel;
+        quint64 core = 0;
     };
     struct Consumer { QString media; quint64 core = 0; bool automatic = false; };
     struct PendingResult {
@@ -99,9 +105,11 @@ private:
     };
 
     QVariantList providers(const QString& feature) const;
-    QString invoke(const QString& contribution, const QString& operation, const QVariantMap& context);
+    QString invoke(const QString& contribution, const QString& operation, const QVariantMap& context,
+                   const QString& privateScope = {});
     void cancelInvocation(const QString& invocation);
-    QString start(const QString& feature, QVariantMap context, const QStringList& fields, bool aggregate, bool assets);
+    QString start(const QString& feature, QVariantMap context, const QStringList& fields,
+                  bool aggregate, bool assets, const QString& privateScope = {});
     void coordinatorFinished(const QString&, const QString&, const QVariantMap&, const QString&);
     void artworkFinished(const QString& consumer, const QString& field, const QUrl&, const QString&);
     void deliver(const QString&, const QString&, const QVariantMap&, const QString&);

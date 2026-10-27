@@ -78,5 +78,14 @@ points are present in the Core export table. This check still uses the
 controlled fetcher boundary.
 
 This evidence does not prove a live provider, the native image route, the
-final family selector, or full app integration. The four new Qt scope tests
-still need a fresh coherent host and native library build.
+final family selector, or full app integration.
+
+The separate native scope checkpoint now passes a fresh host/native build:
+coordinator 28, service 29, and artwork regression 34 normal cases. Focused
+sanitizers pass all 28 coordinator and 29 service cases with no diagnostics.
+The four new cases prove private scope isolation, separate native anchors,
+ordinary portable request sharing, and exact active native job access.
+
+Before owner activation, finish the recorded callback retirement follow-up:
+cancel a returned invocation through a lifetime-safe callback if its owner
+was deleted during invoke, and check the owner after detach cancellation.

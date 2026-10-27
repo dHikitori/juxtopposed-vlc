@@ -53,6 +53,8 @@ struct AddonMetadataService::CoreState {
     AddonMetadataService* owner = nullptr;
     QHash<quint64, NativeJob> jobs;
     QHash<vlc_metadata_job_t*, quint64> keys;
+    QHash<quint64, QString> scopes;
+    QHash<QString, quint64> scopeKeys;
     QHash<quint64, AddonNativeArtworkAssets::Cancel> nativeCancels;
     quint64 sequence = 0;
     std::atomic_bool automaticAllowed{false};
@@ -91,6 +93,7 @@ struct AddonMetadataService::CoreState {
             const auto key = state->keys.take(job);
             if (!key) return;
             held = state->jobs.take(key);
+            state->scopeKeys.remove(state->scopes.take(key));
             cancelNative = state->nativeCancels.take(key);
             if (state->owner && state->mayPostLocked()) QMetaObject::invokeMethod(state->owner, [state, key] {
                 AddonMetadataService* owner;
@@ -106,6 +109,16 @@ struct AddonMetadataService::CoreState {
     { delete static_cast<std::shared_ptr<CoreState>*>(opaque); }
     NativeJob find(quint64 key)
     { std::lock_guard<std::mutex> guard(lock); return jobs.value(key); }
+    QString issueScope(quint64 key)
+    {
+        const auto candidate = nonce("native-anchor:");
+        std::lock_guard<std::mutex> guard(lock);
+        if (!mayPostLocked() || !jobs.contains(key)) return {};
+        if (!scopes.contains(key)) { scopes.insert(key, candidate); scopeKeys.insert(candidate, key); }
+        return scopes.value(key);
+    }
+    quint64 scopeKey(const QString& scope)
+    { std::lock_guard<std::mutex> guard(lock); return scopeKeys.value(scope); }
     NativeJob take(quint64 key)
     {
         NativeJob job;
@@ -114,6 +127,7 @@ struct AddonMetadataService::CoreState {
             std::lock_guard<std::mutex> guard(lock);
             job = jobs.take(key);
             if (job) keys.remove(job.get());
+            scopeKeys.remove(scopes.take(key));
             retired = nativeCancels.take(key);
         }
         return job;
@@ -165,7 +179,13 @@ AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
     : QObject(parent), m_backend(std::move(backend)), m_coordinator({
           [this](const QString& feature) { return providers(feature); },
           [this](const QString& id, const QString& operation, const QVariantMap& context) { return invoke(id, operation, context); },
-          [this](const QString& invocation) { cancelInvocation(invocation); }}, this),
+          [this](const QString& invocation) { cancelInvocation(invocation); },
+          [this](const QString& id) {
+              return m_builtins.value(id).descriptor.value(QStringLiteral("requiresNativeAnchor")).toBool();
+          },
+          [this](const QString& id, const QString& operation, const QVariantMap& context, const QString& scope) {
+              return invoke(id, operation, context, scope);
+          }}, this),
       m_core(std::make_shared<CoreState>())
 {
     m_core->owner = this;
@@ -240,7 +260,8 @@ void AddonMetadataService::unregisterBuiltinProvider(const QString& contribution
     if (!guard) return;
     invalidate();
 }
-QString AddonMetadataService::invoke(const QString& contribution, const QString& operation, const QVariantMap& context)
+QString AddonMetadataService::invoke(const QString& contribution, const QString& operation,
+                                     const QVariantMap& context, const QString& privateScope)
 {
     if (m_closed || !applicationCurrent()) return {};
     const auto found = m_builtins.constFind(contribution);
@@ -250,8 +271,11 @@ QString AddonMetadataService::invoke(const QString& contribution, const QString&
         return m_backend.providers.invoke ? m_backend.providers.invoke(contribution, operation, projection) : QString{};
     }
     if (!found->lifetime) return {};
+    const bool native = found->descriptor.value(QStringLiteral("requiresNativeAnchor")).toBool();
+    const auto core = native ? m_core->scopeKey(privateScope) : 0;
+    if (native && !core) return {};
     const auto id = nonce("native-metadata:");
-    m_nativeCalls.insert(id, {contribution, context.value(QStringLiteral("media")).toString(), found->lifetime, found->cancel});
+    m_nativeCalls.insert(id, {contribution, context.value(QStringLiteral("media")).toString(), found->lifetime, found->cancel, core});
     const auto callback = found->invoke;
     // The coordinator records the returned ID before a native handler can
     // complete inline. This event owns its capture on the Qt owner thread.
@@ -286,6 +310,16 @@ QUrl AddonMetadataService::privateUrlForInvocation(const QString& invocation) co
 {
     const auto call = m_nativeCalls.constFind(invocation);
     return call == m_nativeCalls.cend() ? QUrl{} : m_media.value(call->media).url;
+}
+vlc_metadata_job_t* AddonMetadataService::holdNativeJobForInvocation(const QString& invocation) const
+{
+    if (m_closed || !applicationCurrent()) return nullptr;
+    const auto call = m_nativeCalls.constFind(invocation);
+    if (call == m_nativeCalls.cend() || !call->lifetime || !call->core) return nullptr;
+    const auto job = m_core->find(call->core);
+    if (!job || !vlc_metadata_job_IsPending(job.get())
+        || !(vlc_metadata_job_GetRequest(job.get())->flags & VLC_METADATA_REQUEST_NETWORK)) return nullptr;
+    return vlc_metadata_job_Hold(job.get());
 }
 void AddonMetadataService::operationFinished(const QString& invocation, const QString& contribution,
                                             const QString& status, const QVariantMap& data, const QString& error)
@@ -324,7 +358,8 @@ QString AddonMetadataService::searchAssets(const QString& feature, const QVarian
 { return start(feature, context, {}, aggregate, true); }
 QString AddonMetadataService::enrich(const QString& feature, const QVariantMap& context, const QStringList& fields)
 { return start(feature, context, fields, false, false); }
-QString AddonMetadataService::start(const QString& feature, QVariantMap context, const QStringList& fields, bool aggregate, bool assets)
+QString AddonMetadataService::start(const QString& feature, QVariantMap context, const QStringList& fields,
+                                    bool aggregate, bool assets, const QString& privateScope)
 {
     const auto media = context.value(QStringLiteral("media")).toString();
     const bool automatic = context.value(QStringLiteral("automatic")).toBool();
@@ -340,7 +375,9 @@ QString AddonMetadataService::start(const QString& feature, QVariantMap context,
         return consumer;
     }
     if (!media.isEmpty()) context.insert(QStringLiteral("identity"), m_media.value(media).identity);
-    const auto consumer = assets ? m_coordinator.searchAssets(feature, context, aggregate) : m_coordinator.enrich(feature, context, fields);
+    const auto consumer = assets ? m_coordinator.searchAssets(feature, context, aggregate)
+        : privateScope.isEmpty() ? m_coordinator.enrich(feature, context, fields)
+        : m_coordinator.enrichNative(feature, context, fields, privateScope);
     m_consumers.insert(consumer, {media, 0, automatic});
     return consumer;
 }
@@ -552,7 +589,8 @@ void AddonMetadataService::startCore(quint64 key)
     for (size_t i = 0; i < request->field_count; ++i) fields.append(QString::fromUtf8(request->fields[i]));
     const auto operation = QString::fromUtf8(request->operation);
     QString consumer;
-    if (operation == QStringLiteral("enrich")) consumer = enrich(QString::fromUtf8(request->feature), context, fields);
+    if (operation == QStringLiteral("enrich"))
+        consumer = start(QString::fromUtf8(request->feature), context, fields, false, false, m_core->issueScope(key));
     else if (operation == QStringLiteral("searchAssets")) consumer = searchAssets(QString::fromUtf8(request->feature), context, context.value(QStringLiteral("aggregate")).toBool());
     else {
         releaseMedia(media);

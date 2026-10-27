@@ -21,6 +21,10 @@ public:
         std::function<QVariantList(const QString&)> providersForFeature;
         std::function<QString(const QString&, const QString&, const QVariantMap&)> invoke;
         std::function<void(const QString&)> cancel;
+        // Only the native host can select this path. Its scope never enters
+        // provider context or a portable request key.
+        std::function<bool(const QString&)> requiresNativeScope;
+        std::function<QString(const QString&, const QString&, const QVariantMap&, const QString&)> invokeNative;
     };
 
     explicit AddonMetadataCoordinator(Backend backend, QObject* parent = nullptr);
@@ -30,6 +34,8 @@ public:
                                      bool aggregate = false);
     Q_INVOKABLE QString enrich(const QString& feature, const QVariantMap& context,
                               const QStringList& requiredFields);
+    QString enrichNative(const QString& feature, const QVariantMap& context,
+                         const QStringList& requiredFields, const QString& privateScope);
     Q_INVOKABLE void cancel(const QString& consumer);
     Q_INVOKABLE void setProviderOrder(const QString& feature, const QStringList& providers);
     Q_INVOKABLE void invalidate();
@@ -51,6 +57,7 @@ private:
     struct Consumer {
         QString feature;
         QString operation;
+        QString privateScope;
         QVariantMap context;
         QVariantList providers;
         QStringList required;
@@ -72,6 +79,7 @@ private:
         QString invocation;
         QString provider;
         QString operation;
+        QString privateScope;
         QVariantMap context;
         QVariantMap registration;
         QSet<QString> waiters;
@@ -84,7 +92,8 @@ private:
     };
 
     QString start(const QString& feature, const QString& operation,
-                  const QVariantMap& context, const QStringList& fields, bool aggregate);
+                  const QVariantMap& context, const QStringList& fields, bool aggregate,
+                  const QString& privateScope = {});
     void advance(const QString& consumer);
     void subscribe(const QString& consumer, const QVariantMap& registration);
     void complete(const QString& invocation, const QString& contribution,

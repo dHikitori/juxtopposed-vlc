@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QtTest/QtTest>
 #include <QSignalSpy>
+#include <QJsonDocument>
 #include "addons/addon_metadata_coordinator.hpp"
 
 namespace {
@@ -55,6 +56,54 @@ class TestAddonMetadata : public QObject
 {
     Q_OBJECT
 private slots:
+    void nativeScopesStayPrivateAndDoNotShareClaims()
+    {
+        FakeBackend fake; fake.providers = {registration("native/artwork")};
+        auto backend = fake.backend(); QStringList scopes;
+        backend.requiresNativeScope = [](const QString&) { return true; };
+        backend.invokeNative = [&](const QString& provider, const QString& operation,
+                                    const QVariantMap& projected, const QString& scope) {
+            scopes.append(scope);
+            const auto id = QStringLiteral("native-%1").arg(fake.calls.size() + 1);
+            fake.calls.append({id, provider, operation, projected}); return id;
+        };
+        AddonMetadataCoordinator coordinator(std::move(backend));
+        QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        QSignalSpy canceled(&coordinator, &AddonMetadataCoordinator::canceled);
+        const auto first = coordinator.enrichNative("video.details", context(), {"description"}, "anchor-a");
+        coordinator.enrichNative("video.details", context(), {"description"}, "anchor-b");
+        QTRY_COMPARE(fake.calls.size(), 2); QCOMPARE(scopes, QStringList({"anchor-a", "anchor-b"}));
+        for (const auto& call : fake.calls) {
+            QVERIFY(!call.context.contains("privateScope"));
+            QVERIFY(!QJsonDocument::fromVariant(call.context).toJson().contains("anchor-"));
+        }
+        coordinator.cancel(first); QCOMPARE(canceled.size(), 1); QCOMPARE(fake.canceled, QStringList{fake.calls.first().id});
+        complete(coordinator, fake.calls.last(), "match", claims({{"description", "Native description"}}));
+        QTRY_COMPARE(results.size(), 1);
+        coordinator.enrichNative("video.details", context(), {"description"}, "anchor-b");
+        QTRY_COMPARE(fake.calls.size(), 3);
+        coordinator.enrich("video.details", context(), {"description"});
+        QTRY_COMPARE(results.size(), 2); QCOMPARE(fake.calls.size(), 3);
+        QCOMPARE(results.last().at(1).toString(), QStringLiteral("no_match"));
+    }
+
+    void nativeScopesDoNotChangePortableCoalescing()
+    {
+        FakeBackend fake; fake.providers = {registration("portable/details")};
+        auto backend = fake.backend(); backend.requiresNativeScope = [](const QString&) { return false; };
+        backend.invokeNative = [](const QString&, const QString&, const QVariantMap&, const QString&) {
+            QTest::qFail("A portable request used the native hook.", __FILE__, __LINE__); return QString{};
+        };
+        AddonMetadataCoordinator coordinator(std::move(backend));
+        QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrichNative("video.details", context(), {"description"}, "anchor-a");
+        coordinator.enrichNative("video.details", context(), {"description"}, "anchor-b");
+        QTRY_COMPARE(fake.calls.size(), 1);
+        QVERIFY(!QJsonDocument::fromVariant(fake.calls.first().context).toJson().contains("anchor-"));
+        complete(coordinator, fake.calls.first(), "match", claims({{"description", "Portable description"}}));
+        QTRY_COMPARE(results.size(), 2);
+    }
+
     void sequentialFallbackUsesFeatureOrder() {
         FakeBackend fake;
         fake.providers = {registration("a/search"), registration("b/search")};

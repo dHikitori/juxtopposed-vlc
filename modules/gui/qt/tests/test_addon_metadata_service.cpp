@@ -105,6 +105,54 @@ class TestAddonMetadataService : public QObject
 {
     Q_OBJECT
 private slots:
+    void nativeInvocationsRetainOnlyTheirExactCoreJobs()
+    {
+        Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend()); QObject lifetime;
+        auto descriptor = provider("vlc.builtin.exact/details"); descriptor.insert("requiresNativeAnchor", true);
+        QStringList invocations; QList<vlc_metadata_job_t*> original;
+        QVERIFY(service.registerBuiltinProvider("video.details", descriptor, &lifetime,
+            [&](const QString& id, const QString&, const QVariantMap& projected) {
+                QVERIFY(!projected.contains("privateScope"));
+                const auto held = std::shared_ptr<vlc_metadata_job_t>(service.holdNativeJobForInvocation(id), vlc_metadata_job_Release);
+                QVERIFY(held); original.append(held.get()); invocations.append(id);
+            }));
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        const auto item = std::shared_ptr<input_item_t>(input_item_New("file:///private/movie.mkv", "Example Movie"), input_item_Release);
+        Ended one, two;
+        const auto first = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), one, item.get()), vlc_metadata_job_Release);
+        const auto second = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), two, item.get()), vlc_metadata_job_Release);
+        QCOMPARE(vlc_metadata_job_Start(first.get()), VLC_SUCCESS); QCOMPARE(vlc_metadata_job_Start(second.get()), VLC_SUCCESS);
+        QTRY_COMPARE(invocations.size(), 2); QCOMPARE(original, QList<vlc_metadata_job_t*>({first.get(), second.get()}));
+        QVERIFY(!service.holdNativeJobForInvocation("native-metadata:unknown"));
+        QVERIFY(vlc_metadata_job_Cancel(first.get()));
+        QVERIFY(!service.holdNativeJobForInvocation(invocations.first()));
+        {
+            const auto held = std::shared_ptr<vlc_metadata_job_t>(service.holdNativeJobForInvocation(invocations.last()), vlc_metadata_job_Release);
+            QCOMPARE(held.get(), second.get());
+        }
+        service.completeBuiltin(invocations.last(), "match", claims({{"description", "Exact native description"}}));
+        QVERIFY(!service.holdNativeJobForInvocation(invocations.last()));
+        QTRY_COMPARE(two.count.load(), 1); QCOMPARE(one.count.load(), 1);
+        QSignalSpy finished(&service, &AddonMetadataService::finished);
+        service.enrich("video.details", {{"identity", identity()}, {"privateScope", "native-anchor:forged"}}, {"description"});
+        QTRY_COMPARE(finished.size(), 1); QCOMPARE(invocations.size(), 2);
+    }
+
+    void coreScopesDoNotChangePortableCoalescing()
+    {
+        Fake fake; AddonMetadataService service(fake.backend());
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service.holdCoreBackend(), vlc_metadata_backend_Release);
+        const auto item = std::shared_ptr<input_item_t>(input_item_New("file:///private/movie.mkv", "Example Movie"), input_item_Release);
+        Ended one, two;
+        const auto first = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), one, item.get()), vlc_metadata_job_Release);
+        const auto second = std::shared_ptr<vlc_metadata_job_t>(coreJob(backend.get(), two, item.get()), vlc_metadata_job_Release);
+        QCOMPARE(vlc_metadata_job_Start(first.get()), VLC_SUCCESS); QCOMPARE(vlc_metadata_job_Start(second.get()), VLC_SUCCESS);
+        QTRY_COMPARE(fake.calls.size(), 1);
+        QVERIFY(!QJsonDocument::fromVariant(fake.calls.first().context).toJson().contains("native-anchor:"));
+        fake.complete(service, {{"description", "Shared portable description"}});
+        QTRY_COMPARE(one.count.load(), 1); QTRY_COMPARE(two.count.load(), 1);
+    }
+
     void appRetirementRefusesNativePostsBeforeQtDelivery()
     {
         vlc::addons::AddonStreamLifetime app; Fake fake; AddonMetadataService service(fake.backend());
