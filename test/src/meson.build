@@ -858,3 +858,18 @@ vlc_tests += {
     'sources': files('misc/addon_medialibrary.c'),
     'suite': ['src', 'test_src', 'addons'],
 }
+
+vlc_tests += {
+    'name': 'test_src_input_addon_source',
+    'sources': files('input/addon_source.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_addon_source_playback',
+    'sources': files('input/addon_source_playback.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}

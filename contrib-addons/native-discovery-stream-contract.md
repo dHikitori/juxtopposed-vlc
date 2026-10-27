@@ -11,7 +11,11 @@ The core then owns cancellation of pending and issued transports.
 Close revokes their policies and closes their leases without a Qt event.
 The backend keeps a closed result unavailable.
 Native lifetime tests cover cancellation, shutdown, late results, callback reentry, and 200 result races.
-This API has no access-module binding or stream proxy yet.
+The private input bridge now exists in `src/input/addon_source.c`. Input creation records source approval before it applies options. The primary playback path requires that approval and the exact source policy. It waits with an interrupt hook and a ten-second limit, then installs the proxy policy with an exact item and object check. The input owns its lease through Stop and playback end. A late callback holds no input pointer.
+
+Seven bridge test groups pass normally and with ASAN/UBSAN. Six real native case groups also pass: primary dispatch and end, Stop with a late result, a URI change after input creation, preparse, thumbnails, and associated media. The ordinary preparse, thumbnail, and subtitle controls pass. Eleven backend groups include 200 races and immediate transport revocation after Cancel or Close.
+
+The primary dispatch fixture ends with a controlled loopback connection failure. It does not prove media playback or child-stream EOF behavior. The host resolver, stream proxy, consent, and those playback tests remain open. Production Play and Enqueue remain unavailable.
 
 ## Stable item and per-open lease
 
@@ -44,8 +48,7 @@ They must not wait for the Qt thread.
 A late result releases its policy and transport lease without access to the old input.
 
 The result contains a host-owned loopback URL, a held native policy, and a transport lease.
-The native waiter installs the policy on both the input and access objects with `vlc_input_policy_ReplaceObject()`.
-Each compare-and-swap uses the exact held bootstrap policy as its expected value.
+The native waiter installs the input policy with `vlc_input_policy_ReplaceObject()` before it creates access objects. Those objects inherit the installed policy. The compare-and-swap uses the exact held bootstrap policy as its expected value.
 A failed comparison revokes the new lease and fails the open.
 Never replace an unrelated policy or change the item policy to complete this operation.
 

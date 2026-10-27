@@ -44,6 +44,8 @@ check_PROGRAMS = \
     test_src_input_policy \
     test_src_input_artwork_policy \
     test_src_input_source_backend \
+    test_src_input_addon_source \
+    test_src_input_addon_source_playback \
     test_src_misc_media_library_startup \
     test_src_input_source_owner \
 	test_src_misc_iso_language \
@@ -277,6 +279,12 @@ test_src_input_artwork_policy_LDADD = $(LIBVLCCORE)
 
 test_src_input_source_backend_SOURCES = src/input/source_backend.c
 test_src_input_source_backend_LDADD = $(LIBVLCCORE)
+
+test_src_input_addon_source_SOURCES = src/input/addon_source.c
+test_src_input_addon_source_LDADD = $(LIBVLCCORE)
+
+test_src_input_addon_source_playback_SOURCES = src/input/addon_source_playback.c
+test_src_input_addon_source_playback_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_input_source_owner_SOURCES = src/input/source_owner.c
 test_src_input_source_owner_LDADD = $(LIBVLCCORE)

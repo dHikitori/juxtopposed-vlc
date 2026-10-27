@@ -138,6 +138,7 @@ static void result_cancel_races(void)
         assert(vlc_source_job_AttachTransport(job, result.policy, result.lease));
         struct race race = {job, &result}; vlc_thread_t thread; assert(vlc_clone(&thread, complete_thread, &race) == 0);
         if (i < 100) vlc_source_job_Cancel(job); else vlc_source_backend_Close(backend);
+        assert(state.lease_cancelled == 1 && vlc_input_policy_IsRevoked(result.policy));
         vlc_join(thread, NULL); assert(state.ended == 1 && state.cancelled <= 1);
         result_release(&result); vlc_source_job_Release(job); vlc_source_backend_Release(backend);
         assert(state.destroyed == 1 && state.lease_cancelled == 1 && state.lease_destroyed == 1);
@@ -163,6 +164,19 @@ static void idle_cancel_prevents_dispatch(void)
     assert(vlc_source_job_Cancel(job)); assert(!vlc_source_job_Cancel(job));
     assert(vlc_source_job_Start(job) == -EINTR); assert(state.dispatched == 0 && state.ended == 0);
     vlc_source_job_Release(job); vlc_source_backend_Release(backend); assert(state.destroyed == 1);
+}
+static void completed_cancel_revokes_transport(void)
+{
+    struct state state = {0}; vlc_source_backend_t *backend = backend_new(&state);
+    vlc_source_job_t *job = job_new(&state); assert(vlc_source_job_Start(job) == VLC_SUCCESS);
+    struct vlc_source_result result = result_new(&state);
+    assert(vlc_source_job_AttachTransport(job, result.policy, result.lease));
+    assert(vlc_source_job_Complete(job, VLC_SUCCESS, &result)); assert(state.ended == 1);
+    assert(!vlc_source_job_Cancel(job)); assert(state.ended == 1 && state.status == VLC_SUCCESS);
+    assert(state.lease_cancelled == 1 && vlc_input_policy_IsRevoked(result.policy));
+    assert(!vlc_source_job_Cancel(job)); assert(state.lease_cancelled == 1);
+    result_release(&result); vlc_source_job_Release(job); vlc_source_backend_Release(backend);
+    assert(state.destroyed == 1 && state.lease_destroyed == 1);
 }
 static void close_revokes_issued_and_pending_transports(void)
 {
@@ -191,5 +205,6 @@ int main(void)
 {
     success_and_lifetimes(); cancellation_and_close(); errors_and_reentrant_close();
     invalid_results_and_requests(); result_cancel_races(); active_limit(); close_revokes_issued_and_pending_transports();
-    final_lease_release_can_reenter_cancel(); transport_has_one_job_owner(); idle_cancel_prevents_dispatch(); return 0;
+    final_lease_release_can_reenter_cancel(); transport_has_one_job_owner(); idle_cancel_prevents_dispatch();
+    completed_cancel_revokes_transport(); return 0;
 }

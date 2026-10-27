@@ -58,6 +58,7 @@
 #include <vlc_renderer_discovery.h>
 #include <vlc_hash.h>
 #include <vlc_media_library.h>
+#include <vlc_input_policy.h>
 
 /*****************************************************************************
  * Local prototypes
@@ -161,6 +162,7 @@ void input_Stop( input_thread_t *p_input )
     sys->is_stopped = true;
     vlc_cond_signal( &sys->wait_control );
     vlc_mutex_unlock( &sys->lock_control );
+    input_addon_source_Close(&sys->addon_source);
     vlc_interrupt_kill( &sys->interrupt );
 }
 
@@ -208,6 +210,20 @@ input_item_t *input_GetItem( input_thread_t *p_input )
 }
 
 #undef input_Create
+static bool InputAttachItemPolicy(input_thread_t *input, input_item_t *item, bool *admitted)
+{
+    *admitted = false;
+    char *uri = input_item_GetURI(item);
+    if (uri == NULL) return false;
+    const bool source = input_addon_source_IsURI(uri);
+    vlc_input_policy_t *policy = source ? vlc_input_policy_HoldSourceItem(item, uri)
+                                       : vlc_input_policy_HoldItem(item);
+    free(uri);
+    if (source && policy == NULL) return false;
+    const int status = policy != NULL ? vlc_input_policy_AttachObject(VLC_OBJECT(input), policy) : VLC_SUCCESS;
+    *admitted = source && status == VLC_SUCCESS;
+    vlc_input_policy_Release(policy); return status == VLC_SUCCESS;
+}
 input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
                                const struct vlc_input_thread_cfg *cfg )
 {
@@ -228,6 +244,13 @@ input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
     }
 
     input_thread_t *p_input = &priv->input;
+    input_addon_source_Init(&priv->addon_source);
+    if (!InputAttachItemPolicy(p_input, p_item, &priv->addon_source_admitted)) {
+        input_addon_source_Clean(&priv->addon_source);
+        input_source_Release(priv->master);
+        vlc_object_delete(VLC_OBJECT(p_input));
+        return NULL;
+    }
 
     char * psz_name = input_item_GetName( p_item );
     const char *type_str;
@@ -369,6 +392,7 @@ input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
 static void Destroy(input_thread_t *input)
 {
     input_thread_private_t *priv = input_priv(input);
+    input_addon_source_Clean(&priv->addon_source);
 
 #ifndef NDEBUG
     char *name = input_item_GetName(priv->p_item);
@@ -1386,8 +1410,9 @@ static int Init( input_thread_t * p_input )
     master = priv->master;
     if( master == NULL )
         goto error;
-    int ret = InputSourceInit( master, p_input, priv->p_item->psz_uri,
-                               NULL, false );
+    char *master_uri = input_item_GetURI(priv->p_item);
+    int ret = master_uri != NULL ? InputSourceInit(master, p_input, master_uri, NULL, false) : VLC_ENOMEM;
+    free(master_uri);
     if( ret != VLC_SUCCESS )
     {
         InputSourceDestroy( master );
@@ -1455,6 +1480,7 @@ static int Init( input_thread_t * p_input )
     return VLC_SUCCESS;
 
 error:
+    input_addon_source_Close(&priv->addon_source);
     input_ChangeState( p_input, ERROR_S, VLC_TICK_INVALID );
 
     if( input_priv(p_input)->p_es_out )
@@ -1486,6 +1512,7 @@ error:
 static void End( input_thread_t * p_input )
 {
     input_thread_private_t *priv = input_priv(p_input);
+    input_addon_source_Close(&priv->addon_source);
 
     /* We are at the end */
     input_ChangeState( p_input, END_S, VLC_TICK_INVALID );
@@ -2900,7 +2927,26 @@ static input_source_t *InputSourceNew( const char *psz_mrl )
     return in;
 }
 
+static int InputSourceInitResolved( input_source_t *in, input_thread_t *p_input,
+                            const char *psz_mrl,
+                            const char *psz_forced_demux, bool b_in_can_fail );
 static int InputSourceInit( input_source_t *in, input_thread_t *p_input,
+                            const char *psz_mrl,
+                            const char *psz_forced_demux, bool b_in_can_fail )
+{
+    if (!input_addon_source_IsURI(psz_mrl))
+        return InputSourceInitResolved(in, p_input, psz_mrl, psz_forced_demux, b_in_can_fail);
+    input_thread_private_t *priv = input_priv(p_input);
+    const bool primary_playback = in == priv->master && priv->type == INPUT_TYPE_PLAYBACK
+        && priv->addon_source_admitted;
+    char *proxy = NULL;
+    int status = input_addon_source_Resolve(&priv->addon_source, VLC_OBJECT(p_input), priv->p_item,
+        psz_mrl, primary_playback, VLC_TICK_FROM_SEC(10), &proxy);
+    if (status != VLC_SUCCESS) return status;
+    status = InputSourceInitResolved(in, p_input, proxy, psz_forced_demux, b_in_can_fail);
+    free(proxy); return status;
+}
+static int InputSourceInitResolved( input_source_t *in, input_thread_t *p_input,
                             const char *psz_mrl,
                             const char *psz_forced_demux, bool b_in_can_fail )
 {
@@ -2927,8 +2973,11 @@ static int InputSourceInit( input_source_t *in, input_thread_t *p_input,
     if( psz_demux == NULL )
         psz_demux = "any";
 
-    msg_Dbg( p_input, "`%s' gives access `%s' demux `%s' path `%s'",
-             psz_mrl, psz_access, psz_demux, psz_path );
+    if (vlc_input_policy_Has(VLC_OBJECT(p_input)))
+        msg_Dbg(p_input, "The input uses a source policy.");
+    else
+        msg_Dbg( p_input, "`%s' gives access `%s' demux `%s' path `%s'",
+                 psz_mrl, psz_access, psz_demux, psz_path );
 
     if( master /* XXX ugly */)
     {   /* On master stream only, use input-list */

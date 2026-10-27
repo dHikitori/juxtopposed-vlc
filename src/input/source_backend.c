@@ -222,10 +222,27 @@ static bool finish(vlc_source_job_t *job, int status, struct vlc_source_result *
     vlc_source_job_Release(job); // Active-list reference.
     return true;
 }
+static void revoke_completed(vlc_source_job_t *job)
+{
+    vlc_mutex_lock(&job->backend->lock);
+    vlc_input_policy_t *policy = vlc_input_policy_Hold(job->result.policy);
+    vlc_source_lease_t *lease = job->result.lease;
+    if (lease != NULL) vlc_source_lease_Hold(lease);
+    vlc_mutex_unlock(&job->backend->lock);
+    vlc_input_policy_Revoke(policy);
+    if (lease != NULL) { vlc_source_lease_Cancel(lease); vlc_source_lease_Release(lease); }
+    vlc_input_policy_Release(policy);
+}
 bool vlc_source_job_Cancel(vlc_source_job_t *job)
 {
     vlc_source_job_Hold(job);
     vlc_mutex_lock(&job->backend->lock);
+    if (job->terminal) {
+        vlc_mutex_unlock(&job->backend->lock);
+        revoke_completed(job);
+        vlc_source_job_Release(job);
+        return false;
+    }
     if (!job->started) {
         const bool won = !job->cancelled; job->cancelled = true;
         vlc_mutex_unlock(&job->backend->lock); vlc_source_job_Release(job); return won;
@@ -233,6 +250,7 @@ bool vlc_source_job_Cancel(vlc_source_job_t *job)
     vlc_mutex_unlock(&job->backend->lock);
     struct vlc_source_result result = {0};
     const bool won = finish(job, -EINTR, &result, true);
+    if (!won) revoke_completed(job);
     vlc_source_job_Release(job); return won;
 }
 static bool path_character(unsigned char c)

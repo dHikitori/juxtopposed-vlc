@@ -62,7 +62,10 @@ VLC_API void vlc_source_job_Release(vlc_source_job_t *);
  * That callback can run before Start returns. A failed Start adds none.
  */
 VLC_API int vlc_source_job_Start(vlc_source_job_t *);
-/** Idle cancellation prevents Start and adds no terminal callback. */
+/** Idle cancellation prevents Start and adds no terminal callback. A completed
+ * result keeps its status, but Cancel still revokes its policy and transport.
+ * Return true only when this call won a pending or idle cancellation.
+ */
 VLC_API bool vlc_source_job_Cancel(vlc_source_job_t *);
 VLC_API bool vlc_source_job_IsPending(vlc_source_job_t *);
 /** Register transport ownership before its first I/O operation. A lease can

@@ -163,6 +163,8 @@ libvlccore_sources_base = files(
     'input/policy.c',
     'input/policy.h',
     'input/source_backend.c',
+    'input/addon_source.c',
+    'input/addon_source.h',
     'input/source_owner.c',
     'input/source_owner.h',
     'input/access.c',

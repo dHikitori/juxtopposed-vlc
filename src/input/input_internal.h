@@ -29,6 +29,7 @@
 #include "input_interface.h"
 #include "../misc/interrupt.h"
 #include "./source.h"
+#include "addon_source.h"
 
 struct input_stats;
 
@@ -546,6 +547,8 @@ typedef struct input_thread_private_t
 
     /* Input item */
     input_item_t   *p_item;
+    input_addon_source_t addon_source;
+    bool addon_source_admitted;
 
     /* Main source */
     input_source_t *master;
