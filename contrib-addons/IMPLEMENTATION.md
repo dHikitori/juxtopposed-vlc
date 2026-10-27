@@ -37,6 +37,7 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 | Native source jobs | Bounded retained jobs and one-owner transport leases. Cancellation and Close revoke pending and issued transports without a Qt event. Ten C case groups pass, including cancel before Start; the suite includes 200 result races. The earlier nine-group version also passed sanitizers. All 19 backend/job exports remain. Access binding and stream proxy work remain open. |
 | Native source owner | One owner per native VLC instance; permanent retirement before interface shutdown; final release after native users. Seven normal C groups and 100 Set/Close races pass, including real Cleanup and Destroy. Only Set and Hold are public exports. The host source resolver still needs its mount. |
 | Provider text | Five core UI consumers use plain text for provider titles, artists, track names, filenames, and tooltips. All 13 load-probe cases and 249 existing affected UI cases pass. The normal app build and compiled UI run also pass. |
+| Native artwork record | A private approval binds the local URI, artwork token, source URI, and held policy. Seven normal C groups pass; all three getter/setter exports are present. Ordinary native reads retain their behavior. Consumer mounts and trusted file/image validation at those call sites remain open. |
 
 The standalone test build is in `modules/gui/qt/addons/CMakeLists.txt`. Set `VLC_BUILD_DIR` to add tests that need the native core library.
 
@@ -85,6 +86,7 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - `816490fbea`: typed subtitle/playlist results, current-target checks, and core recovery.
 - `560aa4ba79`: plain provider text with positive and zero-load regression probes.
 - `d91755036c`: source-owner test definitions outside the Windows-only Automake condition.
+- `203ef8e980`: native metadata commit admission with complete token reservation.
 
 ## Open completion gates
 

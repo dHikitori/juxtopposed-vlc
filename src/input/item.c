@@ -34,6 +34,7 @@
 #include <vlc_strings.h>
 
 #include "item.h"
+#include "artwork_policy.h"
 #include <vlc_input_policy.h>
 #include "policy.h"
 #include "info.h"
@@ -440,6 +441,7 @@ void input_item_Release( input_item_t *p_item )
         owner->libvlc_owner_release( owner->libvlc_owner );
 
     vlc_input_policy_Release(owner->input_policy);
+    vlc_artwork_item_ClearApproval(p_item);
 
     free( p_item->psz_name );
     free( p_item->psz_uri );
@@ -1105,6 +1107,7 @@ input_item_t *input_item_Copy( input_item_t *p_input )
     }
 
     vlc_meta_Merge( item->p_meta, p_input->p_meta );
+    vlc_artwork_item_CopyApprovalLocked(item, p_input);
     item->b_net = p_input->b_net;
 
     if( p_input->i_slaves > 0 )

@@ -44,6 +44,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_input_artwork_policy',
+    'sources': files('input/artwork_policy.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_input_source_backend',
     'sources': files('input/source_backend.c'),
     'suite': ['src', 'test_src', 'addons'],

@@ -154,6 +154,8 @@ libvlccore_sources_base = files(
     'preparser/preparser.c',
     'preparser/preparser.h',
     'input/item.c',
+    'input/artwork_policy.c',
+    'input/artwork_policy.h',
     'input/policy.c',
     'input/policy.h',
     'input/source_backend.c',

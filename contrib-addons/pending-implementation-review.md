@@ -91,4 +91,4 @@ Apply also compares the original native item URI and exact held policy, and refu
 
 The complete set of new field tokens is reserved before writes. A failed reservation changes no target value or revision. Limit tests run the actual Apply code with a private test sequence; they cover a failed range, preserved fields, exhaustion between writes, and concurrent non-overlapping ranges. Normal core commit, limit, backend, and revision tests pass. Focused sanitizer tests pass. No production fault-injection API was added.
 
-Keep the existing providers and local readers until the new consumer routes pass preservation tests. The artwork approval record, owner mount, preparser request list, and identity choice store still have integration work.
+Keep the existing providers and local readers until the new consumer routes pass preservation tests. The private artwork record passes its normal suite. Its consumers, the metadata owner mount, preparser request list, and identity choice store still have integration work.

@@ -26,6 +26,7 @@ install_headers(
     'vlc_aout.h',
     'vlc_aout_volume.h',
     'vlc_arrays.h',
+    'vlc_artwork_policy.h',
     'vlc_atomic.h',
     'vlc_avcodec.h',
     'vlc_bits.h',

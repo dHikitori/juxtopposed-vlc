@@ -66,6 +66,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_input.h \
 	../include/vlc_input_item.h \
 	../include/vlc_input_policy.h \
+	../include/vlc_artwork_policy.h \
 	../include/vlc_source_backend.h \
 	../include/vlc_source_owner.h \
 	../include/vlc_interface.h \
@@ -294,6 +295,8 @@ libvlccore_la_SOURCES = \
 	preparser/preparser.h \
 	preparser/external.c \
 	input/item.c \
+	input/artwork_policy.c \
+	input/artwork_policy.h \
 	input/policy.c \
 	input/policy.h \
 	input/source_backend.c \

@@ -39,6 +39,7 @@ check_PROGRAMS = \
     test_src_misc_metadata_commit \
     test_src_misc_metadata_revision \
     test_src_input_policy \
+    test_src_input_artwork_policy \
     test_src_input_source_backend \
     test_src_misc_media_library_startup \
     test_src_input_source_owner \
@@ -259,6 +260,9 @@ test_src_misc_metadata_revision_LDADD = $(LIBVLCCORE)
 
 test_src_input_policy_SOURCES = src/input/input_policy.c
 test_src_input_policy_LDADD = $(LIBVLCCORE)
+
+test_src_input_artwork_policy_SOURCES = src/input/artwork_policy.c
+test_src_input_artwork_policy_LDADD = $(LIBVLCCORE)
 
 test_src_input_source_backend_SOURCES = src/input/source_backend.c
 test_src_input_source_backend_LDADD = $(LIBVLCCORE)

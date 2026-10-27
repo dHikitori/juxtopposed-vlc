@@ -1,6 +1,8 @@
 # Native artwork approval
 
-This document specifies a cutover gate. The native approval record and the consumer mounts are not implemented yet.
+This document specifies a cutover gate. The native approval record is implemented and passes its normal C suite. Its consumer mounts remain open work.
+
+The core exports `vlc_artwork_item_IsRestricted`, `vlc_artwork_item_GetURI`, and `vlc_artwork_item_SetApprovedURI`. The getter performs no image or network operation. The setter accepts a local-file URI after trusted caller validation. It does not decode or validate image bytes itself.
 
 ## Source scope
 
@@ -12,11 +14,13 @@ Ordinary native media keeps its existing embedded artwork behavior. Its native r
 
 ## Private record
 
-The item owner holds one approved artwork URI and one artwork field revision. Only trusted native code can create this record. Metadata tags, extra fields, text options, package data, and serialized items cannot create it.
+The item owner holds one approved artwork URI, its artwork field revision, the source URI, and a held policy reference. Only trusted native code can create this record. Metadata tags, extra fields, text options, package data, and serialized items cannot create it.
 
 The approved URI must identify a local file. The host must validate that file before approval. The native setter writes the URI and captures its new field revision under the item lock. It must refuse an exhausted revision token.
 
-An approved record permits use only when its exact URI and revision equal the current artwork field. A same-value write, an intervening write, or a metadata merge must not restore old approval.
+An approved record permits use only when its exact URI and revision equal the current artwork field. Its source URI and policy must still match; the held policy must not be revoked. A same-value write, an intervening write, or a metadata merge must not restore old approval.
+
+Seven normal C groups pass: ordinary native URI reads, raw imported source URIs, approved native copies, field/source changes, policy changes and revocation, metadata/options transfer attempts, and local URI limits. The URI cases include incorrect UTF-8, correct native UTF-8 filenames, remote authorities, control bytes, and malformed escapes. These cases establish the record's behavior. They do not establish the unmounted consumers' behavior.
 
 A native item copy can retain approval. The copy operation must validate the source record under the source item lock. It must bind the copied record to the destination field's new revision. A metadata merge alone cannot transfer approval.
 

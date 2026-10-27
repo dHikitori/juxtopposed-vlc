@@ -47,6 +47,10 @@ typedef struct input_item_owner
     void (*libvlc_owner_release)(void *libvlc_owner);
     vlc_atomic_rc_t rc;
     struct vlc_input_policy *input_policy;
+    char *artwork_uri;
+    char *artwork_source_uri;
+    uint64_t artwork_revision;
+    struct vlc_input_policy *artwork_policy;
 } input_item_owner_t;
 
 # define item_owner(item) ((struct input_item_owner *)(item))
