@@ -57,11 +57,13 @@ MediaLib::MediaLib(qt_intf_t *_intf, vlc::playlist::PlaylistController* playlist
     m_event_cb.reset( vlc_ml_event_register_callback( m_ml, MediaLib::onMediaLibraryEvent,
                                                       this ) );
     m_runner = new ThreadRunner();
+    m_addonRunner = new MLJoinedThreadRunner(vlc::addons::AddonStreamLifetime::applicationHandle(),this);
 }
 
 MediaLib::~MediaLib()
 {
     cancelTrackMatching();
+    m_addonRunner->close();
     m_runner->destroy();
 }
 
@@ -1387,6 +1389,7 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
 
 void MediaLib::cancelMLTask(const QObject* object, quint64 taskId)
 {
+    if (QThread::currentThread()==thread() && m_addonRunner->cancelTask(object,taskId)) return;
     m_runner->cancelTask(object, taskId);
 }
 

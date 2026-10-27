@@ -28,12 +28,31 @@
 #include <QThread>
 #include <QTimer>
 #include <QSemaphore>
+#include <QThreadStorage>
 #include <vlc_medialibrary_work.h>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #endif
 
 using namespace vlc::addons;
 namespace {
+#ifdef VLC_ADDON_REAL_ML_DISPATCHER
+struct LibraryWorkerTail {
+    struct State {
+        std::mutex mutex;
+        std::condition_variable changed;
+        bool released=false;
+        std::atomic_bool entered{false},ended{false};
+        void release() { { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all(); }
+    };
+    std::shared_ptr<State> state;
+    ~LibraryWorkerTail() {
+        std::unique_lock<std::mutex> lock(state->mutex); state->entered=true;
+        state->changed.wait(lock,[&] { return state->released; }); state->ended=true;
+    }
+};
+#endif
 template<typename Function> auto native(Function function)
 {
     using Result = decltype(function());
@@ -182,6 +201,9 @@ private slots:
         QCOMPARE(uiCalls,0);
     }
     void actualMediaLibDispatcherCommitsTheDiscoverySelection() {
+        AddonStreamLifetime lifetime; const auto handle=lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto retire=qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start());
         auto* intf=vlc_object_create<qt_intf_t>(library.instance->p_libvlc_int); QVERIFY(intf);
         const auto cleanup=qScopeGuard([&] { vlc_object_delete(intf); });
@@ -208,6 +230,39 @@ private slots:
         QVERIFY(!discovery.enqueue(view,{item},target).isEmpty()); QCOMPARE(finished.size(),0);
         QTRY_COMPARE(finished.size(),1); QVERIFY2(finished.first()[1].toBool(),qPrintable(finished.first()[2].toString()));
         QCOMPARE(library.members(id).size(),size_t(1)); discovery.closeView(view); picker.close(); store.close();
+    }
+    void actualAddonLibraryWorkerJoinsQtThreadStorageBeforeAppDrain() {
+        AddonStreamLifetime lifetime; const auto handle=lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto retire=qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
+        Library library; QVERIFY(library.available());
+        auto* intf=vlc_object_create<qt_intf_t>(library.instance->p_libvlc_int); QVERIFY(intf);
+        auto mediaLibrary=std::make_unique<MediaLib>(intf,nullptr); QObject receiver;
+        const auto tail=std::make_shared<LibraryWorkerTail::State>();
+        const auto storage=std::make_shared<QThreadStorage<LibraryWorkerTail*>>();
+        QSemaphore entered,resume; std::atomic_uint queued{0}; unsigned delivered=0;
+        const auto release=qScopeGuard([&] {
+            resume.release(); tail->release(); mediaLibrary.reset();
+            handle.close(); handle.waitQt(std::chrono::seconds(5));
+            if (intf) vlc_object_delete(intf);
+        });
+        QVERIFY(mediaLibrary->runOnMLThread(&receiver,[storage,tail,&entered,&resume](vlc_medialibrary_t*) {
+            storage->setLocalData(new LibraryWorkerTail{tail}); entered.release(); resume.acquire();
+        },[&] { ++delivered; },"addon-native-library"));
+        QVERIFY(entered.tryAcquire(1,5000));
+        QVERIFY(mediaLibrary->runOnMLThread(&receiver,[&](vlc_medialibrary_t*) { ++queued; },
+            [&] { ++delivered; },"addon-native-library"));
+        handle.close(); mediaLibrary.reset(); vlc_object_delete(intf); intf=nullptr;
+        resume.release(); QTRY_VERIFY(tail->entered.load());
+        QVERIFY(!handle.qtDrained()); QVERIFY(!handle.waitQt(std::chrono::milliseconds(20)));
+        QCOMPARE(queued.load(),0u); QCOMPARE(delivered,0u);
+        // The native lease has ended. The app barrier still owns Qt TLS.
+        auto* instance=library.instance; library.instance=nullptr;
+        std::thread core([instance] { libvlc_release(instance); }); core.join();
+        QVERIFY(!handle.qtDrained()); tail->release(); QVERIFY(handle.waitQt(std::chrono::seconds(5)));
+        QVERIFY(tail->ended.load()); QCOMPARE(MLJoinedThreadRunner::processTaskCount(),0u);
+        QCoreApplication::processEvents(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+        QCOMPARE(delivered,0u);
     }
 #endif
     void corePickerExposesOnlyOpaqueChoicesAndConsumesItsSnapshot() {

@@ -65,7 +65,7 @@ void ThreadRunner::setMaxThreadCount(size_t threadCount)
 }
 
 
-void ThreadRunner::start(RunOnThreadBaseRunner* task, const char* queue)
+bool ThreadRunner::start(RunOnThreadBaseRunner* task, const char* queue)
 {
     if (queue == nullptr)
     {
@@ -83,9 +83,10 @@ void ThreadRunner::start(RunOnThreadBaseRunner* task, const char* queue)
         {
             m_serialTasks[queue] = QQueue<RunOnThreadBaseRunner*>();
             m_serialTasks[queue].push_back(task);
-            processQueueLocked(queue);
+            if (!processQueueLocked(queue)) { m_serialTasks.remove(queue); return false; }
         }
     }
+    return true;
 }
 
 bool ThreadRunner::tryTake(RunOnThreadBaseRunner* task)
@@ -131,12 +132,13 @@ RunOnThreadBaseRunner* ThreadRunner::getNextTaskFromQueue(const QString& queueNa
     return task;
 }
 
-void ThreadRunner::processQueueLocked(const QString& queueName)
+bool ThreadRunner::processQueueLocked(const QString& queueName)
 {
     if (!m_serialTasks.contains(queueName))
-        return;
+        return true;
 
-    auto taskId = m_taskId++;
+    const auto taskId = nextMLTaskId();
+    if (!taskId) return false;
     struct Ctx{};
     auto runnable = new RunOnThreadRunner<Ctx>(taskId, this,
         [this, queueName](Ctx&){
@@ -151,7 +153,8 @@ void ThreadRunner::processQueueLocked(const QString& queueName)
         [this, queueName](quint64, const Ctx&){
              QMutexLocker tasksLock(&m_lock);
              QMutexLocker lock(&m_serialTaskLock);
-             if (!m_shuttingDown) processQueueLocked(queueName);
+             if (!m_shuttingDown && !processQueueLocked(queueName))
+                 QMetaObject::invokeMethod(this,&ThreadRunner::destroy,Qt::QueuedConnection);
         });
     connect(runnable, &RunOnThreadBaseRunner::done, this, &ThreadRunner::runOnThreadDone);
     m_runningTasks.insert(taskId, runnable);
@@ -159,6 +162,7 @@ void ThreadRunner::processQueueLocked(const QString& queueName)
 
     runnable->m_queuedWrapper = new MLThreadPoolTask(this, runnable);
     m_threadPool.start(runnable->m_queuedWrapper);
+    return true;
 }
 
 void ThreadRunner::destroy()

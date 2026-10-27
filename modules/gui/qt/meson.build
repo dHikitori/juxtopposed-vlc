@@ -546,6 +546,9 @@ qt_plugin_sources = files(
     'medialibrary/mlhelper.cpp',
     'medialibrary/mlhelper.hpp',
     'medialibrary/mlthreadpool.cpp',
+    'medialibrary/mljoinedthreadrunner.cpp',
+    'medialibrary/mljoinedthreadrunner.hpp',
+    'medialibrary/mltaskid.hpp',
     'medialibrary/mlthreadpool.hpp',
     'medialibrary/mlqmltypes.hpp',
     'medialibrary/mlmedia.hpp',
@@ -2154,6 +2157,10 @@ if qt6_dep.found()
                 'medialibrary/mlbasemodel.cpp',
                 'medialibrary/medialib.cpp',
                 'medialibrary/mlthreadpool.cpp',
+                'medialibrary/mljoinedthreadrunner.cpp',
+                'medialibrary/mljoinedthreadrunner.hpp',
+                'medialibrary/mltaskid.hpp',
+                'addons/addon_stream_lifetime.cpp',
                 'medialibrary/mlmediastore.cpp',
                 'medialibrary/mlfileartwork.cpp',
                 'medialibrary/mlfoldersmodel.cpp',
@@ -2266,6 +2273,19 @@ if qt6_dep.found()
             'link_with': [libvlccore, libvlc],
             'link_args': qt_link_args,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep]
+        }
+
+        vlc_tests += {
+            'name': 'test_qt_ml_joined_runner',
+            'sources': files('tests/test_ml_joined_runner.cpp', 'medialibrary/mljoinedthreadrunner.cpp', 'medialibrary/mlthreadpool.cpp'),
+            'moc_sources': files('tests/test_ml_joined_runner.cpp'),
+            'moc_headers': files('medialibrary/mlthreadpool.hpp'),
+            'include_directories': qt_include_dir,
+            'suite': ['qt', 'addons'],
+            'link_with': [addon_host_library, libvlccore],
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'link_args': qt_link_args,
+            'timeout': 90,
         }
 
         vlc_tests += {

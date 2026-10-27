@@ -38,6 +38,12 @@ foreach(name visualizers visualizer_worker_runtime)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_VISUALIZER_PROCESS_FIXTURE="$<TARGET_FILE:addon_visualizer_process>")
     add_dependencies(test_addon_${name} addon_visualizer_process)
 endforeach()
+add_executable(test_ml_joined_runner "../tests/test_ml_joined_runner.cpp"
+    "../medialibrary/mljoinedthreadrunner.cpp" "../medialibrary/mljoinedthreadrunner.hpp"
+    "../medialibrary/mltaskid.hpp" "../medialibrary/mlthreadpool.cpp" "../medialibrary/mlthreadpool.hpp")
+target_link_libraries(test_ml_joined_runner PRIVATE vlc_addon_host Qt6::Test)
+add_test(NAME ml_joined_runner COMMAND test_ml_joined_runner)
+set_tests_properties(ml_joined_runner PROPERTIES TIMEOUT 90)
 find_package(Qt6 6.2 QUIET COMPONENTS Quick Qml)
 if(TARGET Qt6::Quick AND TARGET Qt6::Qml)
     add_executable(test_addon_ui_assets "../tests/test_addon_ui_assets.cpp" addon_asset_image_provider.cpp)

@@ -424,6 +424,9 @@ libqt_plugin_la_SOURCES = \
 	medialibrary/mlhelper.cpp \
 	medialibrary/mlhelper.hpp \
 	medialibrary/mlthreadpool.cpp \
+	medialibrary/mljoinedthreadrunner.cpp \
+	medialibrary/mljoinedthreadrunner.hpp \
+	medialibrary/mltaskid.hpp \
 	medialibrary/mlthreadpool.hpp \
 	medialibrary/mlqmltypes.hpp \
 	medialibrary/mlmedia.hpp \
@@ -2178,6 +2181,17 @@ endif
 
 if HAVE_QT_QTEST
 
+test_qt_ml_joined_runner_SOURCES = tests/test_ml_joined_runner.cpp medialibrary/mljoinedthreadrunner.cpp medialibrary/mljoinedthreadrunner.hpp medialibrary/mltaskid.hpp medialibrary/mlthreadpool.cpp medialibrary/mlthreadpool.hpp
+nodist_test_qt_ml_joined_runner_SOURCES = tests/test_ml_joined_runner.moc medialibrary/mlthreadpool.moc.cpp
+BUILT_SOURCES += tests/test_ml_joined_runner.moc
+CLEANFILES += tests/test_ml_joined_runner.moc
+test_qt_ml_joined_runner_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_ml_joined_runner_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_ml_joined_runner_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_ml_joined_runner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_ml_joined_runner
+TESTS += test_qt_ml_joined_runner
+
 test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.cpp
 nodist_test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.moc
 BUILT_SOURCES += tests/test_addon_repository_jobs.moc
@@ -2840,6 +2854,8 @@ test_ml_model_SOURCES = \
 	medialibrary/mlbasemodel.hpp medialibrary/mlbasemodel.cpp \
 	medialibrary/medialib.hpp medialibrary/medialib.cpp \
 	medialibrary/mlthreadpool.hpp medialibrary/mlthreadpool.cpp \
+	medialibrary/mljoinedthreadrunner.hpp medialibrary/mljoinedthreadrunner.cpp medialibrary/mltaskid.hpp \
+	addons/addon_stream_lifetime.cpp addons/addon_stream_lifetime.hpp \
 	medialibrary/mlmediastore.hpp medialibrary/mlmediastore.cpp \
 	medialibrary/mlfileartwork.hpp medialibrary/mlfileartwork.cpp util/asynctask.hpp \
 	medialibrary/mlfoldersmodel.hpp medialibrary/mlfoldersmodel.cpp \
@@ -3405,3 +3421,5 @@ EXTRA_DIST += tests/stream-proxy/CMakeLists.txt
 EXTRA_DIST += tests/addon_test_application_work.hpp
 
 EXTRA_DIST += tests/app-shutdown/CMakeLists.txt
+
+EXTRA_DIST += tests/ml-joined-runner/CMakeLists.txt

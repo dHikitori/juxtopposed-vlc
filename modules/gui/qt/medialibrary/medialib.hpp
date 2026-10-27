@@ -23,6 +23,7 @@
 
 #include "qt.hpp"
 #include "mlthreadpool.hpp"
+#include "mljoinedthreadrunner.hpp"
 #include "mlqmltypes.hpp"
 
 namespace vlc {
@@ -242,6 +243,7 @@ private:
     vlc_medialibrary_t* m_ml;
     std::unique_ptr<vlc_ml_event_callback_t, std::function<void(vlc_ml_event_callback_t*)>> m_event_cb;
     ThreadRunner* m_runner = nullptr;
+    MLJoinedThreadRunner* m_addonRunner = nullptr;
 
     quint64 m_trackMatchTask = 0;
     std::shared_ptr<std::atomic_bool> m_trackMatchCancelled;
@@ -255,7 +257,10 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                                     const char* queue)
 {
     const auto task=nativeTask(); if (!task) return 0;
-    return m_runner->runOnThread<Ctx>(obj, [task,mlFun](Ctx& ctx) {
+    auto work=[task,mlFun](Ctx& ctx) {
         invokeNativeTask(task,[&](vlc_medialibrary_t* ml) { mlFun(ml,ctx); });
-    },uiFun,queue);
+    };
+    if (queue && qstrcmp(queue,"addon-native-library")==0)
+        return m_addonRunner->runOnThread<Ctx>(obj,std::move(work),std::move(uiFun));
+    return m_runner->runOnThread<Ctx>(obj,std::move(work),std::move(uiFun),queue);
 }
