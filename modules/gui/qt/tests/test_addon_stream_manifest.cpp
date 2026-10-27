@@ -193,8 +193,8 @@ private slots:
         auto dynamic = mpd(valid); dynamic.replace("type=\"static\"", "type=\"dynamic\""); QVERIFY(!dash(dynamic).valid()); QCOMPARE(batches, 0u);
         auto linked = mpd(valid); linked.replace("<Period>", "<Period xmlns:xlink=\"http://www.w3.org/1999/xlink\" xlink:href=\"https://other.example.org/period\">");
         QVERIFY(!dash(linked).valid()); QCOMPARE(batches, 0u);
-        auto dtd = QByteArray("<!DOCTYPE MPD [<!ENTITY leak SYSTEM 'file:///private/key'>]>") + mpd(valid); QVERIFY(!dash(dtd).valid()); QCOMPARE(batches, 0u);
-        auto processing = QByteArray("<?load href='https://other.example.org/file'?>") + mpd(valid); QVERIFY(!dash(processing).valid()); QCOMPARE(batches, 0u);
+        const QByteArray dtd = QByteArray("<!DOCTYPE MPD [<!ENTITY leak SYSTEM 'file:///private/key'>]>") + mpd(valid); QVERIFY(!dash(dtd).valid()); QCOMPARE(batches, 0u);
+        const QByteArray processing = QByteArray("<?load href='https://other.example.org/file'?>") + mpd(valid); QVERIFY(!dash(processing).valid()); QCOMPARE(batches, 0u);
     }
     void dashUnknownAttributesAndAmbiguousInheritanceAreRejected()
     {
