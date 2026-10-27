@@ -6,6 +6,7 @@
 #include "../../../../src/preparser/metadata_native_provider.h"
 #include <QPointer>
 #include <QUuid>
+#include <array>
 #include <condition_variable>
 #include <mutex>
 #include <string>
@@ -103,17 +104,18 @@ struct AddonNativeProviderContext::State : std::enable_shared_from_this<State> {
     void retire()
     {
         vlc_metadata_native_provider_t* context = nullptr;
-        std::vector<std::shared_ptr<Pending>> values;
+        std::array<std::shared_ptr<Pending>, 32> values;
+        unsigned count = 0;
         {
             std::lock_guard<std::mutex> lock(mutex);
             if (closed) return;
             closed = true;
             if (provider) context = vlc_metadata_native_provider_Hold(provider);
-            for (const auto& row : pending) { row.second->canceled = true; values.push_back(row.second); }
+            for (const auto& row : pending) { row.second->canceled = true; values[count++] = row.second; }
         }
-        for (const auto& value : values) vlc_metadata_job_Cancel(value->job.get());
+        for (unsigned i = 0; i < count; ++i) vlc_metadata_job_Cancel(values[i]->job.get());
         if (context) { vlc_metadata_native_provider_Close(context); vlc_metadata_native_provider_Release(context); }
-        values.clear();
+        for (auto& value : values) value.reset();
         { std::lock_guard<std::mutex> lock(mutex); retirePrepared = true; }
         changed.notify_all();
     }
