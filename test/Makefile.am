@@ -290,6 +290,12 @@ test_src_misc_addon_medialibrary_SOURCES = src/misc/addon_medialibrary.c
 test_src_input_policy_SOURCES = src/input/input_policy.c
 test_src_input_policy_LDADD = $(LIBVLCCORE)
 
+if HAVE_LINUX
+check_PROGRAMS += test_src_input_ytdl_policy
+test_src_input_ytdl_policy_SOURCES = src/input/ytdl_policy.c
+test_src_input_ytdl_policy_LDADD = $(LIBVLC) $(LIBVLCCORE) ../modules/libvlc_json.la -lm
+endif
+
 test_src_input_artwork_policy_SOURCES = src/input/artwork_policy.c
 test_src_input_artwork_policy_LDADD = $(LIBVLCCORE)
 

@@ -40,6 +40,7 @@
 #include <vlc_stream.h>
 #include <vlc_fs.h>
 #include <vlc_input_item.h>
+#include <vlc_input_policy.h>
 #include <vlc_plugin.h>
 #include <vlc_spawn.h>
 #include <vlc_strings.h>
@@ -378,6 +379,10 @@ static void Close(vlc_object_t *obj)
 
 static int OpenCommon(vlc_object_t *obj, const char *src_url)
 {
+    /* An external process cannot inherit the native input policy. */
+    if (vlc_input_policy_Has(obj))
+        return VLC_EGENERIC;
+
     stream_t *s = (stream_t *)obj;
 
     struct ytdl_playlist *sys = vlc_obj_malloc(obj, sizeof (*sys));

@@ -71,6 +71,14 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_input_ytdl_policy',
+    'sources': files('input/ytdl_policy.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore, vlc_json_lib],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
     'name': 'test_src_input_artwork_policy',
     'sources': files('input/artwork_policy.c'),
     'suite': ['src', 'test_src', 'addons'],
