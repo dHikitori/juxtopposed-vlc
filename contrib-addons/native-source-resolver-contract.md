@@ -49,10 +49,13 @@ policy and cancels its lease. There is no unrestricted fallback.
 
 ## Cancellation and ownership
 
-Native dispatch and cancellation callbacks only post bounded host work. A plain
-mutex protects their owner pointer. Destruction clears that pointer before it
-closes the native backend. Native Close and Cancel end input waits and close
-attached transports without a GUI event.
+Native dispatch posts bounded host work. Native cancellation records only a
+job identity and input generation in a bounded native mailbox. It posts no Qt
+event. A plain mutex protects the dispatch owner pointer. Destruction clears
+that pointer before it closes the native backend. Native Close and Cancel end
+input waits and close attached transports without a GUI event. See
+[native source retirement](native-source-foundation.md) for the watch and
+concurrent cancellation checks.
 
 Concurrent lease cancellation waits for the native transport callback to
 finish. Same-thread callback reentry does not wait for itself. See

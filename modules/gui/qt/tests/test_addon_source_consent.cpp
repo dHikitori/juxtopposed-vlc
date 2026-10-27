@@ -9,6 +9,8 @@
 #include <thread>
 #include <QScopeGuard>
 #include <QElapsedTimer>
+#include <condition_variable>
+#include <mutex>
 #include "addons/addon_package_store.hpp"
 #ifdef Q_OS_UNIX
 # include <fcntl.h>
@@ -49,6 +51,103 @@ class TestAddonSourceConsent : public QObject
     static bool write(const QString& path,const QByteArray& bytes) { QFile file(path); return file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size(); }
     using Reason=AddonSourceConsent::IntentReason;
 private slots:
+    void repeatedOwnerRetirementWaitsForTheFirstNativeRevocation() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store));
+        const auto token=store.approvalToken(f.binding); QVERIFY(token);
+        std::mutex mutex; std::condition_variable changed; bool entered=false,released=false;
+        std::atomic_bool firstDone{false},secondDone{false};
+        const auto watch=token->onInvalidated([&] { std::unique_lock<std::mutex> lock(mutex); entered=true; changed.notify_all(); changed.wait(lock,[&]{return released;}); });
+        QVERIFY(watch); const auto retire=store.nativeOwnerRevoker();
+        std::thread first([&] { retire(); firstDone=true; }); std::thread second;
+        const auto cleanup=qScopeGuard([&] {
+            { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all();
+            if(first.joinable()) first.join(); if(second.joinable()) second.join();
+        });
+        { std::unique_lock<std::mutex> lock(mutex); QVERIFY(changed.wait_for(lock,std::chrono::seconds(3),[&]{return entered;})); }
+        second=std::thread([&] { store.retire(); secondDone=true; });
+        QVERIFY(!token->current()); QVERIFY(!firstDone.load()); QVERIFY(!secondDone.load());
+        { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all(); first.join(); second.join();
+        QVERIFY(firstDone.load()); QVERIFY(secondDone.load()); QVERIFY(!watch);
+    }
+    void nativeWatchesRevokeBeforeSavedStateCanChange() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
+        QVERIFY(f.approve(store)); const auto uri=f.uri();
+        const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback);
+        const auto receipt=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(receipt);
+        const auto original=f.binding; f.binding.contribution=QStringLiteral("org.example.radio/other");
+        QVERIFY(f.approve(store)); const auto otherUri=f.uri();
+        const auto otherIntent=store.mintIntent(f.binding,otherUri,2,Reason::PrimaryPlayback);
+        const auto other=store.consumeIntent(otherIntent,f.binding,otherUri,2,Reason::PrimaryPlayback); QVERIFY(other);
+        f.binding=original;
+        std::mutex mutex; std::condition_variable changed; bool entered=false,released=false;
+        std::atomic_uint calls{0}; std::atomic_bool revoked{false},reset{false};
+        const auto watch=receipt->liveToken().onInvalidated([&] {
+            ++calls; std::unique_lock<std::mutex> lock(mutex); entered=true; changed.notify_all();
+            changed.wait(lock,[&] { return released; });
+        });
+        QVERIFY(bool(watch));
+        std::thread revoke([&] { store.revoke(f.binding); revoked=true; });
+        std::thread resetter;
+        auto cleanup=qScopeGuard([&] {
+            { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all();
+            if(revoke.joinable()) revoke.join(); if(resetter.joinable()) resetter.join();
+        });
+        { std::unique_lock<std::mutex> lock(mutex); QVERIFY(changed.wait_for(lock,std::chrono::seconds(3),[&] { return entered; })); }
+        QVERIFY(!receipt->liveToken().current()); QVERIFY(!revoked.load());
+        resetter=std::thread([&] { store.reset(); reset=true; });
+        QTRY_VERIFY_WITH_TIMEOUT(!other->liveToken().current(),1000);
+        // The saved record must remain until the native cancellation returns.
+        QVERIFY(!read(f.file()).value("approvals").toObject().isEmpty()); QVERIFY(!reset.load());
+        { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all();
+        revoke.join(); resetter.join();
+        QVERIFY(revoked.load()); QVERIFY(reset.load()); QCOMPARE(calls.load(),1u); QVERIFY(!watch);
+    }
+    void nativeWatchTracksOwnerReceiptPackageAndBindingSeparately() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store));
+        const auto uri=f.uri(); auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback);
+        const auto receipt=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(receipt);
+        std::atomic_uint calls{0}; const auto watch=receipt->liveToken().onInvalidated([&] { ++calls; }); QVERIFY(bool(watch));
+        const auto package=PackageStore(f.profile.path()).authorityToken();
+        const auto original=f.binding; f.binding.contribution=QStringLiteral("org.example.radio/other");
+        QVERIFY(f.approve(store)); f.binding=original;
+        QVERIFY(package.current()); QVERIFY(receipt->liveToken().current()); QVERIFY(bool(watch)); QCOMPARE(calls.load(),0u);
+        AddonSourceConsent peer(f.profile.path(),f.checks(),f.options()); peer.close();
+        QVERIFY(bool(watch)); QCOMPARE(calls.load(),0u);
+        auto state=read(f.file()); state.insert("epoch",QUuid::createUuid().toString(QUuid::WithoutBraces));
+        QVERIFY(write(f.file(),QJsonDocument(state).toJson()));
+        QVERIFY(!store.current(*receipt,uri,1)); QCOMPARE(calls.load(),1u); QVERIFY(!watch);
+        PackageStore(f.profile.path()).invalidateAuthority(); QCOMPARE(calls.load(),1u);
+        bool refused=false; QVERIFY(!receipt->liveToken().onInvalidated([&] { refused=true; })); QVERIFY(refused);
+    }
+    void nativeWatchQuotaRetainsReleaseAndRetirement() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store)); const auto uri=f.uri();
+        const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback);
+        const auto receipt=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(receipt);
+        std::atomic_uint calls{0}; QList<AddonSourceConsent::LiveWatch> watches;
+        for(unsigned i=0;i<StoreAuthorityToken::WatchLimit;++i) {
+            const auto watch=receipt->liveToken().onInvalidated([&] { ++calls; }); QVERIFY(bool(watch)); watches.append(watch);
+        }
+        QVERIFY(!receipt->liveToken().onInvalidated([&] { ++calls; })); QCOMPARE(calls.load(),1u);
+        watches.clear(); calls=0;
+        const auto watch=receipt->liveToken().onInvalidated([&] { ++calls; }); QVERIFY(bool(watch));
+        store.retire(); QCOMPARE(calls.load(),1u); QVERIFY(!watch); QVERIFY(!receipt->liveToken().current());
+        store.retire(); store.close(); QCOMPARE(calls.load(),1u);
+    }
+    void approvalTokensAndNativeRevokersDoNotCreatePlaybackIntent() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
+        QVERIFY(!store.approvalToken(f.binding)); QVERIFY(f.approve(store));
+        const auto approval=store.approvalToken(f.binding); QVERIFY(approval); QVERIFY(approval->current());
+        const auto uri=f.uri(); const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback);
+        const auto receipt=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(receipt);
+        unsigned canceled=0; const auto watch=receipt->liveToken().onInvalidated([&] { ++canceled; }); QVERIFY(bool(watch));
+        const auto revoke=store.nativeBindingRevoker(f.binding); QVERIFY(bool(revoke)); revoke();
+        QCOMPARE(canceled,1u); QVERIFY(!approval->current()); QVERIFY(!store.approvalToken(f.binding));
+        QVERIFY(!store.mintIntent(f.binding,uri,2,Reason::PrimaryPlayback).size());
+        QVERIFY(f.approve(store)); const auto fresh=store.approvalToken(f.binding); QVERIFY(fresh); QVERIFY(fresh->current());
+        const auto reset=store.nativeProfileRevoker(); QVERIFY(bool(reset)); reset();
+        QVERIFY(!fresh->current()); QVERIFY(!store.approvalToken(f.binding)); QVERIFY(store.reset());
+        QVERIFY(!store.approvalToken(f.binding));
+    }
     void installEnableAndTicketCaptureDoNotApprovePlayback() {
         Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
         QVERIFY(!store.approved(f.binding)); QVERIFY(!QFile::exists(f.file()));
@@ -226,10 +325,16 @@ private slots:
         QVERIFY(write(f.file(),QJsonDocument(saved).toJson())); QVERIFY(!live.current());
     }
 #ifdef Q_OS_UNIX
+    void liveRevocationDoesNotWaitForABlockedDiskCheck_data() {
+        QTest::addColumn<bool>("retire"); QTest::newRow("binding-revoke") << false; QTest::newRow("owner-retire") << true;
+    }
     void liveRevocationDoesNotWaitForABlockedDiskCheck() {
+        QFETCH(bool,retire);
         Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store)); const auto uri=f.uri();
         const auto intent=store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback); const auto authorization=store.consumeIntent(intent,f.binding,uri,1,Reason::PrimaryPlayback); QVERIFY(authorization);
-        const auto live=authorization->liveToken(); const QString saved=f.file()+QStringLiteral(".saved"); QVERIFY(QFile::rename(f.file(),saved));
+        const auto live=authorization->liveToken(); std::atomic_uint canceled{0};
+        const auto watch=live.onInvalidated([&] { ++canceled; }); QVERIFY(bool(watch));
+        const QString saved=f.file()+QStringLiteral(".saved"); QVERIFY(QFile::rename(f.file(),saved));
         const auto path=QFile::encodeName(f.file()); QVERIFY(::mkfifo(path.constData(),0600)==0);
         int writer=-1; std::thread reader,revoker; std::atomic_bool readDone{false},revokeDone{false};
         const auto cleanup=qScopeGuard([&] {
@@ -240,8 +345,10 @@ private slots:
         reader=std::thread([&] { store.current(*authorization,uri,1); readDone.store(true); });
         QTRY_VERIFY_WITH_TIMEOUT([&] { if (writer<0) writer=::open(path.constData(),O_WRONLY|O_NONBLOCK); return writer>=0; }(),5000);
         QVERIFY(!readDone.load()); QVERIFY(live.current());
-        revoker=std::thread([&] { store.revoke(f.binding); revokeDone.store(true); });
-        QTRY_VERIFY_WITH_TIMEOUT(!live.current(),1000); QVERIFY(!readDone.load()); QVERIFY(!revokeDone.load());
+        if(retire) { QElapsedTimer clock; clock.start(); store.retire(); QVERIFY(clock.elapsed()<1000); }
+        else revoker=std::thread([&] { store.revoke(f.binding); revokeDone.store(true); });
+        QTRY_VERIFY_WITH_TIMEOUT(!live.current(),1000); QCOMPARE(canceled.load(),1u);
+        QVERIFY(!readDone.load()); QVERIFY(!revokeDone.load());
     }
 #endif
 };

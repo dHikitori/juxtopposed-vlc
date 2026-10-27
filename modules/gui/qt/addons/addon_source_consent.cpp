@@ -18,6 +18,8 @@
 #include <cmath>
 #include <limits>
 #include <atomic>
+#include <array>
+#include <condition_variable>
 
 namespace vlc::addons {
 namespace {
@@ -93,21 +95,88 @@ template<class Epoch> bool live(const Epoch& value,quint64 revision) noexcept
 }
 template<class Epoch> struct LiveMutation {
     std::shared_ptr<Epoch> value;
-    explicit LiveMutation(std::shared_ptr<Epoch> epoch):value(std::move(epoch)) { value->writers.fetch_add(1,std::memory_order_acq_rel); advance(value); }
-    ~LiveMutation() { advance(value); value->writers.fetch_sub(1,std::memory_order_release); }
+    std::optional<StoreAuthorityMutation> authority;
+    explicit LiveMutation(std::shared_ptr<Epoch> epoch):value(std::move(epoch)) {
+        value->writers.fetch_add(1,std::memory_order_acq_rel); advance(value);
+        authority.emplace(value->authority.mutation());
+    }
+    ~LiveMutation() { advance(value); authority.reset(); value->writers.fetch_sub(1,std::memory_order_release); }
 };
 }
 struct AddonSourceConsent::LiveEpoch {
+    explicit LiveEpoch(const QString& directory):authority(directory) {}
+    StoreAuthority authority;
     std::atomic<quint64> revision{0};
     std::atomic_uint writers{0};
     std::atomic_bool allowed{true},retired{false};
 };
-struct AddonSourceConsent::LiveOwner { std::atomic_bool open{true},allowed{true}; };
+struct AddonSourceConsent::LiveOwner {
+    explicit LiveOwner(const QString& directory):authority(directory) {}
+    StoreAuthority authority;
+    std::atomic_bool open{true},allowed{true};
+};
 struct AddonSourceConsent::LiveProfile {
-    std::shared_ptr<LiveEpoch> reset=std::make_shared<LiveEpoch>();
+    explicit LiveProfile(QString path):directory(std::move(path)),
+        reset(std::make_shared<LiveEpoch>(QDir(directory).filePath(QStringLiteral("authority/reset")))) {}
+    const QString directory;
+    std::shared_ptr<LiveEpoch> reset;
     std::mutex mutex;
     QHash<QString,std::shared_ptr<LiveEpoch>> entries;
 };
+namespace {
+struct ConsentNativeCancel {
+    explicit ConsentNativeCancel(std::function<void()> value):cancel(std::move(value)) {}
+    const std::function<void()> cancel;
+    std::atomic_uint phase{0};
+    std::mutex mutex;
+    std::condition_variable ended;
+    void fire() noexcept {
+        unsigned expected=0;
+        if (phase.compare_exchange_strong(expected,1,std::memory_order_acq_rel)) {
+            try { if(cancel) cancel(); } catch(...) {}
+            { std::lock_guard<std::mutex> lock(mutex); phase.store(2,std::memory_order_release); }
+            ended.notify_all();
+        } else if(expected==1) {
+            std::unique_lock<std::mutex> lock(mutex);
+            ended.wait(lock,[this] { return phase.load(std::memory_order_acquire)==2; });
+        }
+    }
+};
+}
+struct AddonSourceConsent::LiveWatch::State {
+    // Release the shared call before its retained native watch quotas.
+    std::array<StoreAuthorityWatch,5> watches;
+    std::shared_ptr<ConsentNativeCancel> call;
+};
+AddonSourceConsent::LiveWatch::operator bool() const noexcept {
+    if(!m_state || m_state->call->phase.load(std::memory_order_acquire)!=0) return false;
+    for(const auto& watch:m_state->watches) if(!watch) return false;
+    return true;
+}
+AddonSourceConsent::LiveWatch AddonSourceConsent::LiveToken::onInvalidated(std::function<void()> nativeCancel) const noexcept {
+    std::shared_ptr<ConsentNativeCancel> call;
+    std::shared_ptr<LiveWatch::State> state;
+    std::function<void()> cancel;
+    try {
+        call=std::make_shared<ConsentNativeCancel>(std::move(nativeCancel));
+        if(!current()) { call->fire(); return {}; }
+        state=std::make_shared<LiveWatch::State>(); state->call=call;
+        cancel=[call] { call->fire(); };
+        state->watches[0]=m_package.onInvalidated(cancel);
+        state->watches[1]=m_ownerAuthority.onInvalidated(cancel);
+        state->watches[2]=m_receiptAuthority.onInvalidated(cancel);
+        state->watches[3]=m_profileAuthority.onInvalidated(cancel);
+        state->watches[4]=m_entryAuthority.onInvalidated(cancel);
+        LiveWatch watch; watch.m_state=state;
+        if(!current() || !watch) {
+            call->fire(); cancel={}; call.reset(); return {};
+        }
+        return watch;
+    } catch(...) {
+        if(call) call->fire(); else try { if(nativeCancel) nativeCancel(); } catch(...) {}
+        cancel={}; call.reset(); state.reset(); return {};
+    }
+}
 std::shared_ptr<AddonSourceConsent::LiveProfile> AddonSourceConsent::liveProfile(const QString& directory)
 {
     struct Registry { std::mutex mutex; QHash<QString,std::shared_ptr<LiveProfile>> profiles; };
@@ -124,19 +193,20 @@ std::shared_ptr<AddonSourceConsent::LiveProfile> AddonSourceConsent::liveProfile
     }
     auto profile=registry.profiles.value(key);
     if (!profile && registry.profiles.size()>=64) {
-        static const auto unavailable=[] { auto value=std::make_shared<LiveProfile>(); value->reset->allowed.store(false); value->reset->retired.store(true); return value; }();
+        static const auto unavailable=[] { auto value=std::make_shared<LiveProfile>(QStringLiteral("/hakone-consent-unavailable")); value->reset->allowed.store(false); value->reset->retired.store(true); return value; }();
         return unavailable;
     }
-    if (!profile) { profile=std::make_shared<LiveProfile>(); registry.profiles.insert(key,profile); }
+    if (!profile) { profile=std::make_shared<LiveProfile>(key); registry.profiles.insert(key,profile); }
     return profile;
 }
 std::shared_ptr<AddonSourceConsent::LiveEpoch> AddonSourceConsent::liveEntry(const QString& key) const
 {
     std::lock_guard<std::mutex> lock(m_liveProfile->mutex); auto entry=m_liveProfile->entries.value(key);
     if (!entry && m_liveProfile->entries.size()>=512) {
-        m_liveProfile->reset->allowed.store(false,std::memory_order_release); advance(m_liveProfile->reset); return {};
+        m_liveProfile->reset->allowed.store(false,std::memory_order_release); advance(m_liveProfile->reset);
+        m_liveProfile->reset->authority.invalidate(); return {};
     }
-    if (!entry) { entry=std::make_shared<LiveEpoch>(); m_liveProfile->entries.insert(key,entry); }
+    if (!entry) { entry=std::make_shared<LiveEpoch>(QDir(m_liveProfile->directory).filePath(QStringLiteral("authority/entries/")+key)); m_liveProfile->entries.insert(key,entry); }
     return entry;
 }
 bool AddonSourceConsent::liveAllowed(const QString& key) const
@@ -149,10 +219,13 @@ bool AddonSourceConsent::liveAllowed(const QString& key) const
 }
 AddonSourceConsent::LiveToken AddonSourceConsent::liveToken(const QString& key,const StoreAuthorityToken& package) const
 {
-    LiveToken token; token.m_owner=m_liveOwner; token.m_receipt=std::make_shared<LiveOwner>(); token.m_profile=m_liveProfile;
+    LiveToken token; token.m_owner=m_liveOwner; token.m_receipt=std::make_shared<LiveOwner>(QDir(m_liveProfile->directory).filePath(QStringLiteral("authority/receipts/")+uuid())); token.m_profile=m_liveProfile;
     token.m_entry=liveEntry(key); token.m_package=package;
     token.m_profileRevision=m_liveProfile->reset->revision.load(std::memory_order_acquire);
     if (token.m_entry) token.m_entryRevision=token.m_entry->revision.load(std::memory_order_acquire);
+    token.m_ownerAuthority=m_liveOwner->authority.capture(); token.m_receiptAuthority=token.m_receipt->authority.capture();
+    token.m_profileAuthority=m_liveProfile->reset->authority.capture();
+    if(token.m_entry) token.m_entryAuthority=token.m_entry->authority.capture();
     return token;
 }
 bool AddonSourceConsent::LiveToken::current() const noexcept
@@ -161,7 +234,8 @@ bool AddonSourceConsent::LiveToken::current() const noexcept
         && m_receipt->open.load(std::memory_order_acquire) && m_package.current()
         && live(*m_profile->reset,m_profileRevision) && live(*m_entry,m_entryRevision)
         && m_owner->open.load(std::memory_order_acquire) && m_owner->allowed.load(std::memory_order_acquire) && m_receipt->open.load(std::memory_order_acquire)
-        && live(*m_profile->reset,m_profileRevision) && live(*m_entry,m_entryRevision) && m_package.current();
+        && live(*m_profile->reset,m_profileRevision) && live(*m_entry,m_entryRevision) && m_package.current()
+        && m_ownerAuthority.current() && m_receiptAuthority.current() && m_profileAuthority.current() && m_entryAuthority.current();
 }
 struct AddonSourceConsent::State {
     QString epoch;
@@ -175,7 +249,7 @@ AddonSourceConsent::AddonSourceConsent(QString path,Checks checks)
 AddonSourceConsent::AddonSourceConsent(QString path,Checks checks,Options options)
     : m_directory(QDir(path).filePath(QStringLiteral("source-consent"))),
       m_file(QDir(m_directory).filePath(QStringLiteral("approvals.json"))),m_owner(uuid()),m_packageAuthority(path),
-      m_liveProfile(liveProfile(m_directory)),m_liveOwner(std::make_shared<LiveOwner>()),m_checks(std::move(checks)),m_options(std::move(options))
+      m_liveProfile(liveProfile(m_directory)),m_liveOwner(std::make_shared<LiveOwner>(QDir(m_directory).filePath(QStringLiteral("authority/owners/")+m_owner))),m_checks(std::move(checks)),m_options(std::move(options))
 {
     m_options.approvals=std::clamp(m_options.approvals,1,256); m_options.tickets=std::clamp(m_options.tickets,1,64); m_options.intents=std::clamp(m_options.intents,1,128);
     m_options.ticketLifetimeMs=std::clamp<qint64>(m_options.ticketLifetimeMs,1,300000);
@@ -307,6 +381,32 @@ bool AddonSourceConsent::approved(const Binding& value) const
     if (!liveAllowed(id)) return false;
     return !m_closed && !m_denyAll && !m_withdrawn.contains(id) && load(&state) && state.approvals.contains(id);
 }
+std::optional<AddonSourceConsent::LiveToken> AddonSourceConsent::approvalToken(const Binding& value) const
+{
+    const auto package=m_packageAuthority.capture(); const auto binding=canonical(value);
+    if(!package.current() || !binding || !sourceCurrent(*binding)) return {};
+    std::lock_guard<std::mutex> guard(m_mutex); const auto id=key(*binding);
+    const auto token=liveToken(id,package); State state;
+    if(m_closed || m_denyAll || m_withdrawn.contains(id) || !token.current()
+        || !load(&state) || !state.approvals.contains(id) || !token.current()) return {};
+    return token;
+}
+std::function<void()> AddonSourceConsent::nativeBindingRevoker(const Binding& value) const
+{
+    const auto binding=canonical(value); if(!binding) return {};
+    const auto entry=liveEntry(key(*binding)); if(!entry) return {};
+    return [entry] { LiveMutation mutation(entry); entry->allowed.store(false,std::memory_order_release); };
+}
+std::function<void()> AddonSourceConsent::nativeProfileRevoker() const
+{
+    const auto reset=m_liveProfile->reset;
+    return [reset] { LiveMutation mutation(reset); reset->allowed.store(false,std::memory_order_release); };
+}
+std::function<void()> AddonSourceConsent::nativeOwnerRevoker() const
+{
+    const auto owner=m_liveOwner;
+    return [owner] { owner->open.store(false,std::memory_order_release); owner->authority.invalidate(); };
+}
 bool AddonSourceConsent::revoke(const Binding& value,QString* error)
 {
     const auto binding=canonical(value); if (!binding) return fail(error,savedError());
@@ -316,7 +416,7 @@ bool AddonSourceConsent::revoke(const Binding& value,QString* error)
     std::lock_guard<std::mutex> guard(m_mutex); if (m_closed) return false;
     ++m_ticketEpoch;
     if (m_withdrawn.size()<256) m_withdrawn.insert(id);
-    else { m_denyAll=true; m_liveOwner->allowed.store(false,std::memory_order_release); }
+    else { m_denyAll=true; m_liveOwner->allowed.store(false,std::memory_order_release); m_liveOwner->authority.invalidate(); }
     for (auto it=m_tickets.begin();it!=m_tickets.end();) if (key(it->ticket.binding)==id) it=m_tickets.erase(it); else ++it;
     for (auto it=m_intents.begin();it!=m_intents.end();) if (key(it->authorization.m_binding)==id) it=m_intents.erase(it); else ++it;
     if (!directory(error)) return false;
@@ -375,7 +475,10 @@ bool AddonSourceConsent::current(const Authorization& authorization,const QStrin
 {
     if (authorization.m_owner!=m_owner || authorization.m_uri!=uri || authorization.m_generation!=generation) return false;
     if (!authorization.m_live.current()) return false;
-    const auto reject=[&authorization] { authorization.m_live.m_receipt->open.store(false,std::memory_order_release); return false; };
+    const auto reject=[&authorization] {
+        if(authorization.m_live.m_receipt->open.exchange(false,std::memory_order_acq_rel)) authorization.m_live.m_receipt->authority.invalidate();
+        return false;
+    };
     if (!sourceCurrent(authorization.m_binding) || !admissionCurrent(authorization.m_binding,uri)) return reject();
     std::lock_guard<std::mutex> guard(m_mutex); const auto id=key(authorization.m_binding); State state;
     const bool valid=!m_closed && !m_denyAll && authorization.m_reset==m_reset && !m_withdrawn.contains(id) && load(&state)
@@ -383,7 +486,9 @@ bool AddonSourceConsent::current(const Authorization& authorization,const QStrin
         && authorization.m_live.current();
     return valid || reject();
 }
+void AddonSourceConsent::retire() noexcept
+{ m_liveOwner->open.store(false,std::memory_order_release); m_liveOwner->authority.invalidate(); }
 void AddonSourceConsent::close()
-{ m_liveOwner->open.store(false,std::memory_order_release); std::lock_guard<std::mutex> guard(m_mutex); if (m_closed) return;
+{ retire(); std::lock_guard<std::mutex> guard(m_mutex); if (m_closed) return;
   m_closed=true; ++m_reset; ++m_ticketEpoch; m_tickets.clear(); m_intents.clear(); m_issued.clear(); }
 }

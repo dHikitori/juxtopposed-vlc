@@ -9,6 +9,8 @@
 #include <QSemaphore>
 #include <QScopeGuard>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #include <vlc_common.h>
 #include <vlc_source_backend.h>
@@ -17,6 +19,7 @@
 #include "lib/libvlc_internal.h"
 #include "addons/addon_native_source_resolver.hpp"
 #include "addons/addon_source_admissions.hpp"
+#include "addons/addon_package_store.hpp"
 
 using namespace vlc::addons;
 namespace {
@@ -28,7 +31,7 @@ struct Transport {
     std::atomic_int canceled{0}, destroyed{0}, io{0};
     Resolver::Current current;
     Resolver::Started started;
-    std::function<void()> atStart;
+    std::function<void()> atStart,atCancel;
     bool inlineStart = true;
 };
 struct Lease {
@@ -36,6 +39,7 @@ struct Lease {
     static void cancel(void* opaque) {
         auto& value = static_cast<Lease*>(opaque)->value;
         value->active->store(false, std::memory_order_release); ++value->canceled;
+        if(value->atCancel) value->atCancel();
     }
     static void destroy(void* opaque) {
         auto* value = static_cast<Lease*>(opaque); ++value->value->destroyed; delete value;
@@ -142,6 +146,79 @@ class TestAddonNativeSourceResolver : public QObject
     Q_OBJECT
 private slots:
     void cleanup() { QTRY_COMPARE_WITH_TIMEOUT(Resolver::admissionWorkCount(),0u,5000); }
+    void consentChangesRevokeIssuedTransportWithoutOwnerEvents_data() {
+        QTest::addColumn<int>("change"); QTest::newRow("binding-revoke")<<0; QTest::newRow("profile-reset")<<1;
+        QTest::newRow("owner-retire")<<2; QTest::newRow("package-withdrawal")<<3;
+    }
+    void consentChangesRevokeIssuedTransportWithoutOwnerEvents() {
+        QFETCH(int,change); Fixture f; const auto uri=f.uri(); QVERIFY(f.approve());
+        auto transport=std::make_shared<Transport>(); f.automatic(uri,transport); f.create();
+        NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1);
+        QCOMPARE(job.status.load(),VLC_SUCCESS); QCOMPARE(transport->canceled.load(),0);
+        const auto consent=f.consent; const auto binding=f.binding; const auto directory=f.profile.path();
+        std::thread writer([consent,binding,directory,change] {
+            if(change==0) consent->revoke(binding); else if(change==1) consent->reset();
+            else if(change==2) consent->retire(); else PackageStore(directory).invalidateAuthority();
+        }); writer.join();
+        QCOMPARE(transport->canceled.load(),1); QVERIFY(!transport->active->load());
+        QVERIFY(!transport->current()); QCOMPARE(job.ended.load(),1); QCOMPARE(f.owner->issuedCount(),0u);
+    }
+    void aConcurrentNativeStopMustEndBeforeTheWatchWriterReturns_data() {
+        QTest::addColumn<bool>("closeBackend"); QTest::newRow("job-stop")<<false; QTest::newRow("backend-close")<<true;
+    }
+    void aConcurrentNativeStopMustEndBeforeTheWatchWriterReturns() {
+        QFETCH(bool,closeBackend); Fixture f; const auto uri=f.uri(); QVERIFY(f.approve());
+        auto transport=std::make_shared<Transport>(); f.automatic(uri,transport); f.create();
+        NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1);
+        const auto token=PackageStore(f.profile.path()).authorityToken();
+        std::mutex mutex; std::condition_variable changed; bool entered=false,released=false;
+        std::atomic_bool stopDone{false},writerDone{false};
+        transport->atCancel=[&] { std::unique_lock<std::mutex> lock(mutex); entered=true; changed.notify_all(); changed.wait(lock,[&]{return released;}); };
+        auto* backend=vlc_source_owner_Hold(f.root()); QVERIFY(backend);
+        std::thread stop([&] { if(closeBackend) vlc_source_backend_Close(backend); else vlc_source_job_Cancel(job.value); stopDone=true; });
+        std::thread writer;
+        const auto cleanup=qScopeGuard([&] {
+            { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all();
+            if(stop.joinable()) stop.join(); if(writer.joinable()) writer.join(); vlc_source_backend_Release(backend);
+        });
+        { std::unique_lock<std::mutex> lock(mutex); QVERIFY(changed.wait_for(lock,std::chrono::seconds(3),[&]{return entered;})); }
+        const auto directory=f.profile.path(); writer=std::thread([&] { PackageStore(directory).invalidateAuthority(); writerDone=true; });
+        const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+        while(token.current() && std::chrono::steady_clock::now()<end) std::this_thread::yield();
+        QVERIFY(!token.current()); QVERIFY(!stopDone.load()); QVERIFY(!writerDone.load());
+        { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all();
+        stop.join(); writer.join(); QVERIFY(writerDone.load()); QCOMPARE(transport->canceled.load(),1); QVERIFY(!transport->active->load());
+    }
+    void earlyPackageWatchWakesABlockedAdmissionWithoutOwnerEvents() {
+        struct Wait { QSemaphore release; std::atomic_bool entered{false}; };
+        const auto wait=std::make_shared<Wait>(); const auto release=qScopeGuard([wait] { wait->release.release(); });
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); const auto base=f.backend().admit;
+        f.admit=[base,wait](const QString& uri,quint64 generation) {
+            wait->entered=true; wait->release.acquire(); return base(uri,generation);
+        };
+        auto backend=f.backend(); const auto token=PackageStore(f.profile.path()).authorityToken();
+        backend.watchAdmission=[token](auto cancel) { return token.onInvalidated(std::move(cancel)); };
+        f.owner=std::make_unique<Resolver>(f.root(),std::move(backend));
+        NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_VERIFY(wait->entered.load());
+        const auto directory=f.profile.path(); std::thread writer([directory] { PackageStore(directory).invalidateAuthority(); }); writer.join();
+        QCOMPARE(job.ended.load(),1); QCOMPARE(job.status.load(),-EACCES); QCOMPARE(f.preparations.load(),0);
+        wait->release.release(); QTRY_COMPARE(Resolver::admissionWorkCount(),0u); QTRY_COMPARE(f.owner->pendingCount(),0u);
+    }
+    void nativeCancelMailboxOverflowClosesWithoutAJobCycle() {
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); f.create();
+        std::vector<std::unique_ptr<NativeJob>> jobs;
+        for(quint64 generation=1;generation<=257;++generation) {
+            jobs.push_back(std::make_unique<NativeJob>(f.root(),uri,generation));
+            QCOMPARE(jobs.back()->start(),VLC_SUCCESS);
+            QCoreApplication::sendPostedEvents();
+            QVERIFY(vlc_source_job_Cancel(jobs.back()->value));
+            QVERIFY(f.lifetime.handle().waitQt(std::chrono::seconds(3)));
+        }
+        QVERIFY(!f.owner->bound());
+        auto* backend=vlc_source_owner_Hold(f.root()); QVERIFY(backend); QVERIFY(vlc_source_backend_IsClosed(backend));
+        vlc_source_backend_Release(backend); f.owner->close(); QCOMPARE(f.owner->pendingCount(),0u);
+        jobs.clear(); QCOMPARE(Resolver::admissionWorkCount(),0u);
+    }
     void anAppLifetimeIsRequiredBeforeNativeBinding() {
         Fixture f; auto backend=f.backend(); backend.lifetime={};
         Resolver missing(f.root(),std::move(backend)); QVERIFY(!missing.bound());

@@ -11,6 +11,8 @@
 #include <cerrno>
 #include <mutex>
 #include <new>
+#include <array>
+#include <condition_variable>
 #include <vlc_common.h>
 #include <vlc_input_policy.h>
 #include <vlc_source_backend.h>
@@ -50,13 +52,56 @@ struct AddonNativeSourceResolver::Gate {
     AddonNativeSourceResolver* owner = nullptr;
     std::atomic_bool closed{false};
     std::atomic_uint queued{0};
+    struct Cancellation { vlc_source_job_t* identity=nullptr; quint64 generation=0; };
+    std::array<Cancellation,256> cancellations{};
+    unsigned canceled=0;
+    std::weak_ptr<vlc_source_backend_t> native;
 };
+namespace {
+struct NativeSourceRevocation {
+    explicit NativeSourceRevocation(Job value):job(std::move(value)) {}
+    Job job;
+    std::atomic_uint phase{0};
+    std::mutex mutex,finishedMutex;
+    std::condition_variable finished;
+    std::shared_ptr<vlc_input_policy_t> policy;
+    std::shared_ptr<vlc_source_lease_t> lease;
+    bool bind(vlc_input_policy_t* value,vlc_source_lease_t* transport) {
+        const auto scope=std::shared_ptr<vlc_input_policy_t>(vlc_input_policy_Hold(value),vlc_input_policy_Release);
+        const auto held=std::shared_ptr<vlc_source_lease_t>(vlc_source_lease_Hold(transport),vlc_source_lease_Release);
+        std::lock_guard<std::mutex> lock(mutex);
+        if(phase.load(std::memory_order_acquire)!=0) return false;
+        policy=scope; lease=held; return true;
+    }
+    void revoke() noexcept {
+        unsigned expected=0;
+        if(!phase.compare_exchange_strong(expected,1,std::memory_order_acq_rel)) {
+            if(expected==1) {
+                std::unique_lock<std::mutex> lock(finishedMutex);
+                finished.wait(lock,[this] { return phase.load(std::memory_order_acquire)==2; });
+            }
+            return;
+        }
+        std::shared_ptr<vlc_input_policy_t> scope; std::shared_ptr<vlc_source_lease_t> transport;
+        { std::lock_guard<std::mutex> lock(mutex); scope=policy; transport=lease; }
+        vlc_input_policy_Revoke(scope.get());
+        if(transport) vlc_source_lease_Cancel(transport.get());
+        // Complete wakes the native input. The cancel hook uses a native mailbox.
+        vlc_source_job_Complete(job.get(),-EACCES,nullptr);
+        { std::lock_guard<std::mutex> lock(finishedMutex); phase.store(2,std::memory_order_release); }
+        finished.notify_all();
+    }
+};
+}
 struct AddonNativeSourceResolver::Guard {
     Job job;
     std::shared_ptr<vlc_source_backend_t> native;
     std::shared_ptr<Gate> gate;
     AddonStreamLifetime::Handle lifetime;
     Admission admission;
+    std::shared_ptr<NativeSourceRevocation> revocation;
+    StoreAuthorityWatch admissionWatch;
+    AddonSourceConsent::LiveWatch consentWatch;
     QString uri;
     QString sourceHint,accountHint;
     quint64 generation = 0;
@@ -65,7 +110,8 @@ struct AddonNativeSourceResolver::Guard {
     std::shared_ptr<vlc_input_policy_t> policy;
     bool admissionReady=false;
     bool pending() const {
-        return lifetime.current() && phase.load(std::memory_order_acquire)==0 && !gate->closed.load(std::memory_order_acquire)
+        return lifetime.current() && phase.load(std::memory_order_acquire)==0 && revocation->phase.load(std::memory_order_acquire)==0
+            && !gate->closed.load(std::memory_order_acquire)
             && !vlc_source_backend_IsClosed(native.get()) && vlc_source_job_IsPending(job.get());
     }
     bool current() const {
@@ -73,7 +119,8 @@ struct AddonNativeSourceResolver::Guard {
             const auto state = phase.load(std::memory_order_acquire);
             const auto transport = std::atomic_load_explicit(&active, std::memory_order_acquire);
             const auto scope = std::atomic_load_explicit(&policy, std::memory_order_acquire);
-            return lifetime.current() && state < 2 && !gate->closed.load(std::memory_order_acquire)
+            return lifetime.current() && state < 2 && revocation->phase.load(std::memory_order_acquire)==0
+                && !gate->closed.load(std::memory_order_acquire)
                 && !vlc_source_backend_IsClosed(native.get())
                 && (!transport || transport->load(std::memory_order_acquire))
                 && (!scope || !vlc_input_policy_IsRevoked(scope.get()))
@@ -157,7 +204,21 @@ void AddonNativeSourceResolver::nativeCancel(void* opaque, vlc_source_job_t* job
 {
     try {
         const auto gate = *static_cast<std::shared_ptr<Gate>*>(opaque);
-        post(gate, [job = hold(job)](auto* owner) { owner->canceled(job.get()); });
+        if(gate->closed.load(std::memory_order_acquire)) return;
+        const auto generation=vlc_source_job_GetRequest(job)->input_generation;
+        std::shared_ptr<vlc_source_backend_t> overflow;
+        {
+            std::lock_guard<std::mutex> lock(gate->mutex);
+            if(gate->closed.load(std::memory_order_acquire)) return;
+            if(gate->canceled<gate->cancellations.size())
+                gate->cancellations[gate->canceled++]={job,generation};
+            else {
+                gate->closed.store(true,std::memory_order_release);
+                overflow=gate->native.lock();
+            }
+        }
+        // Core Close has no callback-drain wait. Nested cancels see closed first.
+        if(overflow) vlc_source_backend_Close(overflow.get());
     } catch (...) {}
 }
 void AddonNativeSourceResolver::nativeDestroy(void* opaque)
@@ -169,15 +230,17 @@ AddonNativeSourceResolver::AddonNativeSourceResolver(vlc_object_t* instance, Bac
 {
     m_limits.pending = std::clamp(m_limits.pending, 1u, 64u); m_limits.issued = std::clamp(m_limits.issued, 1u, 64u);
     m_gate->owner = this; m_gate->lifetime=m_backend.lifetime;
+    m_cancelPoll.setInterval(20);
+    connect(&m_cancelPoll,&QTimer::timeout,this,&AddonNativeSourceResolver::drainCancellations);
     if (!instance || (!m_backend.admit && !m_backend.captureAdmission) || !m_backend.prepare
         || !m_backend.lifetime.current()) { close(); return; }
     auto* opaque = new std::shared_ptr<Gate>(m_gate);
     static const vlc_source_backend_operations operations{nativeDispatch, nativeCancel, nativeDestroy};
     auto* native = vlc_source_backend_New(&operations, opaque);
     if (!native) { delete opaque; close(); return; }
-    m_native.reset(native, vlc_source_backend_Release);
+    m_native.reset(native, vlc_source_backend_Release); m_gate->native=m_native;
     m_bound = vlc_source_owner_Set(instance, m_native.get()) == VLC_SUCCESS;
-    if (!m_bound) close();
+    if (!m_bound) close(); else m_cancelPoll.start();
 }
 AddonNativeSourceResolver::~AddonNativeSourceResolver() { close(); }
 bool AddonNativeSourceResolver::bound() const
@@ -220,6 +283,7 @@ void AddonNativeSourceResolver::dispatch(Job job)
     const auto uri = QString::fromUtf8(request->source_uri); const auto generation = request->input_generation;
     auto pending = std::make_shared<Pending>(); auto guard = std::make_shared<Guard>(); pending->guard = guard;
     guard->job = job; guard->native = m_native; guard->gate = m_gate; guard->lifetime=m_backend.lifetime;
+    guard->revocation=std::make_shared<NativeSourceRevocation>(job);
     // Use these untrusted fields only to cancel pending work.
     const auto hint=AddonSourceAdmissions::decodeUntrusted(uri);
     guard->sourceHint=hint.value(QStringLiteral("source")).toString(); guard->accountHint=hint.value(QStringLiteral("accountReference")).toString();
@@ -228,6 +292,12 @@ void AddonNativeSourceResolver::dispatch(Job job)
     const auto capture=m_backend.captureAdmission; const auto lifetime=m_backend.lifetime;
     const QPointer<AddonNativeSourceResolver> owner(this);
     try {
+        if(m_backend.watchAdmission) {
+            const auto watch=m_backend.watchAdmission([native=guard->revocation] { native->revoke(); });
+            if(!owner) return;
+            guard->admissionWatch=watch;
+            if(!watch || !guard->pending()) { fail(pending,-EACCES); return; }
+        }
         AdmissionReader reader;
         if (capture) reader=capture(uri,generation);
         else if (admit) reader=[admit,uri,generation] { return admit(uri,generation); };
@@ -261,6 +331,9 @@ void AddonNativeSourceResolver::admitted(const std::shared_ptr<Pending>& pending
         fail(pending,-EACCES); return;
     }
     guard->admission=std::move(*admission); guard->admissionReady=true;
+    const auto token=guard->admission.authorization.liveToken();
+    guard->consentWatch=token.onInvalidated([native=guard->revocation] { native->revoke(); });
+    if(!guard->consentWatch || !guard->current()) { fail(pending,-EACCES); return; }
     const QPointer<AddonNativeSourceResolver> owner(this);
     const auto prepare = m_backend.prepare; const auto gate = m_gate;
     const std::weak_ptr<Pending> weakPending = pending; const std::weak_ptr<Guard> weakGuard = guard;
@@ -290,6 +363,7 @@ void AddonNativeSourceResolver::prepared(const std::shared_ptr<Pending>& pending
         fail(pending, -EACCES); return;
     }
     const QPointer<AddonNativeSourceResolver> owner(this);
+    if(!pending->guard->revocation->bind(value->m_policy,value->m_lease)) { fail(pending,-EINTR); return; }
     const bool attached = vlc_source_job_AttachTransport(job.get(), value->m_policy, value->m_lease);
     if (!owner) return;
     if (!attached || !pending->guard->current()) { fail(pending, -EINTR); return; }
@@ -339,6 +413,23 @@ void AddonNativeSourceResolver::fail(const std::shared_ptr<Pending>& pending, in
     vlc_source_job_Complete(job.get(), status, nullptr);
     cancel(preparation); cancel(startup); if (transport) transport->revoke();
 }
+void AddonNativeSourceResolver::drainCancellations()
+{
+    if(m_gate->closed.load(std::memory_order_acquire)) { close(); return; }
+    std::array<Gate::Cancellation,256> entries{}; unsigned count=0;
+    {
+        std::lock_guard<std::mutex> lock(m_gate->mutex);
+        count=m_gate->canceled; std::copy_n(m_gate->cancellations.begin(),count,entries.begin());
+        m_gate->canceled=0;
+    }
+    const QPointer<AddonNativeSourceResolver> owner(this);
+    for(unsigned index=0;index<count;++index) {
+        const auto& value=entries[index]; const auto found=m_jobs.find(value.identity);
+        if(found!=m_jobs.end() && found->second->guard->generation==value.generation) canceled(value.identity);
+        if(!owner) return;
+    }
+    prune();
+}
 void AddonNativeSourceResolver::canceled(vlc_source_job_t* native)
 {
     const auto found = m_jobs.find(native); if (found == m_jobs.end()) return;
@@ -372,8 +463,9 @@ void AddonNativeSourceResolver::withdraw(const AddonSourceConsent::Binding& bind
 }
 void AddonNativeSourceResolver::close()
 {
+    m_cancelPoll.stop();
     const auto gate = m_gate;
-    { std::lock_guard<std::mutex> lock(gate->mutex); gate->owner = nullptr; gate->closed.store(true, std::memory_order_release); }
+    { std::lock_guard<std::mutex> lock(gate->mutex); gate->owner = nullptr; gate->closed.store(true, std::memory_order_release); gate->canceled=0; }
     auto jobs = std::move(m_jobs); auto issued = std::move(m_issued); const auto native = m_native;
     m_jobs.clear(); m_issued.clear(); m_bound = false;
     for (const auto& value : jobs) value.second->guard->phase.store(2, std::memory_order_release);

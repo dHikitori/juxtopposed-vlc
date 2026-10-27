@@ -26,15 +26,29 @@ public:
         bool operator==(const Binding&) const;
     };
     struct Ticket { QString id; Binding binding; };
+    class LiveToken;
+    class LiveWatch {
+    public:
+        LiveWatch() = default;
+        explicit operator bool() const noexcept;
+    private:
+        friend class LiveToken;
+        struct State;
+        std::shared_ptr<State> m_state;
+    };
     class LiveToken {
     public:
         bool current() const noexcept;
+        // Keep this watch through the native lease. The callback and its capture
+        // must use native state only. Do not wait for Qt or change authority.
+        LiveWatch onInvalidated(std::function<void()> nativeCancel) const noexcept;
     private:
         friend class AddonSourceConsent;
         std::shared_ptr<LiveOwner> m_owner, m_receipt;
         std::shared_ptr<LiveProfile> m_profile;
         std::shared_ptr<LiveEpoch> m_entry;
-        StoreAuthorityToken m_package;
+        StoreAuthorityToken m_package, m_ownerAuthority, m_receiptAuthority,
+            m_profileAuthority, m_entryAuthority;
         quint64 m_profileRevision=0, m_entryRevision=0;
     };
     class Authorization {
@@ -72,6 +86,12 @@ public:
     bool grant(const QString& ticket,QString* error=nullptr);
     bool revoke(const Binding&,QString* error=nullptr);
     bool approved(const Binding&) const;
+    // Create these on joined background work. An approval token cannot mint an
+    // input intent. Its current() method and the returned revokers use memory only.
+    std::optional<LiveToken> approvalToken(const Binding&) const;
+    std::function<void()> nativeBindingRevoker(const Binding&) const;
+    std::function<void()> nativeProfileRevoker() const;
+    std::function<void()> nativeOwnerRevoker() const;
     bool reset(QString* error=nullptr);
     // Only a native primary playback open can supply this generation/reason.
     // Enqueue, import, preparse, and background work must not call this method.
@@ -80,6 +100,8 @@ public:
                                              quint64 generation,IntentReason);
     // Also check the captured package configuration before using a result.
     bool current(const Authorization&,const QString& admittedUri,quint64 generation) const;
+    // Withdraw native authority without a wait for the consent file mutex.
+    void retire() noexcept;
     void close();
 private:
     struct State;

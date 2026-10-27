@@ -4,6 +4,7 @@
 #include "addon_stream_lifetime.hpp"
 #include <QByteArray>
 #include <QObject>
+#include <QTimer>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -78,6 +79,9 @@ public:
         // Preparation reads memory only. The reader runs as joined background
         // work and owns all captured values, with no QObject or raw Core.
         std::function<AdmissionReader(const QString& uri, quint64 generation)> captureAdmission;
+        // Register on the owner thread before the saved admission read starts.
+        // The callback must revoke native state without a Qt call.
+        std::function<StoreAuthorityWatch(Cancel)> watchAdmission;
     };
     struct Limits { unsigned pending = 16, issued = 64; };
     AddonNativeSourceResolver(vlc_object_t* instance, Backend, QObject* parent = nullptr);
@@ -104,6 +108,7 @@ private:
     void prepared(const std::shared_ptr<Pending>&, std::unique_ptr<Prepared>);
     void started(const std::shared_ptr<Pending>&, int);
     void canceled(vlc_source_job*);
+    void drainCancellations();
     void fail(const std::shared_ptr<Pending>&, int);
     bool prune();
     Backend m_backend;
@@ -112,6 +117,7 @@ private:
     std::shared_ptr<vlc_source_backend> m_native;
     std::unordered_map<vlc_source_job*, std::shared_ptr<Pending>> m_jobs;
     std::vector<Issued> m_issued;
+    QTimer m_cancelPoll;
     bool m_bound = false;
 };
 }
