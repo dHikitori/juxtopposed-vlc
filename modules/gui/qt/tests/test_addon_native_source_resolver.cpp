@@ -95,7 +95,7 @@ struct Fixture {
     ~Fixture() { owner.reset(); if (instance) libvlc_InternalDestroy(instance); }
     vlc_object_t* root() const { return VLC_OBJECT(instance); }
     QString uri(const QString& account = QStringLiteral("account-1"), const QString& item = QStringLiteral("station")) {
-        const QVariantMap value{{"format", "vlc-addon-source-v1"}, {"source", binding.contribution}, {"accountReference", account},
+        const QVariantMap value{{"format", "hakone-addon-source-v1"}, {"source", binding.contribution}, {"accountReference", account},
             {"itemId", item}, {"snapshot", QVariantMap{{"title", "Station"}, {"mediaKind", "audio"}}}};
         QStringList result; return admissions->admit({value}, &result) ? result.first() : QString();
     }
@@ -145,7 +145,7 @@ private slots:
     void missingConsentAndUnknownAdmissionCannotStartPreparation() {
         Fixture f; const auto uri = f.uri(); f.create(); NativeJob noConsent(f.root(), uri, 1);
         QCOMPARE(noConsent.start(), VLC_SUCCESS); QTRY_COMPARE(noConsent.ended.load(), 1); QCOMPARE(noConsent.status.load(), -EACCES);
-        QVERIFY(f.approve()); NativeJob unknown(f.root(), QStringLiteral("vlc-addon-source:v1:unknown"), 2);
+        QVERIFY(f.approve()); NativeJob unknown(f.root(), QStringLiteral("hakone-addon-source:v1:unknown"), 2);
         QCOMPARE(unknown.start(), VLC_SUCCESS); QTRY_COMPARE(unknown.ended.load(), 1); QCOMPARE(unknown.status.load(), -EACCES);
         QCOMPARE(f.preparations.load(), 0);
     }

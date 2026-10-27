@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-use vlc_addon_message_v1::{
+use hakone_addon_message_v1::{
     serde_json::{json, Value},
     Addon, Incoming, Pending,
 };
@@ -35,7 +35,7 @@ impl Addon for Fixture {
         }
     }
 }
-vlc_addon_message_v1::export_addon!(
+hakone_addon_message_v1::export_addon!(
     Fixture,
     Fixture {
         pending: Pending::new(8)

@@ -10,11 +10,11 @@ using namespace vlc::addons;
 class TestAddonSourceAdmissions : public QObject
 {
     Q_OBJECT
-    static QVariantMap reference() { return {{"format", "vlc-addon-source-v1"}, {"source", "org.example.radio/source"},
+    static QVariantMap reference() { return {{"format", "hakone-addon-source-v1"}, {"source", "org.example.radio/source"},
         {"itemId", "station-42"}, {"accountReference", "account-1"}, {"snapshot", QVariantMap{{"title", "Station"}, {"mediaKind", "audio"}}}}; }
     static QString forged(const QVariantMap& reference, const QString& id) {
         auto locator = reference; locator.remove("snapshot");
-        return QStringLiteral("vlc-addon-source:v1:") + QString::fromLatin1(QJsonDocument(QJsonObject::fromVariantMap(locator)).toJson(QJsonDocument::Compact).toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)) + '.' + id;
+        return QStringLiteral("hakone-addon-source:v1:") + QString::fromLatin1(QJsonDocument(QJsonObject::fromVariantMap(locator)).toJson(QJsonDocument::Compact).toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)) + '.' + id;
     }
 private slots:
     void persistsExactSourceAccountAndDisplayAdmission() {
@@ -41,6 +41,9 @@ private slots:
         AddonSourceAdmissions imported(second.path(), [](const auto&) { return true; });
         QStringList uris; QVERIFY(source.admit({reference()}, &uris));
         QVERIFY(!AddonSourceAdmissions::decodeUntrusted(uris[0]).isEmpty());
+        QString oldUri = uris[0]; oldUri.replace(QStringLiteral("hakone-addon-source:"), QStringLiteral("vlc-addon-source:"));
+        QVERIFY(AddonSourceAdmissions::decodeUntrusted(oldUri).isEmpty());
+        QVERIFY(source.admittedReference(oldUri).isEmpty());
         QVERIFY(imported.admittedReference(uris[0]).isEmpty());
         QVERIFY(source.admittedReference(forged(reference(), QUuid::createUuid().toString(QUuid::WithoutBraces))).isEmpty());
         QVERIFY(AddonSourceAdmissions::decodeUntrusted(QString(12001, QLatin1Char('a'))).isEmpty());

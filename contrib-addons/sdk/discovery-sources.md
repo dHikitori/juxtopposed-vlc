@@ -65,7 +65,7 @@ The host queue adapter accepts this internal format:
 
 ```json
 {
-  "format": "vlc-addon-source-v1",
+  "format": "hakone-addon-source-v1",
   "source": "org.example.radio/stations",
   "itemId": "station-42",
   "accountReference": "<host account reference>",
@@ -77,7 +77,7 @@ The host supplies `accountReference`. The package cannot select an account refer
 
 The locator consists of the source contribution ID, account reference, and stable item ID. Use the same item ID for the same source item. A title change must not change this ID. If a source has distinct item versions, its item ID must identify the required version.
 
-The native URI starts with `vlc-addon-source:v1:`. It contains a canonical locator and a random admission ID. The private host admission record binds the exact locator. The record keeps the display snapshot separately. Repeated selection and title updates reuse the same URI. No resolved stream URL or credential is stored in that URI or snapshot.
+The native URI starts with `hakone-addon-source:v1:`. It contains a canonical locator and a random admission ID. The private host admission record binds the exact locator. The record keeps the display snapshot separately. Repeated selection and title updates reuse the same URI. No resolved stream URL or credential is stored in that URI or snapshot.
 
 Decoding an imported URI gives no playback authority. An unknown admission ID or changed locator fails validation. A known record still needs the current installed source, account, grants, and user playback intent. A copied admission record does not enable its source.
 
@@ -87,12 +87,12 @@ The real queue adapter takes a queue identity and revision before an action. It 
 
 The default application gate does not yet supply a native discovery transport. Browse and search work with this gate. Play and Enqueue remain disabled. A saved source reference is not a stream URL.
 
-A host that enables playback must supply both contained native preparation and a lazy resolver for admitted source references. The host consumes a one-use playback handle after the final current-item and queue revision checks. The package cannot supply native input pointers, VLC options, output configuration, or an access module name.
+A host that enables playback must supply both contained native preparation and a lazy resolver for admitted source references. The host consumes a one-use playback handle after the final current-item and queue revision checks. The package cannot supply native input pointers, Hakone options, output configuration, or an access module name.
 
 The current production mount does not append to media-library playlists. This path needs the library transaction API that validates and appends under one database transaction. A UI revision comparison or a mutex on one writer path is insufficient.
 
 ## Source and tests
 
-The [coordinator](../../modules/gui/qt/addons/addon_discovery_coordinator.cpp) validates pages and owns transient references. The [view owner](../../modules/gui/qt/addons/addon_discovery_service.cpp) handles browser lifetime. The [admission store](../../modules/gui/qt/addons/addon_source_admissions.cpp) binds saved locators. The [native queue adapter](../../modules/gui/qt/addons/addon_native_queue_store.cpp) uses the real VLC queue.
+The [coordinator](../../modules/gui/qt/addons/addon_discovery_coordinator.cpp) validates pages and owns transient references. The [view owner](../../modules/gui/qt/addons/addon_discovery_service.cpp) handles browser lifetime. The [admission store](../../modules/gui/qt/addons/addon_source_admissions.cpp) binds saved locators. The [native queue adapter](../../modules/gui/qt/addons/addon_native_queue_store.cpp) uses the real Hakone queue.
 
 The [queue tests](../../modules/gui/qt/tests/test_addon_native_queue_store.cpp) use real queue objects and the public add-on settings service. They cover atomic append, stale snapshots, playlist export, title refresh, credential changes, account-field changes, and code updates.

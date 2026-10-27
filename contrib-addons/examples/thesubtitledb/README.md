@@ -1,6 +1,6 @@
 # TheSubtitleDB portable add-on
 
-This subtitle provider uses a portable Wasm module. It imports only `vlc.host_send`. The host owns HTTP requests, API-key use, downloads, identity rules, and track attachment. The API-key value does not enter the guest.
+This subtitle provider uses a portable Wasm module. It imports only `hakone.host_send`. The host owns HTTP requests, API-key use, downloads, identity rules, and track attachment. The API-key value does not enter the guest.
 
 Install the package with the add-on manager. Open its settings. Save your own key from [TheSubtitleDB account](https://thesubtitledb.org/account/keys). A missing key causes `auth_required` before an HTTP request. This host profile needs a key. The service also has public routes.
 
@@ -19,7 +19,7 @@ sh build.sh
 python3 tests/test_worker.py --worker /absolute/path/to/vlc-addon-worker
 ```
 
-`dist/addon.wasm` is the package module. The message ABI is `wasm-message-v1`. Its exports are `vlc_alloc`, `vlc_dealloc`, and `vlc_dispatch`. Tests use synthetic data. They cover invalid replies, identity conflicts, cancellation, and asset resolution. They do not read a developer environment file or use a live service.
+`dist/addon.wasm` is the package module. The message ABI is `wasm-message-v1`. Its exports are `hakone_alloc`, `hakone_dealloc`, and `hakone_dispatch`. Tests use synthetic data. They cover invalid replies, identity conflicts, cancellation, and asset resolution. They do not read a developer environment file or use a live service.
 
 The package source is in the app development repository. For a separate Git release, put the complete source and build files at its repository root. Set `source` to that repository's approved HTTPS URL. Use a tag that agrees with `version`. The host installs only the declared package files. The current source field does not claim a separate tagged release for this folder.
 

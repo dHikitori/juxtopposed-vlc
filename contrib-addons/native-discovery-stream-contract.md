@@ -19,7 +19,7 @@ The primary dispatch fixture ends with a controlled loopback connection failure.
 
 ## Stable item and per-open lease
 
-Keep the queue item, item ID, and `vlc-addon-source:v1:` URI unchanged during playback.
+Keep the queue item, item ID, and `hakone-addon-source:v1:` URI unchanged during playback.
 The URI identifies the contribution, account reference, item, and host admission record.
 Its encoded data is untrusted until `AddonSourceAdmissions::currentReference()` accepts it.
 An admission proves a previous host selection.
@@ -30,7 +30,7 @@ That policy permits no connection.
 Stop must not revoke or replace this persistent policy.
 Otherwise the same queue item cannot play again.
 
-Add a core `vlc-addon-source` access bridge with a retained backend and retained jobs.
+Add a core `hakone-addon-source` access bridge with a retained backend and retained jobs.
 Use the lifetime pattern of `vlc_metadata_backend`, with native cancellation and one terminal result.
 The access open sends the copied URI and a fresh input generation to the backend.
 It must not send an input or access pointer to Qt.

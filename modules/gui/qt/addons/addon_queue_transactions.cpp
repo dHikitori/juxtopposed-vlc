@@ -34,7 +34,7 @@ AddonQueueTransactions::~AddonQueueTransactions()
 bool AddonQueueTransactions::validReference(const QVariantMap& reference)
 {
     static const QRegularExpression source(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}$"));
-    if (reference.value("format").toString() != QLatin1String("vlc-addon-source-v1")
+    if (reference.value("format").toString() != QLatin1String("hakone-addon-source-v1")
         || !source.match(reference.value("source").toString()).hasMatch()
         || !boundedIdentifier(reference.value("itemId")) || !boundedIdentifier(reference.value("accountReference"))
         || reference.value("snapshot").metaType().id() != QMetaType::QVariantMap) return false;

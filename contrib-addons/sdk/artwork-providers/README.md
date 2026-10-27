@@ -2,6 +2,8 @@
 
 The four artwork packages use this Rust source. It contains the provider state and bounded response parsers. Each package has its own manifest, portable module, and release identity.
 
+Use the Cargo package `hakone-artwork-providers` and Rust import `hakone_artwork_providers`.
+
 The `../message-v1` crate owns the ABI exports and exact buffer registry. `Provider` implements its `Addon` trait. Each package calls `export_provider!`, which selects the provider and calls `export_addon!`. Cancellation removes the invocation's pending response state.
 
 The host supplies HTTP results through `wasm-message-v1`. This code has no network or file import. Image claims pass through the host image adapter. The adapter applies origins, redirects, account scope, byte limits, and image decode limits.
@@ -9,7 +11,7 @@ The host supplies HTTP results through `wasm-message-v1`. This code has no netwo
 Run the source tests:
 
 ```sh
-RUSTUP_TOOLCHAIN=stable cargo test --offline
+RUSTUP_AUTO_INSTALL=0 RUSTUP_TOOLCHAIN=stable cargo test --offline
 ```
 
 Run the portable module tests from the repository root:

@@ -1,5 +1,5 @@
 [package]
-name = "vlc-message-sdk-fixture"
+name = "hakone-message-sdk-fixture"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-or-later"
@@ -11,7 +11,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-vlc-addon-message-v1 = { path = ".." }
+hakone-addon-message-v1 = { path = ".." }
 
 [profile.release]
 opt-level = "s"

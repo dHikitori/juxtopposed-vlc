@@ -55,7 +55,7 @@ static bool core_proxy(vlc_input_policy_t *policy)
 bool vlc_input_policy_IsSource(vlc_input_policy_t *policy, const char *source)
 {
     if (!core_proxy(policy) || source == NULL || strnlen(source, 12001) > 12000
-        || strncmp(source, "vlc-addon-source:v1:", 20)) return false;
+        || strncmp(source, "hakone-addon-source:v1:", sizeof("hakone-addon-source:v1:") - 1)) return false;
     const struct proxy_scope *scope = policy->opaque;
     return scope->port == 0 && !scope->attachments && scope->source != NULL && !strcmp(scope->source, source);
 }

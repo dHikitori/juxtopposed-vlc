@@ -1,4 +1,4 @@
-# Add-ons architecture for the redesigned VLC
+# Add-ons architecture for Hakone
 
 Architecture proposed 26 October 2026; implementation is now in progress. See [implementation status](IMPLEMENTATION.md) for current code, verification and remaining gates. Contracts and limits below are the intended design, not a declaration that SDK v1 is already stable.
 
@@ -40,7 +40,7 @@ This is a clean break from legacy Lua extensions, skins2 packages and the old ad
 | Music visualizers | `visualizer` contribution using a bounded visual scene and host FFT/waveform data | No add-on execution on playback/render-critical threads |
 | General extensions and watch parties | Events, commands, scoped storage, timers and brokered networking | Playback authority and session consent are explicit and revocable |
 | GitHub and other Git repositories | HTTPS Git transport; exact tag resolved to immutable object IDs and a package digest | Branch tracking is development-only; moved tags are rejected |
-| Shared components that follow themes | Host-rendered `vlc.ui` vocabulary backed by redesign components | Internal QML files are not the public API |
+| Shared components that follow themes | Host-rendered `hakone.ui` vocabulary backed by redesign components | Internal QML files are not the public API |
 | Consistent settings/account setup | Host-rendered schema forms, staged save/cancel, account broker and secret references | Add-ons cannot read arbitrary core settings or another add-on's secrets |
 
 ## Important product choices
@@ -54,6 +54,6 @@ This is a clean break from legacy Lua extensions, skins2 packages and the old ad
 
 ## Scope of this proposal
 
-The first host is this fork's redesigned Qt desktop interface. Platform support must be proven for the fork's actual Windows, Linux and macOS build targets. Other VLC interfaces, mobile applications and libVLC embedders would need their own host adapters and capability profiles; this document does not imply those adapters already exist.
+The first host is this fork's redesigned Qt desktop interface. Platform support must be proven for the fork's actual Windows, Linux and macOS build targets. Other native interfaces, mobile applications and libVLC embedders would need their own host adapters and capability profiles; this document does not imply those adapters already exist.
 
 The files in this directory are a reviewable design and implementation roadmap, not a shipped SDK, executable reference implementation or promise of a delivery date. Normative words such as “must” state proposed v1 invariants. Numeric budgets are starting values for measurement, called out where used.

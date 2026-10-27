@@ -560,7 +560,7 @@ private slots:
                 {"origin", "https://api.example.org"}, {"header", "Authorization"}, {"prefix", "Bearer "}}}}}}
         }}});
         QVERIFY(populate(package.path(), object));
-        QVERIFY(write(package.filePath("settings/schema.json"), R"({"type":"object","properties":{"apiKey":{"type":"string","x-vlc-secret":true}}})"));
+        QVERIFY(write(package.filePath("settings/schema.json"), R"({"type":"object","properties":{"apiKey":{"type":"string","x-hakone-secret":true}}})"));
         PackageCandidate candidate;
         QString error;
         QVERIFY2(PackageStore::inspectDirectory(package.path(), release(), &candidate, &error), qPrintable(error));
@@ -588,6 +588,76 @@ private slots:
         QVERIFY(error.contains(QStringLiteral("credential binding")));
         QVERIFY(store.settings(candidate.manifest.id, &persisted)); QCOMPARE(persisted, valid);
     }
+    void obsoleteSettingsAnnotationsAreRefused_data()
+    {
+        QTest::addColumn<QJsonObject>("schema");
+        const QJsonObject oldSecret{{"type", "string"}, {"x-vlc-secret", true}};
+        const auto root = [](const QJsonObject& field) {
+            return QJsonObject{{"type", "object"}, {"properties", QJsonObject{{"value", field}}}};
+        };
+        QTest::newRow("secret") << root(oldSecret);
+        QTest::newRow("nested-properties") << root(root(oldSecret));
+        QTest::newRow("array-items") << root(QJsonObject{{"type", "array"}, {"items", root(oldSecret)}});
+        QTest::newRow("old-label") << root(QJsonObject{{"type", "string"}, {"x-vlc-label", "settings.value"}});
+        QJsonObject deep{{"type", "string"}};
+        for (unsigned i = 0; i < 40; ++i) deep = root(deep);
+        QTest::newRow("depth-limit") << deep;
+        QJsonArray many;
+        for (int i = 0; i < 8192; ++i) many.append(i);
+        QTest::newRow("node-limit") << root(QJsonObject{{"type", "integer"}, {"enum", many}});
+    }
+    void obsoleteSettingsAnnotationsAreRefused()
+    {
+        QFETCH(QJsonObject, schema);
+        QTemporaryDir package, storage;
+        QVERIFY(settingsPackage(package.path(), QStringLiteral("1.0.0"), 1, QStringLiteral("value")));
+        QVERIFY(write(package.filePath("settings/schema.json"), QJsonDocument(schema).toJson()));
+        Manifest parsed; QString error;
+        QVERIFY(!Manifest::loadDirectory(package.path(), &parsed, nullptr, &error));
+        QVERIFY(error.contains(QStringLiteral("annotation")));
+        PackageCandidate candidate;
+        QVERIFY(!PackageStore::inspectDirectory(package.path(), release(), &candidate, &error));
+        PackageStore store(storage.path());
+        QVERIFY(!store.saveSettings(QStringLiteral("org.example.package"), QJsonObject{{"value", "ordinary value"}}, 0, &error));
+        QVERIFY(store.installedIds().isEmpty());
+    }
+    void oldInstalledSecretSchemaCannotExposeOrSaveOrdinarySettings()
+    {
+        QTemporaryDir source, storage;
+        QVERIFY(settingsPackage(source.path(), QStringLiteral("1.0.0"), 1, QStringLiteral("apiKey")));
+        PackageCandidate candidate; QString error;
+        QVERIFY(PackageStore::inspectDirectory(source.path(), release(), &candidate, &error));
+        PackageStore store(storage.path());
+        QVERIFY(store.install(candidate, {}, &error));
+        QVERIFY(store.saveSettings(candidate.manifest.id, QJsonObject{{"apiKey", "old value"}}, 0, &error));
+        InstalledPackage installed;
+        QVERIFY(store.installed(candidate.manifest.id, &installed, &error));
+
+        // Create a complete prior-format snapshot with its own correct digest.
+        auto files = candidate.contents;
+        files[QStringLiteral("settings/schema.json")] = R"({"type":"object","properties":{"apiKey":{"type":"string","x-vlc-secret":true}}})";
+        const QString digest = QString::fromLatin1(packageDigest(files));
+        const QString directory = QDir(QFileInfo(installed.directory).absolutePath()).filePath(digest);
+        for (auto it = files.begin(); it != files.end(); ++it)
+            QVERIFY(write(QDir(directory).filePath(it.key()), it.value()));
+        const QString statePath = storage.filePath(QStringLiteral("packages/") + candidate.manifest.id + QStringLiteral("/state.json"));
+        QFile stateFile(statePath); QVERIFY(stateFile.open(QIODevice::ReadOnly));
+        auto state = QJsonDocument::fromJson(stateFile.readAll()).object(); stateFile.close();
+        auto current = state.value("current").toObject(); current.insert("digest", digest); state.insert("current", current);
+        auto versions = state.value("lockedVersions").toObject(); versions.insert(candidate.manifest.version, digest); state.insert("lockedVersions", versions);
+        auto tags = state.value("lockedTags").toObject();
+        auto tag = tags.value(candidate.identity.tag).toObject(); tag.insert("digest", digest); tags.insert(candidate.identity.tag, tag); state.insert("lockedTags", tags);
+        const QByteArray snapshot = QJsonDocument(state).toJson(); QVERIFY(write(statePath, snapshot));
+
+        Manifest refused;
+        QVERIFY(!Manifest::loadDirectory(directory, &refused, nullptr, &error));
+        QVERIFY(error.contains(QStringLiteral("x-hakone")));
+        QJsonObject values; quint64 revision = 0;
+        QVERIFY(!store.settings(candidate.manifest.id, &values, &revision, &error));
+        QVERIFY(values.isEmpty());
+        QVERIFY(!store.saveSettings(candidate.manifest.id, QJsonObject{{"apiKey", "new value"}}, 1, &error));
+        QVERIFY(stateFile.open(QIODevice::ReadOnly)); QCOMPARE(stateFile.readAll(), snapshot);
+    }
     void referenceSubtitleAddonManifest()
     {
         const auto file = QFINDTESTDATA("../../../../contrib-addons/examples/thesubtitledb/addon.json");
@@ -595,7 +665,7 @@ private slots:
         Manifest parsed;
         QString error;
         QVERIFY2(Manifest::loadDirectory(QFileInfo(file).absolutePath(), &parsed, nullptr, &error), qPrintable(error));
-        QCOMPARE(parsed.id, QStringLiteral("org.videolan.thesubtitledb"));
+        QCOMPARE(parsed.id, QStringLiteral("org.hakone.thesubtitledb"));
         QVERIFY(parsed.contribution("search"));
         QVERIFY(parsed.permissionDeclared("credentials.use"));
         QCOMPARE(parsed.permissionScope("network.http").value("methods").toArray(), QJsonArray{"GET"});

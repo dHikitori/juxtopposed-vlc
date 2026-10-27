@@ -24,7 +24,7 @@ class TestAddonNativeQueueStore : public QObject
     vlc_playlist_t* playlist = nullptr;
     struct Locked { vlc_playlist_t* playlist; explicit Locked(vlc_playlist_t* value) : playlist(value) { vlc_playlist_Lock(playlist); } ~Locked() { vlc_playlist_Unlock(playlist); } };
     static QVariantMap reference(const QString& id = QStringLiteral("station-42")) {
-        return {{"format", "vlc-addon-source-v1"}, {"source", "org.example.radio/source"}, {"itemId", id},
+        return {{"format", "hakone-addon-source-v1"}, {"source", "org.example.radio/source"}, {"itemId", id},
             {"accountReference", "default"}, {"snapshot", QVariantMap{{"title", "Station\nhttps://invalid.example/injected"}, {"mediaKind", "audio"}}}};
     }
 private slots:
@@ -52,7 +52,7 @@ private slots:
         char* rawUri = input_item_GetURI(item); uri = QString::fromUtf8(rawUri); free(rawUri);
         char* rawName = input_item_GetName(item); title = QString::fromUtf8(rawName); free(rawName);
         }
-        QVERIFY(uri.startsWith(QStringLiteral("vlc-addon-source:v1:")));
+        QVERIFY(uri.startsWith(QStringLiteral("hakone-addon-source:v1:")));
         QVERIFY(!title.contains(QLatin1Char('\n'))); QVERIFY(!title.contains(QLatin1Char('\r')));
         QCOMPARE(store.queuedReference(firstId), reference());
         QVERIFY(store.snapshot().revision != before.revision);
@@ -138,7 +138,7 @@ private slots:
         };
         QVERIFY(write("addon.json", QJsonDocument(manifest).toJson())); QVERIFY(write("LICENSE", "test license\n"));
         QVERIFY(write("worker.wasm", QByteArray::fromHex("0061736d01000000")));
-        QVERIFY(write("schema.json", "{\"type\":\"object\",\"properties\":{\"apiKey\":{\"type\":\"string\",\"x-vlc-secret\":true,\"minLength\":1},"
+        QVERIFY(write("schema.json", "{\"type\":\"object\",\"properties\":{\"apiKey\":{\"type\":\"string\",\"x-hakone-secret\":true,\"minLength\":1},"
             "\"language\":{\"type\":\"string\",\"default\":\"en\"},\"username\":{\"type\":\"string\",\"default\":\"guest\"}},\"required\":[\"apiKey\"],\"additionalProperties\":false}"));
         AddonManager manager(profile.filePath("addons")); const QString packageId = QStringLiteral("org.example.radio");
         QVERIFY2(manager.installLocalPackage(package.path(), true), qPrintable(manager.errorMessage()));

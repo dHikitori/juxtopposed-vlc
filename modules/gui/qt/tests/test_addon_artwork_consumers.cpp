@@ -89,9 +89,17 @@ private slots:
         m_core = std::make_unique<Core>(); QVERIFY(m_core->initialized);
     }
     void cleanupTestCase() { m_core.reset(); }
+    void oldSourceNameKeepsArtworkRestricted()
+    {
+        SharedInputItem item(input_item_New("VLC-ADDON-SOURCE:v1:old", "Old source"), false);
+        QVERIFY(item); input_item_SetArtURL(item.get(), "http://127.0.0.1/private.png");
+        QVERIFY(PlayerController::decodeArtURL(item.get()).isEmpty());
+        MediaRow source("VLC-ADDON-SOURCE:v1:old"); MLMedia row(&source.value);
+        QVERIFY(row.smallCover().isEmpty()); QVERIFY(row.bannerCover().isEmpty());
+    }
     void decoderRequiresCurrentNativeApproval()
     {
-        SharedInputItem source(input_item_New("VLC-ADDON-SOURCE:v1:raw", "Source"), false);
+        SharedInputItem source(input_item_New("HAKONE-ADDON-SOURCE:v1:raw", "Source"), false);
         QVERIFY(source);
         input_item_SetArtURL(source.get(), "http://127.0.0.1/private.png");
         QVERIFY(PlayerController::decodeArtURL(source.get()).isEmpty());
@@ -107,7 +115,7 @@ private slots:
     }
     void serializedLibraryArtworkCannotGrantApproval()
     {
-        MediaRow source("VLC-ADDON-SOURCE:v1:raw"); MLMedia row(&source.value);
+        MediaRow source("HAKONE-ADDON-SOURCE:v1:raw"); MLMedia row(&source.value);
         vlc_ml_thumbnail_status_t status = VLC_ML_THUMBNAIL_STATUS_AVAILABLE;
         QVERIFY(row.smallCover(&status).isEmpty()); QCOMPARE(status, VLC_ML_THUMBNAIL_STATUS_FAILURE);
         QVERIFY(row.bannerCover(&status).isEmpty()); QCOMPARE(status, VLC_ML_THUMBNAIL_STATUS_FAILURE);
@@ -121,11 +129,11 @@ private slots:
     }
     void nativeLibraryArtworkUsesTheCurrentRecord()
     {
-        SharedInputItem source(input_item_New("vlc-addon-source:v1:episode", "Source"), false);
+        SharedInputItem source(input_item_New("hakone-addon-source:v1:episode", "Source"), false);
         auto *scope = policy(); QVERIFY(scope);
         const auto release = qScopeGuard([&] { vlc_input_policy_Release(scope); });
         QCOMPARE(vlc_input_policy_AttachItem(source.get(), scope), VLC_SUCCESS);
-        MediaRow media("vlc-addon-source:v1:episode"); media.value.p_podcast = source.get(); MLMedia row(&media.value);
+        MediaRow media("hakone-addon-source:v1:episode"); media.value.p_podcast = source.get(); MLMedia row(&media.value);
         QVERIFY(row.smallCover().isEmpty());
         QCOMPARE(vlc_artwork_item_SetApprovedURI(source.get(), "file:///approved.png"), VLC_SUCCESS);
         QCOMPARE(row.smallCover(), QStringLiteral("file:///approved.png"));
@@ -149,7 +157,7 @@ private slots:
         for (const auto& invalid : {QStringLiteral("http://127.0.0.1/private.png"), QStringLiteral("file://server/share/image.png"),
             QStringLiteral("file:////server/share/image.png"), QStringLiteral("file:///%2fserver/share/image.png"),
             QStringLiteral("file:///%5cserver/share/image.png")}) QVERIFY(!ArtworkApproval::validUserFile(QUrl(invalid)));
-        SharedInputItem source(input_item_New("vlc-addon-source:v1:choice", "Source"), false);
+        SharedInputItem source(input_item_New("hakone-addon-source:v1:choice", "Source"), false);
         input_item_SetArtURL(source.get(), "http://127.0.0.1/private.png");
         QVERIFY(!ArtworkApproval::userFile(source.get(), QUrl::fromLocalFile(svgPath)));
         QVERIFY(PlayerController::decodeArtURL(source.get()).isEmpty());
@@ -171,7 +179,7 @@ private slots:
         QByteArray tail(4, '\0'); qToBigEndian<quint32>(quint32(crc), tail.data()); chunk += tail; bytes.insert(33, chunk);
         const auto candidate = QUrl::fromLocalFile(directory.filePath(QStringLiteral("metadata.png")));
         QVERIFY(write(candidate.toLocalFile(), bytes)); QVERIFY(!ArtworkApproval::validUserFile(candidate));
-        SharedInputItem source(input_item_New("vlc-addon-source:v1:choice", "Source"), false);
+        SharedInputItem source(input_item_New("hakone-addon-source:v1:choice", "Source"), false);
         QVERIFY(ArtworkApproval::userFile(source.get(), original));
         QVERIFY(!ArtworkApproval::userFile(source.get(), candidate));
         QCOMPARE(PlayerController::decodeArtURL(source.get()), original.toLocalFile());
@@ -182,7 +190,7 @@ private slots:
     {
         auto *playlist = vlc_playlist_New(VLC_OBJECT(m_core->instance), VLC_PLAYLIST_PREPARSING_DISABLED, 1, 0); QVERIFY(playlist);
         const auto cleanup = qScopeGuard([&] { vlc_playlist_Delete(playlist); });
-        SharedInputItem source(input_item_New("VLC-ADDON-SOURCE:v1:queue", "Source"), false);
+        SharedInputItem source(input_item_New("HAKONE-ADDON-SOURCE:v1:queue", "Source"), false);
         input_item_SetArtURL(source.get(), "http://127.0.0.1/private.png");
         PlaylistItem row;
         {
@@ -199,7 +207,7 @@ private slots:
     void fileArtworkDoesNotUseASerializedSourceFallback()
     {
         MLFileArtwork artwork; QSignalSpy changes(&artwork, &MLFileArtwork::artworkChanged);
-        const QUrl source(QStringLiteral("VLC-ADDON-SOURCE:v1:raw"));
+        const QUrl source(QStringLiteral("HAKONE-ADDON-SOURCE:v1:raw"));
         artwork.request(source, false, QStringLiteral("http://127.0.0.1/private.png"));
         QCOMPARE(changes.size(), 1); QCOMPARE(changes[0][0].toUrl(), source); QVERIFY(changes[0][1].toString().isEmpty());
     }
@@ -212,7 +220,7 @@ private slots:
         intf->p_player = player;
         var_Create(intf, "qt-discover-cast-devices", VLC_VAR_BOOL); var_SetBool(intf, "qt-discover-cast-devices", false);
         PlayerController controller(intf);
-        SharedInputItem source(input_item_New("vlc-addon-source:v1:player", "Source"), false);
+        SharedInputItem source(input_item_New("hakone-addon-source:v1:player", "Source"), false);
         input_item_SetTitle(source.get(), "Source title"); input_item_SetArtURL(source.get(), "http://127.0.0.1/private.png");
         { vlc_player_locker lock(player); QCOMPARE(vlc_player_SetCurrentMedia(player, source.get()), VLC_SUCCESS); }
         QTRY_COMPARE(controller.getTitle(), QStringLiteral("Source title")); QVERIFY(controller.getArtwork().isEmpty());
@@ -222,7 +230,7 @@ private slots:
         controller.refreshMediaMeta(source.get()); QVERIFY(controller.getArtwork().isEmpty());
         auto *scope = vlc_input_policy_HoldItem(source.get()); QVERIFY(scope);
         const auto release = qScopeGuard([&] { vlc_input_policy_Release(scope); });
-        QVERIFY(vlc_input_policy_IsSource(scope, "vlc-addon-source:v1:player"));
+        QVERIFY(vlc_input_policy_IsSource(scope, "hakone-addon-source:v1:player"));
         controller.setArt(source.get(), chosen.toString(QUrl::FullyEncoded)); QCOMPARE(controller.getArtwork(), chosen);
         vlc_input_policy_Revoke(scope); QVERIFY(controller.getArtwork().isEmpty());
         SharedInputItem native(input_item_New("file:///native.flac", "Native"), false);

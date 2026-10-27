@@ -88,11 +88,11 @@ static void text_options_do_not_set_policy(void)
 }
 static void proxy_profile(void)
 {
-    vlc_input_policy_t *policy = vlc_input_policy_NewProxy(9876, "/opaque_grant/", "vlc-addon-source:v1:admitted", true); assert(policy != NULL);
+    vlc_input_policy_t *policy = vlc_input_policy_NewProxy(9876, "/opaque_grant/", "hakone-addon-source:v1:admitted", true); assert(policy != NULL);
     vlc_object_t *obj = object_new(NULL); assert(vlc_input_policy_AttachObject(obj, policy) == VLC_SUCCESS); vlc_input_policy_Release(policy);
-    for (const char *const *p = (const char *const[]){"http://127.0.0.1:9876/opaque_grant/resource", "http://127.0.0.1:9876/opaque_grant/template/20", "attachment://cover.jpg", "vlc-addon-source:v1:admitted", NULL}; *p; ++p)
+    for (const char *const *p = (const char *const[]){"http://127.0.0.1:9876/opaque_grant/resource", "http://127.0.0.1:9876/opaque_grant/template/20", "attachment://cover.jpg", "hakone-addon-source:v1:admitted", NULL}; *p; ++p)
         assert(vlc_input_policy_CheckURL(obj, *p));
-    for (const char *const *p = (const char *const[]){"http://127.0.0.1:9876/other/resource", "http://localhost:9876/opaque_grant/resource", "http://127.0.0.1:9877/opaque_grant/resource", "https://127.0.0.1:9876/opaque_grant/resource", "http://127.0.0.1:9876/opaque_grant/../private", "http://127.0.0.1:9876/opaque_grant/%2e%2e", "http://127.0.0.1:9876/opaque_grant//resource", "http://127.0.0.1:9876/opaque_grant/resource?url=private", "file:///private", "vlc-addon-source:v1:forged", NULL}; *p; ++p)
+    for (const char *const *p = (const char *const[]){"http://127.0.0.1:9876/other/resource", "http://localhost:9876/opaque_grant/resource", "http://127.0.0.1:9877/opaque_grant/resource", "https://127.0.0.1:9876/opaque_grant/resource", "http://127.0.0.1:9876/opaque_grant/../private", "http://127.0.0.1:9876/opaque_grant/%2e%2e", "http://127.0.0.1:9876/opaque_grant//resource", "http://127.0.0.1:9876/opaque_grant/resource?url=private", "file:///private", "hakone-addon-source:v1:forged", NULL}; *p; ++p)
         assert(!vlc_input_policy_CheckURL(obj, *p));
     assert(vlc_input_policy_CheckConnection(obj, "127.0.0.1", 9876, false));
     assert(!vlc_input_policy_CheckConnection(obj, "127.0.0.1", 9877, false));
@@ -102,9 +102,9 @@ static void proxy_profile(void)
     vlc_object_delete(obj);
     assert(vlc_input_policy_NewProxy(9876, "/../", NULL, false) == NULL);
     assert(vlc_input_policy_NewProxy(0, NULL, NULL, false) == NULL);
-    policy = vlc_input_policy_NewProxy(0, NULL, "vlc-addon-source:v1:admitted", false); assert(policy != NULL);
+    policy = vlc_input_policy_NewProxy(0, NULL, "hakone-addon-source:v1:admitted", false); assert(policy != NULL);
     obj = object_new(NULL); assert(vlc_input_policy_AttachObject(obj, policy) == VLC_SUCCESS); vlc_input_policy_Release(policy);
-    assert(vlc_input_policy_CheckURL(obj, "vlc-addon-source:v1:admitted")); assert(!vlc_input_policy_CheckConnection(obj, "127.0.0.1", 9876, false));
+    assert(vlc_input_policy_CheckURL(obj, "hakone-addon-source:v1:admitted")); assert(!vlc_input_policy_CheckConnection(obj, "127.0.0.1", 9876, false));
     vlc_object_delete(obj);
 }
 static void *check_url_thread(void *opaque)
@@ -122,12 +122,12 @@ struct bootstrap { input_item_t *item; vlc_input_policy_t *policy; };
 static void *hold_source_thread(void *opaque)
 {
     struct bootstrap *state = opaque;
-    state->policy = vlc_input_policy_HoldSourceItem(state->item, "vlc-addon-source:v1:admitted");
+    state->policy = vlc_input_policy_HoldSourceItem(state->item, "hakone-addon-source:v1:admitted");
     return NULL;
 }
 static void concurrent_source_bootstrap(void)
 {
-    const char *uri = "vlc-addon-source:v1:admitted";
+    const char *uri = "hakone-addon-source:v1:admitted";
     input_item_t *item = input_item_New(uri, "Source scope"); assert(item != NULL);
     struct bootstrap contexts[16]; vlc_thread_t threads[16];
     for (unsigned i = 0; i < ARRAY_SIZE(threads); ++i) {
@@ -138,7 +138,7 @@ static void concurrent_source_bootstrap(void)
         assert(contexts[i].policy != NULL && contexts[i].policy == contexts[0].policy);
         assert(vlc_input_policy_IsSource(contexts[i].policy, uri));
     }
-    assert(vlc_input_policy_HoldSourceItem(item, "vlc-addon-source:v1:other") == NULL);
+    assert(vlc_input_policy_HoldSourceItem(item, "hakone-addon-source:v1:other") == NULL);
     assert(!vlc_input_policy_IsRevoked(NULL)); assert(!vlc_input_policy_IsRevoked(contexts[0].policy));
     vlc_input_policy_Revoke(contexts[0].policy); assert(vlc_input_policy_IsRevoked(contexts[0].policy));
     assert(vlc_input_policy_HoldSourceItem(item, uri) == NULL);
@@ -155,12 +155,12 @@ static void sealed_profile_checks(void)
 {
     const char *uri = "http://127.0.0.1:9876/token/resource";
     vlc_input_policy_t *policy = vlc_input_policy_NewProxy(9876, "/token/", NULL, false); assert(policy != NULL);
-    assert(vlc_input_policy_IsProxy(policy, uri)); assert(!vlc_input_policy_IsSource(policy, "vlc-addon-source:v1:admitted"));
+    assert(vlc_input_policy_IsProxy(policy, uri)); assert(!vlc_input_policy_IsSource(policy, "hakone-addon-source:v1:admitted"));
     assert(!vlc_input_policy_IsProxy(policy, "http://127.0.0.1:9876/other/resource"));
     vlc_input_policy_Revoke(policy); assert(!vlc_input_policy_IsProxy(policy, uri)); vlc_input_policy_Release(policy);
     policy = vlc_input_policy_NewProxy(9876, "/token/", NULL, true); assert(policy != NULL);
     assert(!vlc_input_policy_IsProxy(policy, uri)); vlc_input_policy_Release(policy);
-    policy = vlc_input_policy_NewProxy(9876, "/token/", "vlc-addon-source:v1:admitted", false); assert(policy != NULL);
+    policy = vlc_input_policy_NewProxy(9876, "/token/", "hakone-addon-source:v1:admitted", false); assert(policy != NULL);
     assert(!vlc_input_policy_IsProxy(policy, uri)); vlc_input_policy_Release(policy);
 }
 int main(void)

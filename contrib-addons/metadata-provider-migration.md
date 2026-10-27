@@ -7,7 +7,7 @@ The shared host service owns provider order, identity comparison, account scope,
 | Current feature | Separate package | Test evidence | Current core status |
 | --- | --- | --- | --- |
 | OpenSubtitles search and download | Trusted native adapter in the shared owner | Existing subtitle tests | Retained |
-| TheSubtitleDB search and download | `org.videolan.thesubtitledb` | Synthetic tests and a separate authenticated host probe | No service-specific Qt protocol |
+| TheSubtitleDB search and download | `org.hakone.thesubtitledb` | Synthetic tests and a separate authenticated host probe | No service-specific Qt protocol |
 | TVMaze episode names | `org.videolan.tvmaze` | Source tests, portable worker tests, public API probe, real episode consumer probe | Old native client retained until consumer parity and cache tests pass |
 | MusicBrainz release/recording search and CAA image | `org.videolan.musicbrainz` | Source tests, portable worker tests, public shared-host CAA image probe | Old Lua provider retained |
 | Amazon ASIN image | The MusicBrainz package | Synthetic provider branch; public native image adapter probe | Old Lua provider retained |

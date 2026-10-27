@@ -66,8 +66,8 @@ vlc_addon_source_media_prepare(vlc_medialibrary_t *ml, const char *source_uri,
 {
     if (media_id != NULL) *media_id = 0;
     if (ml == NULL || media_id == NULL || source_uri == NULL || title == NULL
-        || strnlen(source_uri, 12001) > 12000 || strncmp(source_uri, "vlc-addon-source:v1:", 20)
-        || source_uri[20] == '\0' || strnlen(title, 2049) > 2048 || title[0] == '\0') return VLC_EINVAL;
+        || strnlen(source_uri, 12001) > 12000 || strncmp(source_uri, "hakone-addon-source:v1:", sizeof("hakone-addon-source:v1:") - 1)
+        || source_uri[sizeof("hakone-addon-source:v1:") - 1] == '\0' || strnlen(title, 2049) > 2048 || title[0] == '\0') return VLC_EINVAL;
     for (const unsigned char *p = (const unsigned char *)source_uri; *p != '\0'; ++p)
         if (*p <= 32 || *p == 127) return VLC_EINVAL;
     for (const unsigned char *p = (const unsigned char *)title; *p != '\0'; ++p)

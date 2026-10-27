@@ -6,8 +6,8 @@
 extern "C" {
 #endif
 
-/** A private item policy or a vlc-addon-source: URI restricts artwork.
- * A revoked policy does not remove this restriction.
+/** A private item policy or an add-on source marker restricts artwork.
+ * The old source marker and a revoked policy keep this restriction.
  */
 VLC_API bool vlc_artwork_item_IsRestricted(input_item_t *);
 

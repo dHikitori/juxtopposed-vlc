@@ -94,20 +94,20 @@ pub fn handle(message: &Value) -> Option<Value> {
 }
 
 #[cfg(target_arch = "wasm32")]
-#[link(wasm_import_module = "vlc")]
+#[link(wasm_import_module = "hakone")]
 extern "C" {
     fn host_send(ptr: i32, len: i32) -> i32;
 }
 
 #[no_mangle]
-pub extern "C" fn vlc_alloc(len: i32) -> i32 {
+pub extern "C" fn hakone_alloc(len: i32) -> i32 {
     if len <= 0 || len as usize > MAX_INPUT {
         return 0;
     }
     Box::into_raw(vec![0_u8; len as usize].into_boxed_slice()) as *mut u8 as usize as i32
 }
 #[no_mangle]
-pub unsafe extern "C" fn vlc_dealloc(ptr: i32, len: i32) {
+pub unsafe extern "C" fn hakone_dealloc(ptr: i32, len: i32) {
     if ptr == 0 || len <= 0 || len as usize > MAX_INPUT {
         return;
     }
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn vlc_dealloc(ptr: i32, len: i32) {
 }
 #[cfg(target_arch = "wasm32")]
 #[no_mangle]
-pub unsafe extern "C" fn vlc_dispatch(ptr: i32, len: i32) {
+pub unsafe extern "C" fn hakone_dispatch(ptr: i32, len: i32) {
     if ptr == 0 || len <= 0 || len as usize > MAX_INPUT {
         return;
     }

@@ -123,7 +123,7 @@ static void test_shared_cache(void)
     assert(var_Create(instance, "fetch-art-threads", VLC_VAR_INTEGER) == VLC_SUCCESS);
     assert(var_SetInteger(instance, "fetch-art-threads", 1) == VLC_SUCCESS);
     input_fetcher_t *fetcher = input_fetcher_New(VLC_OBJECT(instance), VLC_PREPARSER_TYPE_FETCHMETA_LOCAL); assert(fetcher != NULL);
-    input_item_t *source = input_item_New("vlc-addon-source:v1:raw", "Source"),
+    input_item_t *source = input_item_New("hakone-addon-source:v1:raw", "Source"),
                  *native = input_item_New("file:///native.flac", "Native");
     assert(source != NULL && native != NULL);
     input_item_t *items[] = {source, native};
@@ -143,13 +143,13 @@ static void test_shared_cache(void)
 int main(void)
 {
     const struct scenario cases[] = {
-        {"VLC-ADDON-SOURCE:v1:raw", "http://127.0.0.1/private.png", "file:///cached.png", false, false, false, false, 0},
-        {"vlc-addon-source:v1:raw", "file:///private.png", NULL, false, false, false, false, 0},
-        {"vlc-addon-source:v1:raw", "attachment://private.png", NULL, false, false, false, false, 0},
-        {"vlc-addon-source:v1:approved", "file:///approved.png", "file:///other-cache.png", true, false, false, true, 0},
-        {"vlc-addon-source:v1:approved", "file:///approved.png", "file:///approved.png", true, false, false, true, 0},
+        {"HAKONE-ADDON-SOURCE:v1:raw", "http://127.0.0.1/private.png", "file:///cached.png", false, false, false, false, 0},
+        {"hakone-addon-source:v1:raw", "file:///private.png", NULL, false, false, false, false, 0},
+        {"hakone-addon-source:v1:raw", "attachment://private.png", NULL, false, false, false, false, 0},
+        {"hakone-addon-source:v1:approved", "file:///approved.png", "file:///other-cache.png", true, false, false, true, 0},
+        {"hakone-addon-source:v1:approved", "file:///approved.png", "file:///approved.png", true, false, false, true, 0},
         {"file:///native-scoped.flac", "http://127.0.0.1/private.png", NULL, false, true, false, false, 0},
-        {"vlc-addon-source:v1:revoked", "file:///approved.png", NULL, true, true, true, false, 0},
+        {"hakone-addon-source:v1:revoked", "file:///approved.png", NULL, true, true, true, false, 0},
         {"file:///native.flac", "file:///native.png", "file:///cached.png", false, false, false, true, 0},
         {"file:///native.flac", "attachment://native.png", NULL, false, false, false, true, 0},
         {"file:///native.flac", "http://127.0.0.1/native.png", NULL, false, false, false, false, 1},

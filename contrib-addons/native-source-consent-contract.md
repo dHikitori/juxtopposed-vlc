@@ -26,7 +26,7 @@ package and configuration check before each operation.
 
 Only a native primary playback open can mint an intent. Queue insertion, import,
 preparse, thumbnails, and background work cannot mint one. The native caller must
-supply the exact admitted `vlc-addon-source:v1:` URI, a positive input generation,
+supply the exact admitted `hakone-addon-source:v1:` URI, a positive input generation,
 and the native playback reason. The current native request proves only
 `PrimaryPlayback`. It does not prove a new UI click or distinguish queue advance
 from replay. A future native caller can use `QueueAdvance` or `Replay` only if it

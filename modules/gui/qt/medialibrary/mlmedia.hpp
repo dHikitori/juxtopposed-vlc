@@ -130,7 +130,8 @@ public:
 protected:
     bool requiresNativeArtwork() const
     {
-        return m_mrl.scheme().compare(QLatin1String("vlc-addon-source"), Qt::CaseInsensitive) == 0
+        return m_mrl.scheme().compare(QLatin1String("hakone-addon-source"), Qt::CaseInsensitive) == 0
+            || m_mrl.scheme().compare(QLatin1String("vlc-addon-source"), Qt::CaseInsensitive) == 0
             || (m_artworkInput && vlc_artwork_item_IsRestricted(m_artworkInput.get()));
     }
     QString nativeArtwork(vlc_ml_thumbnail_status_t* status) const

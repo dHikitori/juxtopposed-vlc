@@ -10,8 +10,8 @@ import unittest
 
 class WorkerSdk(unittest.TestCase):
     def setUp(self):
-        worker = os.environ.get("VLC_ADDON_WORKER")
-        module = os.environ.get("VLC_ADDON_SDK_FIXTURE")
+        worker = os.environ.get("HAKONE_ADDON_WORKER")
+        module = os.environ.get("HAKONE_ADDON_SDK_FIXTURE")
         if not worker or not module:
             self.skipTest("Set the worker and SDK fixture paths.")
         self.process = subprocess.Popen(

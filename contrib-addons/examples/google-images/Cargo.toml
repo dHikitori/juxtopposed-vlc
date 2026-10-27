@@ -1,6 +1,6 @@
 [package]
-name = "vlc-addon-google-images"
-version = "0.1.0"
+name = "hakone-addon-google-images"
+version = "0.1.1"
 edition = "2021"
 license = "GPL-2.0-or-later"
 publish = false
@@ -11,7 +11,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-vlc-artwork-providers = { path = "../../sdk/artwork-providers" }
+hakone-artwork-providers = { path = "../../sdk/artwork-providers" }
 
 [profile.release]
 opt-level = "s"

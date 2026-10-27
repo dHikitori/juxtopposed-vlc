@@ -81,7 +81,7 @@ static uint64_t generation(void)
     return 0;
 }
 bool input_addon_source_IsURI(const char *uri)
-{ return uri != NULL && !strncasecmp(uri, "vlc-addon-source:", 17); }
+{ return vlc_input_policy_IsAddonSourceURI(uri); }
 void input_addon_source_Init(input_addon_source_t *state)
 { memset(state, 0, sizeof(*state)); vlc_mutex_init(&state->lock); }
 void input_addon_source_Close(input_addon_source_t *state)
@@ -108,7 +108,7 @@ int input_addon_source_Resolve(input_addon_source_t *state, vlc_object_t *object
 {
     if (output != NULL) *output = NULL;
     if (!state || !object || !item || !output || !primary_playback || uri == NULL
-        || strnlen(uri, 12001) > 12000 || strncmp(uri, "vlc-addon-source:v1:", 20)
+        || strnlen(uri, 12001) > 12000 || strncmp(uri, "hakone-addon-source:v1:", sizeof("hakone-addon-source:v1:") - 1)
         || timeout <= 0 || timeout > VLC_TICK_FROM_SEC(10)) return VLC_EINVAL;
     vlc_mutex_lock(&state->lock);
     const bool refused = state->closed || state->used;

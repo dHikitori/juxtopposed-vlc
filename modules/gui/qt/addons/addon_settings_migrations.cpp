@@ -184,12 +184,12 @@ bool migrateSettings(const Manifest& next, const QMap<QString, QByteArray>& cont
         const auto properties = schema.value("properties").toObject();
         if (properties.size() > 64) return fail(error, QStringLiteral("The settings schema has too many fields."));
         for (auto it = ordinary.begin(); it != ordinary.end(); ++it)
-            if (!properties.contains(it.key()) || properties.value(it.key()).toObject().value("x-vlc-secret").toBool()
+            if (!properties.contains(it.key()) || properties.value(it.key()).toObject().value("x-hakone-secret").toBool()
                 || !valueValid(it.value(), properties.value(it.key()).toObject()))
                 return fail(error, QStringLiteral("The settings migration result does not agree with the new schema."));
         if (hadOrdinarySettings)
             for (const auto& required : schema.value("required").toArray())
-                if (!properties.value(required.toString()).toObject().value("x-vlc-secret").toBool()
+                if (!properties.value(required.toString()).toObject().value("x-hakone-secret").toBool()
                     && !ordinary.contains(required.toString()))
                     return fail(error, QStringLiteral("A required settings field is missing after migration."));
     }

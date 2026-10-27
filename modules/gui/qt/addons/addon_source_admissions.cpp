@@ -15,7 +15,7 @@
 namespace vlc::addons {
 namespace {
 constexpr qsizetype MaximumPayload = 8192, MaximumSavedBytes = 4 * 1024 * 1024, MaximumAdmissions = 8192;
-const QString prefix = QStringLiteral("vlc-addon-source:v1:");
+const QString prefix = QStringLiteral("hakone-addon-source:v1:");
 bool fail(QString* error, const QString& message) { if (error) *error = message; return false; }
 QByteArray payload(QVariantMap reference) { reference.remove(QStringLiteral("snapshot")); return QJsonDocument(QJsonObject::fromVariantMap(reference)).toJson(QJsonDocument::Compact); }
 QString digest(const QByteArray& bytes) { return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()); }
@@ -64,7 +64,7 @@ bool AddonSourceAdmissions::read(QJsonObject* records, QString* error) const
         if (record.size() != 4 || !hash.match(record.value("digest").toString()).hasMatch()
             || !record.value("source").isString() || record.value("source").toString().size() > 256
             || !record.value("account").isString() || record.value("account").toString().size() > 512 || !record.value("snapshot").isObject()
-            || !AddonQueueTransactions::validReference({{"format", "vlc-addon-source-v1"}, {"source", record.value("source").toVariant()},
+            || !AddonQueueTransactions::validReference({{"format", "hakone-addon-source-v1"}, {"source", record.value("source").toVariant()},
                 {"itemId", "record"}, {"accountReference", record.value("account").toVariant()}, {"snapshot", record.value("snapshot").toVariant()}}))
             return fail(error, QObject::tr("The saved discovery references are not correct."));
     }

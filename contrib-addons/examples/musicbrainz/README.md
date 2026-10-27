@@ -12,7 +12,7 @@ Build from this source tree:
 
 ```sh
 RUSTUP_TOOLCHAIN=stable cargo build --target wasm32-unknown-unknown --release
-cp target/wasm32-unknown-unknown/release/vlc_addon_musicbrainz.wasm dist/addon.wasm
+cp target/wasm32-unknown-unknown/release/hakone_addon_musicbrainz.wasm dist/addon.wasm
 ```
 
 The path dependency is `../../sdk/artwork-providers`. A separate release repository must include that source or use a fixed published SDK version. Do not run a build script during installation.

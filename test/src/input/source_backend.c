@@ -46,11 +46,11 @@ static vlc_source_backend_t *backend_new(struct state *state)
 }
 static vlc_source_job_t *job_new(struct state *state)
 {
-    char uri[] = "vlc-addon-source:v1:admitted";
+    char uri[] = "hakone-addon-source:v1:admitted";
     const struct vlc_source_request request = { uri, 1 };
     vlc_source_job_t *job = vlc_source_job_New(state->backend, &request, ended, state); assert(job != NULL);
     uri[0] = 'x';
-    assert(!strcmp(vlc_source_job_GetRequest(job)->source_uri, "vlc-addon-source:v1:admitted"));
+    assert(!strcmp(vlc_source_job_GetRequest(job)->source_uri, "hakone-addon-source:v1:admitted"));
     assert(vlc_source_job_GetRequest(job)->input_generation == 1);
     return job;
 }
@@ -108,9 +108,10 @@ static void errors_and_reentrant_close(void)
 static void invalid_results_and_requests(void)
 {
     struct state state = {0}; vlc_source_backend_t *backend = backend_new(&state);
-    const struct vlc_source_request invalid[] = { {"https://remote.invalid", 1}, {"vlc-addon-source:v1:admitted", 0} };
+    const struct vlc_source_request invalid[] = { {"https://remote.invalid", 1}, {"hakone-addon-source:v1:admitted", 0},
+        {"vlc-addon-source:v1:admitted", 1}, {"HAKONE-ADDON-SOURCE:v1:admitted", 1} };
     for (unsigned i = 0; i < ARRAY_SIZE(invalid); ++i) assert(vlc_source_job_New(backend, &invalid[i], ended, &state) == NULL);
-    char large[12002]; memset(large, 'a', sizeof(large)); memcpy(large, "vlc-addon-source:v1:", 20); large[12000] = '\0';
+    char large[12002]; memset(large, 'a', sizeof(large)); memcpy(large, "hakone-addon-source:v1:", sizeof("hakone-addon-source:v1:") - 1); large[12000] = '\0';
     const struct vlc_source_request bounded = {large, 1};
     vlc_source_job_t *boundary = vlc_source_job_New(backend, &bounded, ended, &state); assert(boundary != NULL); vlc_source_job_Release(boundary);
     large[12000] = 'a'; large[12001] = '\0'; assert(vlc_source_job_New(backend, &bounded, ended, &state) == NULL);

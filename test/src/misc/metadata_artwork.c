@@ -37,7 +37,7 @@ static void init_base(struct fixture *fixture, const char *uri, const char *exis
     fixture->backend = vlc_metadata_backend_New(&operations, NULL); assert(fixture->backend != NULL);
     fixture->target = input_item_New(uri, "Source"); assert(fixture->target != NULL);
     input_item_SetTitle(fixture->target, "Original");
-    if (!strncmp(uri, "vlc-addon-source:", 17)) {
+    if (!strncmp(uri, "hakone-addon-source:", sizeof("hakone-addon-source:") - 1)) {
         fixture->policy = new_policy();
         assert(vlc_input_policy_AttachItem(fixture->target, fixture->policy) == VLC_SUCCESS);
     }
@@ -74,7 +74,7 @@ static void clean(struct fixture *fixture)
 }
 static void approved_proof_reaches_the_original_target(void)
 {
-    struct fixture fixture; init(&fixture, "vlc-addon-source:v1:item", NULL);
+    struct fixture fixture; init(&fixture, "hakone-addon-source:v1:item", NULL);
     assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///broker/image.png") == VLC_SUCCESS); complete(&fixture);
     size_t applied = 0; assert(vlc_metadata_job_Apply(fixture.job, fixture.target, 0, &applied) == VLC_SUCCESS && applied == 2);
     art(fixture.target, "file:///broker/image.png");
@@ -86,7 +86,7 @@ static void unapproved_source_artwork_is_a_missing_display_asset(void)
 {
     for (unsigned mode = 0; mode < 3; ++mode) {
         struct fixture fixture;
-        init_base(&fixture, mode == 2 ? "file:///native.flac" : "vlc-addon-source:v1:item",
+        init_base(&fixture, mode == 2 ? "file:///native.flac" : "hakone-addon-source:v1:item",
             mode == 1 ? "file:///unapproved.png" : "http://127.0.0.1/unapproved.png", false);
         assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///broker/image.png") == VLC_SUCCESS); complete(&fixture);
         size_t applied = 0;
@@ -97,7 +97,7 @@ static void unapproved_source_artwork_is_a_missing_display_asset(void)
 static void text_and_stale_result_records_cannot_grant_proof(void)
 {
     for (unsigned native = 0; native < 2; ++native) for (unsigned stale = 0; stale < 2; ++stale) {
-        struct fixture fixture; init(&fixture, native ? "file:///native.flac" : "vlc-addon-source:v1:item", NULL);
+        struct fixture fixture; init(&fixture, native ? "file:///native.flac" : "hakone-addon-source:v1:item", NULL);
         if (stale) assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///guest/image.png") == VLC_SUCCESS);
         input_item_SetArtURL(fixture.result, "file:///guest/image.png"); complete(&fixture);
         size_t applied = 99; assert(vlc_metadata_job_Apply(fixture.job, fixture.target, 0, &applied) == -EACCES && applied == 0);
@@ -106,14 +106,14 @@ static void text_and_stale_result_records_cannot_grant_proof(void)
 }
 static void foreign_source_and_policy_cannot_supply_proof(void)
 {
-    struct fixture fixture; init(&fixture, "vlc-addon-source:v1:item", NULL);
-    input_item_SetURI(fixture.result, "vlc-addon-source:v1:other");
+    struct fixture fixture; init(&fixture, "hakone-addon-source:v1:item", NULL);
+    input_item_SetURI(fixture.result, "hakone-addon-source:v1:other");
     assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///broker/image.png") == VLC_SUCCESS); complete(&fixture);
     size_t applied = 99; assert(vlc_metadata_job_Apply(fixture.job, fixture.target, 0, &applied) == -EACCES && applied == 0);
     art(fixture.target, NULL); no_description(&fixture); clean(&fixture);
 
-    init(&fixture, "vlc-addon-source:v1:item", NULL); input_item_Release(fixture.result);
-    fixture.result = input_item_New("vlc-addon-source:v1:item", "Other result"); assert(fixture.result != NULL);
+    init(&fixture, "hakone-addon-source:v1:item", NULL); input_item_Release(fixture.result);
+    fixture.result = input_item_New("hakone-addon-source:v1:item", "Other result"); assert(fixture.result != NULL);
     vlc_input_policy_t *other = new_policy(); assert(vlc_input_policy_AttachItem(fixture.result, other) == VLC_SUCCESS);
     assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///broker/image.png") == VLC_SUCCESS);
     input_item_SetDescription(fixture.result, "Provider description"); complete(&fixture);
@@ -122,12 +122,12 @@ static void foreign_source_and_policy_cannot_supply_proof(void)
 }
 static void existing_artwork_stays_until_native_replacement(void)
 {
-    struct fixture fixture; init(&fixture, "vlc-addon-source:v1:item", "file:///user/image.png");
+    struct fixture fixture; init(&fixture, "hakone-addon-source:v1:item", "file:///user/image.png");
     assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///broker/image.png") == VLC_SUCCESS); complete(&fixture);
     size_t applied = 0; assert(vlc_metadata_job_Apply(fixture.job, fixture.target, 0, &applied) == VLC_SUCCESS && applied == 1);
     art(fixture.target, "file:///user/image.png"); clean(&fixture);
 
-    init(&fixture, "vlc-addon-source:v1:item", "file:///user/image.png");
+    init(&fixture, "hakone-addon-source:v1:item", "file:///user/image.png");
     assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///broker/image.png") == VLC_SUCCESS); complete(&fixture);
     assert(vlc_metadata_job_Apply(fixture.job, fixture.target, UINT32_C(1) << vlc_meta_ArtworkURL, &applied) == VLC_SUCCESS && applied == 2);
     art(fixture.target, "file:///broker/image.png"); clean(&fixture);
@@ -135,7 +135,7 @@ static void existing_artwork_stays_until_native_replacement(void)
 static void stale_target_and_revoked_jobs_leave_every_field_unchanged(void)
 {
     for (unsigned mode = 0; mode < 4; ++mode) {
-        struct fixture fixture; init(&fixture, "vlc-addon-source:v1:item", NULL);
+        struct fixture fixture; init(&fixture, "hakone-addon-source:v1:item", NULL);
         assert(vlc_artwork_item_SetApprovedURI(fixture.result, "file:///broker/image.png") == VLC_SUCCESS); complete(&fixture);
         if (mode == 0) { input_item_SetDescription(fixture.target, "User edit"); input_item_SetDescription(fixture.target, NULL); }
         else if (mode == 1) vlc_input_policy_Revoke(fixture.policy);
@@ -147,7 +147,7 @@ static void stale_target_and_revoked_jobs_leave_every_field_unchanged(void)
 }
 static void native_clear_removes_the_old_approval(void)
 {
-    struct fixture fixture; init(&fixture, "vlc-addon-source:v1:item", "file:///user/image.png");
+    struct fixture fixture; init(&fixture, "hakone-addon-source:v1:item", "file:///user/image.png");
     input_item_SetArtURL(fixture.result, NULL); complete(&fixture);
     size_t applied = 0;
     assert(vlc_metadata_job_Apply(fixture.job, fixture.target, UINT32_C(1) << vlc_meta_ArtworkURL, &applied) == VLC_SUCCESS && applied == 2);

@@ -1,5 +1,5 @@
 [package]
-name = "vlc-addon-thesubtitledb"
+name = "hakone-addon-thesubtitledb"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-or-later"

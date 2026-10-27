@@ -1,5 +1,5 @@
 [package]
-name = "vlc-addon-message-v1"
+name = "hakone-addon-message-v1"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-or-later"

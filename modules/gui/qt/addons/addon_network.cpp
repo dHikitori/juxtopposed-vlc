@@ -270,7 +270,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
     request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
     const QByteArray host = job->url.host().toUtf8() + (job->url.port(443) == 443 ? QByteArray{} : ':' + QByteArray::number(job->url.port()));
     request.setRawHeader("Host", host);
-    request.setRawHeader("User-Agent", "VLC-Addon/1.0 (+https://www.videolan.org/)");
+    request.setRawHeader("User-Agent", "Hakone-Addon/1.0 (+https://hakone.org/)");
     request.setRawHeader("Accept", "application/json");
     request.setRawHeader("Accept-Encoding", "identity");
     const auto headers = job->request.value(QStringLiteral("headers")).toObject();

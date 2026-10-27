@@ -1,5 +1,5 @@
 [package]
-name = "vlc-artwork-providers"
+name = "hakone-artwork-providers"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-or-later"
@@ -9,4 +9,4 @@ publish = false
 
 [dependencies]
 serde_json = "=1.0.152"
-vlc-addon-message-v1 = { path = "../message-v1" }
+hakone-addon-message-v1 = { path = "../message-v1" }

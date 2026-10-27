@@ -92,25 +92,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
-name = "vlc-addon-message-v1"
+name = "hakone-addon-message-v1"
 version = "0.1.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
-name = "vlc-addon-musicbrainz"
-version = "0.1.0"
+name = "hakone-addon-musicbrainz"
+version = "0.1.1"
 dependencies = [
- "vlc-artwork-providers",
+ "hakone-artwork-providers",
 ]
 
 [[package]]
-name = "vlc-artwork-providers"
+name = "hakone-artwork-providers"
 version = "0.1.0"
 dependencies = [
  "serde_json",
- "vlc-addon-message-v1",
+ "hakone-addon-message-v1",
 ]
 
 [[package]]

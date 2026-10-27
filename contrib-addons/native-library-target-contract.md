@@ -2,7 +2,7 @@
 
 `AddonNativeLibraryStore` connects discovery selection to the native playlist
 transaction API. This adapter does not resolve a source reference to a stream
-URL. The saved media MRL is the exact admitted `vlc-addon-source:v1:` reference.
+URL. The saved media MRL is the exact admitted `hakone-addon-source:v1:` reference.
 
 ## Host selection
 

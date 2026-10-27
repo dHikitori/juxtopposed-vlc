@@ -31,7 +31,7 @@ int vlc_ml_control(vlc_medialibrary_t *ml, int query, ...)
         assert(va_arg(args,const int64_t*) == expected_ids);
         assert(va_arg(args,size_t) == expected_count); result = VLC_SUCCESS;
     } else if (supported && query == VLC_ML_ADDON_SOURCE_MEDIA_PREPARE) {
-        assert(!strcmp(va_arg(args,const char*), "vlc-addon-source:v1:admitted"));
+        assert(!strcmp(va_arg(args,const char*), "hakone-addon-source:v1:admitted"));
         assert(!strcmp(va_arg(args,const char*), "Station"));
         *va_arg(args,int64_t*) = 42; result = VLC_SUCCESS;
     }
@@ -62,12 +62,12 @@ int main(void)
     assert(vlc_addon_playlist_append_if_unchanged(ml,snapshot,ids,1001)==VLC_EINVAL);
     assert(vlc_addon_playlist_append_if_unchanged(ml,snapshot,invalid,2)==VLC_EINVAL && calls==admitted);
     int64_t id = -1;
-    assert(vlc_addon_source_media_prepare(ml,"vlc-addon-source:v1:admitted","Station",&id)==VLC_SUCCESS && id==42);
+    assert(vlc_addon_source_media_prepare(ml,"hakone-addon-source:v1:admitted","Station",&id)==VLC_SUCCESS && id==42);
     const unsigned prepared = calls;
     assert(vlc_addon_source_media_prepare(ml,"file:///private.mkv","Station",&id)==VLC_EINVAL && id==0);
-    assert(vlc_addon_source_media_prepare(ml,"vlc-addon-source:v1:","Station",&id)==VLC_EINVAL);
-    assert(vlc_addon_source_media_prepare(ml,"vlc-addon-source:v1:admitted","Station\nInjected",&id)==VLC_EINVAL);
-    assert(vlc_addon_source_media_prepare(ml,"vlc-addon-source:v1:admitted","",&id)==VLC_EINVAL && calls==prepared);
+    assert(vlc_addon_source_media_prepare(ml,"hakone-addon-source:v1:","Station",&id)==VLC_EINVAL);
+    assert(vlc_addon_source_media_prepare(ml,"hakone-addon-source:v1:admitted","Station\nInjected",&id)==VLC_EINVAL);
+    assert(vlc_addon_source_media_prepare(ml,"hakone-addon-source:v1:admitted","",&id)==VLC_EINVAL && calls==prepared);
     supported = false;
     assert(vlc_addon_playlist_append_if_unchanged(ml,snapshot,ids,2)==VLC_EGENERIC);
     vlc_addon_playlist_snapshot_destroy(snapshot); vlc_addon_playlist_snapshot_destroy(NULL);

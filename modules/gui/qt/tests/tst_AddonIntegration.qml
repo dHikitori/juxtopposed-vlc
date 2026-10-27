@@ -47,7 +47,7 @@ TestCase {
         function settingsSchema(id) {
             return {type: "object", additionalProperties: false, properties: {
                 language: {type: "string", default: "en", minLength: 2, title: "Language"},
-                apiKey: {type: "string", "x-vlc-secret": true, minLength: 1, "x-vlc-label": "settings.apiKey"}}, required: ["apiKey"]}
+                apiKey: {type: "string", "x-hakone-secret": true, minLength: 1, "x-hakone-label": "settings.apiKey"}}, required: ["apiKey"]}
         }
         function settingsMessages(id) { return {"settings.apiKey": "API credential"} }
         function settingsValues(id) { return values }

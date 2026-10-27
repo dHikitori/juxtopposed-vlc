@@ -541,7 +541,7 @@ private slots:
         required.insert("credentials.use", QJsonObject{{"bindings", QJsonArray{QJsonObject{{"field", "apiKey"}, {"origin", "https://images.invalid"}, {"header", "Authorization"}}}}});
         permissions.insert("required", required); value.insert("permissions", permissions); package(source.path(), value);
         write(source.path() + QStringLiteral("/settings.json"), QJsonDocument(QJsonObject{{"type", "object"}, {"additionalProperties", false}, {"required", QJsonArray{"apiKey"}},
-            {"properties", QJsonObject{{"apiKey", QJsonObject{{"type", "string"}, {"x-vlc-secret", true}, {"minLength", 1}}}}}}).toJson());
+            {"properties", QJsonObject{{"apiKey", QJsonObject{{"type", "string"}, {"x-hakone-secret", true}, {"minLength", 1}}}}}}).toJson());
         AddonManager manager(storage.path()); QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled("org.example.images", true));
         QVERIFY(manager.uiAssetReader("org.example.images/view")().registration.isEmpty());
         const auto replace = [](const QString& key) { return QVariantMap{{"apiKey", QVariantMap{{"operation", "replace"}, {"value", key}, {"sessionOnly", true}}}}; };

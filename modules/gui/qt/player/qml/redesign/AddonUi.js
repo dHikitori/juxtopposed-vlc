@@ -182,7 +182,7 @@ function validateProjection(node, state, item, messages) {
     return ""
 }
 
-function fieldSecret(field) { return field["x-vlc-secret"] === true || field["x-vlc-control"] === "secret" || field.writeOnly === true || field.format === "password" }
+function fieldSecret(field) { return field["x-hakone-secret"] === true || field["x-hakone-control"] === "secret" || field.writeOnly === true || field.format === "password" }
 function validateSettingsSchema(schema) {
     var error = validateData(schema)
     if (error) return error
@@ -191,16 +191,16 @@ function validateSettingsSchema(schema) {
     var topKeys = ["$schema", "type", "properties", "required", "additionalProperties", "title", "description"]
     if (Object.keys(schema).some(key => !topKeys.includes(key))) return "The app cannot use this schema keyword."
     if (schema.required !== undefined && (!Array.isArray(schema.required) || schema.required.some(key => !own(schema.properties, key)))) return "The required settings list is not correct."
-    var fieldKeys = ["writeOnly", "pattern", "type", "title", "description", "default", "enum", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "items", "format", "x-vlc-control", "x-vlc-label", "x-vlc-help", "x-vlc-secret", "x-vlc-visibleWhen", "x-vlc-restartRequired"]
+    var fieldKeys = ["writeOnly", "pattern", "type", "title", "description", "default", "enum", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "items", "format", "x-hakone-control", "x-hakone-label", "x-hakone-help", "x-hakone-secret", "x-hakone-visibleWhen", "x-hakone-restartRequired"]
     for (var name of Object.keys(schema.properties)) {
         var field = schema.properties[name]
         if (!safeKey(name) || !record(field) || !["boolean", "string", "integer", "number", "array"].includes(field.type)) return "The app cannot use this settings field type."
         if (Object.keys(field).some(key => !fieldKeys.includes(key))) return "The app cannot use this field keyword."
-        if (field["x-vlc-control"] !== undefined && !["secret", "language-list", "multi-enum", "color", "url", "file", "folder", "account", "duration"].includes(field["x-vlc-control"])) return "The app cannot use this settings editor."
-        for (var flag of ["writeOnly", "x-vlc-secret", "x-vlc-restartRequired", "uniqueItems"]) {
+        if (field["x-hakone-control"] !== undefined && !["secret", "language-list", "multi-enum", "color", "url", "file", "folder", "account", "duration"].includes(field["x-hakone-control"])) return "The app cannot use this settings editor."
+        for (var flag of ["writeOnly", "x-hakone-secret", "x-hakone-restartRequired", "uniqueItems"]) {
             if (field[flag] !== undefined && typeof field[flag] !== "boolean") return "A settings flag is not correct."
         }
-        for (var label of ["title", "description", "x-vlc-label", "x-vlc-help"]) {
+        for (var label of ["title", "description", "x-hakone-label", "x-hakone-help"]) {
             if (field[label] !== undefined && typeof field[label] !== "string") return "A settings label is not correct."
         }
         if (field.pattern !== undefined && field.pattern !== "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$") return "The app cannot use this settings pattern."
@@ -220,8 +220,8 @@ function validateSettingsSchema(schema) {
         if (field.type === "array" && field.items.enum !== undefined && (!Array.isArray(field.items.enum) || !field.items.enum.length
                 || field.items.enum.length > 64 || field.items.enum.some(value => typeof value !== "string"))) return "The list choices are not correct."
         if (field.minimum !== undefined && field.maximum !== undefined && field.minimum > field.maximum) return "A setting range is not correct."
-        if (field["x-vlc-visibleWhen"] !== undefined) {
-            var condition = field["x-vlc-visibleWhen"]
+        if (field["x-hakone-visibleWhen"] !== undefined) {
+            var condition = field["x-hakone-visibleWhen"]
             if (!record(condition) || !own(schema.properties, condition.field) || fieldSecret(schema.properties[condition.field]) || !own(condition, "equals") || Object.keys(condition).some(key => !["field", "equals"].includes(key))) return "A settings condition is not correct."
         }
     }
@@ -250,8 +250,8 @@ function fieldError(field, value, required) {
         // Only fixed host validators run in QML; package patterns are never
         // compiled as JavaScript regular expressions.
         if ((field.format === "language" || field.pattern === "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$") && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(value)) return "Enter a correct language tag."
-        if (field["x-vlc-control"] === "color" && !/^#[0-9a-fA-F]{6}$/.test(value)) return "Enter a color such as #224488."
-        if ((field.format === "uri" || field["x-vlc-control"] === "url") && value && !/^https?:\/\/[^\s/]+(?:[/?#][^\s]*)?$/.test(value)) return "Enter an HTTP or HTTPS URL."
+        if (field["x-hakone-control"] === "color" && !/^#[0-9a-fA-F]{6}$/.test(value)) return "Enter a color such as #224488."
+        if ((field.format === "uri" || field["x-hakone-control"] === "url") && value && !/^https?:\/\/[^\s/]+(?:[/?#][^\s]*)?$/.test(value)) return "Enter an HTTP or HTTPS URL."
     }
     if (field.type === "array") {
         if (!Array.isArray(value) || value.length > Math.min(64, field.maxItems === undefined ? 64 : field.maxItems)

@@ -856,6 +856,8 @@ bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
 }
 bool PackageStore::settings(const QString& id, QJsonObject* output, quint64* revision, QString* error) const
 {
+    InstalledPackage package;
+    if (!installed(id, &package, error)) return false;
     QJsonObject state;
     if (!loadState(id, &state, error)) return false;
     const auto current = state.value("current").toObject();
@@ -903,7 +905,7 @@ bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, 
         if (!schema.open(QIODevice::ReadOnly)) return fail(error, QStringLiteral("The app cannot examine the protected settings fields."));
         const auto properties = QJsonDocument::fromJson(schema.readAll()).object().value("properties").toObject();
         for (auto it = properties.begin(); it != properties.end(); ++it)
-            if (it.value().toObject().value("x-vlc-secret").toBool()) secretFields.insert(it.key());
+            if (it.value().toObject().value("x-hakone-secret").toBool()) secretFields.insert(it.key());
     }
     if (settings.contains("_credentials")) {
         if (!settings.value("_credentials").isObject())

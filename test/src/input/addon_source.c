@@ -31,7 +31,7 @@ static char *scope_strdup(const char *value)
 #undef calloc
 #undef strdup
 
-static const char source_uri[] = "vlc-addon-source:v1:admitted";
+static const char source_uri[] = "hakone-addon-source:v1:admitted";
 static const char proxy_uri[] = "http://127.0.0.1:9000/token/resource";
 enum mode { INLINE, PENDING, ERROR, CHANGE_URI, CHANGE_ITEM_POLICY, CHANGE_OBJECT_POLICY, INTERRUPT, ASYNC };
 struct fixture {
@@ -78,7 +78,7 @@ static int dispatch(void *opaque, vlc_source_job_t *job)
     switch (state->mode) {
         case ERROR: return VLC_EGENERIC;
         case PENDING: return VLC_SUCCESS;
-        case CHANGE_URI: input_item_SetURI(state->item, "vlc-addon-source:v1:changed"); break;
+        case CHANGE_URI: input_item_SetURI(state->item, "hakone-addon-source:v1:changed"); break;
         case CHANGE_ITEM_POLICY:
             assert(vlc_input_policy_AttachItem(state->item, state->policy) != VLC_SUCCESS); break;
         case CHANGE_OBJECT_POLICY:
@@ -171,12 +171,15 @@ static void admission_and_failure_cases(void)
 static void native_gate_and_bounds(void)
 {
     struct fixture state; init(&state, INLINE, true); char *output = (char *)1;
+    assert(input_addon_source_IsURI("HAKONE-ADDON-SOURCE:v1:x"));
     assert(input_addon_source_IsURI("VLC-ADDON-SOURCE:v1:x"));
     assert(!input_addon_source_IsURI("https://example.invalid"));
     assert(input_addon_source_Resolve(&state.scope, state.object, state.item,
         source_uri, false, VLC_TICK_FROM_SEC(1), &output) == VLC_EINVAL && output == NULL);
     assert(input_addon_source_Resolve(&state.scope, state.object, state.item,
-        "VLC-ADDON-SOURCE:v1:admitted", true, VLC_TICK_FROM_SEC(1), &output) == VLC_EINVAL);
+        "HAKONE-ADDON-SOURCE:v1:admitted", true, VLC_TICK_FROM_SEC(1), &output) == VLC_EINVAL);
+    assert(input_addon_source_Resolve(&state.scope, state.object, state.item,
+        "vlc-addon-source:v1:admitted", true, VLC_TICK_FROM_SEC(1), &output) == VLC_EINVAL);
     assert(resolve(&state, 0, &output) == VLC_EINVAL);
     assert(resolve(&state, VLC_TICK_FROM_SEC(10) + 1, &output) == VLC_EINVAL);
     vlc_object_delete(state.object);

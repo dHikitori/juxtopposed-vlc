@@ -1,6 +1,6 @@
 [package]
-name = "vlc-addon-tvmaze"
-version = "0.1.0"
+name = "hakone-addon-tvmaze"
+version = "0.1.1"
 edition = "2021"
 license = "GPL-2.0-or-later"
 publish = false

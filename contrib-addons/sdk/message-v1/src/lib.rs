@@ -285,9 +285,9 @@ impl<T> Pending<T> {
 macro_rules! export_addon {
     ($state:ty, $constructor:expr) => {
         #[cfg(target_arch = "wasm32")]
-        mod vlc_message_exports {
+        mod hakone_message_exports {
             use super::*;
-            #[link(wasm_import_module = "vlc")]
+            #[link(wasm_import_module = "hakone")]
             unsafe extern "C" {
                 fn host_send(pointer: i32, length: i32) -> i32;
             }
@@ -296,14 +296,14 @@ macro_rules! export_addon {
                     std::cell::RefCell::new($crate::Guest::new($constructor));
             }
             #[no_mangle]
-            pub extern "C" fn vlc_alloc(length: i32) -> i32 {
+            pub extern "C" fn hakone_alloc(length: i32) -> i32 {
                 if length <= 0 {
                     return 0;
                 }
                 GUEST.with(|guest| guest.borrow_mut().buffers.allocate(length as usize)) as i32
             }
             #[no_mangle]
-            pub extern "C" fn vlc_dealloc(pointer: i32, length: i32) {
+            pub extern "C" fn hakone_dealloc(pointer: i32, length: i32) {
                 if length <= 0 {
                     return;
                 }
@@ -315,7 +315,7 @@ macro_rules! export_addon {
                 });
             }
             #[no_mangle]
-            pub extern "C" fn vlc_dispatch(pointer: i32, length: i32) {
+            pub extern "C" fn hakone_dispatch(pointer: i32, length: i32) {
                 let outcome = GUEST.with(|guest| {
                     guest.borrow_mut().dispatch(
                         pointer as u32 as usize,

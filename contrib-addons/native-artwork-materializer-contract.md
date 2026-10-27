@@ -4,7 +4,7 @@
 
 ## Authority
 
-The adapter accepts a pending `vlc_metadata_job_t`. It reads the original artwork field from the job's immutable native item copy. It accepts an initial HTTP or HTTPS address only. It refuses a private item policy and a case-insensitive `vlc-addon-source:` item URI before file or network I/O. It has no QML method and no worker message.
+The adapter accepts a pending `vlc_metadata_job_t`. It reads the original artwork field from the job's immutable native item copy. It accepts an initial HTTP or HTTPS address only. It refuses a private item policy and a case-insensitive `hakone-addon-source:` item URI before file or network I/O. It has no QML method and no worker message.
 
 A provider result cannot enter this route. All add-on artwork claims must use the package's image broker, even when the target is an ordinary native item. A caller must not create a new native request from an add-on claim to bypass this rule.
 

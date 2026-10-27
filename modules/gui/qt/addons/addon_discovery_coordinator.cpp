@@ -293,7 +293,7 @@ QVariantMap AddonDiscoveryCoordinator::queueReference(const QString& item) const
 {
     const auto found = m_handles.constFind(item);
     if (found == m_handles.cend() || found->kind != QLatin1String("media") || !current(*found)) return {};
-    return {{QStringLiteral("format"), QStringLiteral("vlc-addon-source-v1")}, {QStringLiteral("source"), found->source},
+    return {{QStringLiteral("format"), QStringLiteral("hakone-addon-source-v1")}, {QStringLiteral("source"), found->source},
         {QStringLiteral("itemId"), found->item}, {QStringLiteral("accountReference"), found->account},
         {QStringLiteral("snapshot"), QVariantMap{{QStringLiteral("title"), found->display.value(QStringLiteral("title"))},
             {QStringLiteral("mediaKind"), found->display.value(QStringLiteral("mediaKind"))}}}};
@@ -309,7 +309,7 @@ QString AddonDiscoveryCoordinator::resolve(const QString& item, const QString& i
 QString AddonDiscoveryCoordinator::resolveQueued(const QVariantMap& reference, const QString& intent,
                                                 const QString& view, quint64 generation)
 {
-    if (reference.value(QStringLiteral("format")).toString() != QLatin1String("vlc-addon-source-v1"))
+    if (reference.value(QStringLiteral("format")).toString() != QLatin1String("hakone-addon-source-v1"))
         return rejected(view, generation, QStringLiteral("error"), tr("This saved discovery reference is invalid."));
     return resolveStable(reference.value(QStringLiteral("source")).toString(), reference.value(QStringLiteral("itemId")).toString(),
         reference.value(QStringLiteral("accountReference")).toString(), intent, view, generation);

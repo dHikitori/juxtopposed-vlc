@@ -19,7 +19,7 @@ static bool same_string(const char *a, const char *b)
 static bool restricted_locked(input_item_t *item)
 {
     return item_owner(item)->input_policy != NULL
-        || (item->psz_uri != NULL && !strncasecmp(item->psz_uri, "vlc-addon-source:", 17));
+        || vlc_input_policy_IsAddonSourceURI(item->psz_uri);
 }
 static bool current_locked(input_item_t *item)
 {

@@ -101,7 +101,7 @@ static libvlc_int_t *instance_new(void)
 }
 static vlc_source_job_t *job_new(vlc_source_backend_t *backend, struct state *state)
 {
-    const struct vlc_source_request request = {"vlc-addon-source:v1:admitted", 1};
+    const struct vlc_source_request request = {"hakone-addon-source:v1:admitted", 1};
     vlc_source_job_t *job = vlc_source_job_New(backend, &request, ended, state);
     assert(job != NULL);
     assert(vlc_source_job_Start(job) == VLC_SUCCESS);

@@ -118,7 +118,7 @@ ColumnLayout {
             resetGeneration: root.resetGeneration
             validationError: root.fieldErrors[modelData] || ""
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-            visible: !definition["x-vlc-visibleWhen"] || root.draftValues[definition["x-vlc-visibleWhen"].field] === definition["x-vlc-visibleWhen"].equals
+            visible: !definition["x-hakone-visibleWhen"] || root.draftValues[definition["x-hakone-visibleWhen"].field] === definition["x-hakone-visibleWhen"].equals
             onValueEdited: value => root.setValue(fieldName, value)
             onSecretEdited: (operation, value, sessionOnly) => root.editSecret(fieldName, operation, value, sessionOnly)
             onPickerRequested: (name, kind) => root.pickerRequested(name, kind)

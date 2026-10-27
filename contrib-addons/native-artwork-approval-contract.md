@@ -14,7 +14,7 @@ The normal Qt module build and all nine native consumer cases pass. They cover t
 
 An input item is restricted when it has a private input policy. A revoked policy does not remove this restriction.
 
-An item with a `vlc-addon-source:` URI is also restricted before the native source bootstrap attaches its policy. The URI comparison must ignore ASCII letter case. An imported or serialized source item must not cause an early image load.
+An item with a `hakone-addon-source:` URI is also restricted before the native source bootstrap attaches its policy. The URI comparison must ignore ASCII letter case. An imported or serialized source item must not cause an early image load.
 
 Ordinary native media keeps its existing embedded artwork behavior. Its native remote asset adapter must obey the user's network preference. Add-on assets use the separate public HTTPS policy.
 

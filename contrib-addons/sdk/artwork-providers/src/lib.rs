@@ -4,7 +4,7 @@
 pub use serde_json;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-pub use vlc_addon_message_v1 as message_v1;
+pub use hakone_addon_message_v1 as message_v1;
 mod musicbrainz;
 
 pub const MAX_INPUT: usize = message_v1::MAX_MESSAGE;

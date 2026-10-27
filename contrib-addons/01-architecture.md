@@ -131,7 +131,7 @@ installed version -> staged update -> activation transaction -> new active versi
 
 The manager stores one state for package installation and separate health/setup/availability states for each contribution. “Installed” and “active” are different. A provider may be installed but unconfigured; a theme may remain usable when an optional discovery contribution is unavailable.
 
-Activation negotiates contracts, validates all required resources, establishes grants and starts a worker only on demand. Network-dependent health is not required to open VLC. Views/providers start lazily; inactive sources have no polling loop. Long sessions need an explicit background grant. Updates, disable and uninstall quiesce contributions, cancel jobs, revoke handles, remove UI registrations and stop workers. The built-in home, dialogs and visualizer remain available throughout recovery.
+Activation negotiates contracts, validates all required resources, establishes grants and starts a worker only on demand. Network-dependent health is not required to open Hakone. Views/providers start lazily; inactive sources have no polling loop. Long sessions need an explicit background grant. Updates, disable and uninstall quiesce contributions, cancel jobs, revoke handles, remove UI registrations and stop workers. The built-in home, dialogs and visualizer remain available throughout recovery.
 
 Use bounded restart backoff and a visible error card. Three crashes in five minutes is an initial quarantine policy, adjustable after measurement. Safe mode starts the core interface with all third-party workers and themes disabled, accessible independently of replacement routes. Store recovery choices in core-owned preferences.
 
@@ -139,7 +139,7 @@ Initial budgets for the prototype: 64 MiB Wasm linear memory per worker, 1 MiB m
 
 ## Versioning and compatibility
 
-Keep four versions separate: manifest format, message ABI, individual feature contracts and package release. A fifth value, the VLC application version, may constrain compatibility but is not the extension API number.
+Keep four versions separate: manifest format, message ABI, individual feature contracts and package release. A fifth value, the Hakone application version, may constrain compatibility but is not the extension API number.
 
 At activation, intersect required contract ranges with host support and explicit feature flags. Unsupported required contracts prevent activation with an explanation; unsupported optional contracts disable only their declared dependent contributions. Unknown fields are rejected unless placed in a documented extension namespace. Unsupported enum values never silently become a different action.
 

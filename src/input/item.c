@@ -590,7 +590,7 @@ vlc_input_policy_t *vlc_input_policy_HoldItem(input_item_t *item)
 }
 vlc_input_policy_t *vlc_input_policy_HoldSourceItem(input_item_t *item, const char *source)
 {
-    if (item == NULL || source == NULL || strnlen(source, 12001) > 12000 || strncmp(source, "vlc-addon-source:v1:", 20)) return NULL;
+    if (item == NULL || source == NULL || strnlen(source, 12001) > 12000 || strncmp(source, "hakone-addon-source:v1:", sizeof("hakone-addon-source:v1:") - 1)) return NULL;
     vlc_input_policy_t *candidate = vlc_input_policy_NewProxy(0, NULL, source, false);
     if (candidate == NULL) return NULL;
     vlc_mutex_lock(&item->lock);

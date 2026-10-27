@@ -298,7 +298,7 @@ private slots:
         };
         serviceBackend.cancelArtwork = [&](const QString& id) { assets.cancel(id); };
         AddonMetadataService service(serviceBackend); auto* backend = service.holdCoreBackend();
-        auto* item = input_item_New("vlc-addon-source:v1:asset", "Source"); QVERIFY(item);
+        auto* item = input_item_New("hakone-addon-source:v1:asset", "Source"); QVERIFY(item);
         input_item_SetArtURL(item, "http://127.0.0.1/unapproved.png");
         const auto cleanup = qScopeGuard([&] { input_item_Release(item); vlc_metadata_backend_Release(backend); });
         const char* fields[]{"description", "artwork"};

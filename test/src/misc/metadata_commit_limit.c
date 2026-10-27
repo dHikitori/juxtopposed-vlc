@@ -62,7 +62,7 @@ static void artwork_edits_after_preparation_refuse_every_field(void)
 {
     for (unsigned mode = 0; mode < 3; ++mode) {
         struct fixture fixture; init(&fixture);
-        input_item_SetURI(fixture.item, "vlc-addon-source:v1:asset");
+        input_item_SetURI(fixture.item, "hakone-addon-source:v1:asset");
         input_item_SetArtURL(fixture.item, "https://source.example.org/unapproved.png"); start(&fixture);
         input_item_t *result = input_item_Copy(vlc_metadata_job_GetRequest(fixture.job)->item); assert(result != NULL);
         assert(vlc_artwork_item_SetApprovedURI(result, "file:///broker/image.png") == VLC_SUCCESS);

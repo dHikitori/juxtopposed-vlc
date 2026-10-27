@@ -103,7 +103,7 @@ struct Source {
             {"settings",QJsonObject{{"version",1},{"schema","schema.json"},{"accountFields",QJsonArray{"username"}}}}};
         const QMap<QString,QByteArray> files{{"addon.json",QJsonDocument(manifest).toJson()},{"LICENSE","Test license"},
             {"worker.wasm",QByteArray::fromHex("0061736d01000000")},
-            {"schema.json",R"({"type":"object","properties":{"apiKey":{"type":"string","x-vlc-secret":true,"minLength":1},"language":{"type":"string","default":"en"},"username":{"type":"string","default":"alice"}},"required":["apiKey"],"additionalProperties":false})"}};
+            {"schema.json",R"({"type":"object","properties":{"apiKey":{"type":"string","x-hakone-secret":true,"minLength":1},"language":{"type":"string","default":"en"},"username":{"type":"string","default":"alice"}},"required":["apiKey"],"additionalProperties":false})"}};
         for (auto it=files.begin(); it!=files.end(); ++it) { QFile file(package.filePath(it.key())); if (!file.open(QIODevice::WriteOnly) || file.write(it.value())!=it.value().size()) return false; }
         return manager.installLocalPackage(package.path(),true) && replace(QStringLiteral("first-test-key")) && manager.setEnabled(id,true);
     }
@@ -111,7 +111,7 @@ struct Source {
         {{"apiKey",QVariantMap{{"operation","replace"},{"value",key},{"sessionOnly",true}}}}); }
     QVariantMap reference(const QString& item = QStringLiteral("item-1")) const {
         const auto sources = manager.contributionsOfType(QStringLiteral("discovery.source"),true);
-        return {{"format","vlc-addon-source-v1"},{"source",QString(id+QStringLiteral("/source"))},{"itemId",item},
+        return {{"format","hakone-addon-source-v1"},{"source",QString(id+QStringLiteral("/source"))},{"itemId",item},
             {"accountReference",sources.isEmpty()?QString():sources.first().toMap().value("accountReference").toString()},
             {"snapshot",QVariantMap{{"title","Source item"},{"mediaKind","audio"}}}};
     }
@@ -269,7 +269,7 @@ private slots:
         QCOMPARE(calls,0); QVERIFY(!store.snapshot(target).available); dispatch.run(); QCOMPARE(calls,1); QVERIFY(saved);
         QVERIFY(!store.snapshot(target).available); const auto members=library.members(id); QCOMPARE(members.size(),size_t(3));
         QCOMPARE(members[0],admissions->uriForReference(selected[0].toMap()).toStdString()); QCOMPARE(members[2],members[0]);
-        QVERIFY(members[0].find("vlc-addon-source:v1:")==0); QVERIFY(members[0].find("https://")==std::string::npos);
+        QVERIFY(members[0].find("hakone-addon-source:v1:")==0); QVERIFY(members[0].find("https://")==std::string::npos);
     }
     void coldSnapshotStartsTheNativeDatabase() {
         Library library(false); QVERIFY(library.available());

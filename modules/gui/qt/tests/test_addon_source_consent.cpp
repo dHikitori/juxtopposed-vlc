@@ -30,7 +30,7 @@ class TestAddonSourceConsent : public QObject
             AddonSourceConsent::Options result; result.now=[this] { return now; }; result.ticketLifetimeMs=10; result.intentLifetimeMs=10; return result;
         }
         QString uri(const QString& item=QStringLiteral("station")) {
-            const QVariantMap ref{{"format","vlc-addon-source-v1"},{"source",binding.contribution},{"accountReference",binding.accountReference},
+            const QVariantMap ref{{"format","hakone-addon-source-v1"},{"source",binding.contribution},{"accountReference",binding.accountReference},
                 {"itemId",item},{"snapshot",QVariantMap{{"title","Station"},{"mediaKind","audio"}}}};
             QStringList values; return admissions.admit({ref},&values)?values.first():QString();
         }

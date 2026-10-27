@@ -2,7 +2,7 @@
 
 ## Public components, private implementation
 
-Expose a versioned `vlc.ui` vocabulary of host-rendered components. The author supplies a declarative view document, typed state and registered command IDs. The application maps these to its own redesign controls, theme tokens, accessibility and layout behavior. The author does not import internal QML files or get the application's context objects.
+Expose a versioned `hakone.ui` vocabulary of host-rendered components. The author supplies a declarative view document, typed state and registered command IDs. The application maps these to its own redesign controls, theme tokens, accessibility and layout behavior. The author does not import internal QML files or get the application's context objects.
 
 This also solves the theme requirement: an extension's primary button and media card follow the effective theme automatically. Existing `RedesignButton.qml` and related controls are useful implementations, but their filenames/properties are not the SDK.
 
@@ -75,7 +75,7 @@ New hooks require application work and a documented contract. Add-ons cannot cre
 
 Additive hooks have host-defined groups and optional relative ordering hints within that group. User ordering takes precedence. Otherwise use a stable contribution-ID tie-breaker; do not let add-ons request a universal “highest z-order” or reorder core controls. Each hook can cap visible contributions and use an overflow affordance.
 
-The initial release can expose a subset of this table. A package checks optional hook availability and hides the dependent feature if absent. Required missing hooks prevent that contribution from activating. Announce hook availability through negotiation rather than letting authors infer it from VLC version strings.
+The initial release can expose a subset of this table. A package checks optional hook availability and hides the dependent feature if absent. Required missing hooks prevent that contribution from activating. Announce hook availability through negotiation rather than letting authors infer it from Hakone version strings.
 
 ## New screens and modals
 
@@ -158,22 +158,22 @@ Example settings data schema:
       "uniqueItems": true,
       "maxItems": 8,
       "default": ["en"],
-      "x-vlc-control": "language-list",
-      "x-vlc-label": "settings.languages"
+      "x-hakone-control": "language-list",
+      "x-hakone-label": "settings.languages"
     },
     "apiKey": {
       "type": "string",
       "minLength": 1,
-      "x-vlc-control": "secret",
-      "x-vlc-secret": true,
-      "x-vlc-label": "settings.apiKey"
+      "x-hakone-control": "secret",
+      "x-hakone-secret": true,
+      "x-hakone-label": "settings.apiKey"
     }
   },
   "required": ["languages", "apiKey"]
 }
 ```
 
-`x-vlc-*` annotations belong to the proposed documented subset. In the host's persistent settings record, a secret is represented by a credential reference, not this input string; ordinary `settings.get` returns only presence/status. The input schema is used inside the host's protected editor and credential ingestion flow. Never send raw secret field input to an add-on's normal view-state dispatcher.
+`x-hakone-*` annotations belong to the proposed documented subset. In the host's persistent settings record, a secret is represented by a credential reference, not this input string; ordinary `settings.get` returns only presence/status. The input schema is used inside the host's protected editor and credential ingestion flow. Never send raw secret field input to an add-on's normal view-state dispatcher.
 
 An existing valid credential reference satisfies a required secret field. The protected editor has distinct keep, replace and delete operations; an unchanged masked field does not require reentry. Deleting a required credential requires an explicit disconnect/unconfigure operation, or blocks ordinary Save with a nonsecret validation message. Never echo entered secret material in validation errors. Credential creation/deletion and the settings revision commit together, so cancel/failed save cannot delete the active key or leave a dangling reference.
 

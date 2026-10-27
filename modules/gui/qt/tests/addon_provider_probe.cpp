@@ -23,7 +23,7 @@ int main(int argc, char** argv)
         QTextStream(stdout) << "Provider probe failed at " << stage << ".\n";
         app.exit(1);
     };
-    const QString package = QStringLiteral("org.videolan.thesubtitledb");
+    const QString package = QStringLiteral("org.hakone.thesubtitledb");
     if (!manager.installLocalPackage(app.arguments()[1], true)) {
         QTextStream(stdout) << "Package setup failed: " << manager.errorMessage() << '\n'; return 1;
     }

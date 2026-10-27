@@ -158,7 +158,8 @@ void MLFileArtwork::clear()
 
 void MLFileArtwork::request(const QUrl& url, bool generateVideo, const QString& fallback)
 {
-    if (url.scheme().compare(QLatin1String("vlc-addon-source"), Qt::CaseInsensitive) == 0) {
+    if (url.scheme().compare(QLatin1String("hakone-addon-source"), Qt::CaseInsensitive) == 0
+        || url.scheme().compare(QLatin1String("vlc-addon-source"), Qt::CaseInsensitive) == 0) {
         emit artworkChanged(url, {}); return;
     }
     if (!m_store || (url.scheme() != "file" && url.scheme() != "http" && url.scheme() != "https")) return;

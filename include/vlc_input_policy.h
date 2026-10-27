@@ -7,6 +7,15 @@ extern "C" {
 #endif
 
 typedef struct vlc_input_policy vlc_input_policy_t;
+/** Recognize source markers before a native policy is attached. The old name
+ * remains restricted; only the Hakone name can receive source authority.
+ */
+static inline bool vlc_input_policy_IsAddonSourceURI(const char *uri)
+{
+    return uri != NULL
+        && (!strncasecmp(uri, "hakone-addon-source:", sizeof("hakone-addon-source:") - 1)
+            || !strncasecmp(uri, "vlc-addon-source:", sizeof("vlc-addon-source:") - 1));
+}
 struct vlc_input_policy_operations {
     /** These callbacks can run on any input or network thread. They must use
      * only host-owned policy data. Do not call Qt or wait for a UI event.

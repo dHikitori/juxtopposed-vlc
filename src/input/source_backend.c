@@ -141,7 +141,7 @@ vlc_source_job_t *vlc_source_job_New(vlc_source_backend_t *backend, const struct
                                    vlc_source_ended_cb ended, void *userdata)
 {
     if (backend == NULL || request == NULL || ended == NULL || request->source_uri == NULL
-        || request->input_generation == 0 || strncmp(request->source_uri, "vlc-addon-source:v1:", 20) != 0
+        || request->input_generation == 0 || strncmp(request->source_uri, "hakone-addon-source:v1:", sizeof("hakone-addon-source:v1:") - 1) != 0
         || strnlen(request->source_uri, MAX_SOURCE_URI + 1) > MAX_SOURCE_URI) return NULL;
     vlc_source_job_t *job = calloc(1, sizeof(*job));
     if (job == NULL) return NULL;

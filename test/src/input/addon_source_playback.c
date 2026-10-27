@@ -11,7 +11,7 @@
 #include <vlc_url.h>
 #include <stdatomic.h>
 
-static const char source_uri[] = "vlc-addon-source:v1:native_playback_fixture";
+static const char source_uri[] = "hakone-addon-source:v1:native_playback_fixture";
 static const char proxy_uri[] = "http://127.0.0.1:9/fixture_token/resource";
 static const char mock_uri[] = "mock://video_track_count=0;audio_track_count=1;length=60000000";
 static const char thumbnail_uri[] = "mock://video_track_count=1;audio_track_count=0;length=5000000;video_chroma=ARGB";

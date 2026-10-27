@@ -20,6 +20,24 @@ bool fail(QString* error, const QString& message)
     if (error) *error = message;
     return false;
 }
+bool settingsAnnotations(const QJsonValue& value, unsigned depth, unsigned& nodes, QString* error)
+{
+    if (depth > 32 || nodes == 0)
+        return fail(error, QStringLiteral("The settings schema exceeds the annotation scan limit."));
+    --nodes;
+    if (value.isObject()) {
+        const auto object = value.toObject();
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            if (it.key().startsWith(QLatin1String("x-vlc-")))
+                return fail(error, QStringLiteral("Use x-hakone settings annotations."));
+            if (!settingsAnnotations(it.value(), depth + 1, nodes, error)) return false;
+        }
+    } else if (value.isArray()) {
+        for (const auto& child : value.toArray())
+            if (!settingsAnnotations(child, depth + 1, nodes, error)) return false;
+    }
+    return true;
+}
 bool keys(const QJsonObject& object, const QSet<QString>& allowed, QString* error, const QString& context)
 {
     for (auto it = object.begin(); it != object.end(); ++it)
@@ -435,10 +453,12 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
         const auto schema = QJsonDocument::fromJson(data.value(manifest.settingsSchema),&schemaError);
         if (schemaError.error != QJsonParseError::NoError || !schema.isObject() || schema.object().value("type") != QStringLiteral("object"))
             return fail(error,QStringLiteral("The settings schema is not correct."));
+        unsigned annotationNodes = 8192;
+        if (!settingsAnnotations(schema.object(), 0, annotationNodes, error)) return false;
         const auto properties = schema.object().value("properties").toObject();
         for (const auto& name : manifest.accountFields) {
             const auto property = properties.value(name).toObject();
-            if (property.isEmpty() || property.value("x-vlc-secret").toBool() || property.value("writeOnly").toBool()
+            if (property.isEmpty() || property.value("x-hakone-secret").toBool() || property.value("writeOnly").toBool()
                 || property.value("format").toString() == QLatin1String("password")
                 || !QStringList{QStringLiteral("string"), QStringLiteral("number"), QStringLiteral("integer"), QStringLiteral("boolean")}
                     .contains(property.value("type").toString()))
@@ -446,7 +466,7 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
         }
         for (const auto& binding : manifest.permissionScope("credentials.use").value("bindings").toArray()) {
             const auto property = properties.value(binding.toObject().value("field").toString()).toObject();
-            if (!property.value("x-vlc-secret").toBool() || property.value("type") != QStringLiteral("string"))
+            if (!property.value("x-hakone-secret").toBool() || property.value("type") != QStringLiteral("string"))
                 return fail(error,QStringLiteral("The credential binding does not refer to a secret field."));
         }
     }

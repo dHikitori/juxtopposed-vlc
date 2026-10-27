@@ -7,12 +7,13 @@ using namespace vlc::addons;
 class TestAddonQueueTransactions : public QObject
 {
     Q_OBJECT
-    static QVariantMap reference() { return {{"format", "vlc-addon-source-v1"}, {"source", "org.example.radio/source"},
+    static QVariantMap reference() { return {{"format", "hakone-addon-source-v1"}, {"source", "org.example.radio/source"},
         {"itemId", "station-42"}, {"accountReference", "default"}, {"snapshot", QVariantMap{{"title", "Station"}, {"mediaKind", "audio"}}}}; }
 private slots:
     void validatesOnlySourceReferences() {
         const auto ref = reference(); QVERIFY(AddonQueueTransactions::validReference(ref));
         auto bad = ref; bad.insert("url", "https://private.example/stream"); QVERIFY(!AddonQueueTransactions::validReference(bad));
+        bad = ref; bad.insert("format", "vlc-addon-source-v1"); QVERIFY(!AddonQueueTransactions::validReference(bad));
         bad = ref; bad.insert("options", QStringList{"sout"}); QVERIFY(!AddonQueueTransactions::validReference(bad));
         bad = ref; bad.insert("source", "../../core"); QVERIFY(!AddonQueueTransactions::validReference(bad));
     }

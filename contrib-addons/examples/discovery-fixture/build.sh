@@ -3,6 +3,8 @@
 set -eu
 cd "$(dirname "$0")"
 export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
+export RUSTUP_AUTO_INSTALL=0
+target_directory="${CARGO_TARGET_DIR:-target}"
 cargo build --locked --release --target wasm32-unknown-unknown
 mkdir -p dist
-cp target/wasm32-unknown-unknown/release/vlc_addon_discovery_fixture.wasm dist/addon.wasm
+cp "$target_directory"/wasm32-unknown-unknown/release/hakone_addon_discovery_fixture.wasm dist/addon.wasm

@@ -76,7 +76,7 @@ int main(void)
                                     true, false) == NULL);
     assert(lookups == 2 && opens == 2 && creates == 1);
     vlc_input_policy_t *policy = vlc_input_policy_NewProxy(12345,
-        "/admitted/", "vlc-addon-source://example/item", false);
+        "/admitted/", "hakone-addon-source://example/item", false);
     assert(policy != NULL);
     assert(vlc_input_policy_AttachObject(owner, policy) == VLC_SUCCESS);
     vlc_input_policy_Release(policy);

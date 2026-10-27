@@ -24,7 +24,7 @@ struct AddonVisualizerResources::Shared {
 };
 namespace {
 bool secret(const QJsonObject& field)
-{ return field.value("x-vlc-secret").toBool() || field.value("writeOnly").toBool() || field.value("format").toString() == QLatin1String("password"); }
+{ return field.value("x-hakone-secret").toBool() || field.value("writeOnly").toBool() || field.value("format").toString() == QLatin1String("password"); }
 bool valueValid(const QJsonValue& value, const QJsonObject& field)
 {
     const auto type = field.value("type").toString();

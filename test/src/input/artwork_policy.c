@@ -13,7 +13,7 @@
 static const char artwork[] = "file:///host-cache/approved.png";
 static input_item_t *source(void)
 {
-    input_item_t *item = input_item_New("vlc-addon-source:v1:opaque", "Source"); assert(item != NULL); return item;
+    input_item_t *item = input_item_New("hakone-addon-source:v1:opaque", "Source"); assert(item != NULL); return item;
 }
 static void uri(input_item_t *item, const char *expected)
 {
@@ -31,7 +31,8 @@ static void ordinary_native_behavior(void)
 }
 static void raw_source_uris_and_imports(void)
 {
-    const char *sources[] = {"vlc-addon-source:v1:opaque", "VLC-ADDON-SOURCE:v1:opaque", "VlC-AdDoN-SoUrCe:future:opaque"};
+    const char *sources[] = {"hakone-addon-source:v1:opaque", "HAKONE-ADDON-SOURCE:v1:opaque", "HaKoNe-AdDoN-SoUrCe:future:opaque",
+        "vlc-addon-source:v1:opaque", "VLC-ADDON-SOURCE:future:opaque"};
     const char *values[] = {"http://127.0.0.1/private.png", "https://public.example.test/cover.png", "file:///home/private.png", "attachment://cover.png"};
     for (size_t i = 0; i < ARRAY_SIZE(sources); ++i) {
         input_item_t *item = input_item_New(sources[i], "Imported source"); assert(item != NULL);
@@ -74,7 +75,7 @@ static void same_value_aba_and_source_changes(void)
     assert(vlc_artwork_item_SetApprovedURI(item, artwork) == VLC_SUCCESS);
     input_item_SetArtURL(item, "file:///other.png"); input_item_SetArtURL(item, artwork); uri(item, NULL);
     assert(vlc_artwork_item_SetApprovedURI(item, artwork) == VLC_SUCCESS);
-    input_item_SetURI(item, "vlc-addon-source:v1:different"); uri(item, NULL);
+    input_item_SetURI(item, "hakone-addon-source:v1:different"); uri(item, NULL);
     copy = input_item_Copy(item); assert(copy != NULL); uri(copy, NULL); input_item_Release(copy); input_item_Release(item);
 }
 static void policy_change_and_revocation(void)

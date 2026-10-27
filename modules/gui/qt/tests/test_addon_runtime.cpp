@@ -34,7 +34,7 @@ class TestAddonRuntime : public QObject
 private slots:
     void accountReferencesBindCredentialsButNotDisplaySettingsOrReleaseBytes() {
         QTemporaryDir storage, update; AddonManager manager(storage.path());
-        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
         QVERIFY(manager.installLocalPackage(reference(), true));
         const auto account = [&] {
             return manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap()
@@ -139,7 +139,7 @@ private slots:
     void reviewCapturesPackageAndCancellationDoesNotInstall() {
         QTemporaryDir storage; AddonManager manager(storage.path());
         QVERIFY(manager.stageLocalPackage(reference()));
-        QCOMPARE(manager.pendingPackage().value("id").toString(), QStringLiteral("org.videolan.thesubtitledb"));
+        QCOMPARE(manager.pendingPackage().value("id").toString(), QStringLiteral("org.hakone.thesubtitledb"));
         QVERIFY(manager.packages().isEmpty());
         manager.discardPendingPackage(); QVERIFY(manager.pendingPackage().isEmpty());
         QVERIFY(!manager.approvePendingPackage()); QVERIFY(manager.packages().isEmpty());
@@ -178,7 +178,7 @@ private slots:
     void secretsStayOutOfConfigurationAndWorkerState() {
         QTemporaryDir storage; AddonManager manager(storage.path());
         QVERIFY2(manager.installLocalPackage(reference(), true), qPrintable(manager.errorMessage()));
-        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
         QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("unit-only-secret"))));
         QVERIFY(manager.settingsSecretStatus(id).value("apiKey").toMap().value("present").toBool());
         QVERIFY(manager.settingsSecretStatus(id).value("apiKey").toMap().value("sessionOnly").toBool());
@@ -212,7 +212,7 @@ private slots:
     }
     void capturedCredentialsCannotFollowAChangedAccountOrRelease() {
         QTemporaryDir storage; auto manager = std::make_unique<AddonManager>(storage.path());
-        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
         QVERIFY(manager->installLocalPackage(reference(), true));
         QVERIFY(manager->saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("first-unit-secret"))));
         QVERIFY(manager->setEnabled(id, true));
@@ -243,7 +243,7 @@ private slots:
     }
     void nativeAssetRequestsRejectAnExternalConfigurationChange() {
         QTemporaryDir storage; AddonManager manager(storage.path());
-        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
         QVERIFY(manager.installLocalPackage(reference(), true));
         QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("unit-secret"))));
         QVERIFY(manager.setEnabled(id, true));
@@ -261,7 +261,7 @@ private slots:
     }
     void fullRemovalRevokesAllCredentialGenerations() {
         QTemporaryDir storage; AddonManager manager(storage.path());
-        const QString id = QStringLiteral("org.videolan.thesubtitledb");
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
         QVERIFY(manager.installLocalPackage(reference(), true));
         QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("first-unit-secret"))));
         QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("second-unit-secret"))));

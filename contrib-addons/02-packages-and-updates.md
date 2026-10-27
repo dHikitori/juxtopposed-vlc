@@ -33,7 +33,7 @@ This is a proposed, illustrative manifest, not a schema consumed by today's code
   "version": "1.0.0",
   "publisher": "Example Community",
   "license": "GPL-2.0-or-later",
-  "source": "https://git.example.org/community/subtitles.git",
+  "source": "https://github.com/hakone-org/example-subtitles-addon.git",
   "api": {
     "addon": ">=1.0.0 <2.0.0",
     "contracts": {

@@ -7,7 +7,7 @@ The terms in this document apply to computer processes and applications.
 
 | Technical noun | Meaning |
 | --- | --- |
-| add-on | A package that adds a declared function to VLC. |
+| add-on | A package that adds a declared function to Hakone. |
 | contribution | One function that an add-on declares. |
 | provider | A contribution that supplies metadata or finds media. |
 | theme | Data that sets the permitted colors, shapes, and effects of the interface. |
@@ -15,7 +15,7 @@ The terms in this document apply to computer processes and applications.
 | credential | Secret data that permits access to an account or a service. |
 | API key | A credential that an API uses. |
 | session | The current operation period. Session data does not continue after the app stops. |
-| play queue | The ordered media items that VLC can play. |
+| play queue | The ordered media items that Hakone can play. |
 | schema | Data that specifies permitted fields, types, and limits. |
 | binding | A reference to a field in a declared state object. |
 | UI hook | An interface location that permits a declared contribution. |

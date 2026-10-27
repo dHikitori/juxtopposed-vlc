@@ -39,7 +39,7 @@ impl Runtime {
         let engine = Engine::new(&config)?;
         let module = Module::from_binary(&engine, bytes).context("invalid portable Wasm")?;
         for import in module.imports() {
-            if import.module() != "vlc" || import.name() != "host_send" {
+            if import.module() != "hakone" || import.name() != "host_send" {
                 bail!("unsupported module import");
             }
         }
@@ -53,7 +53,7 @@ impl Runtime {
         store.limiter(|state| &mut state.limits);
         store.set_fuel(DISPATCH_FUEL)?;
         let mut linker = Linker::new(&engine);
-        linker.func_wrap("vlc", "host_send", |mut caller: Caller<'_, State>, ptr: i32, len: i32| -> Result<i32> {
+        linker.func_wrap("hakone", "host_send", |mut caller: Caller<'_, State>, ptr: i32, len: i32| -> Result<i32> {
             let len = usize::try_from(len).context("invalid message length")?;
             let separator = usize::from(!caller.data().messages.is_empty());
             if len > MAX_MESSAGE || caller.data().messages.len() >= MAX_OUTGOING {
@@ -79,9 +79,9 @@ impl Runtime {
         // Start functions may not emit host calls before an invocation exists.
         if !store.data().messages.is_empty() { bail!("module emitted messages during instantiation"); }
         let memory = instance.get_memory(&mut store, "memory").context("missing guest memory")?;
-        let alloc = instance.get_typed_func::<i32, i32>(&mut store, "vlc_alloc")?;
-        let dealloc = instance.get_typed_func::<(i32, i32), ()>(&mut store, "vlc_dealloc")?;
-        let dispatch = instance.get_typed_func::<(i32, i32), ()>(&mut store, "vlc_dispatch")?;
+        let alloc = instance.get_typed_func::<i32, i32>(&mut store, "hakone_alloc")?;
+        let dealloc = instance.get_typed_func::<(i32, i32), ()>(&mut store, "hakone_dealloc")?;
+        let dispatch = instance.get_typed_func::<(i32, i32), ()>(&mut store, "hakone_dispatch")?;
         Ok(Self { store, memory, alloc, dealloc, dispatch })
     }
 
@@ -211,12 +211,12 @@ mod tests {
     use super::*;
     fn module(dispatch: &str, imports: &str) -> Vec<u8> {
         wat::parse_str(format!(r#"(module
-            (import "vlc" "host_send" (func $send (param i32 i32) (result i32)))
+            (import "hakone" "host_send" (func $send (param i32 i32) (result i32)))
             {imports}
             (memory (export "memory") 1 1024)
-            (func (export "vlc_alloc") (param i32) (result i32) i32.const 4096)
-            (func (export "vlc_dealloc") (param i32 i32))
-            (func (export "vlc_dispatch") (param $ptr i32) (param $len i32) {dispatch})
+            (func (export "hakone_alloc") (param i32) (result i32) i32.const 4096)
+            (func (export "hakone_dealloc") (param i32 i32))
+            (func (export "hakone_dispatch") (param $ptr i32) (param $len i32) {dispatch})
         )"#)).unwrap()
     }
     #[test]
@@ -232,12 +232,12 @@ mod tests {
         fn with_reply(bytes: &[u8]) -> Runtime {
             let encoded: String = bytes.iter().map(|byte| format!("\\{byte:02x}")).collect();
             let wasm = wat::parse_str(format!(r#"(module
-                (import "vlc" "host_send" (func $send (param i32 i32) (result i32)))
+                (import "hakone" "host_send" (func $send (param i32 i32) (result i32)))
                 (memory (export "memory") 17 1024)
                 (data (i32.const 0) "{encoded}")
-                (func (export "vlc_alloc") (param i32) (result i32) i32.const 1052672)
-                (func (export "vlc_dealloc") (param i32 i32))
-                (func (export "vlc_dispatch") (param i32 i32)
+                (func (export "hakone_alloc") (param i32) (result i32) i32.const 1052672)
+                (func (export "hakone_dealloc") (param i32 i32))
+                (func (export "hakone_dispatch") (param i32 i32)
                     i32.const 0 i32.const {} call $send drop))"#, bytes.len())).unwrap();
             Runtime::new(&wasm).unwrap()
         }
@@ -262,6 +262,17 @@ mod tests {
     #[test]
     fn rejects_ambient_wasi() {
         assert!(Runtime::new(&module("", r#"(import "wasi_snapshot_preview1" "random_get" (func))"#)).is_err());
+    }
+    #[test]
+    fn rejects_legacy_guest_imports_and_exports() {
+        assert!(Runtime::new(&module("", r#"(import "vlc" "host_send" (func (param i32 i32) (result i32)))"#)).is_err());
+        let legacy = wat::parse_str(r#"(module
+            (import "hakone" "host_send" (func (param i32 i32) (result i32)))
+            (memory (export "memory") 1 1024)
+            (func (export "vlc_alloc") (param i32) (result i32) i32.const 4096)
+            (func (export "vlc_dealloc") (param i32 i32))
+            (func (export "vlc_dispatch") (param i32 i32)))"#).unwrap();
+        assert!(Runtime::new(&legacy).is_err());
     }
     #[test]
     fn bounds_invalid_guest_pointer() {

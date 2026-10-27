@@ -21,7 +21,7 @@
 namespace vlc::addons {
 namespace {
 bool secretField(const QJsonObject& field)
-{ return field.value("x-vlc-secret").toBool() || field.value("writeOnly").toBool() || field.value("format").toString() == QLatin1String("password"); }
+{ return field.value("x-hakone-secret").toBool() || field.value("writeOnly").toBool() || field.value("format").toString() == QLatin1String("password"); }
 QJsonObject readObject(const QString& path)
 {
     QFile file(path); if (!file.open(QIODevice::ReadOnly) || file.size() > 256 * 1024) return {};

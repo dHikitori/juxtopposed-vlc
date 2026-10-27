@@ -3,7 +3,7 @@
 #![no_std]
 use core::panic::PanicInfo;
 
-#[link(wasm_import_module = "vlc")]
+#[link(wasm_import_module = "hakone")]
 unsafe extern "C" {
     fn host_send(pointer: *const u8, length: usize) -> i32;
 }
@@ -11,18 +11,18 @@ static mut INPUT: [u8; 1024 * 1024] = [0; 1024 * 1024];
 static mut OUTPUT: [u8; 512] = [0; 512];
 
 #[unsafe(no_mangle)]
-pub extern "C" fn vlc_alloc(length: usize) -> *mut u8 {
+pub extern "C" fn hakone_alloc(length: usize) -> *mut u8 {
     if length > 1024 * 1024 { core::ptr::null_mut() }
     else { core::ptr::addr_of_mut!(INPUT).cast() }
 }
 #[unsafe(no_mangle)]
-pub extern "C" fn vlc_dealloc(_: *mut u8, _: usize) {}
+pub extern "C" fn hakone_dealloc(_: *mut u8, _: usize) {}
 
 fn find(input: &[u8], pattern: &[u8]) -> Option<usize> {
     input.windows(pattern.len()).position(|part| part == pattern)
 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn vlc_dispatch(pointer: *const u8, length: usize) {
+pub unsafe extern "C" fn hakone_dispatch(pointer: *const u8, length: usize) {
     if length > 1024 * 1024 { return; }
     let input = unsafe { core::slice::from_raw_parts(pointer, length) };
     if find(input, b"\"type\":\"invoke\"").is_none() { return; }

@@ -2,10 +2,10 @@
   "formatVersion": 1,
   "id": "org.videolan.lastfm",
   "name": "Last.fm artwork",
-  "version": "0.1.0",
-  "publisher": "VLC reference add-ons",
+  "version": "0.1.1",
+  "publisher": "Hakone reference add-ons",
   "license": "GPL-2.0-or-later",
-  "source": "https://github.com/dsojevic/juxtopposed-vlc.git",
+  "source": "https://github.com/hakone-org/addon-lastfm.git",
   "api": {
     "addon": ">=1.0.0 <2.0.0",
     "contracts": {

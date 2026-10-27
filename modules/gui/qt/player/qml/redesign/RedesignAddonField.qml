@@ -21,9 +21,9 @@ ColumnLayout {
     property bool lightTheme: false
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property bool secret: Contract.fieldSecret(definition)
-    readonly property string control: definition["x-vlc-control"] || ""
-    readonly property string label: localize(definition["x-vlc-label"] || definition.title || fieldName)
-    readonly property string help: localize(definition["x-vlc-help"] || definition.description || "")
+    readonly property string control: definition["x-hakone-control"] || ""
+    readonly property string label: localize(definition["x-hakone-label"] || definition.title || fieldName)
+    readonly property string help: localize(definition["x-hakone-help"] || definition.description || "")
     readonly property var choices: definition.enum || []
     signal valueEdited(var value)
     signal secretEdited(string operation, string value, bool sessionOnly)

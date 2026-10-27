@@ -24,7 +24,7 @@ A mutex around the add-on adapter cannot give this guarantee.
 The existing `acquirePriorityAccess()` reservation cannot give this guarantee either.
 More than one priority thread can hold that reservation.
 
-## Public VLC API
+## Native host API
 
 Use a separate header, `include/vlc_addon_medialibrary.h`.
 Keep the main public media library header unchanged.
@@ -65,7 +65,7 @@ Every ID must be positive.
 The native library must validate all IDs within the transaction.
 A missing media record must cause a complete rollback.
 
-Source preparation uses the exact admitted `vlc-addon-source:v1:` URI. It creates the external record, file row, and initial title in one transaction. It reuses an existing exact record without changing its title. A later append failure can leave a reusable external record; it cannot leave a partial playlist append. Preparation starts no network or stream work.
+Source preparation uses the exact admitted `hakone-addon-source:v1:` URI. It creates the external record, file row, and initial title in one transaction. It reuses an existing exact record without changing its title. A later append failure can leave a reusable external record; it cannot leave a partial playlist append. Preparation starts no network or stream work.
 
 Use private control query values for these operations.
 The public wrappers can call the existing `vlc_ml_control()` function.

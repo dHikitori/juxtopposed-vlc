@@ -47,8 +47,8 @@ TestCase {
         backend.schema = {type: "object", additionalProperties: false,
             properties: {enabled: {type: "boolean", default: true, title: "Enabled"},
                 count: {type: "integer", minimum: 1, maximum: 9, default: 3},
-                apiKey: {type: "string", minLength: 1, "x-vlc-secret": true},
-                optionalKey: {type: "string", "x-vlc-secret": true}}, required: ["apiKey"]}
+                apiKey: {type: "string", minLength: 1, "x-hakone-secret": true},
+                optionalKey: {type: "string", "x-hakone-secret": true}}, required: ["apiKey"]}
         backend.values = {enabled: true, count: 3}
         backend.secrets = {apiKey: {present: true}, optionalKey: {present: true, sessionOnly: true}}
         backend.saveCount = 0; backend.acceptSave = true; backend.credentialPersistenceAvailable = true; backend.lastOperations = ({}); backend.lastValues = ({})
@@ -237,7 +237,7 @@ TestCase {
     }
     function test_providerSchemaSecretAnnotationsAndLanguageValidation() {
         const schema = {"$schema": "https://json-schema.org/draft/2020-12/schema", type: "object", additionalProperties: false,
-            properties: {apiKey: {type: "string", format: "password", writeOnly: true, "x-vlc-secret": true, "x-vlc-label": "settings.key", minLength: 1},
+            properties: {apiKey: {type: "string", format: "password", writeOnly: true, "x-hakone-secret": true, "x-hakone-label": "settings.key", minLength: 1},
                 language: {type: "string", default: "en", minLength: 2, maxLength: 16, pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"}}, required: ["apiKey"]}
         compare(Contract.validateSettingsSchema(schema), "")
         verify(Contract.fieldSecret(schema.properties.apiKey))
@@ -248,7 +248,7 @@ TestCase {
         settings.messages = ({})
     }
     function test_invalidSchemaBoundsAndFlagsCannotCreateEditors() {
-        for (const mutation of [{maxLength: -1}, {maxItems: 1.5}, {"x-vlc-secret": "yes"}, {title: {bind: "state.name"}}]) {
+        for (const mutation of [{maxLength: -1}, {maxItems: 1.5}, {"x-hakone-secret": "yes"}, {title: {bind: "state.name"}}]) {
             const schema = Contract.clone(backend.schema)
             schema.properties.count = Object.assign({}, schema.properties.count, mutation)
             verify(Contract.validateSettingsSchema(schema).length > 0)

@@ -70,7 +70,8 @@ private slots:
         QTemporaryDir cache; Controlled source; source.release = true; Native assets(source.backend(), cache.path(), {});
         Job normal; QVERIFY(normal.job); QVERIFY(!assets.resolve(normal.job, [](const auto&) {})); QCOMPARE(source.calls.load(), 0);
         assets.setNetworkAllowed(true);
-        for (const auto* uri : {"vlc-addon-source:v1:source", "VLC-ADDON-SOURCE:v1:imported"}) {
+        for (const auto* uri : {"hakone-addon-source:v1:source", "HAKONE-ADDON-SOURCE:v1:imported",
+                                "vlc-addon-source:v1:source", "VLC-ADDON-SOURCE:v1:imported"}) {
             Job scoped(uri); QVERIFY(!assets.resolve(scoped.job, [](const auto&) {}));
         }
         Job local("file:///private/song.flac", "file:///private/cover.png"); QVERIFY(!assets.resolve(local.job, [](const auto&) {}));
