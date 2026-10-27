@@ -3,9 +3,21 @@
 #include <QString>
 #include <memory>
 #include <string>
+#include <functional>
 
 namespace vlc::addons {
 struct StoreAuthorityState;
+struct StoreAuthorityCallback;
+class StoreAuthorityWatch final
+{
+public:
+    StoreAuthorityWatch() = default;
+    // Retain the watch until the native lease has ended or been revoked.
+    explicit operator bool() const noexcept;
+private:
+    friend class StoreAuthorityToken;
+    std::shared_ptr<StoreAuthorityCallback> m_callback;
+};
 class StorePackageRetirement final
 {
 public:
@@ -40,6 +52,11 @@ public:
     StoreAuthorityToken() = default;
     // This check has no lock, file access, or QObject call.
     bool current() const noexcept;
+    // The callback must use native state only. It must not throw, wait for Qt,
+    // or reenter this store except to read current(). A refused registration calls
+    // it before return. Keep the returned watch through the native lease.
+    StoreAuthorityWatch onInvalidated(std::function<void()> nativeCancel) const noexcept;
+    static constexpr unsigned WatchLimit = 256;
 private:
     friend class StoreAuthority;
     std::shared_ptr<const StoreAuthorityState> m_state;

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <limits>
 #include <mutex>
+#include <condition_variable>
 #include <array>
 #include <map>
 #include <string_view>
@@ -22,8 +23,68 @@ struct StoreAuthorityState {
     };
     std::mutex packageMutex;
     std::map<std::string, unsigned, PackageOrder> packages;
+    mutable std::mutex callbackMutex;
+    mutable std::condition_variable callbacksEnded;
+    mutable std::array<std::weak_ptr<StoreAuthorityCallback>, StoreAuthorityToken::WatchLimit> callbacks;
+    mutable std::atomic_uint callbackCount{0};
+    mutable unsigned callbackBatches = 0;
+};
+struct StoreAuthorityCallback {
+    struct Quota {
+        std::shared_ptr<const StoreAuthorityState> state;
+        bool counted = false;
+        ~Quota() { if (counted) state->callbackCount.fetch_sub(1, std::memory_order_release); }
+    };
+    StoreAuthorityCallback(std::shared_ptr<const StoreAuthorityState> owner, quint64 epoch, std::function<void()> callback)
+        : quota{std::move(owner), false}, revision(epoch), cancel(std::move(callback)) {}
+    void fire() noexcept {
+        if (!fired.exchange(true, std::memory_order_acq_rel)) {
+            try { cancel(); } catch (...) {}
+        }
+    }
+    // Destroy the native callback capture before its retiring quota is released.
+    Quota quota;
+    const quint64 revision;
+    const std::function<void()> cancel;
+    std::atomic_bool fired{false};
 };
 namespace {
+void cancelNative(const std::function<void()>& cancel) noexcept
+{ if (cancel) try { cancel(); } catch (...) {} }
+void endCallbackBatch(const std::shared_ptr<const StoreAuthorityState>& state) noexcept
+{
+    std::unique_lock<std::mutex> lock(state->callbackMutex);
+    --state->callbackBatches;
+    state->callbacksEnded.notify_all();
+    state->callbacksEnded.wait(lock, [&] { return state->callbackBatches == 0; });
+}
+void cancelRefused(const std::shared_ptr<const StoreAuthorityState>& state,
+                   const std::function<void()>& cancel) noexcept
+{
+    { std::lock_guard<std::mutex> lock(state->callbackMutex); ++state->callbackBatches; }
+    cancelNative(cancel);
+    endCallbackBatch(state);
+}
+void advance(const std::shared_ptr<StoreAuthorityState>& state) noexcept
+{
+    std::array<std::shared_ptr<StoreAuthorityCallback>, StoreAuthorityToken::WatchLimit> pending;
+    unsigned count = 0;
+    {
+        std::lock_guard<std::mutex> lock(state->callbackMutex);
+        ++state->callbackBatches;
+        const auto revision = state->revision.load(std::memory_order_relaxed);
+        if (revision == std::numeric_limits<quint64>::max()) state->retired.store(true, std::memory_order_release);
+        else state->revision.store(revision + 1, std::memory_order_release);
+        for (auto& weak : state->callbacks) {
+            if (auto callback = weak.lock()) pending[count++] = std::move(callback);
+            weak.reset();
+        }
+    }
+    // A second writer must also wait for callbacks taken by the first writer.
+    // No callback, package, or registry lock covers native cancellation.
+    for (unsigned index = 0; index < count; ++index) pending[index]->fire();
+    endCallbackBatch(state);
+}
 QString normalized(const QString& directory)
 {
     QString path = QDir::cleanPath(QFileInfo(directory).absoluteFilePath());
@@ -77,24 +138,44 @@ bool StoreAuthorityToken::current() const noexcept
         && !m_state->writers.load(std::memory_order_acquire)
         && m_state->revision.load(std::memory_order_acquire) == m_revision;
 }
+StoreAuthorityWatch::operator bool() const noexcept
+{
+    if (!m_callback || m_callback->fired.load(std::memory_order_acquire)) return false;
+    const auto& state = m_callback->quota.state;
+    return !state->retired.load(std::memory_order_acquire)
+        && !state->writers.load(std::memory_order_acquire)
+        && state->revision.load(std::memory_order_acquire) == m_callback->revision
+        && !state->writers.load(std::memory_order_acquire)
+        && state->revision.load(std::memory_order_acquire) == m_callback->revision;
+}
+StoreAuthorityWatch StoreAuthorityToken::onInvalidated(std::function<void()> cancel) const noexcept
+{
+    if (!cancel) return {};
+    if (!m_state) { cancelNative(cancel); return {}; }
+    std::shared_ptr<StoreAuthorityCallback> callback;
+    try { callback = std::make_shared<StoreAuthorityCallback>(m_state, m_revision, std::move(cancel)); }
+    catch (...) { cancelRefused(m_state, cancel); return {}; }
+    bool admitted = false;
+    {
+        std::lock_guard<std::mutex> lock(m_state->callbackMutex);
+        if (current() && m_state->callbackCount.load(std::memory_order_acquire) < WatchLimit) {
+            for (auto& slot : m_state->callbacks) if (slot.expired()) {
+                callback->quota.counted = true;
+                m_state->callbackCount.fetch_add(1, std::memory_order_release);
+                slot = callback; admitted = true; break;
+            }
+        }
+        if (!admitted) ++m_state->callbackBatches;
+    }
+    if (!admitted) { callback->fire(); endCallbackBatch(m_state); return {}; }
+    StoreAuthorityWatch watch; watch.m_callback = std::move(callback); return watch;
+}
 void StoreAuthority::invalidate() const noexcept
 {
-    auto revision = m_state->revision.load(std::memory_order_relaxed);
-    while (revision != std::numeric_limits<quint64>::max())
-        if (m_state->revision.compare_exchange_weak(revision, revision + 1, std::memory_order_release, std::memory_order_relaxed)) return;
-    m_state->retired.store(true, std::memory_order_release);
+    advance(m_state);
 }
 StoreAuthorityToken captureStoreAuthority(const QString& directory)
 { return StoreAuthority(directory).capture(); }
-namespace {
-void advance(const std::shared_ptr<StoreAuthorityState>& state) noexcept
-{
-    auto revision = state->revision.load(std::memory_order_relaxed);
-    while (revision != std::numeric_limits<quint64>::max())
-        if (state->revision.compare_exchange_weak(revision, revision + 1, std::memory_order_release, std::memory_order_relaxed)) return;
-    state->retired.store(true, std::memory_order_release);
-}
-}
 StoreAuthorityMutation::StoreAuthorityMutation(std::shared_ptr<StoreAuthorityState> state) noexcept : m_state(std::move(state))
 { m_state->writers.fetch_add(1, std::memory_order_acq_rel); advance(m_state); }
 StoreAuthorityMutation::StoreAuthorityMutation(StoreAuthorityMutation&& other) noexcept : m_state(std::move(other.m_state)) {}
@@ -123,22 +204,24 @@ bool packageKey(const QString& id, std::array<char, 128>& bytes, size_t* length)
 StorePackageRetirement::StorePackageRetirement(std::shared_ptr<StoreAuthorityState> state, std::string package)
     : m_state(std::move(state)), m_package(std::move(package))
 {
-    std::lock_guard<std::mutex> lock(m_state->packageMutex);
-    auto& count = m_state->packages[m_package];
-    if (count == std::numeric_limits<unsigned>::max()) {
-        m_state->retired.store(true, std::memory_order_release);
-        return;
+    {
+        std::lock_guard<std::mutex> lock(m_state->packageMutex);
+        auto& count = m_state->packages[m_package];
+        if (count == std::numeric_limits<unsigned>::max()) m_state->retired.store(true, std::memory_order_release);
+        else { ++count; m_counted = true; }
     }
-    ++count; m_counted = true; advance(m_state);
+    advance(m_state);
 }
 StorePackageRetirement::StorePackageRetirement(StorePackageRetirement&& other) noexcept
     : m_state(std::move(other.m_state)), m_package(std::move(other.m_package)), m_counted(other.m_counted) {}
 StorePackageRetirement::~StorePackageRetirement()
 {
     if (!m_state || !m_counted) return;
-    std::lock_guard<std::mutex> lock(m_state->packageMutex);
-    const auto found = m_state->packages.find(m_package);
-    if (found != m_state->packages.end() && --found->second == 0) m_state->packages.erase(found);
+    {
+        std::lock_guard<std::mutex> lock(m_state->packageMutex);
+        const auto found = m_state->packages.find(m_package);
+        if (found != m_state->packages.end() && --found->second == 0) m_state->packages.erase(found);
+    }
     advance(m_state);
 }
 StorePackageRetirement StoreAuthority::retirePackage(const QString& id) const

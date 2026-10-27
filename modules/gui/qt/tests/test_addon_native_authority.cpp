@@ -108,7 +108,10 @@ private slots:
         QTemporaryDir directory; auto manager = std::make_unique<AddonManager>(directory.path()); QVERIFY(setup(*manager));
         auto reader = manager->nativeAuthorityReader(contributionId);
         auto first = capture(reader); QVERIFY(first);
+        std::atomic_uint revocations{0};
+        const auto watch = first->onInvalidated([&revocations] { ++revocations; }); QVERIFY(bool(watch));
         QVERIFY(manager->saveAddonSettings(packageId, {{"language", "fr"}}, {}));
+        QCOMPARE(revocations.load(), 1u); QVERIFY(!bool(watch));
         QVERIFY(!first->live()); QVERIFY(!first->current());
         QVERIFY(credential(*first, QStringLiteral("apiKey")).isEmpty()); QVERIFY(!capture(reader));
         auto second = capture(manager->nativeAuthorityReader(contributionId)); QVERIFY(second);
@@ -119,6 +122,20 @@ private slots:
         auto third = capture(reader); QVERIFY(third); QVERIFY(third->accountReference != second->accountReference);
         manager.reset(); QVERIFY(!third->live()); QVERIFY(!third->current());
         QVERIFY(credential(*third, QStringLiteral("apiKey")).isEmpty()); QVERIFY(!capture(reader));
+    }
+    void nativeRevocationPrecedesManagerRetirementAndRefusesFreshReaders()
+    {
+        QTemporaryDir directory; auto manager = std::make_unique<AddonManager>(directory.path()); QVERIFY(setup(*manager));
+        const auto authority = capture(manager->nativeAuthorityReader(contributionId)); QVERIFY(authority);
+        std::atomic_bool revoked{false};
+        const auto watch = authority->onInvalidated([&revoked] { revoked.store(true); }); QVERIFY(bool(watch));
+        auto* native = manager.get(); bool retiring = false, destroyed = false, ordered = false, refused = false;
+        connect(native, &AddonManager::retiring, this, [&] {
+            retiring = true; ordered = revoked.load() && !destroyed && !authority->live();
+            refused = !capture(native->nativeAuthorityReader(contributionId));
+        });
+        connect(native, &QObject::destroyed, this, [&] { destroyed = true; ordered = ordered && retiring; });
+        manager.reset(); QVERIFY(retiring); QVERIFY(destroyed); QVERIFY(ordered); QVERIFY(refused); QVERIFY(!bool(watch));
     }
     void savedStateChangesRefuseCredentialsWithoutAMemoryWrite()
     {

@@ -87,6 +87,8 @@ public:
     NetworkBroker::CredentialResolver credentialResolver(const InstalledPackage&, NetworkBroker::RequestGuard* current = nullptr) const;
     AddonHostServices* hostServices() { return &m_hostServices; }
 signals:
+    // Direct owner-thread teardown runs before worker shutdown waits.
+    void retiring();
     void revisionChanged();
     void capabilitiesChanged();
     void packageWithdrawn(const QString& packageId);
@@ -117,6 +119,7 @@ private:
     std::unique_ptr<AddonRepositoryJobs> m_repositoryJobs;
     QString m_workerExecutable, m_error;
     int m_revision = 0;
+    bool m_retiring = false;
     QPointer<QObject> m_mediaCapabilitiesSource;
     QList<QMetaObject::Connection> m_mediaCapabilityConnections;
     QVariantMap m_updateResult;

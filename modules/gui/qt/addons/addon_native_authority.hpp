@@ -16,6 +16,8 @@ struct AddonNativeAuthority {
     NetworkBroker::CredentialResolver credentials;
     // The live check uses memory only. The current check also reads saved state.
     NetworkBroker::RequestGuard live, current;
+    // Register native-only cancellation before admitting a native lease.
+    std::function<StoreAuthorityWatch(std::function<void()>)> onInvalidated;
 };
 // Invoke this reader on joined background work. It owns no QObject or Core.
 using AddonNativeAuthorityReader = std::function<std::optional<AddonNativeAuthority>()>;
