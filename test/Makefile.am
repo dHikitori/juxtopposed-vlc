@@ -41,6 +41,8 @@ check_PROGRAMS = \
     test_src_misc_metadata_revision \
     test_src_misc_metadata_owner \
     test_src_misc_metadata_requests \
+    test_src_misc_metadata_pipeline \
+    test_src_misc_metadata_fetcher \
     test_src_misc_addon_medialibrary \
     test_src_input_policy \
     test_src_input_artwork_policy \
@@ -299,7 +301,8 @@ endif
 test_src_input_artwork_policy_SOURCES = src/input/artwork_policy.c
 test_src_input_artwork_policy_LDADD = $(LIBVLCCORE)
 
-test_src_input_artwork_fetcher_SOURCES = src/input/artwork_fetcher.c
+test_src_input_artwork_fetcher_SOURCES = src/input/artwork_fetcher.c \
+    ../src/preparser/metadata_owner.c ../src/preparser/metadata_pipeline.c
 test_src_input_artwork_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_input_artwork_fetcher_LDADD = $(LIBVLCCORE)
 
@@ -1040,3 +1043,11 @@ test_modules_mux_mp4_drain_LDADD = $(LIBVLCCORE) $(LIBVLC)
 
 test_modules_video_filter_sepia_SOURCES = modules/video_filter/sepia.c
 test_modules_video_filter_sepia_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+test_src_misc_metadata_pipeline_SOURCES = src/misc/metadata_pipeline.c
+test_src_misc_metadata_pipeline_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_pipeline_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_fetcher_SOURCES = src/misc/metadata_fetcher.c
+test_src_misc_metadata_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_fetcher_LDADD = $(LIBVLCCORE)
