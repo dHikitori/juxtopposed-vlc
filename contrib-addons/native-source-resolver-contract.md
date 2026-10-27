@@ -20,6 +20,14 @@ The returned `Admission` owns the immutable consent authorization and a plain
 captured configuration check. That check must not call a `QObject`. It must fail
 after a release, account, grant, settings, or enablement change.
 
+The host can instead supply `Backend::captureAdmission(uri, generation)`. The
+resolver calls this factory on its Qt owner thread. The factory must read memory
+only and return an exact owned `AdmissionReader`. The resolver invokes that
+reader on joined background work. This permits the host to prepare a manager
+authority snapshot without a background call to the manager. An empty reader
+refuses the request. It cannot fall back to the general `admit` callback. Closing
+or destroying the owner during capture prevents worker submission.
+
 `Backend::prepare(admission, current, completion)` can resolve trusted source
 metadata and allocate a private listener. It must check `current` before each
 request and after each asynchronous step. It cannot start outbound media I/O.
@@ -62,3 +70,15 @@ The input owns the successful lease through Stop and playback end. An individual
 manifest, key, or segment EOF must not cancel it. A replay uses a fresh native
 generation and a new transport. Saved queue and library items keep their exact
 admitted source URI.
+
+## Admission reader checks
+
+The current focused suite passes 33 normal and 33 sanitizer cases. It proves
+that exact reader preparation runs on the Qt owner thread and its saved-state
+read runs on joined work. A refused factory cannot use the general admission
+callback. A factory can destroy its owner without starting the returned reader.
+The existing cancellation, consent, quota, and native transport checks also pass.
+
+The sanitizer build instruments the resolver and its focused host dependencies.
+Address, undefined-behavior, leak, and stack checks report no diagnostic. These
+checks do not activate the production playback mount or prove the full app.

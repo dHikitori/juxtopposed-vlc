@@ -36,6 +36,7 @@ public:
         bool current(const QString& uri, quint64 generation) const;
         bool authorize(const QString& uri, quint64 generation) const;
     };
+    using AdmissionReader = std::function<std::optional<Admission>()>;
     class Prepared final
     {
     public:
@@ -73,6 +74,10 @@ public:
         std::function<Cancel(const Admission&, Current, PreparedCallback)> prepare;
         // The app must drain this owner before it destroys Qt.
         AddonStreamLifetime::Handle lifetime;
+        // Optional owner-thread preparation of an exact admission reader.
+        // Preparation reads memory only. The reader runs as joined background
+        // work and owns all captured values, with no QObject or raw Core.
+        std::function<AdmissionReader(const QString& uri, quint64 generation)> captureAdmission;
     };
     struct Limits { unsigned pending = 16, issued = 64; };
     AddonNativeSourceResolver(vlc_object_t* instance, Backend, QObject* parent = nullptr);

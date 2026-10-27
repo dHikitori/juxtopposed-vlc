@@ -169,7 +169,8 @@ AddonNativeSourceResolver::AddonNativeSourceResolver(vlc_object_t* instance, Bac
 {
     m_limits.pending = std::clamp(m_limits.pending, 1u, 64u); m_limits.issued = std::clamp(m_limits.issued, 1u, 64u);
     m_gate->owner = this; m_gate->lifetime=m_backend.lifetime;
-    if (!instance || !m_backend.admit || !m_backend.prepare || !m_backend.lifetime.current()) { close(); return; }
+    if (!instance || (!m_backend.admit && !m_backend.captureAdmission) || !m_backend.prepare
+        || !m_backend.lifetime.current()) { close(); return; }
     auto* opaque = new std::shared_ptr<Gate>(m_gate);
     static const vlc_source_backend_operations operations{nativeDispatch, nativeCancel, nativeDestroy};
     auto* native = vlc_source_backend_New(&operations, opaque);
@@ -224,12 +225,19 @@ void AddonNativeSourceResolver::dispatch(Job job)
     guard->sourceHint=hint.value(QStringLiteral("source")).toString(); guard->accountHint=hint.value(QStringLiteral("accountReference")).toString();
     guard->uri = uri; guard->generation = generation; m_jobs.emplace(job.get(), pending);
     const auto gate=m_gate; const auto admit=m_backend.admit;
+    const auto capture=m_backend.captureAdmission; const auto lifetime=m_backend.lifetime;
+    const QPointer<AddonNativeSourceResolver> owner(this);
     try {
+        AdmissionReader reader;
+        if (capture) reader=capture(uri,generation);
+        else if (admit) reader=[admit,uri,generation] { return admit(uri,generation); };
+        if (!owner || !guard->pending()) return;
+        if (!reader) { fail(pending,-EACCES); return; }
         const auto work=acquireAdmissionWork(); if(!work) { fail(pending,VLC_ENOMEM); return; }
-        const bool accepted=m_backend.lifetime.startQtWork([pending,guard,gate,admit] {
+        const bool accepted=lifetime.startQtWork([pending,guard,gate,reader=std::move(reader)] {
             if(!guard->pending()) return;
             std::optional<Admission> admission;
-            try { admission=admit(guard->uri,guard->generation); } catch(...) {}
+            try { admission=reader(); } catch(...) {}
             if(!guard->pending()) return;
             try {
                 if(!post(gate,[pending,admission=std::move(admission)](auto* target) mutable { target->admitted(pending,std::move(admission)); }))
@@ -241,8 +249,8 @@ void AddonNativeSourceResolver::dispatch(Job job)
         },[work](auto ticket) {
             if(!ticket.retain(work)) throw std::bad_alloc();
         });
-        if(!accepted) fail(pending,VLC_ENOMEM);
-    } catch(...) { fail(pending,VLC_ENOMEM); }
+        if(!accepted && owner) owner->fail(pending,VLC_ENOMEM);
+    } catch(...) { if (owner) owner->fail(pending,VLC_ENOMEM); }
 }
 void AddonNativeSourceResolver::admitted(const std::shared_ptr<Pending>& pending,std::optional<Admission> admission)
 {

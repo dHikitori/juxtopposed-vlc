@@ -91,6 +91,7 @@ struct Fixture {
     std::shared_ptr<AddonSourceConsent> consent;
     std::unique_ptr<Resolver> owner;
     std::function<std::optional<Resolver::Admission>(const QString&,quint64)> admit;
+    std::function<Resolver::AdmissionReader(const QString&,quint64)> captureAdmission;
     std::function<Resolver::Cancel(const Resolver::Admission&, Resolver::Current, Resolver::PreparedCallback)> prepare;
     Fixture() {
         const auto source=state; const auto key=binding;
@@ -128,7 +129,7 @@ struct Fixture {
         };
         return {std::move(admission), [this](const auto& admission, auto current, auto done) -> Resolver::Cancel {
             ++preparations; return prepare ? prepare(admission, std::move(current), std::move(done)) : Resolver::Cancel{};
-        },app};
+        },app,captureAdmission};
     }
     void create(Resolver::Limits limits = {}) { owner = std::make_unique<Resolver>(root(), backend(), limits); }
     void automatic(const QString& uri, const std::shared_ptr<Transport>& transport) {
@@ -170,6 +171,38 @@ private slots:
         auto transport=std::make_shared<Transport>(); f.automatic(uri,transport); f.create();
         NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1);
         QCOMPARE(job.status.load(),VLC_SUCCESS); QVERIFY(offThread->load()); QCOMPARE(transport->io.load(),1);
+    }
+    void exactReaderIsCapturedOnTheOwnerAndReadOnJoinedWork() {
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); const auto base=f.backend().admit;
+        const auto caller=std::this_thread::get_id(); bool captured=false;
+        const auto offThread=std::make_shared<std::atomic_bool>(false);
+        f.captureAdmission=[&,base,offThread,caller](const QString& value,quint64 generation) -> Resolver::AdmissionReader {
+            captured=std::this_thread::get_id()==caller && value==uri && generation==1;
+            return [base,offThread,caller,value,generation] {
+                offThread->store(std::this_thread::get_id()!=caller); return base(value,generation);
+            };
+        };
+        auto transport=std::make_shared<Transport>(); f.automatic(uri,transport);
+        auto backend=f.backend(); backend.admit={};
+        f.owner=std::make_unique<Resolver>(f.root(),std::move(backend)); QVERIFY(f.owner->bound());
+        NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1);
+        QCOMPARE(job.status.load(),VLC_SUCCESS); QVERIFY(captured); QVERIFY(offThread->load());
+        QCOMPARE(f.admitted.load(),1); QCOMPARE(transport->io.load(),1);
+    }
+    void declinedCaptureCannotFallBackToTheGeneralReader() {
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve());
+        f.captureAdmission=[](const QString&,quint64) { return Resolver::AdmissionReader{}; };
+        f.create(); NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1);
+        QCOMPARE(job.status.load(),-EACCES); QCOMPARE(f.admitted.load(),0); QCOMPARE(f.preparations.load(),0);
+    }
+    void captureCanDestroyItsOwnerBeforeTheWorkerStarts() {
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); const auto reads=std::make_shared<std::atomic_int>(0);
+        f.captureAdmission=[&f,reads](const QString&,quint64) -> Resolver::AdmissionReader {
+            f.owner.reset();
+            return [reads]() -> std::optional<Resolver::Admission> { ++*reads; return {}; };
+        };
+        f.create(); NativeJob job(f.root(),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1);
+        QCOMPARE(job.status.load(),-EINTR); QVERIFY(!f.owner); QCOMPARE(reads->load(),0);
     }
     void pendingAdmissionEndsWithoutOwnerDelivery_data() {
         QTest::addColumn<int>("action"); QTest::newRow("cancel")<<0;
