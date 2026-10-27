@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Build an episode test from the normal Meson Qt objects in WSL."""
+"""Build a metadata consumer test from the normal Meson Qt objects in WSL."""
 import argparse
 import json
 import os
@@ -19,7 +19,9 @@ def main():
     parser.add_argument("--build-dir", type=Path, required=True, help="The normal Meson build directory.")
     parser.add_argument("--output-dir", type=Path, required=True, help="The test output directory.")
     parser.add_argument("--target", default="modules/libqt_plugin.so", help="The normal Qt module target.")
-    parser.add_argument("--probe", action="store_true", help="Build the optional live probe instead of the parity suite.")
+    suite = parser.add_mutually_exclusive_group()
+    suite.add_argument("--probe", action="store_true", help="Build the optional live probe instead of the parity suite.")
+    suite.add_argument("--artwork", action="store_true", help="Build the native artwork consumer suite.")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[4]
     build = args.build_dir.resolve()
@@ -34,12 +36,12 @@ def main():
     subprocess.run(["ninja", args.target, "-j2", "-l3"], cwd=build, env=environment, check=True)
     if shutil.disk_usage(destination).free < reserve + estimate:
         raise RuntimeError("The free disk space is not sufficient for this test link.")
-    name = "addon_episode_probe" if args.probe else "test_addon_episode_metadata"
+    name = "addon_episode_probe" if args.probe else "test_addon_artwork_consumers" if args.artwork else "test_addon_episode_metadata"
     source = root / "modules/gui/qt/tests" / (name + ".cpp")
     commands = json.loads((build / "compile_commands.json").read_text())
     episode = next(item for item in commands if item["file"].endswith("/player/episode_metadata.cpp"))
     original = shlex.split(episode["command"])
-    compile_args = [original[0], "-I" + str(destination)]
+    compile_args = [original[0], "-I" + str(destination), "-I" + str(root)]
     if not args.probe:
         moc = shutil.which("moc")
         if not moc:

@@ -607,6 +607,7 @@ qt_plugin_sources = files(
     'util/media_identity.hpp',
     'util/filter_chain_edit.hpp',
     'util/artwork_discovery.hpp',
+    'util/artwork_approval.hpp',
     'util/artwork_store.hpp',
     'util/media_identity_ml.hpp',
     'util/media_fingerprint.hpp',

@@ -98,6 +98,7 @@ private:
     CoverArtLabel *art_cover;
 
     QString  currentURL;
+    bool artworkSelectedByUser = false;
 
     QPushButton *fingerprintButton;
 

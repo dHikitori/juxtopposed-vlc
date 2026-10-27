@@ -23,6 +23,7 @@
 #endif
 
 #include <vlc_common.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_atomic.h>
 #include <vlc_stream.h>
 #include <vlc_modules.h>
@@ -182,6 +183,7 @@ static void FreeCacheEntry( void* data, void* obj )
 
 static int ReadAlbumCache( input_fetcher_t* fetcher, input_item_t* item )
 {
+    if (vlc_artwork_item_IsRestricted(item)) return VLC_EGENERIC;
     char* key = CreateCacheKey( item );
 
     if( key == NULL )
@@ -201,6 +203,7 @@ static int ReadAlbumCache( input_fetcher_t* fetcher, input_item_t* item )
 static void AddAlbumCache( input_fetcher_t* fetcher, input_item_t* item,
                            bool overwrite )
 {
+    if (vlc_artwork_item_IsRestricted(item)) return;
     char* art = input_item_GetArtURL( item );
     char* key = CreateCacheKey( item );
 
@@ -271,6 +274,13 @@ static int SearchByScope(struct task *task, int scope)
     input_fetcher_t *fetcher = task->fetcher;
     input_item_t* item = task->item;
 
+    if (vlc_artwork_item_IsRestricted(item)) {
+        char *approved = vlc_artwork_item_GetURI(item);
+        if (approved == NULL) return VLC_EGENERIC;
+        free(approved);
+        return Submit(fetcher, fetcher->executor_downloader, item, task->options, task->cbs, task->userdata);
+    }
+
     if( CheckMeta( item ) &&
         InvokeModule( fetcher, item, scope, "meta fetcher" ) )
     {
@@ -309,9 +319,10 @@ static void RunDownloader(void *userdata)
 
     vlc_interrupt_set(&task->interrupt);
 
-    ReadAlbumCache( fetcher, task->item );
+    const bool restricted = vlc_artwork_item_IsRestricted(task->item);
+    if (!restricted) ReadAlbumCache(fetcher, task->item);
 
-    char *psz_arturl = input_item_GetArtURL( task->item );
+    char *psz_arturl = vlc_artwork_item_GetURI(task->item);
     if( !psz_arturl )
         goto out;
 
@@ -321,6 +332,8 @@ static void RunDownloader(void *userdata)
         fetched = true;
         goto out; /* no fetch required */
     }
+
+    if (restricted || vlc_artwork_item_IsRestricted(task->item)) goto out;
 
     stream_t* source = vlc_stream_NewURL( fetcher->owner, psz_arturl );
 

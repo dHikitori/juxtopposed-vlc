@@ -18,6 +18,7 @@
 #include "playlist_item.hpp"
 #include "util/vlctick.hpp"
 #include <vlc_input_item.h>
+#include <vlc_artwork_policy.h>
 #include <algorithm>
 #include <QDir>
 
@@ -76,6 +77,10 @@ QVariantList PlaylistItem::getAncestors() const
 
 QUrl PlaylistItem::getArtwork() const
 {
+    if (auto* item = inputItem(); item && vlc_artwork_item_IsRestricted(item)) {
+        const auto uri = vlc::wrap_cptr(vlc_artwork_item_GetURI(item));
+        return QUrl::fromEncoded(QByteArray(uri ? uri.get() : ""));
+    }
     return d->artwork;
 }
 
@@ -92,6 +97,8 @@ QUrl PlaylistItem::getUrl() const
 void PlaylistItem::sync() {
     input_item_t *media = inputItem();
     assert(media);
+    const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(media));
+    d->artwork = QUrl::fromEncoded(QByteArray(artwork ? artwork.get() : ""));
     QUrl childUrl;
     { vlc_mutex_locker childLocker(&media->lock); childUrl = QUrl(QString::fromUtf8(media->psz_uri)); }
     d->ancestors.clear();
@@ -129,7 +136,6 @@ void PlaylistItem::sync() {
         d->title   = vlc_meta_Get(media->p_meta, vlc_meta_Title);
         d->artist  = vlc_meta_Get(media->p_meta, vlc_meta_Artist);
         d->album   = vlc_meta_Get(media->p_meta, vlc_meta_Album);
-        d->artwork = vlc_meta_Get(media->p_meta, vlc_meta_ArtworkURL);
     }
 
     if (d->title.isNull()) {

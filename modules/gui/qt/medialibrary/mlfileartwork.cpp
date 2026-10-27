@@ -10,6 +10,7 @@
 #include "util/asynctask.hpp"
 #include <QSaveFile>
 #include <vlc_preparser.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_input_item.h>
 #include <QDir>
 #include <QFile>
@@ -157,6 +158,9 @@ void MLFileArtwork::clear()
 
 void MLFileArtwork::request(const QUrl& url, bool generateVideo, const QString& fallback)
 {
+    if (url.scheme().compare(QLatin1String("vlc-addon-source"), Qt::CaseInsensitive) == 0) {
+        emit artworkChanged(url, {}); return;
+    }
     if (!m_store || (url.scheme() != "file" && url.scheme() != "http" && url.scheme() != "https")) return;
     const auto normalized = ArtworkDiscovery::normalizeUrl(url);
     const auto mrl = normalized.toString(QUrl::FullyEncoded);
@@ -439,7 +443,7 @@ void MLFileArtwork::startNext()
             if (status == VLC_SUCCESS) {
                 const auto item = vlc_preparser_req_GetItem(handle);
                 metadata = MediaIdentity::inputMetadata(item);
-                char* uri = input_item_GetArtURL(item);
+                char* uri = vlc_artwork_item_GetURI(item);
                 const auto url = QUrl::fromEncoded(QByteArray(uri ? uri : ""));
                 free(uri);
                 if (url.isLocalFile()) artwork = url.toString(QUrl::FullyEncoded);

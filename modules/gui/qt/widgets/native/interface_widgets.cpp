@@ -29,6 +29,7 @@
 
 #include "qt.hpp"
 #include "interface_widgets.hpp"
+#include "util/artwork_approval.hpp"
 #include "dialogs/dialogs_provider.hpp"
 #include "player/player_controller.hpp"  /* Speed control */
 #include "maininterface/mainctx.hpp" /* Interface integration */
@@ -173,11 +174,13 @@ void CoverArtLabel::setArtFromFile()
 {
     if (!p_item) return;
 
-    QUrl fileUrl = QFileDialog::getOpenFileUrl( this, qtr( "Choose Cover Art" ),
-        p_intf->p_mi->getDialogFilePath(), qtr( "Image Files (*.gif *.jpg *.jpeg *.png)" ) );
+    const bool restricted = vlc_artwork_item_IsRestricted(p_item.get());
+    QUrl fileUrl = QFileDialog::getOpenFileUrl(this, qtr("Choose Cover Art"), p_intf->p_mi->getDialogFilePath(),
+        restricted ? qtr("Image files (*.jpg *.jpeg *.png *.webp)") : qtr("Image Files (*.gif *.jpg *.jpeg *.png)"));
 
     if( fileUrl.isEmpty() )
         return;
+    if (restricted && !ArtworkApproval::validUserFile(fileUrl)) return;
 
     selectedArtPath = fileUrl.toLocalFile();
     showArtUpdate( selectedArtPath );

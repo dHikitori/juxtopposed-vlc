@@ -4,6 +4,7 @@
 #endif
 #include "addon_metadata_service.hpp"
 #include <vlc_metadata_backend.h>
+#include <vlc_artwork_policy.h>
 #include "addon_manager.hpp"
 #include "addon_artwork_assets.hpp"
 #include "util/media_identity_vlc.hpp"
@@ -399,7 +400,8 @@ void AddonMetadataService::artworkFinished(const QString& consumer, const QStrin
     auto found = m_results.find(consumer);
     if (found == m_results.end() || !found->assets.remove(field)) return;
     auto fields = found->data.value(QStringLiteral("fields")).toMap();
-    if (url.isLocalFile() && QFileInfo(url.toLocalFile()).isFile() && QFileInfo(url.toLocalFile()).isReadable()) {
+    if (url.isLocalFile() && vlc_artwork_uri_IsLocalFile(url.toEncoded().constData())
+        && QFileInfo(url.toLocalFile()).isFile() && QFileInfo(url.toLocalFile()).isReadable()) {
         fields.insert(field, url.toString(QUrl::FullyEncoded));
     } else {
         fields.remove(field);
@@ -459,7 +461,8 @@ void AddonMetadataService::startCore(quint64 key)
         context.insert(QStringLiteral("media"), media);
         auto existing = context.value(QStringLiteral("existingFields")).toMap();
         for (auto it = nativeFields().cbegin(); it != nativeFields().cend(); ++it) {
-            char* raw = input_item_GetMeta(request->item, it.value());
+            char* raw = it.value() == vlc_meta_ArtworkURL ? vlc_artwork_item_GetURI(request->item)
+                : input_item_GetMeta(request->item, it.value());
             const auto value = raw ? QString::fromUtf8(raw) : QString{}; free(raw);
             if (!value.isEmpty()) existing.insert(it.key(), value);
         }
@@ -501,7 +504,11 @@ void AddonMetadataService::finishCore(quint64 key, const QString& status, const 
         const auto native = nativeFields().constFind(it.key());
         if (native == nativeFields().cend()) continue;
         const auto value = it.value().toString().toUtf8();
-        if (!value.isEmpty() && value.size() <= 65536) input_item_SetMeta(result, *native, value.constData());
+        if (!value.isEmpty() && value.size() <= 65536) {
+            if (*native == vlc_meta_ArtworkURL) {
+                if (vlc_artwork_item_SetApprovedURI(result, value.constData()) != VLC_SUCCESS) code = VLC_EINVAL;
+            } else input_item_SetMeta(result, *native, value.constData());
+        }
     }
     auto provenance = data;
     provenance.insert(QStringLiteral("status"), status);

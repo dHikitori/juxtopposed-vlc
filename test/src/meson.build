@@ -887,3 +887,11 @@ vlc_tests += {
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_input_artwork_fetcher',
+    'sources': files('input/artwork_fetcher.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}

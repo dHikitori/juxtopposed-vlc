@@ -27,12 +27,14 @@
 #include "audio_waveform_scanner.hpp"
 #include "util/shared_input_item.hpp"
 #include "util/media_identity_vlc.hpp"
+#include "util/artwork_approval.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "playlist/playlist_controller.hpp"
 #include "playlist/media.hpp"
 #include "util/seek_preview_image_provider.hpp"
 
 #include <vlc_actions.h>           /* ACTION_ID */
+#include <vlc_artwork_policy.h>
 #include <vlc_url.h>            /* vlc_uri_decode */
 #include <vlc_strings.h>        /* vlc_strfplayer */
 #include <vlc_aout.h>           /* audio_output_t */
@@ -230,6 +232,8 @@ void PlayerControllerPrivate::UpdateTrackSelection(vlc_es_id_t *trackid, bool se
 void PlayerControllerPrivate::UpdateMeta( input_item_t *p_item )
 {
     Q_Q(PlayerController);
+    const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(p_item));
+    m_artwork = QUrl::fromEncoded(QByteArray(artwork ? artwork.get() : ""));
 
     {
         vlc_mutex_locker locker(&p_item->lock);
@@ -239,7 +243,6 @@ void PlayerControllerPrivate::UpdateMeta( input_item_t *p_item )
             m_title   = vlc_meta_Get(p_item->p_meta, vlc_meta_Title);
             m_artist  = vlc_meta_Get(p_item->p_meta, vlc_meta_Artist);
             m_album   = vlc_meta_Get(p_item->p_meta, vlc_meta_Album);
-            m_artwork = vlc_meta_Get(p_item->p_meta, vlc_meta_ArtworkURL);
 
             /* Capture the raw sylt-data buffer; the entry list is built on
              * first read so we don't pay for it when lyrics are never shown.
@@ -3281,7 +3284,7 @@ const QString PlayerController::decodeArtURL( input_item_t *p_item )
 {
     assert( p_item );
 
-    char *psz_art = input_item_GetArtURL( p_item );
+    char *psz_art = vlc_artwork_item_GetURI( p_item );
     if( psz_art )
     {
         char *psz = vlc_uri2path( psz_art );
@@ -3308,12 +3311,13 @@ void PlayerController::setArt( input_item_t *p_item, QString fileUrl )
         QString old_url = decodeArtURL( p_item );
         old_url = QDir( old_url ).canonicalPath();
 
-        if( psz_cachedir != nullptr && old_url.startsWith( QString::fromUtf8( psz_cachedir ) ) )
-            QFile( old_url ).remove(); /* Purge cached artwork */
-
-        free( psz_cachedir );
-
-        input_item_SetArtURL( p_item , fileUrl.toUtf8().constData() );
+        const QUrl selected(fileUrl);
+        if (!ArtworkApproval::userFile(p_item, selected)) { free(psz_cachedir); return; }
+        const QString selectedPath = QFileInfo(selected.toLocalFile()).canonicalFilePath();
+        if (psz_cachedir != nullptr && old_url != selectedPath && old_url.startsWith(QString::fromUtf8(psz_cachedir)))
+            QFile(old_url).remove();
+        free(psz_cachedir);
+        d->UpdateMeta(p_item);
         d->UpdateArt( p_item );
     }
 }
@@ -3432,7 +3436,15 @@ PRIMITIVETYPE_GETTER(bool, getTeletextTransparency, m_teletextTransparent)
 PRIMITIVETYPE_GETTER(QString, getTitle, m_title)
 PRIMITIVETYPE_GETTER(QString, getArtist, m_artist)
 PRIMITIVETYPE_GETTER(QString, getAlbum, m_album)
-PRIMITIVETYPE_GETTER(QUrl, getArtwork, m_artwork)
+QUrl PlayerController::getArtwork() const
+{
+    Q_D(const PlayerController);
+    if (d->m_currentItem && vlc_artwork_item_IsRestricted(d->m_currentItem.get())) {
+        const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(d->m_currentItem.get()));
+        return QUrl::fromEncoded(QByteArray(artwork ? artwork.get() : ""));
+    }
+    return d->m_artwork;
+}
 PRIMITIVETYPE_GETTER(QUrl, getUrl, m_url)
 
 QVariantMap PlayerController::getSeriesContext() const

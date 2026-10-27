@@ -5,12 +5,20 @@
 #include <QtTest/QtTest>
 #include <QSignalSpy>
 #include <QTemporaryFile>
+#include <QTemporaryDir>
+#include <QBuffer>
+#include <QImage>
+#include <QScopeGuard>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <atomic>
 #include <thread>
 #include <vlc_common.h>
+#include <vlc_cxx_helpers.hpp>
 #include <vlc_input_item.h>
 #include <vlc_metadata_backend.h>
+#include <vlc_artwork_policy.h>
+#include "addons/addon_artwork_assets.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "util/media_identity_vlc.hpp"
 
@@ -272,6 +280,50 @@ private slots:
         QTRY_COMPARE(fake.calls.size(), 2); fake.complete(service, {{"artwork", "https://remote.invalid/image.jpg"}});
         QTRY_VERIFY(bool(complete)); service.cancel(consumer); QCOMPARE(canceled, QStringList{"asset-1"});
         complete(QUrl::fromLocalFile(file.fileName()), {}); QCoreApplication::processEvents(); QCOMPARE(results.size(), 1);
+    }
+    void nativeAssetAdapterProofSurvivesTheCoreCommit()
+    {
+        QTemporaryDir directory; QVERIFY(directory.isValid());
+        vlc::addons::NetworkBroker::Callback network;
+        AddonArtworkAssets::Backend assetsBackend{
+            [](const QString&) { return QVariantMap{{"enabled", true}, {"configured", true}, {"cachePartition", "release-1:account-1:settings-1"}}; },
+            [&](const QString& source, const QJsonObject& request, vlc::addons::NetworkBroker::Callback complete) {
+                if (source != QStringLiteral("example/details") || request.value("method").toString() != QStringLiteral("GET")) return quint64(0);
+                network = std::move(complete); return quint64(1);
+            }, [](quint64) {}};
+        AddonArtworkAssets assets(assetsBackend, directory.path(), {});
+        Fake fake; auto serviceBackend = fake.backend();
+        serviceBackend.resolveArtwork = [&](const QString& source, const QVariant& claim, AddonMetadataService::ArtworkCallback complete) {
+            return assets.resolve(source, claim, std::move(complete));
+        };
+        serviceBackend.cancelArtwork = [&](const QString& id) { assets.cancel(id); };
+        AddonMetadataService service(serviceBackend); auto* backend = service.holdCoreBackend();
+        auto* item = input_item_New("vlc-addon-source:v1:asset", "Source"); QVERIFY(item);
+        input_item_SetArtURL(item, "http://127.0.0.1/unapproved.png");
+        const auto cleanup = qScopeGuard([&] { input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        const char* fields[]{"description", "artwork"};
+        const auto context = QJsonDocument::fromVariant(QVariantMap{{"identity", identity()}}).toJson(QJsonDocument::Compact);
+        vlc_metadata_request request{}; request.feature = "video.details"; request.operation = "enrich";
+        request.item = item; request.fields = fields; request.field_count = 2;
+        request.context_json = context.constData(); request.context_size = context.size(); request.flags = VLC_METADATA_REQUEST_NETWORK;
+        Ended ended; auto* job = vlc_metadata_job_New(backend, &request, Ended::callback, &ended); QVERIFY(job);
+        const auto release = qScopeGuard([&] { vlc_metadata_job_Release(job); });
+        QCOMPARE(vlc_metadata_job_Start(job), VLC_SUCCESS); QTRY_COMPARE(fake.calls.size(), 1);
+        QVERIFY(!fake.calls[0].context.value("existingFields").toMap().contains("artwork"));
+        fake.complete(service, {{"description", "Provider text"}, {"artwork", "https://images.example.org/art.png"}});
+        QTRY_VERIFY(bool(network));
+        QImage image(2, 2, QImage::Format_RGB32); image.fill(Qt::red);
+        QByteArray bytes; QBuffer output(&bytes); QVERIFY(output.open(QIODevice::WriteOnly)); QVERIFY(image.save(&output, "PNG"));
+        vlc::addons::NetworkBroker::Response response; response.status = 200; response.body = bytes; network(response);
+        QTRY_COMPARE(ended.count.load(), 1); QCOMPARE(ended.status.load(), VLC_SUCCESS);
+        const auto* result = vlc_metadata_job_GetResult(job); QVERIFY(result && result->item);
+        const auto approved = vlc::wrap_cptr(vlc_artwork_item_GetURI(result->item)); QVERIFY(approved);
+        const QUrl local = QUrl::fromEncoded(approved.get()); QVERIFY(local.isLocalFile()); QVERIFY(QFileInfo::exists(local.toLocalFile()));
+        QVERIFY(!vlc_artwork_item_GetURI(item));
+        size_t applied = 0; QCOMPARE(vlc_metadata_job_Apply(job, item, 0, &applied), VLC_SUCCESS); QCOMPARE(applied, size_t(2));
+        const auto published = vlc::wrap_cptr(vlc_artwork_item_GetURI(item)); QVERIFY(published);
+        QCOMPARE(QByteArray(published.get()), QByteArray(approved.get()));
+        input_item_SetArtURL(item, published.get()); QVERIFY(!vlc_artwork_item_GetURI(item));
     }
 };
 QTEST_GUILESS_MAIN(TestAddonMetadataService)

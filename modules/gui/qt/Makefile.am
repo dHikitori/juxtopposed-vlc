@@ -3091,4 +3091,4 @@ endif
 
 EXTRA_DIST += $(addon_reference_DATA) $(addon_reference_dist_DATA) $(addon_reference_settings_DATA) $(addon_reference_locales_DATA)
 EXTRA_DIST += $(addon_tvmaze_DATA) $(addon_tvmaze_dist_DATA)
-EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp
+EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/test_addon_artwork_consumers.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp util/artwork_approval.hpp

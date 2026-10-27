@@ -38,11 +38,13 @@
 
 #include <cassert>
 #include <vlc_url.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_meta.h>
 #include <vlc_input_item.h>
 #include <vlc_list.hpp>
 
 #include "util/interface_translator.hpp"
+#include "util/artwork_approval.hpp"
 
 #include <QTreeWidget>
 #include <QTableWidget>
@@ -177,7 +179,7 @@ MetaPanel::MetaPanel( QWidget *parent,
     coverLayout->addStretch();
     connect( fingerprintButton, &QPushButton::clicked, this, &MetaPanel::fingerprint );
     connect( art_cover, &CoverArtLabel::editing, this, &MetaPanel::enterEditMode );
-    connect( art_cover, &CoverArtLabel::artSelected, this, [this](const QString &url) { currentURL = url; } );
+    connect(art_cover, &CoverArtLabel::artSelected, this, [this](const QString& url) { currentURL = url; artworkSelectedByUser = true; });
 
     fieldRows = {{title, artist}, {album, date}, {genre, track}, {language, publisher},
                  {copyright, encodedBy}, {nowPlaying, nullptr}, {commentsBlock, cover}};
@@ -314,8 +316,9 @@ void MetaPanel::update( const SharedInputItem& p_item )
 #undef UPDATE_META
 
     art_cover->setItem( p_item );
-    char *psz_art = input_item_GetArtURL( inputItem );
+    char *psz_art = vlc_artwork_item_GetURI( inputItem );
     currentURL = qfu( psz_art ? psz_art : "" );
+    artworkSelectedByUser = false;
     free( psz_art );
 }
 
@@ -368,16 +371,19 @@ bool MetaPanel::saveMeta()
         input_item_SetPublisher( item, qtu( publisher_text->text() ) );
         input_item_SetDescription( item, qtu( description_text->toPlainText() ) );
         input_item_SetEncodedBy( item, qtu( encodedby_text->text() ) );
-        if( !currentURL.isEmpty() )
-            input_item_SetArtURL( item, qtu( currentURL ) );
+        if (!currentURL.isEmpty() && artworkSelectedByUser) {
+            if (!ArtworkApproval::userFile(item, QUrl(currentURL))) return false;
+        }
+        return true;
     };
-    applyEdits( edited.get() );
+    if (!applyEdits(edited.get())) { warn(); return false; }
     int vlcret = input_item_WriteMeta( VLC_OBJECT(p_intf), edited.get() );
     if (vlcret != VLC_SUCCESS) {
         warn();
         return false;
     }
-    applyEdits( input );
+    if (!applyEdits(input)) { warn(); return false; }
+    artworkSelectedByUser = false;
     pendingTags.reset();
     art_cover->setItem( p_input );
     /* Refresh the player controller caches for the currently playing item so
@@ -441,6 +447,7 @@ void MetaPanel::clear()
     encodedby_text->clear();
     art_cover->clear();
     currentURL.clear();
+    artworkSelectedByUser = false;
     fingerprintButton->setEnabled( false );
 
     nowplaying_text->parentWidget()->hide();

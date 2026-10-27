@@ -30,6 +30,8 @@
 #include "util/media_identity_ml.hpp"
 #include "util/vlctick.hpp"
 #include "util/podcast_metadata.hpp"
+#include "util/shared_input_item.hpp"
+#include <vlc_artwork_policy.h>
 
 #include <QObject>
 #include <algorithm>
@@ -74,9 +76,10 @@ public:
         }
         m_mrl = getMRL();
         if (media->p_podcast) {
+            m_artworkInput = SharedInputItem(media->p_podcast);
             m_podcast = podcastMetadata(media->p_podcast);
             m_mrl = QUrl::fromEncoded(media->p_podcast->psz_uri);
-            const auto artwork = vlc::wrap_cptr(input_item_GetArtworkURL(media->p_podcast));
+            const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(media->p_podcast));
             if (artwork && m_smallThumbnail.mrl.isEmpty()) m_smallThumbnail = {QString::fromUtf8(artwork.get()), VLC_ML_THUMBNAIL_STATUS_AVAILABLE};
         }
         m_identityMetadata = MediaIdentity::libraryMetadata(media, m_mrl);
@@ -103,6 +106,7 @@ public:
 
     QString smallCover(vlc_ml_thumbnail_status_t* status = nullptr) const
     {
+        if (requiresNativeArtwork()) return nativeArtwork(status);
         if (status) *status = m_smallThumbnail.status;
         return m_smallThumbnail.mrl;
     }
@@ -114,6 +118,7 @@ public:
 
     QString bannerCover(vlc_ml_thumbnail_status_t* status = nullptr) const
     {
+        if (requiresNativeArtwork()) return nativeArtwork(status);
         if (status) *status = m_bannerThumbnail.status;
         return m_bannerThumbnail.mrl;
     }
@@ -123,6 +128,24 @@ public:
     Q_INVOKABLE bool valid() const { return getId().id != INVALID_MLITEMID_ID; }
 
 protected:
+    bool requiresNativeArtwork() const
+    {
+        return m_mrl.scheme().compare(QLatin1String("vlc-addon-source"), Qt::CaseInsensitive) == 0
+            || (m_artworkInput && vlc_artwork_item_IsRestricted(m_artworkInput.get()));
+    }
+    QString nativeArtwork(vlc_ml_thumbnail_status_t* status) const
+    {
+        QString result;
+        if (m_artworkInput) {
+            const auto source = vlc::wrap_cptr(input_item_GetURI(m_artworkInput.get()));
+            if (QUrl::fromEncoded(QByteArray(source ? source.get() : "")) == m_mrl) {
+                const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(m_artworkInput.get()));
+                if (artwork) result = QString::fromUtf8(artwork.get());
+            }
+        }
+        if (status) *status = result.isEmpty() ? VLC_ML_THUMBNAIL_STATUS_FAILURE : VLC_ML_THUMBNAIL_STATUS_AVAILABLE;
+        return result;
+    }
     struct MLThumbnail
     {
         QString mrl;
@@ -130,6 +153,7 @@ protected:
     };
 
     QVariantMap m_podcast;
+    SharedInputItem m_artworkInput;
     QVariantMap m_identityMetadata;
     QString m_title;
     QString m_fileName;
