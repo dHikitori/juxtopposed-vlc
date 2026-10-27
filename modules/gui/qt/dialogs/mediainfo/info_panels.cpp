@@ -180,6 +180,14 @@ MetaPanel::MetaPanel( QWidget *parent,
     connect( fingerprintButton, &QPushButton::clicked, this, &MetaPanel::fingerprint );
     connect( art_cover, &CoverArtLabel::editing, this, &MetaPanel::enterEditMode );
     connect(art_cover, &CoverArtLabel::artSelected, this, [this](const QString& url) { currentURL = url; artworkSelectedByUser = true; });
+    connect(art_cover,&CoverArtLabel::artSelectionReset,this,[this] {
+        artworkSelectedByUser=false;
+        char* uri=p_input ? vlc_artwork_item_GetURI(p_input.get()) : nullptr;
+        currentURL=qfu(uri ? uri : ""); free(uri);
+    });
+    connect(art_cover,&CoverArtLabel::artworkPreparationChanged,this,[this](bool busy) {
+        artworkPreparing=busy; emit lookupInProgressChanged(lookupInProgress || artworkPreparing);
+    });
 
     fieldRows = {{title, artist}, {album, date}, {genre, track}, {language, publisher},
                  {copyright, encodedBy}, {nowPlaying, nullptr}, {commentsBlock, cover}};
@@ -327,7 +335,7 @@ void MetaPanel::update( const SharedInputItem& p_item )
  **/
 bool MetaPanel::saveMeta()
 {
-    if (lookupInProgress) return false;
+    if (lookupInProgress || artworkPreparing) return false;
     const auto input = p_input.get();
 
     if( input == NULL ) {
@@ -341,10 +349,19 @@ bool MetaPanel::saveMeta()
         const QUrl url = QUrl::fromEncoded(QByteArray(uri ? uri.get() : ""));
         const QString location = url.isLocalFile() ? url.toLocalFile() : url.toDisplayString(QUrl::RemovePassword);
         DialogsProvider::getInstance()->messageDialog(
-            qtr("VLC cannot save the file details.\n\nLocation: %1\n\nYour changes remain in this window.")
+            qtr("The app cannot save the file details.\n\nLocation: %1\n\nYour changes remain in this window.")
                 .arg(location), qtr("Save file details"), QMessageBox::Close, QMessageBox::Close,
             QMessageBox::Warning, this);
     };
+    const auto receipt=artworkSelectedByUser ? art_cover->selectedReceipt() : nullptr;
+    const auto stale=[this](bool tagsWritten) {
+        const auto message=tagsWritten
+            ? qtr("The app wrote the file tags, but the media item changed. Choose the cover image again before you save.")
+            : qtr("The media item changed. Choose the cover image again before you save.");
+        DialogsProvider::getInstance()->messageDialog(message,qtr("Save file details"),
+            QMessageBox::Close,QMessageBox::Close,QMessageBox::Warning,this);
+    };
+    if(artworkSelectedByUser && (!receipt || !receipt->current(input,receipt->generation()))) { stale(false); return false; }
     // Keep the live item unchanged until the file write succeeds.
     const SharedInputItem edited { input_item_Copy( input ), false };
     if( !edited )
@@ -352,12 +369,15 @@ bool MetaPanel::saveMeta()
         warn();
         return false;
     }
-    const auto applyEdits = [this]( input_item_t *item ) {
-        if (pendingTags)
+    const SharedInputItem tags { pendingTags ? input_item_Copy(pendingTags.get()) : nullptr, false };
+    if(pendingTags && !tags) { warn(); return false; }
+    if(tags && receipt) input_item_SetArtURL(tags.get(),nullptr);
+    const auto applyEdits = [this,tags]( input_item_t *item ) {
+        if (tags)
         {
             vlc_mutex_locker lock(&item->lock);
             if (!item->p_meta) item->p_meta = vlc_meta_New();
-            if (item->p_meta) vlc_meta_Merge(item->p_meta, pendingTags->p_meta);
+            if (item->p_meta) vlc_meta_Merge(item->p_meta, tags->p_meta);
         }
         input_item_SetTitle( item, qtu( title_text->text() ) );
         input_item_SetArtist( item, qtu( artist_text->text() ) );
@@ -371,17 +391,17 @@ bool MetaPanel::saveMeta()
         input_item_SetPublisher( item, qtu( publisher_text->text() ) );
         input_item_SetDescription( item, qtu( description_text->toPlainText() ) );
         input_item_SetEncodedBy( item, qtu( encodedby_text->text() ) );
-        if (!currentURL.isEmpty() && artworkSelectedByUser) {
-            if (!ArtworkApproval::userFile(item, QUrl(currentURL))) return false;
-        }
         return true;
     };
     if (!applyEdits(edited.get())) { warn(); return false; }
+    if(receipt && !receipt->stampCopy(edited.get())) { stale(false); return false; }
+    if(receipt && !receipt->current(input,receipt->generation())) { stale(false); return false; }
     int vlcret = input_item_WriteMeta( VLC_OBJECT(p_intf), edited.get() );
     if (vlcret != VLC_SUCCESS) {
         warn();
         return false;
     }
+    if(receipt && receipt->apply(input,receipt->generation())!=VLC_SUCCESS) { stale(true); return false; }
     if (!applyEdits(input)) { warn(); return false; }
     artworkSelectedByUser = false;
     pendingTags.reset();
@@ -407,6 +427,7 @@ void MetaPanel::enterEditMode()
 void MetaPanel::discardEdits()
 {
     if (fingerprintDialog) fingerprintDialog->reject();
+    art_cover->discardArtSelection(); artworkSelectedByUser=false;
     pendingTags.reset();
     if( !b_inEditMode )
         return;
@@ -475,7 +496,7 @@ void MetaPanel::fingerprint()
     connect(dialog, &QDialog::finished, this, [this] {
         fingerprintDialog.clear();
         lookupInProgress = false;
-        emit lookupInProgressChanged(false);
+        emit lookupInProgressChanged(artworkPreparing);
     });
     dialog->setAttribute(Qt::WA_DeleteOnClose, true);
     dialog->show();

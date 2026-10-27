@@ -60,7 +60,8 @@ public:
     bool saveMeta();
 
     bool isInEditMode();
-    bool isInputLocked() const { return b_inEditMode || lookupInProgress; }
+    bool canSaveMeta() const { return b_inEditMode && !lookupInProgress && !artworkPreparing; }
+    bool isInputLocked() const { return b_inEditMode || lookupInProgress || artworkPreparing; }
     void setEditMode( bool );
     void discardEdits();
 
@@ -69,6 +70,7 @@ private:
     qt_intf_t *p_intf;
     bool b_inEditMode = false;
     bool lookupInProgress = false;
+    bool artworkPreparing = false;
     QPointer<FingerprintDialog> fingerprintDialog;
     SharedInputItem pendingTags;
     QGridLayout *metaLayout;

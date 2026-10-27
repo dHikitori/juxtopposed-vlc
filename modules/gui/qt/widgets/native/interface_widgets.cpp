@@ -39,8 +39,11 @@
 
 #include <QApplication>
 #include <algorithm>
+#include <limits>
 #include <QAction>
 #include <QUrl>
+#include <QPointer>
+#include <QStandardPaths>
 #include <QPainter>
 #include <QPainterPath>
 #include <vlc_input_item.h>
@@ -56,10 +59,10 @@ CoverArtLabel::CoverArtLabel( QWidget *parent, qt_intf_t *_p_i )
     // Only refresh this item's cover. A different playing item must not
     // replace the selected item's art or an unsaved cover choice.
     connect( THEMIM, QOverload<QString>::of(&PlayerController::artChanged), this, [this] {
-        if (p_item.get() == THEMIM->getInput() && selectedArtPath.isEmpty()) showArtUpdate();
+        if (p_item.get() == THEMIM->getInput() && selectedArtPath.isEmpty() && !preparingArt) showArtUpdate();
     } );
     connect( THEMIM, QOverload<input_item_t *>::of(&PlayerController::artChanged), this, [this](input_item_t *item) {
-        if (item == p_item.get() && selectedArtPath.isEmpty()) showArtUpdate();
+        if (item == p_item.get() && selectedArtPath.isEmpty() && !preparingArt) showArtUpdate();
     } );
     setScaledContents( false );
     setAlignment( Qt::AlignCenter );
@@ -92,6 +95,8 @@ CoverArtLabel::CoverArtLabel( QWidget *parent, qt_intf_t *_p_i )
 
 CoverArtLabel::~CoverArtLabel()
 {
+    if(selection) selection->close();
+    if(preview) preview->close();
     QList< QAction* > artActions = actions();
     foreach( QAction *act, artActions )
         removeAction( act );
@@ -99,7 +104,10 @@ CoverArtLabel::~CoverArtLabel()
 
 void CoverArtLabel::setItem( const SharedInputItem& _p_item )
 {
-    selectedArtPath.clear();
+    const QPointer<CoverArtLabel> owner(this);
+    discardArtSelection();
+    if(!owner) return;
+    if(preview) preview->cancel();
     p_item = _p_item;
 
     if( p_item )
@@ -119,11 +127,46 @@ void CoverArtLabel::mouseDoubleClickEvent( QMouseEvent *event )
     event->accept();
 }
 
-void CoverArtLabel::showArtUpdate( const QString& url )
+bool CoverArtLabel::ensureArtworkHelpers()
 {
-    artwork = QPixmap();
-    if (!url.isEmpty()) artwork.load(url);
-    update();
+    if(selection && preview) return true;
+    auto* ctx=p_intf->p_mi;
+    auto lifetime=artworkLifetime;
+    if(!lifetime.current() && ctx) lifetime=ctx->addonStreamLifetime();
+    if(!lifetime.current()) return false;
+    if(!selection) {
+        const auto directory=artworkDirectory.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+QStringLiteral("/selected-artwork") : artworkDirectory;
+        selection=new ArtworkSelection(lifetime,directory,this);
+        if(ctx) connect(ctx,&MainCtx::addonWorkRetiring,selection,&ArtworkSelection::close,Qt::DirectConnection);
+    }
+    if(!preview) {
+        preview=new ArtworkNativePreview(lifetime,this);
+        if(ctx) connect(ctx,&MainCtx::addonWorkRetiring,preview,&ArtworkNativePreview::close,Qt::DirectConnection);
+    }
+    return true;
+}
+
+void CoverArtLabel::setArtworkSelectionLifetime(vlc::addons::AddonStreamLifetime::Handle lifetime,QString directory)
+{
+    const QPointer<CoverArtLabel> owner(this);
+    discardArtSelection();
+    if(!owner) return;
+    delete selection; selection=nullptr;
+    delete preview; preview=nullptr;
+    artworkLifetime=std::move(lifetime); artworkDirectory=std::move(directory); showArtUpdate();
+}
+
+void CoverArtLabel::showArtUpdate( const QString& path )
+{
+    artwork=QPixmap(); update();
+    if(path.isEmpty() || !ensureArtworkHelpers()) return;
+    const auto item=p_item;
+    preview->request(path,[this,item,path](QImage pixels) {
+        if(item!=p_item || preparingArt || !selectedArtPath.isEmpty()
+            || !item || THEMIM->decodeArtURL(item.get())!=path) return;
+        artwork=QPixmap::fromImage(std::move(pixels)); update();
+    });
 }
 
 void CoverArtLabel::showArtUpdate()
@@ -172,20 +215,60 @@ void CoverArtLabel::askForUpdate()
 
 void CoverArtLabel::setArtFromFile()
 {
-    if (!p_item) return;
+    if(!p_item || !p_intf->p_mi) return;
+    const QPointer<CoverArtLabel> owner(this);
+    const auto file=QFileDialog::getOpenFileUrl(this,qtr("Choose cover art"),p_intf->p_mi->getDialogFilePath(),
+        qtr("Image files (*.bmp *.cur *.gif *.ico *.jfif *.jpeg *.jpg *.pbm *.pgm *.png *.ppm *.svg *.svgz *.webp *.xbm *.xpm);;All files (*)"));
+    if(owner && !file.isEmpty()) chooseArtFile(file);
+}
 
-    const bool restricted = vlc_artwork_item_IsRestricted(p_item.get());
-    QUrl fileUrl = QFileDialog::getOpenFileUrl(this, qtr("Choose Cover Art"), p_intf->p_mi->getDialogFilePath(),
-        restricted ? qtr("Image files (*.jpg *.jpeg *.png *.webp)") : qtr("Image Files (*.gif *.jpg *.jpeg *.png)"));
-
-    if( fileUrl.isEmpty() )
-        return;
-    if (restricted && !ArtworkApproval::validUserFile(fileUrl)) return;
-
-    selectedArtPath = fileUrl.toLocalFile();
-    showArtUpdate( selectedArtPath );
-    emit artSelected( fileUrl.toString() );
+void CoverArtLabel::chooseArtFile(const QUrl& file)
+{
+    if(!p_item || !ensureArtworkHelpers() || artworkChoiceEpoch==std::numeric_limits<quint64>::max()) return;
+    const auto epoch=++artworkChoiceEpoch;
+    const QPointer<CoverArtLabel> owner(this);
+    const auto item=p_item;
+    if(preview) preview->cancel();
+    selection->cancel(); preparedArt.reset(); selectedArtPath.clear();
+    emit artSelectionReset();
+    if(!owner || item!=p_item || epoch!=artworkChoiceEpoch) return;
+    preparingArt=true; emit artworkPreparationChanged(true);
+    if(!owner || !preparingArt || item!=p_item || epoch!=artworkChoiceEpoch) return;
     emit editing();
+    if(!owner || !preparingArt || item!=p_item || epoch!=artworkChoiceEpoch) return;
+    const auto generation=selection->prepare(item.get(),file,[this,item,epoch](ArtworkSelection::Result result) {
+        if(item!=p_item || epoch!=artworkChoiceEpoch || !selection || selection->generation()!=result.generation) return;
+        const QPointer<CoverArtLabel> owner(this);
+        if(!result.receipt || !result.receipt->current(item.get(),result.generation)) {
+            preparingArt=false; emit artworkPreparationChanged(false);
+            if(!owner || item!=p_item || epoch!=artworkChoiceEpoch || preparingArt) return;
+            showArtUpdate();
+            DialogsProvider::getInstance()->messageDialog(qtr("The app cannot prepare this cover image."),
+                qtr("Cover art"),QMessageBox::Close,QMessageBox::Close,QMessageBox::Warning,this);
+            return;
+        }
+        preparedArt=std::move(result.receipt); selectedArtPath=preparedArt->file().toLocalFile();
+        artwork=QPixmap::fromImage(std::move(result.preview)); update();
+        emit artSelected(preparedArt->file().toString(QUrl::FullyEncoded));
+        if(!owner || item!=p_item || epoch!=artworkChoiceEpoch || !preparingArt) return;
+        preparingArt=false; emit artworkPreparationChanged(false);
+        if(owner && epoch==artworkChoiceEpoch) emit editing();
+    });
+    if(!generation) {
+        preparingArt=false; emit artworkPreparationChanged(false);
+        if(!owner || item!=p_item || epoch!=artworkChoiceEpoch || preparingArt) return;
+        showArtUpdate();
+        DialogsProvider::getInstance()->messageDialog(qtr("The app cannot prepare this cover image."),
+            qtr("Cover art"),QMessageBox::Close,QMessageBox::Close,QMessageBox::Warning,this);
+    }
+}
+
+void CoverArtLabel::discardArtSelection()
+{
+    if(artworkChoiceEpoch!=std::numeric_limits<quint64>::max()) ++artworkChoiceEpoch;
+    if(selection) selection->cancel();
+    preparedArt.reset(); selectedArtPath.clear();
+    if(preparingArt) { preparingArt=false; emit artworkPreparationChanged(false); }
 }
 
 void CoverArtLabel::clear()

@@ -28,6 +28,8 @@
 #include "util/shared_input_item.hpp"
 #include "util/media_identity_vlc.hpp"
 #include "util/artwork_approval.hpp"
+#include "util/artwork_selection.hpp"
+#include "maininterface/mainctx.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "playlist/playlist_controller.hpp"
 #include "playlist/media.hpp"
@@ -54,6 +56,7 @@
 #include <QImage>
 #include <QBuffer>
 #include <QStandardPaths>
+#include <QPointer>
 #include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -84,6 +87,7 @@ using SharedTitleList = ::vlc::vlc_shared_data_ptr<vlc_player_title_list,
 
 PlayerControllerPrivate::~PlayerControllerPrivate()
 {
+    m_artworkSelection.reset();
     assert(m_smpteTimerRequestCount == 0);
     m_seekSampleTimer.stop();
     m_seekPreviewEnabled = false;
@@ -3302,24 +3306,51 @@ const QString PlayerController::decodeArtURL( input_item_t *p_item )
     return path;
 }
 
+void PlayerController::setArtworkSelectionLifetime(vlc::addons::AddonStreamLifetime::Handle lifetime, QString cacheDirectory)
+{
+    Q_D(PlayerController);
+    d->m_artworkSelection.reset(); d->m_artworkSelectionLifetime=std::move(lifetime);
+    d->m_artworkSelectionDirectory=std::move(cacheDirectory);
+}
+
 void PlayerController::setArt( input_item_t *p_item, QString fileUrl )
 {
     Q_D(PlayerController);
-    if( hasInput() )
+    if(!p_item || !hasInput()) return;
+    const SharedInputItem target(p_item);
     {
-        char *psz_cachedir = config_GetUserDir( VLC_CACHE_DIR );
-        QString old_url = decodeArtURL( p_item );
-        old_url = QDir( old_url ).canonicalPath();
-
-        const QUrl selected(fileUrl);
-        if (!ArtworkApproval::userFile(p_item, selected)) { free(psz_cachedir); return; }
-        const QString selectedPath = QFileInfo(selected.toLocalFile()).canonicalFilePath();
-        if (psz_cachedir != nullptr && old_url != selectedPath && old_url.startsWith(QString::fromUtf8(psz_cachedir)))
-            QFile(old_url).remove();
-        free(psz_cachedir);
-        d->UpdateMeta(p_item);
-        d->UpdateArt( p_item );
+        vlc_player_locker lock(d->m_player);
+        if(vlc_player_GetCurrentMedia(d->m_player)!=target.get()) return;
     }
+    if(!d->m_artworkSelection) {
+        auto lifetime=d->m_artworkSelectionLifetime;
+        auto* ctx=d->p_intf->p_mi;
+        if(!lifetime.current() && ctx) lifetime=ctx->addonStreamLifetime();
+        if(!lifetime.current()) return;
+        const auto directory=d->m_artworkSelectionDirectory.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+QStringLiteral("/selected-artwork") : d->m_artworkSelectionDirectory;
+        d->m_artworkSelection=std::make_unique<ArtworkSelection>(lifetime,directory,this);
+        auto* selection=d->m_artworkSelection.get();
+        connect(this,&PlayerController::inputChanged,selection,[selection] { selection->cancel(); });
+        if(ctx) connect(ctx,&MainCtx::addonWorkRetiring,selection,&ArtworkSelection::close,Qt::DirectConnection);
+    }
+    d->m_artworkSelection->prepare(target.get(),QUrl(fileUrl,QUrl::StrictMode),[this,target](ArtworkSelection::Result result) {
+        if(!result.receipt) return;
+        Q_D(PlayerController);
+        {
+            vlc_player_locker lock(d->m_player);
+            if(vlc_player_GetCurrentMedia(d->m_player)!=target.get()
+                || result.receipt->apply(target.get(),result.generation)!=VLC_SUCCESS) return;
+        }
+        const QPointer<PlayerController> owner(this);
+        d->UpdateMeta(target.get());
+        if(!owner) return;
+        {
+            vlc_player_locker lock(d->m_player);
+            if(vlc_player_GetCurrentMedia(d->m_player)!=target.get()) return;
+        }
+        d->UpdateArt(target.get());
+    });
 }
 
 void PlayerController::refreshMediaMeta( input_item_t *p_item )

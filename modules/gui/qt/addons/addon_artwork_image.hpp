@@ -19,6 +19,10 @@ public:
         int dimension = 1024;
     };
     static QImage decode(const QByteArray&, Profile, const Limits&, QString* error = nullptr);
+    // Explicit native user choice only. Preserve the native 32768 dimension
+    // and 100 million input-pixel bounds, then return a scaled pixel image.
+    // This method does not change either existing image profile.
+    static QImage decodeSelected(const QByteArray&, int maximumDimension = 4096, QString* error = nullptr);
     static QByteArray format(const QByteArray&);
 };
 }

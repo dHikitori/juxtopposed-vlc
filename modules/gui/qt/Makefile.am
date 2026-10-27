@@ -537,6 +537,7 @@ libqt_plugin_la_SOURCES = \
 	util/redesign_widget_theme.cpp util/redesign_widget_theme.hpp \
 	util/scroll_focus_tracker.cpp util/scroll_focus_tracker.hpp \
 	util/playlist_cover_store.hpp \
+	util/artwork_selection.cpp util/artwork_selection.hpp \
 	util/filter_chain_edit.hpp util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp util/media_identity_vlc.hpp util/episode_title_cache.hpp util/media_identity_ml.hpp util/artwork_discovery.hpp util/artwork_store.hpp util/subtitle_matching.hpp \
 	util/local_file_url.hpp \
 	util/gettext_translator.cpp util/gettext_translator.hpp \
@@ -2180,6 +2181,28 @@ TESTS += test_qt_win32_emutls
 endif
 
 if HAVE_QT_QTEST
+
+test_qt_artwork_selection_SOURCES = tests/test_artwork_selection.cpp util/artwork_selection.cpp util/artwork_selection.hpp
+nodist_test_qt_artwork_selection_SOURCES = tests/test_artwork_selection.moc
+BUILT_SOURCES += tests/test_artwork_selection.moc
+CLEANFILES += tests/test_artwork_selection.moc
+test_qt_artwork_selection_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir)
+test_qt_artwork_selection_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_artwork_selection_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_artwork_selection_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_artwork_selection
+TESTS += test_qt_artwork_selection
+
+test_qt_artwork_selected_image_SOURCES = tests/test_artwork_selected_image.cpp
+nodist_test_qt_artwork_selected_image_SOURCES = tests/test_artwork_selected_image.moc
+BUILT_SOURCES += tests/test_artwork_selected_image.moc
+CLEANFILES += tests/test_artwork_selected_image.moc
+test_qt_artwork_selected_image_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir)
+test_qt_artwork_selected_image_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_artwork_selected_image_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_artwork_selected_image_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_artwork_selected_image
+TESTS += test_qt_artwork_selected_image
 
 test_qt_ml_joined_runner_SOURCES = tests/test_ml_joined_runner.cpp medialibrary/mljoinedthreadrunner.cpp medialibrary/mljoinedthreadrunner.hpp medialibrary/mltaskid.hpp medialibrary/mlthreadpool.cpp medialibrary/mlthreadpool.hpp
 nodist_test_qt_ml_joined_runner_SOURCES = tests/test_ml_joined_runner.moc medialibrary/mlthreadpool.moc.cpp

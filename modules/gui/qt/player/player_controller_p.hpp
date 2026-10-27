@@ -47,6 +47,7 @@ typedef struct vlc_preparser_req vlc_preparser_req;
 
 struct AudioWaveformSource;
 class ProgressiveAudioWaveform;
+class ArtworkSelection;
 
 class PlayerControllerPrivate {
     Q_DISABLE_COPY(PlayerControllerPrivate)
@@ -115,6 +116,9 @@ public:
     vlc_player_t            *m_player;
     vlc_preparser_t         *m_preparser = nullptr;
     QPointer<AddonMetadataService> m_metadataService;
+    std::unique_ptr<ArtworkSelection> m_artworkSelection;
+    vlc::addons::AddonStreamLifetime::Handle m_artworkSelectionLifetime;
+    QString m_artworkSelectionDirectory;
     vlc_preparser_t *m_seekPreparser = nullptr;
     vlc_preparser_req *m_seekRequest = nullptr;
     quint64 m_seekGeneration = 0;

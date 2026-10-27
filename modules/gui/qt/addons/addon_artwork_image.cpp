@@ -285,16 +285,17 @@ QByteArray AddonArtworkImage::format(const QByteArray& bytes)
     if (prefix.startsWith("<svg") || prefix.startsWith("<?xml") || prefix.startsWith("<!--")) return "svg";
     return {};
 }
-QImage AddonArtworkImage::decode(const QByteArray& bytes, Profile profile, const Limits& requested, QString* error)
+static QImage decodeProfile(const QByteArray& bytes, Profile profile, const Limits& requested, QString* error, int selectedDimension = 0)
 {
     if (error) error->clear();
     const auto fail = [error] { if (error) *error = QStringLiteral("The artwork format or resource limit is not valid."); return QImage{}; };
     const bool native = profile == Profile::NativeArtwork;
-    Limits limits{std::clamp<qint64>(requested.encodedBytes, 1, native ? 32 * 1024 * 1024 : 1024 * 1024),
-        std::clamp<qint64>(requested.pixelBytes, 8, native ? 128 * 1024 * 1024 : 8 * 1024 * 1024),
-        std::clamp(requested.dimension, 1, native ? 16384 : 1024)};
+    const bool selected = native && selectedDimension > 0;
+    Limits limits{std::clamp<qint64>(requested.encodedBytes, 1, selected ? 512 * 1024 * 1024 : native ? 32 * 1024 * 1024 : 1024 * 1024),
+        std::clamp<qint64>(requested.pixelBytes, 8, selected ? 800000000 : native ? 128 * 1024 * 1024 : 8 * 1024 * 1024),
+        std::clamp(requested.dimension, 1, selected ? 32768 : native ? 16384 : 1024)};
     if (bytes.isEmpty() || bytes.size() > limits.encodedBytes) return fail();
-    QByteArray clean; auto codec = format(bytes); bool valid = false; int orientation = 1;
+    QByteArray clean; auto codec = AddonArtworkImage::format(bytes); bool valid = false; int orientation = 1;
     if (codec == "png") valid = png(bytes, profile, limits, &clean);
     else if (codec == "jpeg") valid = jpeg(bytes, profile, limits, &clean, &orientation);
     else if (codec == "webp") valid = webp(bytes, profile, limits, &clean);
@@ -315,8 +316,16 @@ QImage AddonArtworkImage::decode(const QByteArray& bytes, Profile profile, const
     QImageReader reader(&input, codec); reader.setAutoDetectImageFormat(false); reader.setDecideFormatFromContent(false); reader.setAutoTransform(false);
     const auto size = reader.size();
     if (!size.isValid() || !dimensions(size.width(), size.height(), limits)) return fail();
+    auto expected = size;
+    if (selected && (size.width() > selectedDimension || size.height() > selectedDimension)) {
+        expected = size.scaled(QSize(selectedDimension, selectedDimension), Qt::KeepAspectRatio);
+        // This is the existing native reader's scaled-decode path. A codec
+        // can use an internal full frame. The header caps that frame at
+        // 100 million pixels; Qt's global allocation policy stays unchanged.
+        reader.setScaledSize(expected);
+    }
     auto image = reader.read();
-    if (image.isNull() || image.size() != size || image.sizeInBytes() > limits.pixelBytes) return fail();
+    if (image.isNull() || image.size() != expected || image.sizeInBytes() > limits.pixelBytes) return fail();
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     if (image.isNull() || image.sizeInBytes() > limits.pixelBytes) return fail();
     if (native) {
@@ -335,5 +344,12 @@ QImage AddonArtworkImage::decode(const QByteArray& bytes, Profile profile, const
     if (pixels.isNull()) return fail();
     for (int row = 0; row < image.height(); ++row) std::memcpy(pixels.scanLine(row), image.constScanLine(row), size_t(image.width()) * 4);
     return pixels;
+}
+QImage AddonArtworkImage::decode(const QByteArray& bytes, Profile profile, const Limits& limits, QString* error)
+{ return decodeProfile(bytes, profile, limits, error); }
+QImage AddonArtworkImage::decodeSelected(const QByteArray& bytes, int maximumDimension, QString* error)
+{
+    return decodeProfile(bytes, Profile::NativeArtwork, Limits{512 * 1024 * 1024, 800000000, 32768}, error,
+        std::clamp(maximumDimension, 1, 4096));
 }
 }
