@@ -83,6 +83,9 @@ addon_host_sources = files(
     'addons/addon_visualizer_render_queue.hpp',
     'addons/addon_native_source_resolver.cpp',
     'addons/addon_native_source_resolver.hpp',
+    'addons/addon_discovery_source_owner.cpp',
+    'addons/addon_discovery_source_owner.hpp',
+    'addons/addon_source_consent_ui_owner.cpp',
     'addons/addon_native_player_analysis.cpp',
     'addons/addon_native_player_analysis.hpp',
     'addons/addon_visualizer_worker_runtime.cpp',
@@ -157,6 +160,7 @@ addon_host_moc_headers = files(
     'addons/addon_queue_transactions.hpp',
     'addons/addon_discovery_service.hpp',
     'addons/addon_native_queue_store.hpp',
+    'addons/addon_discovery_source_owner.hpp',
     'addons/addon_native_library_store.hpp',
     'addons/addon_native_library_targets.hpp',
     'addons/addon_theme_service.hpp',
@@ -1873,6 +1877,7 @@ if qt6_dep.found()
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
         addon_visualizer_process = executable('addon_visualizer_process', files('tests/fixtures/addon_visualizer_process.c'), install: false, build_by_default: false)
+        addon_discovery_source_process = executable('addon_discovery_source_process', files('tests/fixtures/addon_discovery_source_process.c'), install: false, build_by_default: false)
         addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
         foreach addon_test : ['packages', 'runtime', 'metadata', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
             native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
@@ -1928,6 +1933,23 @@ if qt6_dep.found()
             'cpp_args': ['-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'],
             'link_args': qt_link_args,
         }
+        foreach addon_test : ['discovery_source_owner', 'source_consent_ui_owner']
+            vlc_tests += {
+                'name': 'test_qt_addon_' + addon_test,
+                'sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                'link_with': [addon_host_library, libvlccore, libvlc],
+                'suite': ['qt', 'addons'],
+                'timeout': 90,
+                'module_depends': addon_test == 'discovery_source_owner' ? ['http', 'https', 'console_logger', 'prefetch', 'record', 'wav', 'araw', 'adummy', 'float_mixer', 'scaletempo', 'audio_format', 'ugly_resampler'] : [],
+                'include_directories': [qt_include_dir, include_directories('../../..')],
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'] + (addon_test == 'discovery_source_owner' ? ['-DVLC_ADDON_DISCOVERY_PROCESS_FIXTURE="' + addon_discovery_source_process.full_path() + '"'] : []),
+                'depends': addon_test == 'discovery_source_owner' ? [addon_discovery_source_process] : [],
+                'link_args': qt_link_args,
+                'env': addon_worker_environment,
+            }
+        endforeach
         if host_system == 'windows'
             vlc_tests += {
                 'name': 'test_qt_window_fullscreen',

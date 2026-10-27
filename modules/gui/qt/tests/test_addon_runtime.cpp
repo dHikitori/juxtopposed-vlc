@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QScopeGuard>
 #include <QSemaphore>
+#include <QDynamicPropertyChangeEvent>
 #include <memory>
 #include <atomic>
 #include <thread>
@@ -416,6 +417,55 @@ private slots:
         lifetime.reset(); QVERIFY(!manager.capabilities().value("webSocketAvailable").toBool());
         QVERIFY(manager.capabilities().value("privateStorageAvailable").toBool());
         media.reset(); QVERIFY(!manager.capabilities().value("media").toMap().value("known").toBool());
+    }
+
+    void nativeSourceCapabilityRequiresAnExplicitAppMount() {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        QSignalSpy changed(&manager,&AddonManager::capabilitiesChanged);
+        QVERIFY(!manager.capabilities().value("mediaStreamAvailable").toBool());
+        QVERIFY(manager.metaObject()->indexOfMethod("setNativeStreamAvailable(bool)")<0);
+        manager.setNativeStreamAvailable(false); QCOMPARE(changed.size(),0);
+        manager.setNativeStreamAvailable(true); QCOMPARE(changed.size(),1);
+        QVERIFY(manager.capabilities().value("mediaStreamAvailable").toBool());
+        manager.setNativeStreamAvailable(true); QCOMPARE(changed.size(),1);
+        manager.setNativeStreamAvailable(false); QCOMPARE(changed.size(),2);
+        QVERIFY(!manager.capabilities().value("mediaStreamAvailable").toBool());
+    }
+
+    void retirementCannotPublishNativePlaybackAvailability() {
+        QTemporaryDir storage; auto manager=std::make_unique<AddonManager>(storage.path());
+        manager->setNativeStreamAvailable(true);
+        bool retired=false;
+        const auto owner=manager.get();
+        connect(owner,&AddonManager::retiring,this,[&] {
+            retired=true; QVERIFY(!owner->capabilities().value("mediaStreamAvailable").toBool());
+            owner->setNativeStreamAvailable(true);
+            QVERIFY(!owner->capabilities().value("mediaStreamAvailable").toBool());
+        });
+        manager.reset(); QVERIFY(retired);
+    }
+
+    void nativeCapabilityPropertyPublicationCanDeleteTheManager() {
+        struct DeleteOnProperty final : QObject {
+            bool eventFilter(QObject* watched,QEvent* event) override {
+                if(event->type()!=QEvent::DynamicPropertyChange
+                    || static_cast<QDynamicPropertyChangeEvent*>(event)->propertyName()!=QByteArrayLiteral("hakoneNativeStreamAvailable")) return false;
+                delete watched; return true;
+            }
+        } filter;
+        QTemporaryDir storage; QPointer<AddonManager> manager=new AddonManager(storage.path());
+        manager->installEventFilter(&filter); manager->setNativeStreamAvailable(true);
+        QVERIFY(!manager);
+    }
+
+    void nativeCapabilityObserversCanRemoveTheMount() {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        QSignalSpy changed(&manager,&AddonManager::capabilitiesChanged);
+        connect(&manager,&AddonManager::capabilitiesChanged,this,[&] {
+            if(manager.capabilities().value("mediaStreamAvailable").toBool()) manager.setNativeStreamAvailable(false);
+        });
+        manager.setNativeStreamAvailable(true); QCOMPARE(changed.size(),2);
+        QVERIFY(!manager.capabilities().value("mediaStreamAvailable").toBool());
     }
 
     void reviewCapturesPackageAndCancellationDoesNotInstall() {

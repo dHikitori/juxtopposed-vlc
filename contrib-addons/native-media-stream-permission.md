@@ -27,10 +27,10 @@ a private address or an unsupported protocol. The transport does not use API
 credentials. See [the native stream contract](native-discovery-stream-contract.md)
 and [saved source consent](native-source-consent-contract.md).
 
-`mediaStreamAvailable` reports the mounted host capability. It is false while
-the production native source route remains incomplete. The install screen can
-show that limit while it still permits package review. Adding this permission
-does not enable Play or Enqueue.
+`mediaStreamAvailable` reports the mounted host capability. It is false before
+the native source owner becomes active and during retirement. The install
+screen can show an unavailable route while it permits package review. This
+permission does not grant the separate source/account playback approval.
 
 WSS credential headers also have a closed host boundary. All header names with
 the case-insensitive prefix `sec-websocket-` are reserved, including future

@@ -52,7 +52,7 @@ The same-process store and approval epochs give the immediate invalidation bound
 
 ## Evidence boundary
 
-The consent/resolver foundation has 27 consent and 41 resolver cases in normal and sanitizer runs. The current owner/queue cohort also passes these cases in both modes:
+The consent/resolver foundation has 27 consent and 41 resolver cases in normal and sanitizer runs. The first owner/queue checkpoint also passes these cases in both modes:
 
 | Suite | Cases |
 | --- | ---: |
@@ -66,6 +66,8 @@ No sanitizer report occurs in these runs. The queue-only native fixture retains 
 
 The native sanitizer fixture uses the observed HTTP/WAV decoder modules, their configuration modules, and the native fallback resampler. A separate no-owner control reproduces the full module scan's 20,918-byte exit leak in 145 allocations. A per-module no-owner control isolates an additional 8-byte exit leak to the optional `soxr` module. These controls do not change production codec selection. The limited module run uses `ugly_resampler`, proves real native decode, and has no leak report.
 
-The app mount and truthful Manager capability flag remain a separate integration checkpoint. Do a check of that proof before the app enables this platform.
+The portable process fixture repeats the source-owner suite with 13 normal and 13 sanitizer cases against the updated Core. Six protocol and bound cases also pass on Linux, in an actual Windows process, and under focused sanitizers. Windows execution proves the fixture; the native owner playback runs execute on Linux. The old Python fixture is removed. See `/tmp/hakone-portable-source-worker-validation.json`.
+
+MainUI now mounts the owner, trusted approval panel, and stable-reference factory. The actual MainUI object compiles. The panel binding passes nine normal and nine sanitizer cases. All 39 runtime cases pass in each build, including explicit capability activation, retirement, callback reentry, and the packaged worker. See [the app binding](source-consent-ui.md). Full app linking, compiled QML, and supported-platform app execution remain open.
 
 The C++ fixture friend can install synthetic DNS, TLS trust, and a loopback connection for native tests. The production constructor and factory expose no endpoint override. No public service or account key is required for these tests.

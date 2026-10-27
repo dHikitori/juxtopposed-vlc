@@ -202,10 +202,17 @@ QVariantMap AddonManager::capabilities() const
     const QFileInfo worker(m_workerExecutable);
     return {{"workerAvailable", worker.isFile() && worker.isExecutable()}, {"workerProtocol", "wasm-message-v1"},
         {"safeMode", safeMode()}, {"coreOperations", operations}, {"networkHttpAvailable", QSslSocket::supportsSsl()},
-        {"mediaStreamAvailable", false},
+        {"mediaStreamAvailable", !m_retiring && property("hakoneNativeStreamAvailable").toBool()},
         {"privateStorageAvailable", all({QStringLiteral("storage.get"), QStringLiteral("storage.set"), QStringLiteral("storage.remove")})},
         {"webSocketAvailable", all({QStringLiteral("network.websocket.open"), QStringLiteral("network.websocket.send"), QStringLiteral("network.websocket.receive"), QStringLiteral("network.websocket.close")})},
         {"media", media}};
+}
+void AddonManager::setNativeStreamAvailable(bool available)
+{
+    if (m_retiring || property("hakoneNativeStreamAvailable").toBool() == available) return;
+    const QPointer<AddonManager> alive(this);
+    setProperty("hakoneNativeStreamAvailable", available);
+    if (alive && !m_retiring) emit capabilitiesChanged();
 }
 void AddonManager::setMediaCapabilitiesSource(QObject* source)
 {

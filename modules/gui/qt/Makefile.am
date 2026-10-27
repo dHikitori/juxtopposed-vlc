@@ -189,6 +189,9 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_visualizer_render_queue.hpp \
 	addons/addon_native_source_resolver.cpp \
 	addons/addon_native_source_resolver.hpp \
+	addons/addon_discovery_source_owner.cpp \
+	addons/addon_discovery_source_owner.hpp \
+	addons/addon_source_consent_ui_owner.cpp \
 	addons/addon_native_player_analysis.cpp \
 	addons/addon_native_player_analysis.hpp \
 	addons/addon_visualizer_worker_runtime.cpp \
@@ -262,6 +265,7 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_queue_transactions.moc.cpp \
 	addons/addon_discovery_service.moc.cpp \
 	addons/addon_native_queue_store.moc.cpp \
+	addons/addon_discovery_source_owner.moc.cpp \
 	addons/addon_native_library_store.moc.cpp \
 	addons/addon_native_library_targets.moc.cpp \
 	addons/addon_theme_service.moc.cpp \
@@ -2492,6 +2496,9 @@ TESTS += test_qt_addon_websocket_codec
 
 check_PROGRAMS += addon_visualizer_process
 addon_visualizer_process_SOURCES = tests/fixtures/addon_visualizer_process.c
+
+check_PROGRAMS += addon_discovery_source_process
+addon_discovery_source_process_SOURCES = tests/fixtures/addon_discovery_source_process.c
 EXTRA_DIST += tests/fixtures/addon_visualizer_worker.rs tests/fixtures/addon_visualizer_worker_wasm.hpp
 
 test_qt_addon_source_consent_SOURCES = tests/test_addon_source_consent.cpp
@@ -2731,6 +2738,29 @@ test_qt_addon_native_queue_store_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PL
 check_PROGRAMS += test_qt_addon_native_queue_store
 TESTS += test_qt_addon_native_queue_store
 
+
+test_qt_addon_discovery_source_owner_SOURCES = tests/test_addon_discovery_source_owner.cpp
+nodist_test_qt_addon_discovery_source_owner_SOURCES = tests/test_addon_discovery_source_owner.moc
+BUILT_SOURCES += tests/test_addon_discovery_source_owner.moc
+CLEANFILES += tests/test_addon_discovery_source_owner.moc
+test_qt_addon_discovery_source_owner_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_DISCOVERY_PROCESS_FIXTURE='"$(abs_builddir)/addon_discovery_source_process$(EXEEXT)"'
+test_qt_addon_discovery_source_owner_DEPENDENCIES = libqt_addon_host.la addon_discovery_source_process
+test_qt_addon_discovery_source_owner_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_discovery_source_owner_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_discovery_source_owner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_discovery_source_owner
+TESTS += test_qt_addon_discovery_source_owner
+
+test_qt_addon_source_consent_ui_owner_SOURCES = tests/test_addon_source_consent_ui_owner.cpp
+nodist_test_qt_addon_source_consent_ui_owner_SOURCES = tests/test_addon_source_consent_ui_owner.moc
+BUILT_SOURCES += tests/test_addon_source_consent_ui_owner.moc
+CLEANFILES += tests/test_addon_source_consent_ui_owner.moc
+test_qt_addon_source_consent_ui_owner_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_source_consent_ui_owner_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_source_consent_ui_owner_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_source_consent_ui_owner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_source_consent_ui_owner
+TESTS += test_qt_addon_source_consent_ui_owner
 
 LIBVLC = ../../../lib/libvlc.la
 QT_QTEST_COMMON_cppflags = $(libqt_plugin_la_CPPFLAGS) -I$(builddir)/tests -DTOP_BUILDDIR=\"$(abs_top_builddir)\"
@@ -3523,3 +3553,6 @@ EXTRA_DIST += tests/builtin-ids/CMakeLists.txt
 
 EXTRA_DIST += tests/test_addon_metadata_family_plan.cpp tests/test_addon_native_provider_context.cpp \
 	tests/fixtures/addon_native_provider_fixture.c tests/fixtures/addon_native_provider_fixture.h
+
+EXTRA_DIST += tests/discovery-source/CMakeLists.txt tests/discovery-source/native_module_baseline.cpp \
+	tests/fixtures/addon_source_tls_fixture.hpp

@@ -42,6 +42,7 @@ FocusScope {
         id: discoveryWindow
         backend: typeof AddonDiscovery === "undefined" ? null : AddonDiscovery
         settingsBackend: typeof AddonManager === "undefined" ? null : AddonManager
+        sourceConsentBackend: typeof AddonSourcePlayback === "undefined" ? null : AddonSourcePlayback
         scaleFactor: view.scaleFactor; accentColor: view.accentColor; lightTheme: view.lightTheme
         onManageRequested: DialogsProvider.prefsPageDialog("extensions")
     }

@@ -49,6 +49,8 @@ public:
     QVariantMap capabilities() const;
     QVariantMap updateResult() const { return m_updateResult; }
     void setMediaCapabilitiesSource(QObject*);
+    // C++ only. The app reports the mounted native source route.
+    void setNativeStreamAvailable(bool);
     void setWorkerExecutable(const QString&);
     Q_INVOKABLE QVariantList providersForFeature(const QString& feature) const;
     Q_INVOKABLE QStringList providerOrder(const QString& feature) const;

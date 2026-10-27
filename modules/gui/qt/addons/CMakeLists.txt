@@ -93,6 +93,8 @@ if(VLC_BUILD_DIR)
         addon_native_library_targets.cpp addon_native_library_targets.hpp
         addon_native_artwork_assets.cpp addon_native_artwork_assets.hpp
         addon_native_source_resolver.cpp addon_native_source_resolver.hpp
+        addon_discovery_source_owner.cpp addon_discovery_source_owner.hpp
+        addon_source_consent_ui_owner.cpp
         addon_stream_proxy_native.cpp addon_stream_proxy_native.hpp
         addon_native_player_analysis.cpp addon_native_player_analysis.hpp)
     target_sources(vlc_addon_native_metadata PRIVATE addon_native_session_player.cpp addon_native_session_player.hpp)
@@ -177,6 +179,21 @@ if(VLC_BUILD_DIR)
     target_include_directories(test_addon_native_queue_store PRIVATE "${VLC_SOURCE_ROOT}")
     target_compile_definitions(test_addon_native_queue_store PRIVATE VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
     add_test(NAME addon_native_queue_store COMMAND test_addon_native_queue_store)
+
+    add_executable(addon_discovery_source_process "../tests/fixtures/addon_discovery_source_process.c")
+    set_target_properties(addon_discovery_source_process PROPERTIES AUTOMOC OFF)
+    foreach(name discovery_source_owner source_consent_ui_owner)
+        add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
+        target_link_libraries(test_addon_${name} PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
+        target_include_directories(test_addon_${name} PRIVATE "${VLC_SOURCE_ROOT}")
+        target_compile_definitions(test_addon_${name} PRIVATE
+            VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}" VLC_ADDON_NATIVE_BUILD_ROOT="${VLC_BUILD_DIR}")
+        add_test(NAME addon_${name} COMMAND test_addon_${name})
+        set_tests_properties(addon_${name} PROPERTIES TIMEOUT 90)
+    endforeach()
+
+    target_compile_definitions(test_addon_discovery_source_owner PRIVATE VLC_ADDON_DISCOVERY_PROCESS_FIXTURE="$<TARGET_FILE:addon_discovery_source_process>")
+    add_dependencies(test_addon_discovery_source_owner addon_discovery_source_process)
 
     find_package(SQLite3 QUIET)
     if(TARGET SQLite::SQLite3)

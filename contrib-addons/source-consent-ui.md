@@ -30,6 +30,30 @@ review action. Both QML diagnostic streams and the sanitizer stream are empty.
 
 The isolated recipe compiles the actual facade and tests with strict Qt
 definitions. Exact source, executable, and log hashes are in
-`/tmp/hakone-source-consent-ui-validation.json`. The native-owner bridge,
-production app mount, native owner/queue tests, and fresh full app run remain
-separate integration gates.
+`/tmp/hakone-source-consent-ui-validation.json`.
+
+## Native app binding
+
+The native constructor binds this panel to `AddonDiscoverySourceOwner` through
+guarded owner pointers. The real binding passes nine normal and nine focused
+sanitizer cases. These cases include saved Allow and Remove actions, closing a
+review without approval, failed capture, Manager retirement, and both object
+destruction orders. Both diagnostic streams are empty. Exact hashes are in
+`/tmp/hakone-source-consent-native-binding/final-proof.json`.
+
+MainUI creates the owner with the shared admissions store and app work handle.
+It binds the panel as `AddonSourcePlayback` and supplies it to the discovery
+window. The source factory puts stable references in the native queue. Only a
+native input open can ask the provider for a stream address.
+
+The C++ app reports `mediaStreamAvailable` after the native owner becomes
+active. The default is false. Repeated state reports do not send duplicate
+notifications. Retirement reports false and refuses a later true report. The
+setter is not a QML method. All 39 runtime cases pass normally and with focused
+sanitizers, including the actual packaged worker. There are no skips or
+diagnostics. See `/tmp/hakone-native-stream-runtime-validation.json`.
+
+App retirement closes the source owner and panel before app drain. Manager
+retirement closes the native source route before worker shutdown waits. The
+actual MainUI object compiles with the configured strict app flags. Full app
+linking, compiled QML, and supported-platform app checks remain open.

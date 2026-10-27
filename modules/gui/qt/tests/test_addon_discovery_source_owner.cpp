@@ -9,6 +9,8 @@
 #include <QJsonArray>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QProcess>
+#include <QElapsedTimer>
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
@@ -40,6 +42,17 @@ struct DiscoverySourceTestAccess {
 }
 namespace {
 const QString source=QStringLiteral("org.hakone.discovery-fixture/catalogue");
+QString workerName() {
+#ifdef Q_OS_WIN
+    return QStringLiteral("source-worker.exe");
+#else
+    return QStringLiteral("source-worker");
+#endif
+}
+bool copyWorker(const QString& path) {
+    return QFile::copy(QStringLiteral(VLC_ADDON_DISCOVERY_PROCESS_FIXTURE),path)
+        && QFile::setPermissions(path,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);
+}
 struct NativeModuleLog {
     std::mutex mutex; std::vector<std::string> selected;
     static void record(void* raw,int,const libvlc_log_t*,const char* format,va_list args) {
@@ -106,9 +119,8 @@ struct Fixture {
             permissions.insert("required",required); manifest.insert("permissions",permissions);
         }
         QFile output(package.filePath("addon.json")); if(!output.open(QIODevice::WriteOnly)) return; output.write(QJsonDocument(manifest).toJson()); output.close();
-        const auto worker=tools.filePath("source-worker");
-        if(!QFile::copy(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addon-discovery-source-worker.py"),worker)) return;
-        QFile::setPermissions(worker,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);
+        const auto worker=tools.filePath(workerName());
+        if(!copyWorker(worker)) return;
         manager=std::make_unique<AddonManager>(profile.path()); manager->setWorkerExecutable(worker);
         if(!manager->installLocalPackage(package.path(),true)) return;
         if(privateAccount && !manager->saveAddonSettings("org.hakone.discovery-fixture",{},{{"apiKey",QVariantMap{{"operation","replace"},{"value","unit-source-key"},{"sessionOnly",true}}}})) return;
@@ -145,12 +157,45 @@ struct Fixture {
             {"itemId","station"},{"snapshot",QVariantMap{{"title","Station"},{"mediaKind","musicTrack"}}}};
     }
     QString uri() { QStringList values; return admissions->admit({reference()},&values)?values.first():QString{}; }
-    int resolves() const { QFile file(tools.filePath("source-worker.resolves")); return file.open(QIODevice::ReadOnly)?file.readAll().count('\n'):0; }
+    int resolves() const { QFile file(tools.filePath(workerName()+QStringLiteral(".resolves"))); return file.open(QIODevice::ReadOnly)?file.readAll().count('\n'):0; }
 };
 }
 class TestAddonDiscoverySourceOwner final:public QObject {
     Q_OBJECT
 private slots:
+    void portableWorkerKeepsFramingAndOneResolveRecord() {
+        QTemporaryDir directory; QVERIFY(directory.isValid());
+        const QString path=directory.filePath(QString::fromUtf8("Source \xe9\x9f\xb3\xe6\xa5\xbd"));
+        QVERIFY(QDir().mkpath(path)); const auto executable=QDir(path).filePath(workerName());
+        QVERIFY(copyWorker(executable));
+        QProcess process; process.start(executable,{QStringLiteral("unused.wasm")}); QVERIFY(process.waitForStarted());
+        QByteArray output;
+        const auto readLines=[&](int count) {
+            QElapsedTimer elapsed; elapsed.start();
+            while(output.count('\n')<count && elapsed.elapsed()<5000) {
+                output+=process.readAllStandardOutput();
+                if(output.count('\n')<count) process.waitForReadyRead(50);
+            }
+            output+=process.readAllStandardOutput(); return output.count('\n')==count;
+        };
+        QVERIFY(readLines(1));
+        QCOMPARE(QJsonDocument::fromJson(output.trimmed()).object().value("type").toString(),QStringLiteral("ready"));
+        const QByteArray requests="{\"type\":\"invoke\",\"id\":\"roots\",\"operation\":\"roots\",\"context\":{}}\n"
+            "{\"type\":\"cancel\",\"id\":\"ignored\"}\n"
+            "{\"type\":\"invoke\",\"id\":\"resolve\\\"quoted\",\"operation\":\"resolve\",\"context\":{\"itemRef\":\"station\"}}\n";
+        QCOMPARE(process.write(requests),qint64(requests.size())); process.closeWriteChannel();
+        QVERIFY(readLines(3));
+        if(process.state()!=QProcess::NotRunning) QVERIFY(process.waitForFinished());
+        QCOMPARE(process.exitStatus(),QProcess::NormalExit); QCOMPARE(process.exitCode(),0);
+        const auto lines=output.trimmed().split('\n'); QCOMPARE(lines.size(),3);
+        const auto root=QJsonDocument::fromJson(lines.at(1)).object().value("messages").toArray().first().toObject();
+        QCOMPARE(root.value("id").toString(),QStringLiteral("roots")); QCOMPARE(root.value("data").toObject().value("items").toArray().size(),1);
+        const auto resolved=QJsonDocument::fromJson(lines.at(2)).object().value("messages").toArray().first().toObject();
+        QCOMPARE(resolved.value("id").toString(),QStringLiteral("resolve\"quoted"));
+        QCOMPARE(resolved.value("data").toObject().value("format").toString(),QStringLiteral("progressive"));
+        QFile log(executable+QStringLiteral(".resolves")); QVERIFY(log.open(QIODevice::ReadOnly)); QCOMPARE(log.readAll(),QByteArray("resolve\n"));
+        QVERIFY(process.readAllStandardError().isEmpty());
+    }
     void realQueuePlaybackUsesOneFreshResolveAndContainedTlsPerOpen() {
         AddonSourceTlsFixture tls; QVERIFY(tls.start()); Fixture f(true,true); QVERIFY(f.valid);
         libvlc_log_set(f.native,NativeModuleLog::record,nativeModuleLog.get());

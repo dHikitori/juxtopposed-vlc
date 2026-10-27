@@ -85,11 +85,13 @@ The real queue adapter takes a queue identity and revision before an action. It 
 
 ## Playback status
 
-The default application gate does not yet supply a native discovery transport. Browse and search work with this gate. Play and Enqueue remain disabled. A saved source reference is not a stream URL.
+The app supplies contained native preparation and a lazy resolver for admitted source references. Play and Enqueue need an active native route and the user's saved approval for the exact source and account. Browse and search do not grant that approval.
 
-A host that enables playback must supply both contained native preparation and a lazy resolver for admitted source references. The host consumes a one-use playback handle after the final current-item and queue revision checks. The package cannot supply native input pointers, Hakone options, output configuration, or an access module name.
+Enqueue stores the stable locator without a stream lookup. Play uses that same locator after the final source, account, and queue checks. Only a native primary input open creates the one-use playback intent and asks the source to resolve it. Stop and replay use a fresh input generation and source result. The package cannot supply native input pointers, Hakone options, output configuration, or an access module name.
 
-The current production mount does not append to media-library playlists. This path needs the library transaction API that validates and appends under one database transaction. A UI revision comparison or a mutex on one writer path is insufficient.
+The app also binds the native library adapter when the media library is available. The trusted picker supplies an opaque playlist choice. The adapter validates and appends the selection under one database transaction. Saving a reference does not resolve a stream or grant later playback approval.
+
+The native owner, approval panel, queue route, and actual MainUI object have focused checks. The fresh full application link, compiled QML, and supported-platform app checks remain open.
 
 ## Source and tests
 
