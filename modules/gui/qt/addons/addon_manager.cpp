@@ -2,6 +2,7 @@
 #include "addon_manager.hpp"
 #include "addon_storage.hpp"
 #include "addon_ui_assets.hpp"
+#include "addon_store_authority.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -382,15 +383,16 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
     // This preparation reads memory only. The detached reader owns no QObject.
     const auto store = m_store;
     const auto presence = m_secrets.presenceSnapshot();
-    return [store, presence, global]() {
+    const auto authority = m_store.authorityToken();
+    return [store, presence, global, authority]() {
         UiAssetCapture result;
         const auto rejected = [&result] {
             result.error = QStringLiteral("The image package or its permissions changed.");
-            result.registration.clear(); result.assets.clear(); result.current = {};
+            result.registration.clear(); result.assets.clear(); result.current = {}; result.live = {};
             return result;
         };
         InstalledPackage package;
-        if (!store.installed(packagePart(global), &package) || !package.enabled) return rejected();
+        if (!authority.current() || !store.installed(packagePart(global), &package) || !package.enabled) return rejected();
         const auto* contribution = package.manifest.contribution(localPart(global));
         if (!contribution || !QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement"}.contains(contribution->type)) return rejected();
         const auto scope = package.grants.value(QStringLiteral("ui.contribute")).toObject();
@@ -450,7 +452,8 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
             if (bytes.isEmpty() || bytes.size() > 1024 * 1024 || (total += bytes.size()) > 8 * 1024 * 1024) return rejected();
             result.assets.insert(it.key(), bytes);
         }
-        result.current = [store, package, settings, settingsRevision] { return store.networkConfigurationMatches(package, settings, settingsRevision); };
+        result.live = [authority] { return authority.current(); };
+        result.current = [store, package, settings, settingsRevision, authority] { return authority.current() && store.networkConfigurationMatches(package, settings, settingsRevision); };
         if (!result.current()) return rejected();
         result.registration = {{"id", global}, {"packageId", verified.id}, {"enabled", true}, {"configured", true},
             {"accountReference", account}, {"assetStamp", stamp}, {"assets", declarations.toVariantMap()}};

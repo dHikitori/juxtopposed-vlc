@@ -1,5 +1,9 @@
 # Static UI images
 
+Image delivery also checks a shared in-memory store token. The host captures it before background admission. A settings, release, grant, recovery, or removal write invalidates that token before file publication. Cold delivery, warm-cache delivery, provider reads, and trusted pixel snapshots refuse an old token. A short native scope sweep withdraws already mounted images. Publication reads no files on the UI thread.
+
+The token covers mutations by owners in the same process. External file edits remain subject to background state checks and the Manager's live session epoch; this is not an instantaneous cross-process revocation claim.
+
 A UI route, modal, section, or replacement can declare static package images. Include each image in the manifest file list.
 
 ```json

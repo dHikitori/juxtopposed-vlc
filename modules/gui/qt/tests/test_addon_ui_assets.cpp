@@ -50,6 +50,7 @@ struct Fake {
                 {"accountReference", "account-1"}, {"assetStamp", identity}, {"assets", assets}};
             captured.assets = images;
             captured.current = [epoch = epoch, expected = epoch->load()] { return epoch->load() == expected; };
+            captured.live = captured.current;
             return [captured] { return captured; };
         }};
     }
@@ -187,6 +188,22 @@ private slots:
         QVERIFY(!assets.claimImage("c", &third).isEmpty());
         QVERIFY(assets.claimImage("a", &third).isEmpty());
     }
+    void nativeCompositionUsesItsTrustedProfileAndRevokesSnapshots()
+    {
+        Fake fake; fake.images["cover"] = raster("PNG", 800, 400);
+        AddonUiAssets::Options nativeProfile; nativeProfile.maximumOutputDimension = 1024;
+        AddonUiAssets native(fake.backend(), nativeProfile), ui(fake.backend(), {});
+        QVERIFY(native.openSession("native", "example/view")); QVERIFY(ui.openSession("ui", "example/view"));
+        QTRY_VERIFY(!native.sessionLoading("native") && native.sessionPixels("native").size() == 1);
+        QTRY_VERIFY(!ui.sessionLoading("ui") && ui.sessionPixels("ui").size() == 1);
+        QCOMPARE(native.sessionPixels("native").value("cover").size(), QSize(800, 400));
+        QCOMPARE(ui.sessionPixels("ui").value("cover").size(), QSize(512, 256));
+        QCOMPARE(native.sessionRegistration("native").value("assetStamp").toString(), fake.identity);
+        QCOMPARE(native.metaObject()->indexOfMethod("sessionPixels(QString)"), -1);
+        QCOMPARE(native.metaObject()->indexOfMethod("sessionRegistration(QString)"), -1);
+        native.closeSession("native"); QVERIFY(native.sessionPixels("native").isEmpty());
+        QVERIFY(native.sessionRegistration("native").isEmpty()); QVERIFY(!native.sessionLoading("native"));
+    }
     void imageOwnerLimitCoversAllServices()
     {
         Fake fake; AddonUiAssets first(fake.backend(), {}), second(fake.backend(), {});
@@ -215,6 +232,49 @@ private slots:
         QTRY_COMPARE(assets.statistics().value("jobs").toInt(), 0); QVERIFY(assets.sessionAssets("closed").isEmpty());
         QVERIFY(assets.openSession("disabled", "example/view")); fake.setEnabled(false); assets.invalidate();
         QTRY_COMPARE(assets.statistics().value("jobs").toInt(), 0); QVERIFY(assets.sessionAssets("disabled").isEmpty());
+    }
+    void authorityChangeBetweenWorkerGuardAndDelivery_data()
+    { QTest::addColumn<bool>("warm"); QTest::newRow("cold") << false; QTest::newRow("warm-cache") << true; }
+    void authorityChangeBetweenWorkerGuardAndDelivery()
+    {
+        QFETCH(bool, warm);
+        struct Control { QSemaphore checked; std::atomic_bool armed{false}, live{true}; };
+        const auto control = std::make_shared<Control>(); Fake fake; auto backend = fake.backend(); const auto prepare = backend.prepare;
+        backend.prepare = [prepare, control](const QString& id) {
+            const auto reader = prepare(id);
+            return [reader, control] {
+                auto capture = reader(); capture.live = [control] { return control->live.load(); };
+                capture.current = [control] { if (control->armed.load()) control->checked.release(); return true; };
+                return capture;
+            };
+        };
+        AddonUiAssets assets(backend, {});
+        if (warm) {
+            QVERIFY(assets.openSession("warm", "example/view")); QTRY_COMPARE(assets.sessionPixels("warm").size(), 1);
+            assets.closeSession("warm"); QVERIFY(assets.statistics().value("cacheBytes").toLongLong() > 0);
+        }
+        QTRY_COMPARE(assets.statistics().value("globalIntegrityCaptures").toInt(), 0);
+        control->armed.store(true); QVERIFY(assets.openSession("late", "example/view"));
+        // No GUI event can deliver the queued result before this guard changes.
+        QVERIFY(control->checked.tryAcquire(1, 5000)); control->live.store(false);
+        QTRY_COMPARE(assets.statistics().value("jobs").toInt(), 0);
+        QVERIFY(assets.sessionAssets("late").isEmpty()); QVERIFY(assets.sessionPixels("late").isEmpty());
+        QVERIFY(assets.sessionRegistration("late").isEmpty());
+    }
+    void publishedTicketsConsultAuthorityAndReleaseExpiredOwners()
+    {
+        const auto live = std::make_shared<std::atomic_bool>(true); Fake fake; auto backend = fake.backend(); const auto prepare = backend.prepare;
+        backend.prepare = [prepare, live](const QString& id) {
+            const auto reader = prepare(id);
+            return [reader, live] { auto capture = reader(); capture.live = [live] { return live->load(); }; return capture; };
+        };
+        AddonUiAssets assets(backend, {}); AddonAssetImageProvider provider(&assets); QObject owner;
+        QVERIFY(assets.openSession("published", "example/view")); QTRY_COMPARE(assets.sessionAssets("published").size(), 1);
+        const auto claim = assets.claimImage("published", &owner), url = assets.assetUrlForClaim("published", "asset:cover", claim);
+        QVERIFY(!provider.requestImage(providerId(url), nullptr, {}).isNull()); live->store(false);
+        QVERIFY(provider.requestImage(providerId(url), nullptr, {}).isNull()); QVERIFY(assets.sessionPixels("published").isEmpty());
+        QVERIFY(assets.assetUrlForClaim("published", "asset:cover", claim).isEmpty());
+        QTRY_COMPARE(assets.statistics().value("claims").toInt(), 0);
     }
     void pendingDecodeKeepsItsBudgetWithoutBlockingClose_data()
     {

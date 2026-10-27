@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QPointer>
 #include <QVariantMap>
+#include <QTimer>
 #include <functional>
 #include <memory>
 
@@ -16,6 +17,8 @@ struct UiAssetCapture {
     QMap<QString, QByteArray> assets;
     QMap<QString, QString> cacheKeys;
     std::function<bool()> current;
+    // This guard reads memory only, including from an image-provider thread.
+    std::function<bool()> live;
     QString error;
 };
 using UiAssetReader = std::function<UiAssetCapture()>;
@@ -48,6 +51,11 @@ public:
     ~AddonUiAssets() override;
     bool openSession(const QString& session, const QString& contribution);
     QVariantMap sessionAssets(const QString& session) const;
+    // Trusted native consumers can compose these pixels into one surface.
+    // These functions are not available through QML or guest messages.
+    QVariantMap sessionRegistration(const QString& session) const;
+    QMap<QString, QImage> sessionPixels(const QString& session) const;
+    bool sessionLoading(const QString& session) const;
     void closeSession(const QString& session, bool notify = true);
     void suspendSession(const QString& session, bool suspended);
     QString claimImage(const QString& session, QObject* owner);
@@ -64,8 +72,8 @@ signals:
     void imageBudgetChanged();
 private:
     friend class AddonAssetImageProvider;
-    struct Scope { QString contribution, package, stamp; quint64 epoch = 0; bool suspended = false; QVariantMap urls; QMap<QString, QString> tickets; };
-    struct Work { QString id, session, alias, suffix, cacheKey; quint64 epoch = 0; QByteArray bytes; std::shared_ptr<void> bytesLease; std::function<bool()> current; };
+    struct Scope { QString contribution, package, stamp; quint64 epoch = 0; bool suspended = false; QVariantMap urls; QMap<QString, QString> tickets; QVariantMap registration; std::function<bool()> live; };
+    struct Work { QString id, session, alias, suffix, cacheKey; quint64 epoch = 0; QByteArray bytes; std::shared_ptr<void> bytesLease; std::function<bool()> current, live; };
     struct CaptureWork { QString id, session; quint64 epoch; UiAssetReader read; };
     struct Cache { QImage image; qint64 bytes = 0; int pins = 0; quint64 use = 0; };
     struct Claim { QString session; QPointer<QObject> owner; QMetaObject::Connection destroyed; std::shared_ptr<void> lease; };
@@ -74,6 +82,7 @@ private:
     static QImage image(const std::shared_ptr<SharedImages>&, const QString&, QSize*);
     void pump();
     void shutdown(bool notify);
+    void expireScopes();
     void decoded(const QString& work, QImage image, const QString& error);
     void captured(const QString& work, UiAssetCapture capture);
     bool publish(const QString& session, const QString& alias, const QString& cacheKey);
@@ -89,6 +98,7 @@ private:
     QList<CaptureWork> m_captureQueue;
     QHash<QString, Cache> m_cache;
     QHash<QString, Claim> m_claims;
+    QTimer m_authorityTimer;
     qint64 m_queuedBytes = 0, m_cacheBytes = 0;
     quint64 m_epoch = 0, m_use = 0;
     bool m_closing = false;

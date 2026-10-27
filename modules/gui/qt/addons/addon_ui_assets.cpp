@@ -18,7 +18,7 @@
 
 namespace vlc::addons {
 struct AddonUiAssets::SharedImages {
-    struct Ticket { QString session, cacheKey; quint64 epoch; QImage pixels; };
+    struct Ticket { QString session, cacheKey; quint64 epoch; QImage pixels; std::function<bool()> live; };
     struct Claim { QString session; quint64 epoch; };
     QMutex mutex;
     QPointer<AddonUiAssets> owner;
@@ -172,13 +172,15 @@ AddonUiAssets::AddonUiAssets(Backend backend, const Options& options, QObject* p
     m_options.maximumQueuedBytes = std::clamp<qint64>(options.maximumQueuedBytes, 1, 8 * 1024 * 1024);
     m_options.maximumCacheBytes = std::clamp<qint64>(options.maximumCacheBytes, 1, 32 * 1024 * 1024);
     m_options.maximumDimension = std::clamp(options.maximumDimension, 1, 1024);
-    m_options.maximumOutputDimension = std::clamp(options.maximumOutputDimension, 1, 512);
+    m_options.maximumOutputDimension = std::clamp(options.maximumOutputDimension, 1, 1024);
     m_options.maximumJobs = std::clamp(options.maximumJobs, 1, 2);
     m_options.maximumAssets = std::clamp(options.maximumAssets, 1, 64);
     m_options.maximumTickets = std::clamp(options.maximumTickets, 1, 256);
     m_options.maximumSessionImages = std::clamp(options.maximumSessionImages, 1, 32);
     m_options.maximumImages = std::clamp(options.maximumImages, 1, 64);
     m_images->owner = this;
+    m_authorityTimer.setInterval(100);
+    connect(&m_authorityTimer, &QTimer::timeout, this, &AddonUiAssets::expireScopes);
     const std::weak_ptr<SharedImages> weak = m_images;
     m_images->wake = [weak] {
         const auto shared = weak.lock(); if (!shared) return;
@@ -198,6 +200,7 @@ void AddonUiAssets::shutdown(bool notify)
 {
     if (m_closing) return;
     m_closing = true;
+    m_authorityTimer.stop();
     { QMutexLocker lock(&m_images->mutex); m_images->owner = nullptr; m_images->tickets.clear(); m_images->claims.clear(); }
     for (const auto& claim : m_claims) disconnect(claim.destroyed);
     const auto sessions = m_scopes.keys();
@@ -230,7 +233,7 @@ QImage AddonUiAssets::decodeImage(const QByteArray& bytes, const QString& suffix
     if (image.isNull() || image.size() != size || image.sizeInBytes() > qint64(limit) * limit * 8)
         return fail(error, "The app cannot decode this image within the pixel limit.");
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-    const int output = std::clamp(options.maximumOutputDimension, 1, 512);
+    const int output = std::clamp(options.maximumOutputDimension, 1, 1024);
     if (image.width() > output || image.height() > output) image = image.scaled(output, output, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     QImage pixels(image.size(), QImage::Format_ARGB32_Premultiplied);
     if (pixels.isNull()) return fail(error, "The app cannot allocate the image pixels.");
@@ -247,7 +250,8 @@ bool AddonUiAssets::openSession(const QString& session, const QString& contribut
     const auto prepare = m_backend.prepare;
     const auto read = prepare ? prepare(contribution) : UiAssetReader{};
     if (!guard || !read || m_epoch != epoch) return false;
-    m_scopes.insert(session, {contribution, contribution.section('/', 0, 0), {}, epoch, false, {}, {}});
+    m_scopes.insert(session, {contribution, contribution.section('/', 0, 0), {}, epoch, false, {}, {}, {}, {}});
+    m_authorityTimer.start();
     m_captureQueue.append({nonce(), session, epoch, read}); m_error.clear();
     pump(); return true;
 }
@@ -261,10 +265,11 @@ void AddonUiAssets::captured(const QString& id, UiAssetCapture capture)
     const auto scopeStamp = stamp(registration);
     const auto declarations = registration.value("assets").toMap();
     const auto reject = [this, &work, &capture] {
-        m_error = capture.error; pump(); emit sessionAssetsChanged(work.session);
+        m_error = capture.error; closeSession(work.session);
     };
     if (!capture.error.isEmpty() || scopeStamp.isEmpty() || registration.value("assets").metaType().id() != QMetaType::QVariantMap
-        || declarations.size() > m_options.maximumAssets || !capture.current || capture.assets.size() != declarations.size()) { reject(); return; }
+        || declarations.size() > m_options.maximumAssets || !capture.current || !capture.live || !capture.live()
+        || capture.assets.size() != declarations.size()) { reject(); return; }
     const auto& bytes = capture.assets;
     qint64 total = 0;
     for (auto it = declarations.begin(); it != declarations.end(); ++it) {
@@ -288,7 +293,7 @@ void AddonUiAssets::captured(const QString& id, UiAssetCapture capture)
         if (bytesAvailable) budget->bytes += total;
     }
     if (!bytesAvailable) { reject(); return; }
-    found->package = registration.value("packageId").toString(); found->stamp = scopeStamp;
+    found->package = registration.value("packageId").toString(); found->stamp = scopeStamp; found->registration = registration; found->live = capture.live;
     const auto session = work.session; const auto epoch = work.epoch; m_error.clear();
     for (auto it = declarations.begin(); it != declarations.end(); ++it) {
         const auto suffix = QFileInfo(it.value().toMap().value("path").toString()).suffix().toLower();
@@ -296,7 +301,7 @@ void AddonUiAssets::captured(const QString& id, UiAssetCapture capture)
         auto bytesLease = std::make_shared<BytesLease>(); bytesLease->budget = budget; bytesLease->bytes = encoded.size();
         const auto key = capture.cacheKeys.value(it.key());
         if (m_cache.contains(key)) publish(session, it.key(), key);
-        else { m_queue.append({nonce(), session, it.key(), suffix, key, epoch, encoded, std::move(bytesLease), capture.current}); m_queuedBytes += encoded.size(); }
+        else { m_queue.append({nonce(), session, it.key(), suffix, key, epoch, encoded, std::move(bytesLease), capture.current, capture.live}); m_queuedBytes += encoded.size(); }
     }
     pump(); emit sessionAssetsChanged(session);
 }
@@ -366,12 +371,12 @@ bool AddonUiAssets::makeRoom(qint64 bytes)
 bool AddonUiAssets::publish(const QString& session, const QString& alias, const QString& cacheKey)
 {
     auto scope = m_scopes.find(session); auto cached = m_cache.find(cacheKey);
-    if (scope == m_scopes.end() || scope->suspended || cached == m_cache.end()) return false;
+    if (scope == m_scopes.end() || scope->suspended || !scope->live || !scope->live() || cached == m_cache.end()) return false;
     const auto ticket = nonce(); ++cached->pins; cached->use = ++m_use;
     const QString url = QStringLiteral("image://addonassets/") + ticket;
     scope->tickets.insert(alias, ticket); scope->urls.insert(QStringLiteral("asset:") + alias, url);
     QMutexLocker lock(&m_images->mutex);
-    m_images->tickets.insert(ticket, {session, cacheKey, scope->epoch, cached->image}); return true;
+    m_images->tickets.insert(ticket, {session, cacheKey, scope->epoch, cached->image, scope->live}); return true;
 }
 void AddonUiAssets::decoded(const QString& id, QImage image, const QString& error)
 {
@@ -381,7 +386,7 @@ void AddonUiAssets::decoded(const QString& id, QImage image, const QString& erro
         pump(); return;
     }
     const auto scope = m_scopes.constFind(work.session);
-    if (scope != m_scopes.cend() && !scope->suspended && scope->epoch == work.epoch
+    if (scope != m_scopes.cend() && !scope->suspended && scope->epoch == work.epoch && work.live && work.live()
         && !image.isNull() && error.isEmpty()) {
         if (!m_cache.contains(work.cacheKey) && makeRoom(image.sizeInBytes())) {
             m_cache.insert(work.cacheKey, {image, image.sizeInBytes(), 0, ++m_use}); m_cacheBytes += image.sizeInBytes();
@@ -391,7 +396,36 @@ void AddonUiAssets::decoded(const QString& id, QImage image, const QString& erro
     pump(); emit sessionAssetsChanged(work.session);
 }
 QVariantMap AddonUiAssets::sessionAssets(const QString& session) const
-{ return m_scopes.value(session).suspended ? QVariantMap{} : m_scopes.value(session).urls; }
+{
+    const auto scope = m_scopes.constFind(session);
+    return scope == m_scopes.cend() || scope->suspended || !scope->live || !scope->live() ? QVariantMap{} : scope->urls;
+}
+QVariantMap AddonUiAssets::sessionRegistration(const QString& session) const
+{
+    const auto scope = m_scopes.constFind(session);
+    return scope == m_scopes.cend() || scope->suspended || !scope->live || !scope->live() ? QVariantMap{} : scope->registration;
+}
+QMap<QString, QImage> AddonUiAssets::sessionPixels(const QString& session) const
+{
+    const auto scope = m_scopes.constFind(session); QMap<QString, QImage> result;
+    if (scope == m_scopes.cend() || scope->suspended || !scope->live || !scope->live()) return result;
+    QMutexLocker lock(&m_images->mutex);
+    for (auto it = scope->tickets.cbegin(); it != scope->tickets.cend(); ++it) {
+        const auto ticket = m_images->tickets.constFind(it.value());
+        if (ticket != m_images->tickets.cend() && ticket->epoch == scope->epoch && ticket->session == session)
+            result.insert(it.key(), ticket->pixels);
+    }
+    return result;
+}
+bool AddonUiAssets::sessionLoading(const QString& session) const
+{
+    const auto scope = m_scopes.constFind(session);
+    if (scope == m_scopes.cend() || scope->suspended) return false;
+    const auto pending = [&session, epoch = scope->epoch](const auto& work) { return work.session == session && work.epoch == epoch; };
+    return std::any_of(m_captureQueue.cbegin(), m_captureQueue.cend(), pending)
+        || std::any_of(m_captureJobs.cbegin(), m_captureJobs.cend(), pending)
+        || std::any_of(m_queue.cbegin(), m_queue.cend(), pending) || std::any_of(m_jobs.cbegin(), m_jobs.cend(), pending);
+}
 void AddonUiAssets::removeTicket(const QString& ticket)
 {
     QMutexLocker lock(&m_images->mutex); const auto old = m_images->tickets.take(ticket);
@@ -401,6 +435,7 @@ void AddonUiAssets::closeSession(const QString& session, bool notify)
 {
     const auto found = m_scopes.find(session); if (found == m_scopes.end()) return;
     const auto scope = *found; m_scopes.erase(found);
+    if (m_scopes.isEmpty()) m_authorityTimer.stop();
     for (const auto& ticket : scope.tickets) removeTicket(ticket);
     for (auto it = m_queue.begin(); it != m_queue.end();) {
         if (it->session == session) { m_queuedBytes -= it->bytes.size(); it = m_queue.erase(it); } else ++it;
@@ -423,7 +458,7 @@ void AddonUiAssets::suspendSession(const QString& session, bool suspended)
     const auto contribution = found->contribution;
     if (!suspended) { openSession(session, contribution); return; }
     QPointer<AddonUiAssets> guard(this); closeSession(session); if (!guard) return;
-    m_scopes.insert(session, {contribution, {}, {}, ++m_epoch, true, {}, {}});
+    m_scopes.insert(session, {contribution, {}, {}, ++m_epoch, true, {}, {}, {}, {}});
 }
 QString AddonUiAssets::claimImage(const QString& session, QObject* owner)
 {
@@ -452,7 +487,8 @@ void AddonUiAssets::releaseImage(const QString& claim)
 QString AddonUiAssets::assetUrlForClaim(const QString& session, const QString& alias, const QString& claim) const
 {
     const auto scope = m_scopes.constFind(session); const auto selected = m_claims.constFind(claim);
-    if (scope == m_scopes.cend() || scope->suspended || selected == m_claims.cend() || selected->session != session || !selected->owner) return {};
+    if (scope == m_scopes.cend() || scope->suspended || !scope->live || !scope->live()
+        || selected == m_claims.cend() || selected->session != session || !selected->owner) return {};
     const auto base = scope->urls.value(alias).toString();
     return base.isEmpty() ? QString{} : base + '/' + claim;
 }
@@ -463,7 +499,7 @@ QImage AddonUiAssets::image(const std::shared_ptr<SharedImages>& shared, const Q
     QMutexLocker lock(&shared->mutex);
     const auto ticket = shared->tickets.constFind(parts[0]); const auto claim = shared->claims.constFind(parts[1]);
     if (ticket == shared->tickets.cend() || claim == shared->claims.cend()
-        || ticket->session != claim->session || ticket->epoch != claim->epoch) return {};
+        || ticket->session != claim->session || ticket->epoch != claim->epoch || !ticket->live || !ticket->live()) return {};
     if (size) *size = ticket->pixels.size();
     return ticket->pixels;
 }
@@ -476,6 +512,16 @@ void AddonUiAssets::invalidate()
 {
     const auto sessions = m_scopes.keys(); QPointer<AddonUiAssets> guard(this);
     for (const auto& session : sessions) { closeSession(session); if (!guard) return; }
+}
+void AddonUiAssets::expireScopes()
+{
+    const auto sessions = m_scopes.keys(); QPointer<AddonUiAssets> guard(this);
+    for (const auto& session : sessions) {
+        const auto scope = m_scopes.constFind(session);
+        if (scope != m_scopes.cend() && scope->live && !scope->live()) {
+            closeSession(session); if (!guard) return;
+        }
+    }
 }
 QVariantMap AddonUiAssets::statistics() const
 {

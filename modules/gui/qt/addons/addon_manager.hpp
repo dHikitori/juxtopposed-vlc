@@ -30,6 +30,10 @@ public:
     QString errorMessage() const { return m_error; }
     QVariantList packages() const;
     QString storageDirectory() const { return m_store.storageDirectory(); }
+    // Read these memory snapshots on the manager thread. They contain no key bytes.
+    QString workerExecutable() const { return m_workerExecutable; }
+    QHash<QString, QHash<QString, bool>> credentialPresenceSnapshot() const { return m_secrets.presenceSnapshot(); }
+    StoreAuthorityToken storeAuthorityToken() const noexcept { return m_store.authorityToken(); }
     QVariantList contributionsOfType(const QString& type, bool includeDisabled = false) const;
     QJsonObject contributionResource(const QString& globalId, const QString& resourceField) const;
     QByteArray contributionFile(const QString& globalId, const QString& path, qint64 maximumBytes) const;
