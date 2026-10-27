@@ -105,6 +105,105 @@ class TestAddonMetadataService : public QObject
 {
     Q_OBJECT
 private slots:
+    void aPortableInvokeCanDeleteTheServiceWithoutAnOrphan()
+    {
+        Fake fake; AddonMetadataService* service = nullptr; auto backend = fake.backend();
+        auto token = std::make_shared<int>(1); const std::weak_ptr<int> weak = token;
+        bool aliveDuringReturn = false;
+        backend.providers.invoke = [&, held=token](const QString& provider, const QString& operation, const QVariantMap& projected) {
+            const auto id = QStringLiteral("returned-portable-request"); fake.calls.append({id, provider, operation, projected});
+            delete std::exchange(service, nullptr); aliveDuringReturn = !weak.expired(); return id;
+        };
+        service = new AddonMetadataService(std::move(backend)); token.reset();
+        const auto cleanup = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        service->enrich("video.details", {{"identity", identity()}}, {"description"});
+        QTRY_VERIFY(!service); QCOMPARE(fake.calls.size(), 1);
+        QCOMPARE(fake.canceled, QStringList{fake.calls.first().id});
+        QVERIFY(aliveDuringReturn); QVERIFY(weak.expired());
+    }
+
+    void aNativeCancelCanDeleteTheService()
+    {
+        for (const bool timeout : {false, true}) {
+            Fake fake; fake.providers.clear(); auto* service = new AddonMetadataService(fake.backend()); QObject lifetime;
+            const auto cleanup = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+            QString invocation; unsigned canceled = 0;
+            QVERIFY(service->registerBuiltinProvider("video.details", provider("vlc.builtin.cancel/details"), &lifetime,
+                [&](const QString& id, const QString&, const QVariantMap&) { invocation = id; },
+                [&](const QString& id) { QCOMPARE(id, invocation); ++canceled; delete std::exchange(service, nullptr); }));
+            QSignalSpy finished(service, &AddonMetadataService::finished);
+            QVariantMap request{{"identity", identity()}}; if (timeout) request.insert("timeoutMs", 100);
+            const auto consumer = service->enrich("video.details", request, {"description"});
+            QTRY_VERIFY(!invocation.isEmpty());
+            if (!timeout) service->cancel(consumer);
+            QTRY_VERIFY(!service); QCOMPARE(canceled, 1u); QCOMPARE(finished.size(), 0);
+            QVERIFY(fake.canceled.isEmpty());
+        }
+    }
+
+    void anArtworkCancelCanDeleteTheServiceAfterConsumerRemoval()
+    {
+        Fake fake; auto* service = new AddonMetadataService(fake.backend());
+        const auto cleanup = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        unsigned resolved = 0, canceled = 0;
+        service->setArtworkAdapter([&](const QString&, const QVariant&, AddonMetadataService::ArtworkCallback) {
+            ++resolved; return QStringLiteral("native-asset-request");
+        }, [&](const QString& id) {
+            QCOMPARE(id, QStringLiteral("native-asset-request")); ++canceled;
+            QCOMPARE(service->mediaCount(), 0); delete std::exchange(service, nullptr);
+        });
+        const auto media = service->acquireMedia(QUrl(QStringLiteral("file:///private/movie.mkv")), identity());
+        const auto consumer = service->enrich("video.details", {{"media", media}}, {"artwork"});
+        service->releaseMedia(media); QTRY_COMPARE(fake.calls.size(), 1);
+        fake.complete(*service, {{"artwork", QVariantMap{{"asset", "opaque"}}}});
+        QTRY_COMPARE(resolved, 1u); service->cancel(consumer);
+        QVERIFY(!service); QCOMPARE(canceled, 1u);
+    }
+
+    void allDetachedAssetsCancelAfterOwnerDeletion_data()
+    {
+        QTest::addColumn<bool>("nativeCompletion");
+        QTest::newRow("first-asset-cancel") << false;
+        QTest::newRow("native-job-cancel") << true;
+    }
+    void allDetachedAssetsCancelAfterOwnerDeletion()
+    {
+        QFETCH(bool, nativeCompletion);
+        Fake fake; DeleteOnEnd state; state.service = new AddonMetadataService(fake.backend());
+        AddonMetadataService*& service = state.service;
+        const auto cleanup = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        unsigned resolved = 0; QSet<QString> canceled;
+        service->setArtworkAdapter([&](const QString&, const QVariant& descriptor, AddonMetadataService::ArtworkCallback) {
+            ++resolved; return descriptor.toMap().value("asset").toString();
+        }, [&](const QString& id) {
+            QVERIFY(!canceled.contains(id)); canceled.insert(id);
+            if (nativeCompletion || canceled.size() > 1) QVERIFY(!service);
+            else { QCOMPARE(service->mediaCount(), 0); delete std::exchange(service, nullptr); }
+        });
+        const auto backend = std::shared_ptr<vlc_metadata_backend_t>(service->holdCoreBackend(), vlc_metadata_backend_Release);
+        const auto item = std::shared_ptr<input_item_t>(input_item_New("file:///private/movie.mkv", "Example Movie"), input_item_Release);
+        std::shared_ptr<vlc_metadata_job_t> job; QString consumer;
+        if (nativeCompletion) {
+            const char* fields[]{"artwork", "artworkUrl"};
+            const auto context = QJsonDocument::fromVariant(QVariantMap{{"identity", identity()}}).toJson(QJsonDocument::Compact);
+            vlc_metadata_request request{}; request.feature = "video.details"; request.operation = "enrich";
+            request.fields = fields; request.field_count = 2; request.item = item.get();
+            request.context_json = context.constData(); request.context_size = context.size(); request.flags = VLC_METADATA_REQUEST_NETWORK;
+            job = {vlc_metadata_job_New(backend.get(), &request, DeleteOnEnd::callback, &state), vlc_metadata_job_Release};
+            QVERIFY(job); QCOMPARE(vlc_metadata_job_Start(job.get()), VLC_SUCCESS);
+        } else {
+            const auto media = service->acquireMedia(QUrl(QStringLiteral("file:///private/movie.mkv")), identity());
+            consumer = service->enrich("video.details", {{"media", media}}, {"artwork", "artworkUrl"});
+            service->releaseMedia(media);
+        }
+        QTRY_COMPARE(fake.calls.size(), 1);
+        fake.complete(*service, {{"artwork", QVariantMap{{"asset", "asset-a"}}}, {"artworkUrl", QVariantMap{{"asset", "asset-b"}}}});
+        QTRY_COMPARE(resolved, 2u);
+        if (nativeCompletion) service->invalidate(); else service->cancel(consumer);
+        QVERIFY(!service); QCOMPARE(canceled, QSet<QString>({"asset-a", "asset-b"}));
+        QCOMPARE(state.count, nativeCompletion ? 1 : 0);
+    }
+
     void nativeInvocationsRetainOnlyTheirExactCoreJobs()
     {
         Fake fake; fake.providers.clear(); AddonMetadataService service(fake.backend()); QObject lifetime;

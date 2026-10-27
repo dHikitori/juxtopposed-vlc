@@ -86,6 +86,18 @@ sanitizers pass all 28 coordinator and 29 service cases with no diagnostics.
 The four new cases prove private scope isolation, separate native anchors,
 ordinary portable request sharing, and exact active native job access.
 
-Before owner activation, finish the recorded callback retirement follow-up:
-cancel a returned invocation through a lifetime-safe callback if its owner
-was deleted during invoke, and check the owner after detach cancellation.
+The callback retirement follow-up now passes all 30 coordinator and 34 service
+cases normally and with focused sanitizers. An invocation retains its copied
+invoke and cancel callbacks through return. If invoke deletes the owner, the
+returned request is canceled. Each cancellation boundary checks the owner
+before it accesses service state again.
+
+Consumer state is removed before native cancellation. Detached artwork jobs
+are canceled through a copied callback even if the native job or the first
+asset cancellation deletes the service. Two separate multi-asset cases prove
+that every detached job ends exactly once. The prior coordinator implementation
+fails the returned-request cancellation control. Exact hashes and test records
+are in `/tmp/hakone-native-callback-retirement/final-proof.json`.
+
+The sealed native image route, family selection, and owner activation remain
+open.

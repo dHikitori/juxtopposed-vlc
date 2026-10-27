@@ -297,13 +297,16 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
         const auto provider = job->provider, operation = job->operation;
         const auto context = job->context;
         const auto scope = job->privateScope;
+        const auto invoke = m_backend.invoke;
+        const auto invokeNative = m_backend.invokeNative;
+        const auto cancel = m_backend.cancel;
         const QPointer<AddonMetadataCoordinator> alive(this);
         const auto invocation = !scope.isEmpty()
-            ? (m_backend.invokeNative ? m_backend.invokeNative(provider, operation, context, scope) : QString{})
-            : (m_backend.invoke ? m_backend.invoke(provider, operation, context) : QString{});
-        if (!alive) return;
+            ? (invokeNative ? invokeNative(provider, operation, context, scope) : QString{})
+            : (invoke ? invoke(provider, operation, context) : QString{});
+        if (!alive) { if (!invocation.isEmpty() && cancel) cancel(invocation); return; }
         job = m_jobs.find(key);
-        if (job == m_jobs.end()) { if (!invocation.isEmpty() && m_backend.cancel) m_backend.cancel(invocation); return; }
+        if (job == m_jobs.end()) { if (!invocation.isEmpty() && cancel) cancel(invocation); return; }
         if (invocation.isEmpty() || m_invocations.contains(invocation)) {
             const auto waiters = job->waiters;
             const auto registration = job->registration;
@@ -313,7 +316,9 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
                 if (consumer == m_consumers.end() || !consumer->pending.remove(key)) continue;
                 --consumer->outstanding;
                 consume(waiter, registration, QStringLiteral("error"), {}, tr("The provider could not start."));
+                if (!alive) return;
                 advance(waiter);
+                if (!alive) return;
             }
             return;
         }
@@ -516,7 +521,9 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
     if (found->entityAmbiguous) found->labelArtwork = found->ambiguousArtwork;
     const auto consumer = *found;
     m_consumers.remove(consumerId);
+    const QPointer<AddonMetadataCoordinator> alive(this);
     detach(consumerId, consumer.pending);
+    if (!alive) return;
     QVariantMap data{{QStringLiteral("contextGeneration"), consumer.context.value(QStringLiteral("generation"), consumer.context.value(QStringLiteral("contextGeneration")))},
         {QStringLiteral("targetRevision"), consumer.context.value(QStringLiteral("targetRevision"))},
         {QStringLiteral("expectedFieldRevisions"), consumer.context.value(QStringLiteral("fieldRevisions"))}};
@@ -554,9 +561,10 @@ void AddonMetadataCoordinator::detach(const QString& consumerId, const QSet<QStr
         job->waiters.remove(consumerId);
         if (!job->waiters.isEmpty()) continue;
         const auto invocation = job->invocation;
+        const auto cancel = m_backend.cancel;
         m_jobs.erase(job);
         m_invocations.remove(invocation);
-        if (!invocation.isEmpty() && m_backend.cancel) m_backend.cancel(invocation);
+        if (!invocation.isEmpty() && cancel) cancel(invocation);
         if (!alive) return;
     }
 }
@@ -587,5 +595,6 @@ void AddonMetadataCoordinator::invalidate()
     ++m_policy;
     m_cache.clear();
     const auto consumers = m_consumers.keys();
-    for (const auto& consumer : consumers) cancel(consumer);
+    const QPointer<AddonMetadataCoordinator> alive(this);
+    for (const auto& consumer : consumers) { cancel(consumer); if (!alive) return; }
 }

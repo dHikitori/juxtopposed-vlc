@@ -177,14 +177,21 @@ AddonMetadataService::AddonMetadataService(vlc::addons::AddonManager* manager, Q
 }
 AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
     : QObject(parent), m_backend(std::move(backend)), m_coordinator({
-          [this](const QString& feature) { return providers(feature); },
-          [this](const QString& id, const QString& operation, const QVariantMap& context) { return invoke(id, operation, context); },
-          [this](const QString& invocation) { cancelInvocation(invocation); },
-          [this](const QString& id) {
-              return m_builtins.value(id).descriptor.value(QStringLiteral("requiresNativeAnchor")).toBool();
+          [owner=QPointer<AddonMetadataService>(this)](const QString& feature) {
+              return owner ? owner->providers(feature) : QVariantList{};
           },
-          [this](const QString& id, const QString& operation, const QVariantMap& context, const QString& scope) {
-              return invoke(id, operation, context, scope);
+          [owner=QPointer<AddonMetadataService>(this)](const QString& id, const QString& operation, const QVariantMap& context) {
+              return owner ? owner->invoke(id, operation, context) : QString{};
+          },
+          [owner=QPointer<AddonMetadataService>(this), portableCancel=m_backend.providers.cancel](const QString& invocation) {
+              if (owner) owner->cancelInvocation(invocation);
+              else if (portableCancel) portableCancel(invocation);
+          },
+          [owner=QPointer<AddonMetadataService>(this)](const QString& id) {
+              return owner && owner->m_builtins.value(id).descriptor.value(QStringLiteral("requiresNativeAnchor")).toBool();
+          },
+          [owner=QPointer<AddonMetadataService>(this)](const QString& id, const QString& operation, const QVariantMap& context, const QString& scope) {
+              return owner ? owner->invoke(id, operation, context, scope) : QString{};
           }}, this),
       m_core(std::make_shared<CoreState>())
 {
@@ -195,20 +202,7 @@ AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
     if (!m_coreBackend) delete state;
     connect(&m_coordinator, &AddonMetadataCoordinator::finished, this, &AddonMetadataService::coordinatorFinished);
     connect(&m_coordinator, &AddonMetadataCoordinator::canceled, this, [this](const QString& consumer) {
-        const auto found = m_consumers.constFind(consumer);
-        if (found == m_consumers.cend()) return;
-        const auto record = *found;
-        m_consumers.remove(consumer);
-        releaseMedia(record.media);
-        const auto result = m_results.take(consumer);
-        for (const auto& id : result.assets) if (m_backend.cancelArtwork && !id.isEmpty()) m_backend.cancelArtwork(id);
-        if (record.core) {
-            m_coreConsumers.remove(record.core);
-            auto job = m_core->take(record.core);
-            if (job) vlc_metadata_job_Cancel(job.get());
-            return;
-        }
-        emit canceled(consumer);
+        retireConsumer(consumer);
     });
 }
 AddonMetadataService::~AddonMetadataService()
@@ -268,7 +262,8 @@ QString AddonMetadataService::invoke(const QString& contribution, const QString&
     if (found == m_builtins.cend()) {
         auto projection = context;
         projection.remove(QStringLiteral("media"));
-        return m_backend.providers.invoke ? m_backend.providers.invoke(contribution, operation, projection) : QString{};
+        const auto invokePortable = m_backend.providers.invoke;
+        return invokePortable ? invokePortable(contribution, operation, projection) : QString{};
     }
     if (!found->lifetime) return {};
     const bool native = found->descriptor.value(QStringLiteral("requiresNativeAnchor")).toBool();
@@ -384,20 +379,32 @@ QString AddonMetadataService::start(const QString& feature, QVariantMap context,
 void AddonMetadataService::cancel(const QString& consumer)
 {
     if (!m_consumers.contains(consumer)) return;
+    const QPointer<AddonMetadataService> alive(this);
     m_coordinator.cancel(consumer);
+    if (!alive) return;
     // A result can wait for an asset after its coordinator request ends.
+    retireConsumer(consumer);
+}
+void AddonMetadataService::retireConsumer(const QString& consumer)
+{
     if (!m_consumers.contains(consumer)) return;
+    const QPointer<AddonMetadataService> alive(this);
+    const auto cancelArtwork = m_backend.cancelArtwork;
     const auto record = m_consumers.take(consumer);
     const auto result = m_results.take(consumer);
-    for (const auto& id : result.assets) if (m_backend.cancelArtwork && !id.isEmpty()) m_backend.cancelArtwork(id);
     releaseMedia(record.media);
+    NativeJob job;
     if (record.core) {
         m_coreConsumers.remove(record.core);
-        auto job = m_core->take(record.core);
-        if (job) vlc_metadata_job_Cancel(job.get());
-        return;
+        job = m_core->take(record.core);
     }
-    emit canceled(consumer);
+    // Complete owner state before a native callback can delete the service.
+    if (job) vlc_metadata_job_Cancel(job.get());
+    // Detached work must still end if a cancellation destroys the owner.
+    for (const auto& id : result.assets) if (cancelArtwork && !id.isEmpty()) {
+        cancelArtwork(id);
+    }
+    if (alive && !record.core) emit canceled(consumer);
 }
 void AddonMetadataService::invalidate()
 {
@@ -405,6 +412,7 @@ void AddonMetadataService::invalidate()
     const auto consumers = m_consumers.keys();
     for (const auto& consumer : consumers) { cancel(consumer); if (!guard) return; }
     m_coordinator.invalidate();
+    if (!guard) return;
     emit invalidated();
 }
 void AddonMetadataService::setArtworkAdapter(ArtworkResolver resolver, std::function<void(const QString&)> cancel)

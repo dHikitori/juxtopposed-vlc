@@ -2,6 +2,8 @@
 #include <QtTest/QtTest>
 #include <QSignalSpy>
 #include <QJsonDocument>
+#include <QScopeGuard>
+#include <utility>
 #include "addons/addon_metadata_coordinator.hpp"
 
 namespace {
@@ -56,6 +58,50 @@ class TestAddonMetadata : public QObject
 {
     Q_OBJECT
 private slots:
+    void anInvokeCanDeleteTheOwnerAndItsReturnedWorkIsCanceled()
+    {
+        for (const bool native : {false, true}) {
+            FakeBackend fake; fake.providers = {registration("provider/details")};
+            AddonMetadataCoordinator* owner = nullptr;
+            const auto cleanup = qScopeGuard([&] { delete std::exchange(owner, nullptr); });
+            auto token = std::make_shared<int>(1); const std::weak_ptr<int> weak = token;
+            bool aliveDuringReturn = false;
+            const auto body = [&](const QString& provider, const QString& operation, const QVariantMap& projected) {
+                const auto id = QStringLiteral("returned-request"); fake.calls.append({id, provider, operation, projected});
+                delete std::exchange(owner, nullptr); aliveDuringReturn = !weak.expired(); return id;
+            };
+            auto backend = fake.backend();
+            backend.requiresNativeScope = [native](const QString&) { return native; };
+            backend.invoke = [&, held=token](const QString& provider, const QString& operation, const QVariantMap& projected) {
+                return body(provider, operation, projected);
+            };
+            backend.invokeNative = [&, held=token](const QString& provider, const QString& operation,
+                                                   const QVariantMap& projected, const QString&) {
+                return body(provider, operation, projected);
+            };
+            owner = new AddonMetadataCoordinator(std::move(backend)); token.reset();
+            if (native) owner->enrichNative("video.details", context(), {"description"}, "native-scope");
+            else owner->enrich("video.details", context(), {"description"});
+            QTRY_VERIFY(!owner); QCOMPARE(fake.calls.size(), 1);
+            QCOMPARE(fake.canceled, QStringList{fake.calls.first().id});
+            QVERIFY(aliveDuringReturn); QVERIFY(weak.expired());
+        }
+    }
+
+    void aTimeoutCancelCanDeleteTheCoordinator()
+    {
+        FakeBackend fake; fake.providers = {registration("provider/details")};
+        AddonMetadataCoordinator* owner = nullptr; auto backend = fake.backend();
+        backend.cancel = [&](const QString& id) { fake.canceled.append(id); delete std::exchange(owner, nullptr); };
+        owner = new AddonMetadataCoordinator(std::move(backend));
+        const auto cleanup = qScopeGuard([&] { delete std::exchange(owner, nullptr); });
+        QSignalSpy finished(owner, &AddonMetadataCoordinator::finished);
+        auto request = context(); request.insert("timeoutMs", 100);
+        owner->enrich("video.details", request, {"description"});
+        QTRY_VERIFY(!owner); QCOMPARE(fake.calls.size(), 1);
+        QCOMPARE(fake.canceled, QStringList{fake.calls.first().id}); QCOMPARE(finished.size(), 0);
+    }
+
     void nativeScopesStayPrivateAndDoNotShareClaims()
     {
         FakeBackend fake; fake.providers = {registration("native/artwork")};

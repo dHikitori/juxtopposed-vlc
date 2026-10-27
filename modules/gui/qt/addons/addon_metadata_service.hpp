@@ -108,6 +108,7 @@ private:
     QString invoke(const QString& contribution, const QString& operation, const QVariantMap& context,
                    const QString& privateScope = {});
     void cancelInvocation(const QString& invocation);
+    void retireConsumer(const QString& consumer);
     QString start(const QString& feature, QVariantMap context, const QStringList& fields,
                   bool aggregate, bool assets, const QString& privateScope = {});
     void coordinatorFinished(const QString&, const QString&, const QVariantMap&, const QString&);
