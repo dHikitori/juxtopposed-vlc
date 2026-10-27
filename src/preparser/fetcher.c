@@ -231,6 +231,7 @@ static int InvokeModule( input_fetcher_t* fetcher, input_item_t* item,
         return VLC_ENOMEM;
 
     mf->e_scope = scope;
+    mf->e_provider = META_FETCHER_PROVIDER_ANY;
     mf->p_item = item;
 
     module_t* mf_module = module_need( mf, type, NULL, false );

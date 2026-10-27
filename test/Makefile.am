@@ -250,6 +250,15 @@ endif
 test_src_misc_configured_proxy_SOURCES = src/misc/configured_proxy.c
 test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
+check_PROGRAMS += test_modules_lua_meta_selector
+test_modules_lua_meta_selector_SOURCES = modules/lua/meta_selector.c
+test_modules_lua_meta_selector_LDADD = $(LIBVLCCORE)
+if BUILD_LUA
+check_PROGRAMS += test_modules_lua_meta_selector_runtime
+test_modules_lua_meta_selector_runtime_SOURCES = modules/lua/meta_selector_runtime.c
+test_modules_lua_meta_selector_runtime_LDADD = $(LIBVLC) $(LIBVLCCORE)
+endif
+
 test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c
 test_src_misc_metadata_backend_LDADD = $(LIBVLCCORE)
 

@@ -536,3 +536,19 @@ vlc_tests += {
     'link_with' : [libvlc, libvlccore],
     'module_depends' : ['blend']
 }
+
+vlc_tests += {
+    'name': 'test_modules_lua_meta_selector',
+    'sources': files('lua/meta_selector.c'),
+    'suite': ['modules', 'test_modules', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_modules_lua_meta_selector_runtime',
+    'sources': files('lua/meta_selector_runtime.c'),
+    'suite': ['modules', 'test_modules', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['lua'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+}

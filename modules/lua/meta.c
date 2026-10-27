@@ -34,6 +34,8 @@
 
 #include "vlc.h"
 #include "libs.h"
+#include "meta_selector.h"
+#include <vlc_configuration.h>
 
 /*****************************************************************************
  * Init lua
@@ -150,6 +152,14 @@ static bool validate_scope( const luabatch_context_t *p_context, meta_fetcher_sc
 static int fetch_art( vlc_object_t *p_this, const char * psz_filename,
                       const luabatch_context_t *p_context )
 {
+    if (p_context->e_provider != META_FETCHER_PROVIDER_ANY) {
+        if (p_context->e_scope != FETCHER_SCOPE_NETWORK && p_context->e_scope != FETCHER_SCOPE_ANY) return VLC_EGENERIC;
+        char *libdir = config_GetSysPath(VLC_PKG_LIBEXEC_DIR, NULL);
+        char *datadir = config_GetSysPath(VLC_PKG_DATA_DIR, NULL);
+        const bool selected = vlclua_metadata_script_selected(p_context->e_provider, psz_filename, libdir, datadir);
+        free(libdir); free(datadir);
+        if (!selected) return VLC_EGENERIC;
+    }
     lua_State *L = init( p_this, p_context->p_item, psz_filename );
     if( !L )
         return VLC_EGENERIC;
@@ -220,6 +230,7 @@ static int read_meta( vlc_object_t *p_this, const char * psz_filename,
 static int fetch_meta( vlc_object_t *p_this, const char * psz_filename,
                        const luabatch_context_t *p_context )
 {
+    if (p_context->e_provider != META_FETCHER_PROVIDER_ANY) return VLC_EGENERIC;
     lua_State *L = init( p_this, p_context->p_item, psz_filename );
     if( !L )
         return VLC_EGENERIC;
@@ -250,10 +261,11 @@ int ReadMeta( demux_meta_t *p_this )
 
 int FetchMeta( meta_fetcher_t *p_finder )
 {
-    if( lua_Disabled( p_finder ) )
+    if( lua_Disabled( p_finder ) || p_finder->e_provider == META_FETCHER_PROVIDER_NONE )
         return VLC_EGENERIC;
 
-    luabatch_context_t context = { p_finder->p_item, p_finder->e_scope, validate_scope };
+    luabatch_context_t context = {.p_item=p_finder->p_item, .e_scope=p_finder->e_scope,
+        .pf_validator=validate_scope, .e_provider=p_finder->e_provider};
 
     return vlclua_scripts_batch_execute( VLC_OBJECT(p_finder), "meta"DIR_SEP"fetcher",
                                          &fetch_meta, (void*)&context );
@@ -265,10 +277,11 @@ int FetchMeta( meta_fetcher_t *p_finder )
  *****************************************************************************/
 int FindArt( meta_fetcher_t *p_finder )
 {
-    if( lua_Disabled( p_finder ) )
+    if( lua_Disabled( p_finder ) || p_finder->e_provider == META_FETCHER_PROVIDER_NONE )
         return VLC_EGENERIC;
 
-    luabatch_context_t context = { p_finder->p_item, p_finder->e_scope, validate_scope };
+    luabatch_context_t context = {.p_item=p_finder->p_item, .e_scope=p_finder->e_scope,
+        .pf_validator=validate_scope, .e_provider=p_finder->e_provider};
 
     return vlclua_scripts_batch_execute( VLC_OBJECT(p_finder), "meta"DIR_SEP"art",
                                          &fetch_art, (void*)&context );
