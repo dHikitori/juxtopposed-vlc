@@ -12,7 +12,7 @@ Use these guides for the current host contracts. The [architecture documents](..
 | [Visualizer scene](visualizer-scene.md) | The host renders data-only music scenes. Core supplies bounded audio analysis and playback timing. |
 | [Discovery source](discovery-sources.md) | Browse, search, and pages use host references. The default application gate keeps Play and Enqueue disabled. |
 | [Typed UI selections](typed-ui-selections.md) | Typed subtitle and playlist bodies, core confirmation, and recovery. The normal app build and compiled UI tests pass. Core keeps the built-in bodies available. |
-| [Shared playback sessions](sessions.md) | Native bridge and outbound WSS components pass focused checks. The app does not mount this profile yet. |
+| [Shared playback sessions](sessions.md) | MainUI connects the native bridge, controller, and host review panel. Focused UI and actual-player checks pass. The fresh full app and platform runs remain open. |
 | [Guest private storage](../guest-storage-contract.md) | Mounted private storage, account partitions, pure migrations, and recovery snapshots. All 18 focused tests pass. |
 | [Terminology](terminology.md) | Technical terms and English text rules for this project. |
 

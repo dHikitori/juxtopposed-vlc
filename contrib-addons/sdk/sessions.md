@@ -1,7 +1,9 @@
 # Shared playback sessions
 
-The app does not mount this profile yet. It does not
-include a room service or a watch-party add-on.
+MainUI connects this profile through the native session owner and the host
+review panel in Extensions settings. The complete app link, compiled UI run,
+two-player correction checks, and platform runs remain release gates. A
+controller add-on supplies its own room protocol and service.
 
 Declare `session@1` and a `session.controller` contribution with the `run`
 operation. Use the normal message SDK. Each host call has a unique ID and its
@@ -182,6 +184,10 @@ baseline without the adapter. That independent startup limit remains open.
 The native Core library was not instrumented in this component run. The
 two-player test measures seek targets only. It does not test output clocks.
 
-The native watch and invocation checks are component tests. The app mount, app
-retirement, and platform execution checks remain gates. These results do not
-enable production playback sessions.
+The native watch and invocation checks are component tests. The host review
+object also passes 18 normal and 18 sanitizer cases; its QML panel passes eight
+cases. The actual-player app assembly passes ten normal and ten focused
+sanitizer cases, including Manager retirement and native revocation before UI
+publication. MainUI and the new app objects compile. The fresh complete app
+link, compiled UI run, two-player correction, and supported-platform execution
+remain open. See [session app owners](../native-session-app-contract.md).
