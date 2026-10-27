@@ -274,10 +274,46 @@ static void unrelated_native_edits_keep_standard_only_path(void)
     assert(vlc_meta_GetExtra(f.item->p_meta, "Native extra") == NULL);
     field(f.item, vlc_meta_Description, "Remote description"); clean(&f);
 }
+static void sealed_native_artwork_keeps_ordinary_local_results(void)
+{
+    const char *claims[] = {"file:///cache/native-cover.png", "attachment://native-cover", "https://native.example/cover.jpg"};
+    for (unsigned i = 0; i < ARRAY_SIZE(claims); ++i) {
+        struct fixture f; init(&f); start(&f);
+        input_item_SetArtURL(f.parsed, claims[i]);
+        assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS); complete(&f);
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == VLC_SUCCESS);
+        field(f.item, vlc_meta_ArtworkURL, claims[i]); field(f.item, vlc_meta_Description, "Remote description");
+        assert(item_owner(f.item)->artwork_uri == NULL); clean(&f);
+    }
+}
+static void sealed_native_artwork_does_not_authorize_scoped_or_provider_claims(void)
+{
+    static const struct vlc_input_policy_operations ops = {allow_url, allow_connection, NULL};
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        struct fixture f; init(&f);
+        vlc_input_policy_t *policy = NULL;
+        if (mode == 0) input_item_SetURI(f.item, "hakone-addon-source:v1:asset");
+        if (mode == 1) input_item_SetURI(f.item, "VLC-ADDON-SOURCE:v1:asset");
+        if (mode == 2) {
+            policy = vlc_input_policy_New(&ops, NULL); assert(policy != NULL);
+            assert(vlc_input_policy_AttachItem(f.item, policy) == VLC_SUCCESS);
+        }
+        start(&f); input_item_SetArtURL(f.parsed, "file:///cache/native-cover.png");
+        assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+        input_item_t *result = input_item_Copy(f.parsed); assert(result != NULL);
+        input_item_SetDescription(result, "Provider description");
+        if (mode == 3) input_item_SetArtURL(result, "file:///provider/forged-cover.png");
+        assert(vlc_metadata_job_Complete(f.job, VLC_SUCCESS, result, NULL, 0)); input_item_Release(result);
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EACCES);
+        field(f.item, vlc_meta_ArtworkURL, NULL); field(f.item, vlc_meta_Description, NULL);
+        clean(&f); vlc_input_policy_Release(policy);
+    }
+}
 int main(void)
 {
     full_native_parity_and_seal(); sideband_waits_for_admission(); stale_native_same_value_and_aba();
     live_progress_has_precedence(); closed_owner_and_cancelled_local_result(); exact_draft_and_execution_identity();
     missing_name_and_native_edit_guards(); policy_identity_and_revocation(); unrelated_native_edits_keep_standard_only_path();
+    sealed_native_artwork_keeps_ordinary_local_results(); sealed_native_artwork_does_not_authorize_scoped_or_provider_claims();
     return 0;
 }

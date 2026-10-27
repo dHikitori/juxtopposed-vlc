@@ -531,7 +531,14 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
         values[i] = strdup(value);
         if (values[i] == NULL) { status = VLC_ENOMEM; goto out; }
         if (field->type == vlc_meta_ArtworkURL) {
-            status = vlc_artwork_item_PrepareApproval(job->result.item, job->uri, job->policy, value, &artwork);
+            /* Only the exact sealed native execution can retain the ordinary
+             * native artwork route. A provider result cannot grant this path. */
+            const bool native_local = job->local && job->local_prepared && job->policy == NULL
+                && !vlc_input_policy_IsAddonSourceURI(job->uri)
+                && vlc_meta_FieldRevision(job->local_delta.item->p_meta, vlc_meta_ArtworkURL) != job->baseline.fields[vlc_meta_ArtworkURL]
+                && same_string(value, vlc_meta_Get(job->local_delta.item->p_meta, vlc_meta_ArtworkURL));
+            status = native_local ? VLC_SUCCESS
+                : vlc_artwork_item_PrepareApproval(job->result.item, job->uri, job->policy, value, &artwork);
             if (status != VLC_SUCCESS) goto out;
         }
     }

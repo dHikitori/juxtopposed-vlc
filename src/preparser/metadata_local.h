@@ -25,6 +25,9 @@ VLC_API input_item_t *vlc_metadata_job_CopyLocalItem(vlc_metadata_job_t *);
  * 16 MiB of copied native data, 4096 entries per collection, 32 tree levels,
  * and 16 MiB of retained attachment data. A failure leaves no attached delta.
  * URI, options, policy, and opaque owner data never enter the commit delta.
+ * An exact sealed artwork claim can keep the ordinary native artwork route.
+ * This exception grants no approval record and never applies to scoped media.
+ * A provider claim still requires its own current native approval.
  */
 VLC_API int vlc_metadata_job_PrepareLocal(vlc_metadata_job_t *, input_item_t *parsed,
                                 const struct vlc_metadata_local_events *);

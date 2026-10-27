@@ -35,6 +35,13 @@ groups, extra tags and their priorities, native item type, EPG, metadata status,
 and new track links. A native name can fill an absent name only. Standard fields
 keep the existing missing-field and explicit native replacement-mask rules.
 
+The exact sealed native artwork claim can retain the ordinary native route.
+This rule preserves native local/cache, attachment, and embedded artwork output.
+It applies only when the original item has no native policy or source marker.
+It creates no approval record. A provider cannot change the sealed claim or
+gain this route through a matching field name. Provider artwork still needs
+its own current native approval. Scoped media cannot use this exception.
+
 URI, execution options, opaque owner data, network classification, and policy
 are not output fields. The target keeps its current link objects and selection
 flags. New links append by URI; a duplicate URI cannot replace a current link.
@@ -71,10 +78,11 @@ before a future preparser mount; they do not narrow the current preparser path.
 
 ## Verification
 
-`test/src/misc/metadata_local.c` has nine groups and 25 scenarios. It covers
+`test/src/misc/metadata_local.c` has 11 groups and 32 scenarios. It covers
 native output parity, priority retention, exact policy, link selection,
 remote-result isolation, sideband admission, same-value and ABA edits, live
-progress, cancellation, and the standard-only path.
+progress, cancellation, and the standard-only path. It also covers sealed
+ordinary-native artwork and refusal of scoped or changed provider claims.
 
 `test/src/misc/metadata_local_limit.c` has six groups. It injects each allocation
 failure in native snapshot and delta preparation, without a production fault
@@ -94,7 +102,10 @@ The thin shared-Core fixture uses `metadata_local_setters.c`. This file includes
 the real item source and aliases unused definitions before section GC. Only
 the three private EPG/time/status setters remain as local definitions. The
 constructor, ordinary copy, metadata allocator, and all delta operations come
-from the fresh shared Core. This fixture passes all nine groups and 25 scenarios.
+from the fresh shared Core. The current fixture passes all 11 groups and 32
+scenarios through that Core. The isolated source fixture also passes normally
+and with sanitizer diagnostics. The normal limit, commit, pipeline, fetcher,
+and token-limit targets pass with the artwork exception.
 It requires compiler symbol aliases, function sections, and linker section GC.
 
 The limit fixture includes the real policy source. Its item object and its
@@ -110,10 +121,10 @@ the fresh Core library. It requires no new production export or fault hook.
 - Preserve local and offline output when the owner is absent, closed, or
   suspended. Only the never-owned `VLC_ENOENT` result permits a legacy remote
   lease. A retired owner cannot restore directory-scanned remote providers.
-- Add a trusted local-reader selector before full Parse executes Lua metadata
-  readers. `ReadMeta` still scans `meta/reader` with a NULL provider context.
-  The owned-local fetcher selector does not cover that path. Preserve shipped
-  local readers and filename behavior.
+- Validate the trusted Lua reader gate with the fresh normal Lua module. It
+  admits only shipped filename source or bytecode before VM creation. All
+  native Parse paths use this same rule; no per-request reader profile or IPC
+  field can restore an arbitrary reader. Preserve native binary readers.
 - Complete native artwork format parity and the native embedded HTTP/LAN asset
   adapter before global owner activation. Keep every native provider family
   until its actual consumer replacement passes.
