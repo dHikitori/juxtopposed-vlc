@@ -10,6 +10,8 @@ Updated 27 October 2026. The user has approved code edits, fixes, builds, stagin
 
 The [implementation record](IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) is now approved. No earlier rejected database change ran.
 
+The latest integrated app build passes. Its compiled UI run passes 709 cases in 27 suites, with no failures or skips. The normal image suite passes 25 cases; the metadata service passes 14; actual artwork consumers pass nine; the real library dispatcher suite passes 21. These results include the image and library mounts that were excluded from the earlier snapshot.
+
 ## Playlist recovery: test and submission guards
 
 The initial read-only trace found separate test and product repair needs. Both now have source changes and passing regressions.
@@ -67,21 +69,21 @@ The tests use real `libvlc_InternalCreate`/`libvlc_InternalDestroy` instances. T
 
 The read-only audit found no active package-image path that can load external image references. Themes accept hex colors and bounded numeric shape and effect tokens. UI icon names select fixed host SVG strings.
 
-`RedesignAddonView.assetFor()` accepts only a key from the host asset map. The native registry currently supplies an empty map. A worker update changes the descriptor state; it cannot fill that map. Thus, declared UI Image and MediaCard artwork still need a mounted asset route.
+`RedesignAddonView.assetFor()` accepts only a key from the host asset map. The mounted registry supplies tickets for declared package PNG, JPEG, and WebP images. A native claim binds each image to the same live session and image owner. A worker can select an alias; it cannot create a ticket or supply a URL.
 
 The manifest permits package and contribution icon resource paths without an image-format restriction. The review found no current reader or renderer for those fields. Treat this as unfinished image support, rather than evidence of a current load outside the broker.
 
-Before mounting package images, define the permitted formats, decode limits, and host-owned asset handles. Test an image with an external reference and confirm that no network or local-file load occurs. Also test account, release, and permission changes against old asset handles. Keep these tests separate from the metadata plain-text repairs above.
+All 25 image cases pass, including painted pixels, external-I/O controls, static format limits, old-handle invalidation, slow reads, and Close/destruction while work is blocked. Full package reads, hashing, and decoding run in bounded background slots. Global resource reservations remain charged until those jobs finish. These tests remain separate from the plain-text repairs above.
 
 ## Native open prerequisites
 
 The source-only item policy must have an atomic get-or-create path. Concurrent inputs must use the same policy. Reject an unrelated or revoked policy. Accept a loopback result only through the core proxy profile, without source or attachment access.
 
-The core helper exports and normal native tests now pass, including 16 concurrent source-policy callers. Idle source-job cancellation prevents Start without a terminal callback. This closes the interrupt-before-Start gap for the planned native waiter. The access bridge itself is not yet mounted.
+The core helper exports and normal native tests pass, including 16 concurrent source-policy callers. Idle source-job cancellation prevents Start without a terminal callback. The native input bridge now records approval before options and requires that approval for primary playback. Its seven bridge groups pass normally and with ASAN/UBSAN. Six real player/input groups also pass, including late URI mutation and non-playback refusal.
 
 The native input owns the transport lease. Stop and playback end cancel it. A manifest, segment, or key EOF keeps it active. Keep the queue item's source-only policy intact for replay.
 
-The [stream contract](native-discovery-stream-contract.md) specifies the remaining access bridge, source consent, native intent, public HTTPS transport, nested media, and revocation tests. The [artwork approval contract](native-artwork-approval-contract.md) specifies the separate native record and consumer gates for scoped artwork. Neither route can be enabled from its draft alone.
+The [stream contract](native-discovery-stream-contract.md) specifies the remaining host resolver, source consent, native intent, public HTTPS transport, nested media, and revocation tests. Production Play and Enqueue remain unavailable. The [artwork approval contract](native-artwork-approval-contract.md) records the tested native record, consumers, and proof transfer; its owned preparser/provider cutover remains open.
 
 ## Metadata handover
 
@@ -91,4 +93,4 @@ Apply also compares the original native item URI and exact held policy, and refu
 
 The complete set of new field tokens is reserved before writes. A failed reservation changes no target value or revision. Limit tests run the actual Apply code with a private test sequence; they cover a failed range, preserved fields, exhaustion between writes, and concurrent non-overlapping ranges. Normal core commit, limit, backend, and revision tests pass. Focused sanitizer tests pass. No production fault-injection API was added.
 
-Keep the existing providers and local readers until the new consumer routes pass preservation tests. The private artwork record passes its normal suite. Its consumers, the metadata owner mount, preparser request list, and identity choice store still have integration work.
+Keep the existing providers and local readers until the owned route passes preservation tests. The private artwork record, consumers, broker/service proof transfer, native owner retirement, and request-list lifetime have passing evidence. The preparser owner mount, direct legacy-network admission gate, and identity choice store still have integration work.

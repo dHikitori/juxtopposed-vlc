@@ -93,6 +93,16 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - `560aa4ba79`: plain provider text with positive and zero-load regression probes.
 - `d91755036c`: source-owner test definitions outside the Windows-only Automake condition.
 - `203ef8e980`: native metadata commit admission with complete token reservation.
+- `6df9069887`: native artwork approval records.
+- `a22a5590a2`: metadata owner retirement, request-list lifetime, and idle cancellation.
+- `11080d0144`: dependency playlist CAS and the native module boundary.
+- `00beba6e13`: native source input lifetime and real playback gate tests.
+- `99712472c1`: native library work leases through Core shutdown.
+- `91ef46ff8d`: artwork proof transfer during atomic metadata Apply.
+- `82bb7dfb95`: bounded static UI images and the normal app mount.
+- `55bfc7c556`: native artwork consumers and the broker/service proof chain.
+- `3a20f84770`: native library picker, guarded append, and real dispatcher tests.
+- `4879a452b2`: complete artwork package distribution and startup inventories.
 
 ## Open completion gates
 
