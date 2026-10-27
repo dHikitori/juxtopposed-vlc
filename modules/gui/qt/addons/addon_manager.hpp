@@ -115,6 +115,7 @@ private:
     QMap<QString, QString> m_distributionDirectories;
     QMap<QString, QVariantMap> m_distributionPackages;
     QSet<QString> m_removingPackages;
+    QSet<QString> m_withdrawingPackages;
     std::shared_ptr<PackageCandidate> m_pendingPackage;
     std::unique_ptr<AddonRepositoryJobs> m_repositoryJobs;
     QString m_workerExecutable, m_error;

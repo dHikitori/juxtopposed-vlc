@@ -110,7 +110,15 @@ void AddonHostServices::finish(quint64 id, Result result, bool abort)
 void AddonHostServices::cancel(quint64 id)
 { finish(id, {{}, tr("VLC canceled the host operation.")}, true); }
 void AddonHostServices::cancelPackage(const QString& package)
-{ const auto ids = m_jobs.keys(); for (const auto id : ids) if (m_jobs.value(id).package == package) cancel(id); }
+{
+    const QPointer<AddonHostServices> alive(this);
+    const QString selected = package;
+    const auto ids = m_jobs.keys();
+    for (const auto id : ids) {
+        if (m_jobs.value(id).package == selected) cancel(id);
+        if (!alive) return;
+    }
+}
 void AddonHostServices::unregisterOperation(const QString& operation)
 {
     QPointer<AddonHostServices> guard(this);

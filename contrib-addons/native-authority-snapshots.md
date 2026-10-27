@@ -17,6 +17,8 @@ file read. A blocked file read cannot block the memory check or revocation.
 
 Manager destruction invalidates the shared store epoch before service teardown.
 Package, account, settings, and permission writes also invalidate that epoch.
+Executable withdrawal invalidates it before Worker stop and old request
+completion, even when no saved-state write is needed.
 Old readers cannot become current again after a same-process change. External
 saved-state changes are checked by `current`; the memory check alone cannot
 detect an external file edit.

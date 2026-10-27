@@ -8,6 +8,7 @@
 #include <QScopeGuard>
 #include <QSemaphore>
 #include <memory>
+#include <atomic>
 #include <thread>
 #ifdef Q_OS_UNIX
 #include <fcntl.h>
@@ -561,6 +562,117 @@ private slots:
         }
 #else
         QSKIP("This fixture uses a temporary Linux credential command.");
+#endif
+    }
+    void workerFailureWithdrawsBeforeManagerObservers_data() {
+        QTest::addColumn<bool>("deleteManager"); QTest::addColumn<bool>("deleteOnCompletion");
+        QTest::newRow("retained-owner") << false << false;
+        QTest::newRow("observer-deletes-owner") << true << false;
+        QTest::newRow("completion-deletes-owner") << true << true;
+    }
+    void workerFailureWithdrawsBeforeManagerObservers() {
+        QFETCH(bool, deleteManager); QFETCH(bool, deleteOnCompletion);
+        QTemporaryDir storage; auto* manager = new AddonManager(storage.path());
+        const QPointer<AddonManager> alive(manager);
+        const auto cleanup = qScopeGuard([&] { if (alive) delete alive.data(); });
+        QVERIFY(manager->installLocalPackage(reference(), true));
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        QVERIFY(manager->saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("test-only-key"))));
+        QVERIFY(manager->setEnabled(id, true));
+        manager->setWorkerExecutable(storage.filePath(QStringLiteral("missing-hakone-worker")));
+        unsigned withdrawals = 0, completions = 0; bool exact = false;
+        connect(manager, &AddonManager::operationFinished, this, [&](const QString&, const QString& contribution, const QString& status, const QVariantMap&, const QString&) {
+            ++completions; exact = contribution == id + QStringLiteral("/search") && status == QLatin1String("error");
+            if (deleteOnCompletion) delete manager;
+        });
+        connect(manager, &AddonManager::packageWithdrawn, this, [&](const QString& package) {
+            ++withdrawals; exact = package == id;
+            if (deleteManager && !deleteOnCompletion) delete manager;
+        });
+        const auto request = manager->invoke(id + QStringLiteral("/search"), QStringLiteral("searchAssets"), {{"query", "Film"}});
+        QVERIFY(!request.isEmpty());
+        QTRY_COMPARE(completions, 1u); QVERIFY(exact);
+        if (deleteOnCompletion) { QVERIFY(!alive); QCOMPARE(withdrawals, 0u); return; }
+        QTRY_COMPARE(withdrawals, 1u); QVERIFY(exact);
+        if (deleteManager) QVERIFY(!alive);
+        else QVERIFY(!manager->errorMessage().isEmpty());
+    }
+    void failedWorkerRetryKeepsBothReentrantInvocationsTracked() {
+#ifdef Q_OS_UNIX
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        const QString id = QStringLiteral("org.hakone.thesubtitledb");
+        const QString contribution = id + QStringLiteral("/search");
+        QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, replace(QStringLiteral("test-only-key"))));
+        QVERIFY(manager.setEnabled(id, true));
+        QFile fixture(storage.filePath(QStringLiteral("retry-worker"))); QVERIFY(fixture.open(QIODevice::WriteOnly));
+        const QByteArray script = R"PY(#!/usr/bin/python3
+import json, pathlib, sys
+root = pathlib.Path(__file__).parent
+print(json.dumps({"type":"ready","protocol":"wasm-message-v1"}), flush=True)
+for line in sys.stdin:
+    message = json.loads(line)
+    kind = message.get("type")
+    if kind in ("invoke", "cancel"):
+        with (root / (kind + '.jsonl')).open('a') as output:
+            output.write(json.dumps(message['id']) + '\n')
+)PY";
+        QCOMPARE(fixture.write(script), script.size()); fixture.close();
+        QVERIFY(fixture.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        std::atomic_bool revoked{false};
+        std::optional<AddonNativeAuthority> authority;
+        const auto reader = manager.nativeAuthorityReader(contribution);
+        std::thread capture([reader, &authority] { authority = reader(); }); capture.join();
+        QVERIFY(authority.has_value()); QVERIFY(authority->live && authority->live());
+        const auto watch = authority->onInvalidated([&revoked] { revoked.store(true, std::memory_order_release); });
+        QVERIFY(bool(watch));
+        QString original, inner, outer, refused;
+        bool gated = false, nestedRefused = false, deniedReader = false, revokedBeforeCompletion = false;
+        unsigned withdrawals = 0, completions = 0, activeWorkers = 0;
+        QObject observer;
+        connect(&manager, &AddonManager::operationFinished, &observer, [&](const QString& request, const QString&, const QString&, const QVariantMap&, const QString&) {
+            ++completions;
+            if (request != original) return;
+            revokedBeforeCompletion = revoked.load(std::memory_order_acquire) && !authority->live();
+            refused = manager.invoke(contribution, QStringLiteral("searchAssets"), {});
+            gated = refused.isEmpty();
+            deniedReader = !manager.nativeAuthorityReader(contribution)().has_value();
+            nestedRefused = !manager.setEnabled(id, false);
+        });
+        connect(&manager, &AddonManager::packageWithdrawn, &observer, [&](const QString& package) {
+            if (package != id) return;
+            ++withdrawals;
+            if (withdrawals == 1) inner = manager.invoke(contribution, QStringLiteral("searchAssets"), {{"query", "Inner"}});
+        });
+        manager.setWorkerExecutable(storage.filePath(QStringLiteral("missing-hakone-worker")));
+        original = manager.invoke(contribution, QStringLiteral("searchAssets"), {{"query", "Original"}});
+        QVERIFY(!original.isEmpty());
+        const auto initial = manager.findChildren<AddonWorker*>(); QCOMPARE(initial.size(), 1);
+        connect(initial.first(), &AddonWorker::unavailable, &observer, [&](const QString&) {
+            manager.setWorkerExecutable(fixture.fileName());
+            outer = manager.invoke(contribution, QStringLiteral("searchAssets"), {{"query", "Outer"}});
+            for (auto* worker : manager.findChildren<AddonWorker*>()) if (!worker->failed()) ++activeWorkers;
+        });
+        QTRY_VERIFY(!outer.isEmpty()); QVERIFY(!inner.isEmpty()); QVERIFY(inner != outer);
+        QCOMPARE(withdrawals, 1u); QCOMPARE(activeWorkers, 1u);
+        QVERIFY(gated); QVERIFY(refused.isEmpty()); QVERIFY(nestedRefused); QVERIFY(deniedReader); QVERIFY(revokedBeforeCompletion);
+        const auto received = [&storage](const QString& kind) {
+            QSet<QString> ids; QFile file(storage.filePath(kind + QStringLiteral(".jsonl")));
+            if (!file.open(QIODevice::ReadOnly)) return ids;
+            for (const auto& line : file.readAll().split('\n')) {
+                if (line.isEmpty()) continue;
+                const auto array = QJsonDocument::fromJson('[' + line + ']').array();
+                if (array.size() == 1 && array.first().isString()) ids.insert(array.first().toString());
+            }
+            return ids;
+        };
+        const QSet<QString> expected{inner, outer};
+        QTRY_COMPARE(received(QStringLiteral("invoke")), expected);
+        manager.cancel(inner); manager.cancel(outer);
+        QTRY_COMPARE(received(QStringLiteral("cancel")), expected);
+        QCOMPARE(completions, 1u); QCOMPARE(withdrawals, 1u);
+#else
+        QSKIP("This process-cancellation fixture requires a Unix executable script.");
 #endif
     }
     void realPortableWorkerHasNoAmbientCredential() {

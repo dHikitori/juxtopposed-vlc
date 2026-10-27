@@ -23,6 +23,7 @@ public:
                           NetworkBroker::CredentialResolver);
     void setRequestGuard(NetworkBroker::RequestGuard guard) { m_requestGuard = std::move(guard); }
     bool configurationCurrent() const { return !m_requestGuard || m_requestGuard(); }
+    bool failed() const noexcept { return m_failed; }
     QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context);
     void cancel(const QString& invocation);
     void stop();
@@ -53,6 +54,6 @@ private:
     NetworkBroker::CredentialResolver m_resolver;
     NetworkBroker::RequestGuard m_requestGuard;
     QString m_executable;
-    bool m_ready = false, m_stopping = false;
+    bool m_ready = false, m_stopping = false, m_failed = false;
 };
 }

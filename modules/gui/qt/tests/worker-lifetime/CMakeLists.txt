@@ -1,0 +1,43 @@
+cmake_minimum_required(VERSION 3.20)
+project(hakone_worker_lifetime_tests LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Test)
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
+get_filename_component(VLC_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../.." ABSOLUTE)
+set(HAKONE_HOST_ARCHIVE "" CACHE FILEPATH "Current normal add-on host archive.")
+if(NOT EXISTS "${HAKONE_HOST_ARCHIVE}")
+    message(FATAL_ERROR "Set HAKONE_HOST_ARCHIVE to a current normal add-on host archive.")
+endif()
+set(addons "${VLC_SOURCE_ROOT}/modules/gui/qt/addons")
+set(runtime_sources "${addons}/addon_manager.cpp" "${addons}/addon_worker.cpp"
+    "${addons}/addon_host_services.cpp" "${addons}/addon_credentials.cpp")
+# The normal archive supplies matching host metaobjects.
+set_source_files_properties(${runtime_sources} PROPERTIES SKIP_AUTOMOC ON)
+add_executable(test_addon_runtime "${VLC_SOURCE_ROOT}/modules/gui/qt/tests/test_addon_runtime.cpp" ${runtime_sources})
+add_executable(test_addon_host_services "${VLC_SOURCE_ROOT}/modules/gui/qt/tests/test_addon_host_services.cpp"
+    "${addons}/addon_host_services.cpp")
+option(HAKONE_WORKER_SANITIZERS "Enable focused worker lifetime sanitizers." OFF)
+foreach(name runtime host_services)
+    target_include_directories(test_addon_${name} PRIVATE "${VLC_SOURCE_ROOT}/modules/gui/qt")
+    target_compile_definitions(test_addon_${name} PRIVATE
+        QT_USE_QSTRINGBUILDER QT_NO_CAST_TO_ASCII QT_NO_CAST_FROM_BYTEARRAY QT_STRICT_ITERATORS
+        VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
+    target_link_libraries(test_addon_${name} PRIVATE "${HAKONE_HOST_ARCHIVE}"
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Test Threads::Threads ZLIB::ZLIB)
+    if(WIN32)
+        target_link_libraries(test_addon_${name} PRIVATE Advapi32 ws2_32)
+    elseif(APPLE)
+        target_link_libraries(test_addon_${name} PRIVATE "-framework Security")
+    endif()
+    if(HAKONE_WORKER_SANITIZERS)
+        target_compile_options(test_addon_${name} PRIVATE
+            -fsanitize=address,undefined,float-cast-overflow -fno-omit-frame-pointer -O1 -g1)
+        target_link_options(test_addon_${name} PRIVATE -fsanitize=address,undefined,float-cast-overflow)
+    endif()
+endforeach()
+enable_testing()
+add_test(NAME addon_runtime COMMAND test_addon_runtime)
+add_test(NAME addon_host_services COMMAND test_addon_host_services)
+set_tests_properties(addon_runtime addon_host_services PROPERTIES TIMEOUT 120)

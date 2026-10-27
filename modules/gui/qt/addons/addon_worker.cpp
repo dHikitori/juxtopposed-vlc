@@ -54,6 +54,10 @@ void AddonWorker::start()
 QString AddonWorker::invoke(const QString& contribution, const QString& operation, const QJsonObject& context)
 {
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if (m_failed) {
+        QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("error"), {}, tr("The add-on worker is not available.")); });
+        return id;
+    }
     const auto registration = m_package.manifest.contribution(contribution);
     if (!configurationCurrent()) {
         QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("denied"), {}, tr("The add-on release, account, or settings changed.")); });
@@ -90,6 +94,8 @@ void AddonWorker::send(const QJsonObject& message)
 
 void AddonWorker::read()
 {
+    if (m_stopping || m_failed) return;
+    const QPointer<AddonWorker> alive(this);
     m_buffer += m_process.readAllStandardOutput();
     if (m_buffer.size() > 2 * 1024 * 1024) { fail(tr("The add-on sent too much data.")); return; }
     while (m_buffer.contains('\n')) {
@@ -105,7 +111,7 @@ void AddonWorker::read()
             }
             m_ready = true; m_startup.stop();
             const auto pending = std::move(m_queued); m_queued.clear();
-            for (const auto& message : pending) send(message);
+            for (const auto& message : pending) { send(message); if (!alive || m_stopping) return; }
             continue;
         }
         if (object.value(QStringLiteral("type")).toString() != QLatin1String("messages")
@@ -116,13 +122,14 @@ void AddonWorker::read()
         for (const auto& value : object.value(QStringLiteral("messages")).toArray()) {
             if (!value.isObject()) { fail(tr("The add-on sent a message that is not correct.")); return; }
             message(value.toObject());
-            if (m_stopping) return;
+            if (!alive || m_stopping) return;
         }
     }
 }
 
 void AddonWorker::message(const QJsonObject& object)
 {
+    if (m_stopping || m_failed) return;
     if (!configurationCurrent()) { fail(tr("The add-on release, account, or settings changed.")); return; }
     const auto type = object.value(QStringLiteral("type")).toString();
     const auto id = object.value(QStringLiteral("id")).toString();
@@ -194,22 +201,24 @@ void AddonWorker::message(const QJsonObject& object)
 
 void AddonWorker::finish(const QString& id, const QString& status, const QJsonObject& data, const QString& error)
 {
+    const QPointer<AddonWorker> alive(this);
     if (!m_invocations.contains(id)) return;
     const auto invocation = m_invocations.take(id);
     Q_ASSERT(m_hostCallCount>=invocation.hostCalls.size()); m_hostCallCount-=invocation.hostCalls.size(); rememberRetired(id);
     if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
-    for (auto job : invocation.jobs) m_network->cancel(job);
-    if (m_services) for (auto job : invocation.serviceJobs) m_services->cancel(job);
-    emit completed(id, status, data, error);
+    for (auto job : invocation.jobs) { m_network->cancel(job); if (!alive) return; }
+    if (m_services) for (auto job : invocation.serviceJobs) { m_services->cancel(job); if (!alive) return; }
+    QTimer::singleShot(0, this, [this, id, status, data, error] { emit completed(id, status, data, error); });
 }
 void AddonWorker::cancel(const QString& id)
 {
+    const QPointer<AddonWorker> alive(this);
     if (!m_invocations.contains(id)) return;
     const auto invocation = m_invocations.take(id);
     Q_ASSERT(m_hostCallCount>=invocation.hostCalls.size()); m_hostCallCount-=invocation.hostCalls.size(); rememberRetired(id);
     if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
-    for (auto job : invocation.jobs) m_network->cancel(job);
-    if (m_services) for (auto job : invocation.serviceJobs) m_services->cancel(job);
+    for (auto job : invocation.jobs) { m_network->cancel(job); if (!alive) return; }
+    if (m_services) for (auto job : invocation.serviceJobs) { m_services->cancel(job); if (!alive) return; }
     QQueue<QJsonObject> retained;
     while (!m_queued.isEmpty()) { const auto message = m_queued.dequeue(); if (message.value(QStringLiteral("id")).toString() != id) retained.enqueue(message); }
     m_queued = retained;
@@ -225,16 +234,26 @@ void AddonWorker::rememberRetired(const QString& id)
 void AddonWorker::fail(const QString& error)
 {
     if (m_stopping) return;
-    m_stopping = true; m_ready = false; m_startup.stop(); m_queued.clear();
+    m_failed = true; m_stopping = true; m_ready = false; m_startup.stop(); m_queued.clear();
     if (m_process.state() != QProcess::NotRunning) m_process.kill();
     const auto ids = m_invocations.keys();
-    for (const auto& id : ids) finish(id, QStringLiteral("error"), {}, error);
-    emit unavailable(error);
+    const QString failure = error;
+    const QPointer<AddonWorker> alive(this);
+    // Observers can destroy this owner. Leave the QProcess signal stack first.
+    QTimer::singleShot(0, this, [alive, ids, failure] {
+        if (!alive) return;
+        for (const auto& id : ids) {
+            alive->finish(id, QStringLiteral("error"), {}, failure);
+            if (!alive) return;
+        }
+        emit alive->unavailable(failure);
+    });
 }
 void AddonWorker::stop()
 {
+    const QPointer<AddonWorker> alive(this);
     m_stopping = true; m_startup.stop(); m_ready = false; m_queued.clear();
-    const auto ids = m_invocations.keys(); for (const auto& id : ids) cancel(id);
+    const auto ids = m_invocations.keys(); for (const auto& id : ids) { cancel(id); if (!alive) return; }
     if (m_process.state() != QProcess::NotRunning) { m_process.kill(); m_process.waitForFinished(1000); }
 }
 }

@@ -13,6 +13,7 @@
 #include <QLocale>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QSslSocket>
 #include <QMetaProperty>
 #include <QTimer>
@@ -230,6 +231,10 @@ QByteArray AddonManager::credential(const QString& id, const QString& field) con
 { return m_secrets.read(id, savedSettings(id).value("_credentials").toObject().value(field).toString()); }
 NetworkBroker::CredentialResolver AddonManager::credentialResolver(const InstalledPackage& package, NetworkBroker::RequestGuard* current) const
 {
+    if (m_retiring || m_withdrawingPackages.contains(package.manifest.id)) {
+        if (current) *current = [] { return false; };
+        return [](const QString&) { return QByteArray{}; };
+    }
     QJsonObject settings; quint64 revision = 0;
     const bool captured = m_store.networkConfiguration(package, &settings, &revision);
     const auto references = settings.value("_credentials").toObject();
@@ -239,7 +244,8 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Install
     for (const auto& value : bindings) if (approved.contains(value)) fields.insert(value.toObject().value("field").toString());
     const QPointer<AddonManager> owner(const_cast<AddonManager*>(this));
     NetworkBroker::RequestGuard guard = [owner, package, settings, revision, captured] {
-        return captured && owner && owner->m_store.networkConfigurationMatches(package, settings, revision);
+        return captured && owner && !owner->m_retiring && !owner->m_withdrawingPackages.contains(package.manifest.id)
+            && owner->m_store.networkConfigurationMatches(package, settings, revision);
     };
     if (current) *current = guard;
     return [owner, guard, references, fields, id = package.manifest.id](const QString& field) {
@@ -249,7 +255,7 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Install
 }
 QVariantMap AddonManager::settingsSecretStatus(const QString& id) const
 {
-    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return {};
+    if (m_withdrawingPackages.contains(id) || m_removingPackages.contains(id) || m_store.packageRetiring(id)) return {};
     InstalledPackage package; if (!m_store.installed(id, &package)) return {};
     const auto properties = schema(package).value("properties").toObject();
     const auto references = savedSettings(id).value("_credentials").toObject(); QVariantMap status;
@@ -261,7 +267,7 @@ QVariantMap AddonManager::settingsSecretStatus(const QString& id) const
 }
 bool AddonManager::configured(const InstalledPackage& package) const
 {
-    if (m_retiring || m_removingPackages.contains(package.manifest.id) || m_store.packageRetiring(package.manifest.id)) return false;
+    if (m_retiring || m_withdrawingPackages.contains(package.manifest.id) || m_removingPackages.contains(package.manifest.id) || m_store.packageRetiring(package.manifest.id)) return false;
     const auto document = schema(package); if (document.value("type").toString() != QLatin1String("object")) return false;
     const auto values = QJsonObject::fromVariantMap(settingsValues(package.manifest.id));
     const auto properties = document.value("properties").toObject();
@@ -396,7 +402,7 @@ QVariantList AddonManager::contributionsOfType(const QString& type, bool include
 QJsonObject AddonManager::contributionResource(const QString& global, const QString& resourceField) const
 {
     static const QSet<QString> fields{QStringLiteral("resource"), QStringLiteral("view"), QStringLiteral("theme"), QStringLiteral("scene")};
-    if (!fields.contains(resourceField)) return {};
+    if (m_retiring || m_withdrawingPackages.contains(packagePart(global)) || !fields.contains(resourceField)) return {};
     InstalledPackage package; if (!m_store.installed(packagePart(global), &package) || !package.enabled) return {};
     const auto* contribution = package.manifest.contribution(localPart(global)); if (!contribution) return {};
     const auto path = contribution->document.value(resourceField).toString();
@@ -404,10 +410,12 @@ QJsonObject AddonManager::contributionResource(const QString& global, const QStr
     return readObject(QDir(package.directory).filePath(path));
 }
 QJsonObject AddonManager::grantedScope(const QString& id, const QString& capability) const
-{ InstalledPackage package; return m_store.installed(id, &package) && package.enabled ? package.grants.value(capability).toObject() : QJsonObject{}; }
+{ if (m_retiring || m_withdrawingPackages.contains(id)) return {};
+  InstalledPackage package; return m_store.installed(id, &package) && package.enabled ? package.grants.value(capability).toObject() : QJsonObject{}; }
 QByteArray AddonManager::contributionFile(const QString& global, const QString& path, qint64 maximumBytes) const
 {
-    if (!portablePackagePath(path) || maximumBytes < 1 || maximumBytes > Manifest::MaximumFileBytes) return {};
+    if (m_retiring || m_withdrawingPackages.contains(packagePart(global))
+        || !portablePackagePath(path) || maximumBytes < 1 || maximumBytes > Manifest::MaximumFileBytes) return {};
     InstalledPackage package;
     if (!m_store.installed(packagePart(global), &package) || !package.enabled
         || !package.manifest.contribution(localPart(global)) || !package.manifest.files.contains(path)) return {};
@@ -419,6 +427,8 @@ QByteArray AddonManager::contributionFile(const QString& global, const QString& 
 std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& global) const
 {
     if (m_retiring) return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on manager is closing."); return result; };
+    if (m_withdrawingPackages.contains(packagePart(global)))
+        return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on is not available."); return result; };
     if (m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
         return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on is being removed."); return result; };
     // This preparation reads memory only. The detached reader owns no QObject.
@@ -504,7 +514,7 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
 AddonNativeAuthorityReader AddonManager::nativeAuthorityReader(const QString& global) const
 {
     if (m_retiring) return []() -> std::optional<AddonNativeAuthority> { return std::nullopt; };
-    if (m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
+    if (m_withdrawingPackages.contains(packagePart(global)) || m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
         return []() -> std::optional<AddonNativeAuthority> { return std::nullopt; };
     const auto store = m_store;
     const auto authority = store.authorityToken();
@@ -759,7 +769,7 @@ bool AddonManager::approvePendingPackage(bool enable)
     if (busy() || !m_pendingPackage) return changed(false, tr("Select an add-on package first."));
     const auto candidate = m_pendingPackage; QString error;
     const QPointer<AddonManager> alive(this);
-    withdraw(candidate->manifest.id);
+    if (!withdraw(candidate->manifest.id)) return false;
     if (!alive) return false;
     if (candidate->identity.distributionSource) {
         const auto known = m_distributionPackages.value(candidate->manifest.id);
@@ -829,14 +839,17 @@ QVariantList AddonManager::retainedGenerations(const QString& id) const
 { return m_store.retainedGenerations(id).toVariantList(); }
 bool AddonManager::uninstall(const QString& id, bool removeData)
 {
-    if (busy() || m_removingPackages.contains(id)) return changed(false, tr("Wait for the current add-on request to end."));
+    if (busy() || m_removingPackages.contains(id) || m_withdrawingPackages.contains(id)) return changed(false, tr("Wait for the current add-on request to end."));
     auto retirement = std::make_shared<StorePackageRetirement>(m_store.retirePackage(id));
     if (!*retirement) return changed(false, tr("The package ID is not correct."));
     auto store = m_store;
     auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
     m_removingPackages.insert(id);
     const QPointer<AddonManager> alive(this);
-    withdraw(id);
+    if (!withdraw(id)) {
+        if (alive) m_removingPackages.remove(id);
+        return false;
+    }
     if (!alive) return false;
     const bool started = m_repositoryJobs->submit([store, id, removeData, retirement, error, success]() mutable {
         // The shared retirement hold refuses fresh readers before this task starts.
@@ -868,10 +881,17 @@ bool AddonManager::uninstall(const QString& id, bool removeData)
 
 AddonWorker* AddonManager::worker(const InstalledPackage& package)
 {
-    if (m_retiring) return nullptr;
+    if (m_retiring || m_withdrawingPackages.contains(package.manifest.id)
+        || m_removingPackages.contains(package.manifest.id) || m_store.packageRetiring(package.manifest.id)) return nullptr;
     if (auto* previous = m_workers.value(package.manifest.id)) {
-        if (previous->configurationCurrent()) return previous;
-        if (!withdraw(package.manifest.id)) return nullptr;
+        if (!previous->failed() && previous->configurationCurrent()) return previous;
+        const QPointer<AddonManager> alive(this);
+        if (!withdraw(package.manifest.id) || !alive || m_retiring || m_withdrawingPackages.contains(package.manifest.id)) return nullptr;
+        InstalledPackage current;
+        if (!m_store.installed(package.manifest.id, &current) || !current.enabled || current.digest != package.digest
+            || current.generation != package.generation || current.grants != package.grants || !configured(current)) return nullptr;
+        if (auto* replacement = m_workers.value(package.manifest.id))
+            return !replacement->failed() && replacement->configurationCurrent() ? replacement : nullptr;
     }
     auto* instance = new AddonWorker(package, &m_network, this); instance->setExecutable(m_workerExecutable);
     instance->setHostServices(&m_hostServices);
@@ -884,15 +904,20 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
         const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);
         if (!contribution.isEmpty()) emit operationFinished(request, contribution, status, data.toVariantMap(), error);
     });
-    connect(instance, &AddonWorker::unavailable, this, [this, id, instance](const QString& error) {
-        if (m_workers.value(id) == instance) m_workers.remove(id);
-        instance->deleteLater(); changed(false, error);
-    });
+    connect(instance, &AddonWorker::unavailable, this, [this, id, owner=QPointer<AddonWorker>(instance)](const QString& error) {
+        if (!owner) return;
+        const QString failure=error, package=id;
+        if (m_workers.value(package) != owner.data()) { owner->deleteLater(); return; }
+        const QPointer<AddonManager> alive(this);
+        if (!withdraw(package) || !alive) return;
+        changed(false, failure);
+    }, Qt::QueuedConnection);
     m_workers.insert(id, instance); return instance;
 }
 QString AddonManager::invoke(const QString& contributionId, const QString& operation, const QVariantMap& context)
 {
     const auto packageId = packagePart(contributionId); InstalledPackage package;
+    if (m_retiring || m_withdrawingPackages.contains(packageId)) return {};
     if (!m_store.installed(packageId, &package) || !package.enabled || !configured(package)) {
         const auto request = QUuid::createUuid().toString(QUuid::WithoutBraces);
         QTimer::singleShot(0, this, [this, request, contributionId] { emit operationFinished(request, contributionId, QStringLiteral("auth_required"), {}, tr("Enable this add-on. Then enter its settings.")); });
@@ -920,7 +945,7 @@ void AddonManager::cancel(const QString& request)
 quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback callback)
 {
     const auto id = packagePart(contributionId); InstalledPackage package;
-    if (m_retiring || m_removingPackages.contains(id) || m_store.packageRetiring(id)
+    if (m_retiring || m_withdrawingPackages.contains(id) || m_removingPackages.contains(id) || m_store.packageRetiring(id)
         || !m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
         QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
     }
@@ -931,7 +956,7 @@ quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObjec
 quint64 AddonManager::fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback callback)
 {
     const auto id = packagePart(contributionId); InstalledPackage package;
-    if (m_retiring || m_removingPackages.contains(id) || m_store.packageRetiring(id)
+    if (m_retiring || m_withdrawingPackages.contains(id) || m_removingPackages.contains(id) || m_store.packageRetiring(id)
         || !m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
         QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
     }
@@ -940,26 +965,40 @@ quint64 AddonManager::fetchImageAsset(const QString& contributionId, const QJson
     return m_network.fetch(package.manifest, package.grants, request,
         std::move(resolver), std::move(callback), 1024 * 1024, NetworkBroker::RequestKind::ImageAsset, std::move(current));
 }
-bool AddonManager::withdraw(const QString& id)
+bool AddonManager::withdraw(const QString& packageId)
 {
+    const QString id = packageId;
+    if (m_withdrawingPackages.contains(id)) return false;
+    m_withdrawingPackages.insert(id);
     const QPointer<AddonManager> alive(this);
-    if (const QPointer<AddonWorker> instance = m_workers.take(id)) {
-        instance->stop(); if (instance) instance->deleteLater();
+    auto release = qScopeGuard([alive, id] { if (alive) alive->m_withdrawingPackages.remove(id); });
+    const QString error = tr("The add-on settings changed.");
+    QList<QPair<QString, QString>> requests;
+    const auto oldRequests = m_invocationPackages.keys(id);
+    requests.reserve(oldRequests.size());
+    for (const auto& request : oldRequests) {
+        requests.append({request, m_invocationContributions.take(request)});
+        m_invocationPackages.remove(request);
     }
+    m_store.invalidateAuthority();
     if (!alive) return false;
+    if (const QPointer<AddonWorker> instance = m_workers.take(id)) {
+        instance->stop();
+        if (!alive) return false;
+        if (instance) instance->deleteLater();
+    }
     m_network.cancelPackage(id);
     if (!alive) return false;
     m_hostServices.cancelPackage(id);
     if (!alive) return false;
-    emit packageWithdrawn(id);
-    if (!alive) return false;
-    const auto requests = m_invocationPackages.keys(id);
     for (const auto& request : requests) {
-        const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);
-        emit operationFinished(request, contribution, QStringLiteral("error"), {}, tr("The add-on settings changed."));
+        emit operationFinished(request.first, request.second, QStringLiteral("error"), {}, error);
         if (!alive) return false;
     }
-    return true;
+    m_withdrawingPackages.remove(id);
+    release.dismiss();
+    emit packageWithdrawn(id);
+    return bool(alive);
 }
 bool AddonManager::changed(bool success, const QString& error)
 { m_error = success ? QString{} : error; ++m_revision; emit revisionChanged(); return success; }

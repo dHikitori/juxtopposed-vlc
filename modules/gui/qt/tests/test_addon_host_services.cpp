@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
 #include <QJsonArray>
+#include <QScopeGuard>
 #include "addons/addon_host_services.hpp"
 #include <thread>
 using namespace vlc::addons;
@@ -72,6 +73,28 @@ private slots:
         services.cancel(first); QCOMPARE(aborts, 1); QCOMPARE(calls, 1); complete({{}, {}}); QTest::qWait(20); QCOMPARE(calls, 1);
         services.dispatch(context(), QStringLiteral("playback.observe"), {}, [&](auto result) { ++calls; QVERIFY(!result.error.isEmpty()); }, 1);
         QTRY_COMPARE(calls, 2); QCOMPARE(aborts, 2);
+    }
+    void packageCancellationCanDeleteTheDispatcher_data() {
+        QTest::addColumn<bool>("deleteInCancel");
+        QTest::newRow("native-cancel") << true;
+        QTest::newRow("completion") << false;
+    }
+    void packageCancellationCanDeleteTheDispatcher() {
+        QFETCH(bool, deleteInCancel);
+        QObject owner; auto* services = new AddonHostServices;
+        const QPointer<AddonHostServices> alive(services);
+        int calls = 0, aborts = 0; bool deleting = false;
+        const auto cleanup = qScopeGuard([&] { deleting = true; if (alive) delete alive.data(); });
+        QVERIFY(services->registerOperation(QStringLiteral("playback.observe"), &owner,
+            [&](const auto&, const auto&, auto) -> AddonHostServices::Cancel {
+                return [&] { ++aborts; if (deleteInCancel && !deleting) { deleting = true; delete services; } };
+            }));
+        for (int index = 0; index < 2; ++index)
+            QVERIFY(services->dispatch(context(), QStringLiteral("playback.observe"), {}, [&](auto) {
+                ++calls; if (!deleteInCancel && !deleting) { deleting = true; delete services; }
+            }));
+        services->cancelPackage(context().package);
+        QVERIFY(!alive); QCOMPARE(aborts, 2); QCOMPARE(calls, 2);
     }
     void pendingQuotaAndPackageWithdrawalAreBounded() {
         AddonHostServices services; QObject owner; int aborts = 0, calls = 0;
