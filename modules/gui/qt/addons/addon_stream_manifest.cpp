@@ -5,6 +5,10 @@
 #include <QSet>
 #include <QStringDecoder>
 #include <limits>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+#include <memory>
+#include <vector>
 
 namespace vlc::addons {
 namespace {
@@ -255,5 +259,182 @@ AddonStreamManifest::Result AddonStreamManifest::hls(const QByteArray& bytes, co
     auto result = lines.join(QLatin1Char('\n')).toUtf8();
     if (result.size() > 2 * 1024 * 1024) return invalid();
     return {std::move(result), {}};
+}
+namespace {
+struct DashNode {
+    QString name, text;
+    QMap<QString, QString> attrs;
+    QMap<QString, qsizetype> routes;
+    std::vector<std::unique_ptr<DashNode>> children;
+    qsizetype media = -1;
+};
+bool dashContains(const char* names, const QString& value)
+{ return QString::fromLatin1(names).split(QLatin1Char(' '), Qt::SkipEmptyParts).contains(value); }
+const char* dashAttrs(const QString& name)
+{
+    if (name == QLatin1String("MPD")) return "id profiles type mediaPresentationDuration minBufferTime maxSegmentDuration maxSubsegmentDuration";
+    if (name == QLatin1String("Period")) return "id start duration bitstreamSwitching";
+    if (name == QLatin1String("AdaptationSet")) return "id group lang contentType mimeType codecs width height frameRate audioSamplingRate segmentAlignment subsegmentAlignment startWithSAP bitstreamSwitching par minBandwidth maxBandwidth minWidth maxWidth minHeight maxHeight minFrameRate maxFrameRate";
+    if (name == QLatin1String("Representation")) return "id bandwidth qualityRanking mimeType codecs width height frameRate audioSamplingRate sar startWithSAP scanType";
+    if (name == QLatin1String("BaseURL")) return "";
+    if (name == QLatin1String("SegmentList")) return "timescale presentationTimeOffset duration startNumber";
+    if (name == QLatin1String("SegmentBase")) return "timescale presentationTimeOffset indexRange indexRangeExact";
+    if (name == QLatin1String("Initialization")) return "sourceURL range";
+    if (name == QLatin1String("SegmentURL")) return "media mediaRange";
+    if (name == QLatin1String("SegmentTimeline")) return "";
+    if (name == QLatin1String("S")) return "t d r";
+    if (name == QLatin1String("Role") || name == QLatin1String("AudioChannelConfiguration")) return "schemeIdUri value";
+    return nullptr;
+}
+bool dashChild(const QString& parent, const QString& child)
+{
+    if (parent == QLatin1String("MPD")) return dashContains("BaseURL Period", child);
+    if (parent == QLatin1String("Period")) return dashContains("BaseURL AdaptationSet", child);
+    if (parent == QLatin1String("AdaptationSet")) return dashContains("BaseURL Representation Role AudioChannelConfiguration", child);
+    if (parent == QLatin1String("Representation")) return dashContains("BaseURL SegmentList SegmentBase AudioChannelConfiguration", child);
+    if (parent == QLatin1String("SegmentList")) return dashContains("Initialization SegmentTimeline SegmentURL", child);
+    if (parent == QLatin1String("SegmentBase")) return child == QLatin1String("Initialization");
+    return parent == QLatin1String("SegmentTimeline") && child == QLatin1String("S");
+}
+bool dashRange(const QString& text, Range* out)
+{
+    const auto parts = text.split(QLatin1Char('-')); quint64 first, last;
+    if (parts.size() != 2 || !unsignedNumber(parts[0], &first) || !unsignedNumber(parts[1], &last) || last < first
+        || last == quint64(std::numeric_limits<qint64>::max())) return false;
+    *out = {first, last - first + 1}; return true;
+}
+std::unique_ptr<DashNode> dashTree(const QByteArray& bytes)
+{
+    QXmlStreamReader reader(bytes); std::unique_ptr<DashNode> root; std::vector<DashNode*> stack;
+    qsizetype nodes = 0, total = 0;
+    while (!reader.atEnd()) {
+        const auto token = reader.readNext();
+        if (token == QXmlStreamReader::DTD || token == QXmlStreamReader::EntityReference
+            || token == QXmlStreamReader::ProcessingInstruction) return {};
+        if (token == QXmlStreamReader::StartDocument && !reader.documentEncoding().isEmpty()
+            && reader.documentEncoding().compare(QLatin1String("UTF-8"), Qt::CaseInsensitive) != 0) return {};
+        if (token == QXmlStreamReader::StartElement) {
+            if (++nodes > 4096 || stack.size() >= 16 || reader.namespaceUri() != QLatin1String("urn:mpeg:dash:schema:mpd:2011")) return {};
+            auto node = std::make_unique<DashNode>(); node->name = reader.name().toString(); const char* permitted = dashAttrs(node->name);
+            if (!permitted || (stack.empty() ? root || node->name != QLatin1String("MPD") : !dashChild(stack.back()->name, node->name))
+                || reader.attributes().size() > 32) return {};
+            for (const auto& attr : reader.attributes()) {
+                if (node->name == QLatin1String("MPD") && attr.namespaceUri() == QLatin1String("http://www.w3.org/2001/XMLSchema-instance")
+                    && attr.name() == QLatin1String("schemaLocation")) continue;
+                if (!attr.namespaceUri().isEmpty() || !dashContains(permitted, attr.name().toString()) || attr.value().size() > 8192) return {};
+                total += attr.value().size(); if (total > 2 * 1024 * 1024) return {};
+                node->attrs.insert(attr.name().toString(), attr.value().toString());
+            }
+            auto* pointer = node.get();
+            if (stack.empty()) root = std::move(node); else stack.back()->children.emplace_back(std::move(node));
+            stack.push_back(pointer);
+        } else if (token == QXmlStreamReader::EndElement) {
+            if (stack.empty()) return {};
+            stack.pop_back();
+        } else if (token == QXmlStreamReader::Characters && !stack.empty()) {
+            if (stack.back()->name == QLatin1String("BaseURL")) {
+                stack.back()->text += reader.text(); if (stack.back()->text.size() > 8192) return {};
+            } else if (!reader.isWhitespace()) return {};
+        }
+    }
+    return reader.hasError() || !stack.empty() ? nullptr : std::move(root);
+}
+qsizetype dashCount(const DashNode& node, const char* name)
+{
+    qsizetype count = 0; for (const auto& child : node.children) if (child->name == QLatin1String(name)) ++count; return count;
+}
+bool dashPrepare(DashNode& node, QUrl base, QList<Resource>* resources, unsigned* representations, bool fileBase = false)
+{
+    if (dashCount(node, "BaseURL") > 1) return false;
+    for (const auto& child : node.children) if (child->name == QLatin1String("BaseURL")) {
+        if (!resolved(child->text.trimmed(), base, &base)) return false;
+        fileBase = !base.path().endsWith(QLatin1Char('/'));
+    }
+    if (node.name == QLatin1String("MPD")) {
+        if (node.attrs.value(QStringLiteral("type"), QStringLiteral("static")) != QLatin1String("static") || !dashCount(node, "Period")
+            || dashCount(node, "Period") > 16 || node.attrs.value(QStringLiteral("profiles")).isEmpty()
+            || node.attrs.value(QStringLiteral("minBufferTime")).isEmpty()) return false;
+    } else if (node.name == QLatin1String("Period")) {
+        if (!dashCount(node, "AdaptationSet")) return false;
+    } else if (node.name == QLatin1String("AdaptationSet")) {
+        if (!dashCount(node, "Representation")) return false;
+    } else if (node.name == QLatin1String("Representation")) {
+        if (++*representations > 64 || dashCount(node, "SegmentBase") + dashCount(node, "SegmentList") != 1) return false;
+        if (dashCount(node, "SegmentBase") && (dashCount(node, "BaseURL") != 1 || !fileBase)) return false;
+        if (dashCount(node, "SegmentBase")) { node.media = resources->size(); resources->append({base, Kind::Media, {}}); }
+    } else if (node.name == QLatin1String("SegmentList")) {
+        if (!dashCount(node, "SegmentURL") || dashCount(node, "Initialization") > 1 || dashCount(node, "SegmentTimeline") > 1
+            || (!dashCount(node, "SegmentTimeline") && !node.attrs.contains(QStringLiteral("duration")))) return false;
+        quint64 entries = 0, end = 0;
+        for (const auto& child : node.children) if (child->name == QLatin1String("SegmentTimeline")) {
+            if (child->children.empty()) return false;
+            for (const auto& point : child->children) {
+                quint64 duration, repeat = 0, start = end;
+                if (!unsignedNumber(point->attrs.value(QStringLiteral("d")), &duration) || !duration
+                    || (point->attrs.contains(QStringLiteral("r")) && !unsignedNumber(point->attrs.value(QStringLiteral("r")), &repeat))
+                    || (point->attrs.contains(QStringLiteral("t")) && !unsignedNumber(point->attrs.value(QStringLiteral("t")), &start))
+                    || repeat > 511 || entries + repeat + 1 > 512) return false;
+                if (start < end || duration > (quint64(std::numeric_limits<qint64>::max()) - start) / (repeat + 1)) return false;
+                end = start + duration * (repeat + 1); entries += repeat + 1;
+            }
+            if (entries != quint64(dashCount(node, "SegmentURL"))) return false;
+        }
+    } else if (node.name == QLatin1String("SegmentBase")) {
+        Range range;
+        if (dashCount(node, "Initialization") > 1 || (node.attrs.contains(QStringLiteral("indexRange"))
+            && !dashRange(node.attrs.value(QStringLiteral("indexRange")), &range))) return false;
+        if (node.attrs.contains(QStringLiteral("indexRangeExact"))
+            && !dashContains("true false 0 1", node.attrs.value(QStringLiteral("indexRangeExact")))) return false;
+    }
+    for (const auto* attr : {"timescale", "duration", "startNumber", "presentationTimeOffset"}) if (node.attrs.contains(QLatin1String(attr))) {
+        if (node.name == QLatin1String("Period")) continue;
+        quint64 value; if (!unsignedNumber(node.attrs.value(QLatin1String(attr)), &value)
+            || ((QLatin1String(attr) == QLatin1String("timescale") || QLatin1String(attr) == QLatin1String("duration")) && !value)) return false;
+    }
+    if (node.name == QLatin1String("SegmentURL") || node.name == QLatin1String("Initialization")) {
+        const bool initial = node.name == QLatin1String("Initialization"); const QString attr = initial ? QStringLiteral("sourceURL") : QStringLiteral("media");
+        const QString rangeAttr = initial ? QStringLiteral("range") : QStringLiteral("mediaRange");
+        QUrl remote = base; if (node.attrs.contains(attr) && !resolved(node.attrs.value(attr), base, &remote)) return false;
+        if (!node.attrs.contains(attr) && (!node.attrs.contains(rangeAttr) || !fileBase)) return false;
+        std::optional<Range> range;
+        if (node.attrs.contains(rangeAttr)) { Range parsed; if (!dashRange(node.attrs.value(rangeAttr), &parsed)) return false; range = parsed; }
+        node.routes.insert(attr, resources->size()); resources->append({remote, initial ? Kind::Initialization : Kind::Media, range});
+    }
+    if (resources->size() > 512) return false;
+    for (auto& child : node.children) if (child->name != QLatin1String("BaseURL") && !dashPrepare(*child, base, resources, representations, fileBase)) return false;
+    return true;
+}
+QByteArray dashWrite(const DashNode& root, const QStringList& routes)
+{
+    QByteArray bytes; QXmlStreamWriter writer(&bytes); writer.writeStartDocument();
+    std::function<void(const DashNode&, bool)> writeNode = [&](const DashNode& node, bool top) {
+        writer.writeStartElement(node.name); if (top) writer.writeDefaultNamespace(QStringLiteral("urn:mpeg:dash:schema:mpd:2011"));
+        for (auto attr = node.attrs.cbegin(); attr != node.attrs.cend(); ++attr) if (!node.routes.contains(attr.key())) writer.writeAttribute(attr.key(), attr.value());
+        for (auto route = node.routes.cbegin(); route != node.routes.cend(); ++route) writer.writeAttribute(route.key(), routes[route.value()]);
+        if (node.media >= 0) { writer.writeTextElement(QStringLiteral("BaseURL"), routes[node.media]); }
+        for (const auto& child : node.children) if (child->name != QLatin1String("BaseURL")) writeNode(*child, false);
+        writer.writeEndElement();
+    };
+    writeNode(root, true); writer.writeEndDocument(); return writer.hasError() ? QByteArray{} : bytes;
+}
+}
+AddonStreamManifest::Result AddonStreamManifest::dash(const QByteArray& bytes, const QUrl& upstream,
+    const QUrl& proxyPrefix, const Register& install)
+{
+    const auto invalid = [] { return Result{{}, QStringLiteral("This DASH playlist is not valid or uses a feature that is not supported.")}; };
+    if (bytes.isEmpty() || bytes.size() > 1024 * 1024 || !https(upstream) || !proxy(proxyPrefix) || !install) return invalid();
+    QStringDecoder decoder(QStringDecoder::Utf8); const QString text = decoder.decode(bytes);
+    if (decoder.hasError() || text.startsWith(QChar(0xfeff))) return invalid();
+    for (const auto c : text) if ((c.unicode() < 32 && c != QLatin1Char('\n') && c != QLatin1Char('\r') && c != QLatin1Char('\t'))
+        || (c.unicode() >= 127 && c.unicode() <= 159)) return invalid();
+    auto root = dashTree(bytes); QList<Resource> resources; unsigned representations = 0;
+    if (!root || !dashPrepare(*root, upstream, &resources, &representations) || resources.isEmpty()) return invalid();
+    const QString placeholder = proxyPrefix.toString(QUrl::FullyEncoded) + QString(512, QLatin1Char('x'));
+    QStringList routes; for (qsizetype i = 0; i < resources.size(); ++i) routes.append(placeholder);
+    const auto maximum = dashWrite(*root, routes); if (maximum.isEmpty() || maximum.size() > 2 * 1024 * 1024) return invalid();
+    routes = install(resources); if (routes.size() != resources.size()) return invalid();
+    for (const auto& route : routes) if (!local(route, proxyPrefix)) return invalid();
+    const auto output = dashWrite(*root, routes); if (output.isEmpty() || output.size() > 2 * 1024 * 1024) return invalid();
+    return {output, {}};
 }
 }

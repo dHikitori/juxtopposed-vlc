@@ -20,5 +20,8 @@ public:
     // not grant network access or authorize DNS, redirects, or byte transfers.
     using Register = std::function<QStringList(const QList<Resource>&)>;
     static Result hls(const QByteArray&, const QUrl& upstream, const QUrl& proxyPrefix, const Register&);
+    // Static MPDs with explicit representation SegmentList or SegmentBase.
+    // Templates, remote clocks, protection, and external XML links are refused.
+    static Result dash(const QByteArray&, const QUrl& upstream, const QUrl& proxyPrefix, const Register&);
 };
 }
