@@ -31,7 +31,7 @@ struct vlc_metadata_job {
     vlc_atomic_rc_t refs;
     vlc_metadata_backend_t *backend;
     vlc_metadata_job_t *next, *previous;
-    bool started, terminal, dispatched;
+    bool started, terminal, dispatched, listed, local, applying, sealed;
     bool commit_cancelled;
     int status;
     struct vlc_metadata_request request;
@@ -240,6 +240,15 @@ static bool copy_field(input_item_t *item, vlc_meta_type_t type, char **value)
     vlc_mutex_unlock(&item->lock);
     return success;
 }
+static bool remove_job_locked(vlc_metadata_job_t *job)
+{
+    vlc_metadata_backend_t *backend = job->backend;
+    vlc_mutex_assert(&backend->lock);
+    if (!job->listed) return false;
+    if (job->previous != NULL) job->previous->next = job->next; else backend->head = job->next;
+    if (job->next != NULL) job->next->previous = job->previous;
+    job->next = job->previous = NULL; job->listed = false; --backend->active; return true;
+}
 static bool finish(vlc_metadata_job_t *job, int status, struct vlc_metadata_result *result, bool cancel)
 {
     vlc_metadata_backend_t *backend = job->backend;
@@ -251,18 +260,19 @@ static bool finish(vlc_metadata_job_t *job, int status, struct vlc_metadata_resu
     }
     job->terminal = true;
     job->status = status;
-    if (job->previous != NULL) job->previous->next = job->next; else backend->head = job->next;
-    if (job->next != NULL) job->next->previous = job->previous;
-    --backend->active;
+    const bool retain = job->local && status == VLC_SUCCESS && !cancel && !job->commit_cancelled;
+    const bool removed = !retain && remove_job_locked(job);
     job->result = *result;
     if (result->field_count > 0) memcpy(job->patches, result->fields, result->field_count * sizeof(*job->patches));
     job->result.fields = job->patches;
+    // A callback can seal or cancel a retained anchor and release its caller
+    // reference. Keep a separate callback reference through that reentry.
+    vlc_metadata_job_Hold(job);
     vlc_mutex_unlock(&backend->lock);
-    // The active list keeps job and backend valid if the callback releases
-    // its caller reference or calls Close or Cancel again.
     job->ended(job, status, job->userdata);
     if (cancel && backend->ops.cancel != NULL) backend->ops.cancel(backend->opaque, job);
-    vlc_metadata_job_Release(job); // active-list reference
+    if (removed) vlc_metadata_job_Release(job); // active-list reference
+    vlc_metadata_job_Release(job); // callback reference
     return true;
 }
 bool vlc_metadata_job_Cancel(vlc_metadata_job_t *job)
@@ -276,6 +286,12 @@ bool vlc_metadata_job_Cancel(vlc_metadata_job_t *job)
         vlc_metadata_job_Release(job); return won;
     }
     job->commit_cancelled = true;
+    if (job->terminal) {
+        const bool removed = job->local && remove_job_locked(job);
+        vlc_mutex_unlock(&job->backend->lock);
+        if (removed) vlc_metadata_job_Release(job);
+        vlc_metadata_job_Release(job); return false;
+    }
     vlc_mutex_unlock(&job->backend->lock);
     struct vlc_metadata_result result = {0};
     const bool won = finish(job, -EINTR, &result, true);
@@ -329,8 +345,11 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
     bool changes[VLC_META_TYPE_COUNT] = {0};
     unsigned count = 0;
     int status = VLC_SUCCESS;
+    bool local_attempt = false;
     vlc_mutex_lock(&job->backend->lock);
-    const bool ready = job->terminal && job->status == VLC_SUCCESS;
+    const bool ready = job->terminal && job->status == VLC_SUCCESS
+        && (!job->local || (!job->applying && !job->sealed));
+    if (ready && job->local) { job->applying = true; local_attempt = true; }
     vlc_mutex_unlock(&job->backend->lock);
     if (!ready) { status = VLC_EINVAL; goto out; }
     const bool missing_artwork = vlc_artwork_item_HasMissingDisplay(job->request.item);
@@ -392,6 +411,13 @@ int vlc_metadata_job_Apply(vlc_metadata_job_t *job, input_item_t *target,
     vlc_mutex_unlock(&target->lock);
     vlc_mutex_unlock(&job->backend->lock);
 out:
+    if (local_attempt) {
+        vlc_mutex_lock(&job->backend->lock);
+        job->sealed = true; job->applying = false;
+        const bool removed = remove_job_locked(job);
+        vlc_mutex_unlock(&job->backend->lock);
+        if (removed) vlc_metadata_job_Release(job);
+    }
     vlc_artwork_approval_Clear(&artwork);
     for (size_t i = 0; i < ARRAY_SIZE(values); ++i) free(values[i]);
     vlc_metadata_job_Release(job); return status;
@@ -433,6 +459,7 @@ static int start_job(vlc_metadata_job_t *job, bool local)
         vlc_mutex_unlock(&backend->lock); vlc_metadata_job_Release(job); return error;
     }
     job->started = true;
+    job->local = local; job->listed = true;
     job->dispatched = local;
     job->next = backend->head;
     if (backend->head != NULL) backend->head->previous = job;

@@ -287,6 +287,95 @@ static void native_anchors_share_the_retained_job_limit(void)
     for (unsigned i = 0; i < ARRAY_SIZE(anchors); ++i) vlc_metadata_job_Release(anchors[i]);
     vlc_metadata_job_Release(extra); vlc_metadata_backend_Close(owner); vlc_metadata_backend_Release(owner);
 }
+static void completed_anchors_remain_revocable_until_their_one_apply_attempt(void)
+{
+    for (unsigned cancel_kind = 0; cancel_kind < 3; ++cancel_kind) {
+        struct fixture fixture = {0}; vlc_metadata_backend_t *owner = backend(&fixture);
+        input_item_t *item = input_item_New("file:///private/original.flac", "Song"); assert(item != NULL);
+        const struct vlc_metadata_request request = {.feature="native.transaction", .operation="anchor", .item=item,
+            .flags=VLC_METADATA_REQUEST_NETWORK | VLC_METADATA_REQUEST_AUTOMATIC};
+        vlc_metadata_job_t *anchor = vlc_metadata_job_New(owner, &request, ended, &fixture); assert(anchor != NULL);
+        assert(vlc_metadata_job_StartLocal(anchor) == VLC_SUCCESS);
+        input_item_t *copy = input_item_Copy(vlc_metadata_job_GetRequest(anchor)->item); assert(copy != NULL);
+        input_item_SetDescription(copy, "Validated result");
+        assert(vlc_metadata_job_Complete(anchor, VLC_SUCCESS, copy, NULL, 0)); input_item_Release(copy);
+        assert(!vlc_metadata_backend_Suspend(owner));
+        if (cancel_kind == 0) assert(vlc_metadata_backend_CancelAutomatic(owner) == 1);
+        else if (cancel_kind == 1) vlc_metadata_backend_Close(owner);
+        else assert(!vlc_metadata_job_Cancel(anchor));
+        size_t applied = 99; assert(vlc_metadata_job_Apply(anchor, item, 0, &applied) == -EINTR && applied == 0);
+        assert(vlc_metadata_job_Apply(anchor, item, 0, &applied) == VLC_EINVAL);
+        char *description = input_item_GetDescription(item); assert(description == NULL); free(description);
+        assert(atomic_load(&fixture.callbacks) == 1 && atomic_load(&fixture.cancels) == 0);
+        assert(vlc_metadata_backend_CancelAutomatic(owner) == 0);
+        vlc_metadata_job_Release(anchor); input_item_Release(item);
+        vlc_metadata_backend_Close(owner); vlc_metadata_backend_Release(owner); assert(atomic_load(&fixture.destroys) == 1);
+    }
+}
+struct anchor_reentry {
+    vlc_metadata_backend_t *backend;
+    input_item_t *item;
+    unsigned action, callbacks;
+    size_t applied;
+};
+static int no_anchor_dispatch(void *opaque, vlc_metadata_job_t *job)
+{ (void)opaque; (void)job; assert(!"A local anchor must not reach provider dispatch."); return VLC_EGENERIC; }
+static void anchor_callback(vlc_metadata_job_t *job, int status, void *opaque)
+{
+    struct anchor_reentry *state = opaque; ++state->callbacks; assert(status == VLC_SUCCESS);
+    if (state->action == 1) assert(!vlc_metadata_job_Cancel(job));
+    else if (state->action == 2) vlc_metadata_backend_Close(state->backend);
+    const int applied = vlc_metadata_job_Apply(job, state->item, 0, &state->applied);
+    assert(applied == (state->action == 0 ? VLC_SUCCESS : -EINTR));
+    assert(vlc_metadata_job_Apply(job, state->item, 0, NULL) == VLC_EINVAL);
+    vlc_metadata_job_Release(job); // caller reference
+}
+static void anchor_callback_can_apply_cancel_close_and_release_its_caller_reference(void)
+{
+    for (unsigned action = 0; action < 3; ++action) {
+        struct anchor_reentry state = {.action=action};
+        const struct vlc_metadata_backend_operations ops = {.dispatch=no_anchor_dispatch};
+        state.backend = vlc_metadata_backend_New(&ops, &state); assert(state.backend != NULL);
+        state.item = input_item_New("file:///private/song.flac", "Song"); assert(state.item != NULL);
+        const struct vlc_metadata_request request = {.feature="native.transaction", .operation="anchor", .item=state.item};
+        vlc_metadata_job_t *anchor = vlc_metadata_job_New(state.backend, &request, anchor_callback, &state); assert(anchor != NULL);
+        assert(vlc_metadata_job_StartLocal(anchor) == VLC_SUCCESS);
+        input_item_t *copy = input_item_Copy(vlc_metadata_job_GetRequest(anchor)->item); assert(copy != NULL);
+        input_item_SetDescription(copy, "Native result");
+        assert(vlc_metadata_job_Complete(anchor, VLC_SUCCESS, copy, NULL, 0)); input_item_Release(copy);
+        assert(state.callbacks == 1 && state.applied == (action == 0 ? 1 : 0));
+        char *description = input_item_GetDescription(state.item);
+        assert(action == 0 ? description != NULL && strcmp(description, "Native result") == 0 : description == NULL); free(description);
+        assert(vlc_metadata_backend_CancelAutomatic(state.backend) == 0);
+        vlc_metadata_backend_Close(state.backend); vlc_metadata_backend_Release(state.backend); input_item_Release(state.item);
+    }
+}
+static void completed_anchors_keep_their_quota_and_preparation_error_seals_them(void)
+{
+    struct fixture fixture = {0}; vlc_metadata_backend_t *owner = backend(&fixture); vlc_metadata_job_t *anchors[1024];
+    for (unsigned i = 0; i < ARRAY_SIZE(anchors); ++i) {
+        anchors[i] = automatic_job(owner, &fixture, true); assert(vlc_metadata_job_StartLocal(anchors[i]) == VLC_SUCCESS);
+        assert(vlc_metadata_job_Complete(anchors[i], VLC_SUCCESS, NULL, NULL, 0));
+    }
+    vlc_metadata_job_t *extra = automatic_job(owner, &fixture, true);
+    assert(vlc_metadata_job_StartLocal(extra) != VLC_SUCCESS);
+    assert(vlc_metadata_backend_CancelAutomatic(owner) == ARRAY_SIZE(anchors));
+    assert(atomic_load(&fixture.callbacks) == ARRAY_SIZE(anchors) && atomic_load(&fixture.cancels) == 0);
+    assert(vlc_metadata_job_StartLocal(extra) == VLC_SUCCESS && vlc_metadata_job_Cancel(extra)); vlc_metadata_job_Release(extra);
+    for (unsigned i = 0; i < ARRAY_SIZE(anchors); ++i) vlc_metadata_job_Release(anchors[i]);
+    input_item_t *item = input_item_New("file:///private/song.flac", "Song"); assert(item != NULL);
+    const struct vlc_metadata_request request = {.feature="native.transaction", .operation="anchor", .item=item};
+    vlc_metadata_job_t *anchor = vlc_metadata_job_New(owner, &request, ended, &fixture); assert(anchor != NULL);
+    assert(vlc_metadata_job_StartLocal(anchor) == VLC_SUCCESS);
+    input_item_t *copy = input_item_Copy(vlc_metadata_job_GetRequest(anchor)->item); assert(copy != NULL);
+    input_item_SetDescription(copy, "Must stay private"); input_item_SetArtURL(copy, "https://example.org/unapproved.png");
+    assert(vlc_metadata_job_Complete(anchor, VLC_SUCCESS, copy, NULL, 0)); input_item_Release(copy);
+    assert(vlc_metadata_job_Apply(anchor, item, 0, NULL) != VLC_SUCCESS);
+    assert(vlc_metadata_job_Apply(anchor, item, 0, NULL) == VLC_EINVAL);
+    char *description = input_item_GetDescription(item); assert(description == NULL); free(description);
+    assert(vlc_metadata_backend_Suspend(owner)); vlc_metadata_backend_Resume(owner); assert(fixture.held_count == 0);
+    vlc_metadata_job_Release(anchor); input_item_Release(item); vlc_metadata_backend_Close(owner); vlc_metadata_backend_Release(owner);
+}
 int main(void)
 {
     idle_synchronous_and_rejected_dispatch();
@@ -299,5 +388,8 @@ int main(void)
     automatic_cancellation_covers_anchors_queued_and_dispatched_jobs();
     native_anchors_share_the_retained_job_limit();
     automatic_cancel_can_close_the_backend_from_a_native_callback();
+    completed_anchors_remain_revocable_until_their_one_apply_attempt();
+    anchor_callback_can_apply_cancel_close_and_release_its_caller_reference();
+    completed_anchors_keep_their_quota_and_preparation_error_seals_them();
     return 0;
 }

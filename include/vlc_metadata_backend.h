@@ -58,7 +58,9 @@ struct vlc_metadata_backend_operations {
      */
     int (*dispatch)(void *opaque, vlc_metadata_job_t *job);
     /** Use this hook for host cleanup. The native request is complete before
-     * this hook starts. Do not wait for a UI event loop.
+     * this hook starts. Dispatch might not have run for a queued request or
+     * a host-local anchor. An unknown job must be safe. Do not wait for a UI
+     * event loop.
      */
     void (*cancel)(void *opaque, vlc_metadata_job_t *job);
     void (*destroy)(void *opaque); /**< The last backend reference has ended. */
@@ -112,8 +114,13 @@ VLC_API int vlc_metadata_job_Start(vlc_metadata_job_t *);
  * or closed backend. Resume never dispatches the anchor to a provider.
  *
  * Only trusted native code can complete this anchor from its staged result.
+ * A successful completed anchor retains its bounded slot until one valid
+ * Apply attempt, Cancel, or Close. Thus automatic revocation can still find
+ * a completed result before publication. An unused result needs Cancel.
  * Apply still validates the original target, URI, policy, and field tokens.
+ * Its one attempt seals the anchor, including on a preparation or token error.
  * A cancelled anchor cannot acquire a new result or commit a field patch.
+ * Cancel can remove a completed anchor while its pending-win result is false.
  * This operation is not part of the worker ABI.
  */
 VLC_API int vlc_metadata_job_StartLocal(vlc_metadata_job_t *);
