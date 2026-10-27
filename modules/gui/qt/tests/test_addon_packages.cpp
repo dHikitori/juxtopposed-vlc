@@ -542,6 +542,41 @@ private slots:
         grants.insert("queue.modify", QJsonObject{});
         QVERIFY(!store.install(candidate, grants, &error));
     }
+    void explicitWssCredentialBindings_data()
+    {
+        QTest::addColumn<QString>("bindingOrigin"); QTest::addColumn<QString>("capability");
+        QTest::addColumn<QString>("networkOrigin"); QTest::addColumn<QString>("header"); QTest::addColumn<bool>("valid");
+        const auto wss=QStringLiteral("wss://relay.example"),http=QStringLiteral("https://relay.example");
+        QTest::newRow("explicit-wss")<<wss<<QStringLiteral("network.websocket")<<wss<<QStringLiteral("Authorization")<<true;
+        QTest::newRow("https-unchanged")<<http<<QStringLiteral("network.http")<<http<<QStringLiteral("Authorization")<<true;
+        QTest::newRow("no-https-to-wss")<<http<<QStringLiteral("network.websocket")<<wss<<QStringLiteral("Authorization")<<false;
+        QTest::newRow("no-wss-to-https")<<wss<<QStringLiteral("network.http")<<http<<QStringLiteral("Authorization")<<false;
+        QTest::newRow("other-host")<<QStringLiteral("wss://other.example")<<QStringLiteral("network.websocket")<<wss<<QStringLiteral("Authorization")<<false;
+        for(const auto& value:QStringList{QStringLiteral("wss://relay.example/"),QStringLiteral("wss://relay.example:443"),
+                QStringLiteral("wss://relay.example:8443"),QStringLiteral("wss://@relay.example"),QStringLiteral("wss://relay.example?room=x"),QStringLiteral("wss://RELAY.EXAMPLE")})
+            QTest::newRow(qPrintable(value))<<value<<QStringLiteral("network.websocket")<<wss<<QStringLiteral("Authorization")<<false;
+        for(const auto& value:QStringList{QStringLiteral("Upgrade"),QStringLiteral("Cookie"),QStringLiteral("Origin"),QStringLiteral("Sec-WebSocket-Key"),QStringLiteral("Sec-WebSocket-Protocol")})
+            QTest::newRow(qPrintable(value))<<wss<<QStringLiteral("network.websocket")<<wss<<value<<false;
+    }
+    void explicitWssCredentialBindings()
+    {
+        QFETCH(QString,bindingOrigin); QFETCH(QString,capability); QFETCH(QString,networkOrigin); QFETCH(QString,header); QFETCH(bool,valid);
+        QTemporaryDir directory; QVERIFY(settingsPackage(directory.path(),QStringLiteral("1.0.0"),1,QStringLiteral("apiKey")));
+        QFile file(directory.filePath(QStringLiteral("addon.json"))); QVERIFY(file.open(QIODevice::ReadOnly));
+        auto document=QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        const QJsonObject binding{{"field","apiKey"},{"origin",bindingOrigin},{"header",header},{"prefix","Bearer "}};
+        document.insert("permissions",QJsonObject{{"required",QJsonObject{{capability,QJsonObject{{"origins",QJsonArray{networkOrigin}}}},
+            {"credentials.use",QJsonObject{{"bindings",QJsonArray{binding}}}}}}});
+        QVERIFY(write(directory.filePath(QStringLiteral("addon.json")),QJsonDocument(document).toJson()));
+        QVERIFY(write(directory.filePath(QStringLiteral("settings/schema.json")),R"({"type":"object","properties":{"apiKey":{"type":"string","x-hakone-secret":true}}})"));
+        Manifest parsed; QString error; const bool result=Manifest::loadDirectory(directory.path(),&parsed,nullptr,&error);
+        QCOMPARE(result,valid); if(valid) {
+            QVERIFY2(error.isEmpty(),qPrintable(error));
+            if(bindingOrigin.startsWith(QStringLiteral("wss:"))) {
+                QCOMPARE(exactWssOrigin(bindingOrigin),bindingOrigin); QVERIFY(exactHttpsOrigin(bindingOrigin).isEmpty());
+            }
+        } else QVERIFY(!error.isEmpty());
+    }
     void protectedCredentialReferencesAreNotSecretValues()
     {
         QTemporaryDir package, data;

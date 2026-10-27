@@ -119,8 +119,7 @@ bool permissions(const QJsonObject& value, QString* error)
                     if (list.isEmpty()) return fail(error, QStringLiteral("The network permission needs a list of origins."));
                     for (const auto& origin : list) {
                         if (it.key() == QStringLiteral("network.websocket")) {
-                            QUrl url(origin); const auto scheme = url.scheme(); url.setScheme(QStringLiteral("https"));
-                            if (scheme != QStringLiteral("wss") || exactHttpsOrigin(url.toString()).isEmpty()) return fail(error, QStringLiteral("The WSS origin is not correct."));
+                            if (exactWssOrigin(origin).isEmpty()) return fail(error, QStringLiteral("The WSS origin is not correct."));
                         } else if (exactHttpsOrigin(origin).isEmpty()) return fail(error, QStringLiteral("The HTTPS origin is not correct."));
                     }
                 }
@@ -142,13 +141,16 @@ bool permissions(const QJsonObject& value, QString* error)
                 if (!keys(binding, {"field", "origin", "header", "prefix"}, error, QStringLiteral("credential binding"))
                     || !text(binding, "field", &field, error) || !text(binding, "origin", &origin, error)
                     || !text(binding, "header", &header, error)) return false;
+                const bool websocket=QUrl(origin,QUrl::StrictMode).scheme()==QLatin1String("wss");
                 if (!QRegularExpression(QStringLiteral("^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")).match(field).hasMatch()
-                    || exactHttpsOrigin(origin).isEmpty()
+                    || (websocket ? exactWssOrigin(origin).isEmpty() : exactHttpsOrigin(origin).isEmpty())
                     || !QRegularExpression(QStringLiteral("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$")).match(header).hasMatch()
                     || names.contains(field + QLatin1Char('/') + origin + QLatin1Char('/') + header.toLower()))
                     return fail(error, QStringLiteral("A credential binding is not correct or occurs more than once."));
                 const auto protectedHeaders = QSet<QString>{"host", "connection", "content-length", "transfer-encoding", "proxy-authorization"};
                 if (protectedHeaders.contains(header.toLower())) return fail(error, QStringLiteral("The credential header is not permitted."));
+                if (websocket && (QSet<QString>{"upgrade","origin","cookie","sec-websocket-key","sec-websocket-version", "sec-websocket-protocol","sec-websocket-extensions"}.contains(header.toLower())))
+                    return fail(error, QStringLiteral("The WSS credential header is not permitted."));
                 if (binding.contains("prefix")) {
                     const auto prefix = binding.value("prefix");
                     if (!prefix.isString() || prefix.toString().size() > 32
@@ -260,6 +262,15 @@ QString exactHttpsOrigin(const QString& value)
     if (!safeSource(url) || (!url.path().isEmpty() && url.path() != QStringLiteral("/")) || url.port() == 0)
         return {};
     return originForUrl(url);
+}
+QString exactWssOrigin(const QString& value)
+{
+    const QUrl url(value,QUrl::StrictMode);
+    if (!url.isValid() || url.scheme()!=QLatin1String("wss") || url.host().isEmpty() || !url.userInfo().isEmpty()
+        || url.authority(QUrl::FullyEncoded).contains(QLatin1Char('@')) || url.host().contains(QLatin1Char('%'))
+        || url.port(443)!=443 || !url.path().isEmpty() || url.hasQuery() || url.hasFragment()) return {};
+    const auto canonical=originForUrl(url);
+    return value==canonical ? canonical : QString{};
 }
 bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
 {
@@ -398,11 +409,14 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
                 || result.permissionDeclared("session.background")))
             return fail(error, QStringLiteral("Visualizer packages cannot have network or background session permissions."));
     const auto bindingScope = result.permissionScope(QStringLiteral("credentials.use"));
-    const auto network = result.permissionScope(QStringLiteral("network.http")).value("origins").toArray();
     for (const auto& binding : bindingScope.value("bindings").toArray()) {
-        const auto origin = exactHttpsOrigin(binding.toObject().value("origin").toString()); bool allowed = false;
-        for (const auto& item : network) allowed |= origin == exactHttpsOrigin(item.toString());
-        if (!allowed || result.settingsSchema.isEmpty()) return fail(error, QStringLiteral("The credential binding needs a settings field and a declared HTTP origin."));
+        const auto declared=binding.toObject().value("origin").toString();
+        const bool websocket=QUrl(declared,QUrl::StrictMode).scheme()==QLatin1String("wss");
+        const auto origin=websocket ? exactWssOrigin(declared) : exactHttpsOrigin(declared);
+        const auto network=result.permissionScope(websocket ? QStringLiteral("network.websocket") : QStringLiteral("network.http")).value("origins").toArray();
+        bool allowed=false;
+        for (const auto& item : network) allowed |= origin==(websocket ? exactWssOrigin(item.toString()) : exactHttpsOrigin(item.toString()));
+        if (!allowed || result.settingsSchema.isEmpty()) return fail(error, QStringLiteral("The credential binding needs a settings field and a declared network origin."));
     }
     if (!validateSettingsMigrations(result, {}, error)) return false;
     if ((result.permissionDeclared(QStringLiteral("storage.private")) || root.contains("storage")) && !contracts.contains("storage"))

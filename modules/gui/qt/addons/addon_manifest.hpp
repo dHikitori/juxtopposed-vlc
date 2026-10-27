@@ -27,6 +27,8 @@ bool validateUiSchema(const QJsonObject& schema);
 bool validateUiValue(const QJsonObject& schema, const QJsonValue& value);
 // Returns an empty string for non-HTTPS origins, credentials, paths or fragments.
 QString exactHttpsOrigin(const QString& origin);
+// WSS v1 uses a canonical origin on port 443. It has no path or user data.
+QString exactWssOrigin(const QString& origin);
 
 struct Contribution
 {
