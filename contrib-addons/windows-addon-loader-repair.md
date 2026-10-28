@@ -27,3 +27,9 @@ app check displayed a window but failed to create the expected temporary
 package states. The user also reported an Extensions-tab hang. The complete
 startup and responsiveness repair remains open; a passing import probe alone
 does not prove that the app works. See [the current build record](windows-local-build.md).
+
+The later `2a689c3a11` complete build passes the private full-app check with
+all seven installed IDs, correct private paths, a responsive stable window
+and normal shutdown. The original profile is unchanged by this new test.
+The actual Extensions click remains a separate check. Cold startup still has
+one initial hung-window sample before the stable window becomes responsive.

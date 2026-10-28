@@ -50,8 +50,9 @@ separate. The controlled FIFO test's poll was made idempotent before its
 first execution. A test-only failure-cleanup write emits an unused-result
 build warning; it is not a sanitizer diagnostic.
 
-The Windows rebuild and actual Windows Extensions-click responsiveness
-remain separate gates. A private startup driver checks the actual app's
-settings/store/module paths, seven installs and owned-window responsiveness;
-it does not exercise clicking Extensions. No production source changed
+The Windows rebuild and private app startup now pass. That driver confirms
+private settings/store/module paths, seven installs and stable owned-window
+responsiveness. It does not click Extensions. One initial cold-start stall
+is recorded in [the build record](windows-local-build.md). Actual Windows
+Extensions-click responsiveness remains open. No production source changed
 during the focused proof.
