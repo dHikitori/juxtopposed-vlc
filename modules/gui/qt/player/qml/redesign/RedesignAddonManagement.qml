@@ -142,7 +142,7 @@ ColumnLayout {
     }
     function stateText(row) {
         return row.removing === true ? qsTr("Removal in progress") : safeMode ? qsTr("Temporarily disabled")
-            : row.configured === false ? row.enabled === true ? qsTr("Setup required") : qsTr("Disabled · Setup required") : row.enabled === true ? qsTr("Enabled") : qsTr("Disabled")
+            : row.configured === false && row.configurationKnown !== false ? row.enabled === true ? qsTr("Setup required") : qsTr("Disabled · Setup required") : row.enabled === true ? qsTr("Enabled") : qsTr("Disabled")
     }
     function setPaused(paused) {
         if (typeof backend.setSafeMode !== "function") return
@@ -413,7 +413,7 @@ ColumnLayout {
                 Layout.fillWidth: true; spacing: root.theme.dp(6)
                 ActionButton {
                     objectName: "addonPackageConfigure_" + (root.selectedPackage.id || "")
-                    caption: root.selectedPackage.configured === false ? qsTr("Set up…") : qsTr("Settings…")
+                    caption: root.selectedPackage.configured === false && root.selectedPackage.configurationKnown !== false ? qsTr("Set up…") : qsTr("Settings…")
                     enabled: root.listReady && !root.busy
                     onClicked: root.configure(root.selectedPackage.id)
                 }

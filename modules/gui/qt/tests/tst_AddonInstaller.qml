@@ -706,6 +706,24 @@ TestCase {
     }
 
 
+    function test_unknownConfigurationDoesNotClaimSetupIsRequired() {
+        summary.displayBacked = true; summary.safeModeKnown = true
+        const row = {id: "org.example.one", name: "One", configured: false,
+            configurationKnown: false, enabled: true}
+        summary.rows = [row]; summary.available = true; summary.current = true
+        const probe = createTemporaryObject(managementFactory, testCase,
+            {backend: manager, summaryBackend: summary, width: 600})
+        verify(probe !== null); probe.selectPackage(row.id)
+        const button = findChild(probe, "addonPackageConfigure_" + row.id)
+        verify(button !== null); verify(button.enabled)
+        compare(probe.stateText(row), "Enabled"); compare(button.caption, "Settings…")
+        compare(probe.stateText(Object.assign({}, row, {enabled: false})), "Disabled")
+        const known = Object.assign({}, row, {configurationKnown: true})
+        summary.rows = [known]; wait(20)
+        compare(probe.stateText(known), "Setup required"); compare(button.caption, "Set up…")
+        compare(manager.settingsSaves, 0); compare(manager.enableRequests, 0)
+    }
+
     function test_attachedRefreshKeepsTheOpenConfigurationDraft() {
         summary.displayBacked = true; summary.safeModeKnown = true
         summary.rows = [{id: "org.example.one", name: "One", configured: true, enabled: true}]

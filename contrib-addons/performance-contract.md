@@ -338,6 +338,14 @@ SHA-256 `fc96c0c66ef8032acc8ae04e14e0632149f26a2f915ec75de4969ab95e80bce4`.
 The failed draft-property assertion and the old form's read-count failure are
 kept in the same packet. The latter established the form boundary above.
 
+An unknown configuration no longer shows a false `Setup required` state or
+`Set up…` button. Those labels require a known missing setting. The screen can
+show `Enabled` or `Disabled` and keep `Settings…` without a credential query.
+All 64 copied Qt Quick cases pass (49 installer and 15 recovery), including
+unknown-to-known state changes. The scope is unchanged. The record is
+`/tmp/hakone-management-setup-status/normal/proof.json`, SHA-256
+`6d2a98f9afae549731714cdf4681a9ea927db6ac5a325119dfefe6f139186983`.
+
 ## Native change notification foundation
 
 The host now has a native wake with a Windows event or a nonblocking POSIX
