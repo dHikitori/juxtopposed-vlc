@@ -384,6 +384,7 @@ void MainUI::registerQMLTypes()
         AddonMetadataService* metadataService = nullptr;
         if (!dataDirectory.isEmpty()) {
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
+            msg_Dbg(m_intf, "Add-on store directory: %s", qtu(addonManager->storageDirectory()));
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
             addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
@@ -393,19 +394,22 @@ void MainUI::registerQMLTypes()
                     QStringLiteral("lastfm"), QStringLiteral("french-tv"), QStringLiteral("google-images")}) {
                 const auto installedReference = installedRoot.isEmpty() ? QString() : QDir(installedRoot).filePath(name);
                 const auto buildReference = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(name);
-                addonManager->ensureDistributionPackage(!installedReference.isEmpty() && QFileInfo::exists(installedReference)
-                    ? installedReference : buildReference, QStringLiteral("org.videolan.") + name);
+                if (!addonManager->ensureDistributionPackage(!installedReference.isEmpty() && QFileInfo::exists(installedReference)
+                    ? installedReference : buildReference, QStringLiteral("org.videolan.") + name))
+                    msg_Warn(m_intf, "Cannot install bundled add-on %s: %s", qtu(name), qtu(addonManager->errorMessage()));
             }
             const auto installedRadio = installedRoot.isEmpty() ? QString()
                 : QDir(installedRoot).filePath(QStringLiteral("radio-browser"));
             const auto buildRadio = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("radio-browser"));
-            addonManager->ensureDistributionPackage(!installedRadio.isEmpty() && QFileInfo::exists(installedRadio)
-                ? installedRadio : buildRadio, QStringLiteral("org.hakone.radio-browser"));
+            if (!addonManager->ensureDistributionPackage(!installedRadio.isEmpty() && QFileInfo::exists(installedRadio)
+                ? installedRadio : buildRadio, QStringLiteral("org.hakone.radio-browser")))
+                msg_Warn(m_intf, "Cannot install bundled add-on radio-browser: %s", qtu(addonManager->errorMessage()));
             const auto installedSubtitles = installedRoot.isEmpty() ? QString()
                 : QDir(installedRoot).filePath(QStringLiteral("thesubtitledb"));
             const auto buildSubtitles = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("thesubtitledb"));
-            addonManager->ensureDistributionPackage(!installedSubtitles.isEmpty() && QFileInfo::exists(installedSubtitles)
-                ? installedSubtitles : buildSubtitles, QStringLiteral("org.hakone.thesubtitledb"));
+            if (!addonManager->ensureDistributionPackage(!installedSubtitles.isEmpty() && QFileInfo::exists(installedSubtitles)
+                ? installedSubtitles : buildSubtitles, QStringLiteral("org.hakone.thesubtitledb")))
+                msg_Warn(m_intf, "Cannot install bundled add-on thesubtitledb: %s", qtu(addonManager->errorMessage()));
             metadataService = new AddonMetadataService(addonManager, this);
             if (!metadataService->bindApplicationLifetime(m_mainCtx->addonStreamLifetime()))
                 metadataService->shutdown();
