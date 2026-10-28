@@ -73,6 +73,7 @@
 #include "util/redesign_folder_model.hpp"
 #include "util/subtitle_source_service.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_catalogue_view.hpp"
 #include "addons/addon_package_summaries.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "addon_distribution_paths.hpp"
@@ -387,36 +388,46 @@ void MainUI::registerQMLTypes()
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
             msg_Dbg(m_intf, "Add-on store directory: %s", qtu(addonManager->storageDirectory()));
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
+            addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
+            char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
+            const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
+            free(sharedDirectory);
+            QList<vlc::addons::DistributionBootstrapEntry> bundledAddons;
+            for (const auto& entry : QList<QPair<QString,QString>>{
+                    {QStringLiteral("tvmaze"),QStringLiteral("org.videolan.tvmaze")},
+                    {QStringLiteral("musicbrainz"),QStringLiteral("org.videolan.musicbrainz")},
+                    {QStringLiteral("lastfm"),QStringLiteral("org.videolan.lastfm")},
+                    {QStringLiteral("french-tv"),QStringLiteral("org.videolan.french-tv")},
+                    {QStringLiteral("google-images"),QStringLiteral("org.videolan.google-images")},
+                    {QStringLiteral("radio-browser"),QStringLiteral("org.hakone.radio-browser")},
+                    {QStringLiteral("thesubtitledb"),QStringLiteral("org.hakone.thesubtitledb")}}) {
+                bundledAddons.append({entry.second,
+                    installedRoot.isEmpty()?QString():QDir(installedRoot).filePath(entry.first),
+                    QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(entry.first)});
+            }
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, addonManager,
+                &vlc::addons::AddonManager::cancelDistributionBootstrap, Qt::DirectConnection);
+            connect(addonManager, &vlc::addons::AddonManager::distributionBootstrapChanged, this,
+                [this, owner=QPointer<vlc::addons::AddonManager>(addonManager)] {
+                    if(!owner || owner->distributionBootstrapInProgress())return;
+                    for(const auto& result:owner->distributionBootstrapResults()) {
+                        const auto row=result.toMap();if(row.value(QStringLiteral("success")).toBool())continue;
+                        const auto id=row.value(QStringLiteral("id")).toString(), error=row.value(QStringLiteral("error")).toString();
+                        msg_Warn(m_intf,"Cannot prepare bundled add-on %s: %s",qtu(id),qtu(error));
+                    }
+                });
+            if(!addonManager->beginDistributionBootstrap(std::move(bundledAddons)))
+                msg_Warn(m_intf,"Cannot start bundled add-on preparation: %s",qtu(addonManager->errorMessage()));
+            auto* displayCatalogue = new vlc::addons::AddonCatalogueView(addonManager,
+                m_mainCtx->addonStreamLifetime());
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, displayCatalogue,
+                &vlc::addons::AddonCatalogueView::close, Qt::DirectConnection);
             auto* packageSummaries = new vlc::addons::AddonPackageSummaries(addonManager,
                 m_mainCtx->addonStreamLifetime(), this);
             connect(m_mainCtx, &MainCtx::addonWorkRetiring, packageSummaries,
                 &vlc::addons::AddonPackageSummaries::close, Qt::DirectConnection);
             qmlRegisterSingletonInstance<vlc::addons::AddonPackageSummaries>(uri, versionMajor, versionMinor,
                 "AddonPackageSummaries", packageSummaries);
-            addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
-            char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
-            const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
-            free(sharedDirectory);
-            for (const auto& name : {QStringLiteral("tvmaze"), QStringLiteral("musicbrainz"),
-                    QStringLiteral("lastfm"), QStringLiteral("french-tv"), QStringLiteral("google-images")}) {
-                const auto installedReference = installedRoot.isEmpty() ? QString() : QDir(installedRoot).filePath(name);
-                const auto buildReference = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(name);
-                if (!addonManager->ensureDistributionPackage(!installedReference.isEmpty() && QFileInfo::exists(installedReference)
-                    ? installedReference : buildReference, QStringLiteral("org.videolan.") + name))
-                    msg_Warn(m_intf, "Cannot install bundled add-on %s: %s", qtu(name), qtu(addonManager->errorMessage()));
-            }
-            const auto installedRadio = installedRoot.isEmpty() ? QString()
-                : QDir(installedRoot).filePath(QStringLiteral("radio-browser"));
-            const auto buildRadio = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("radio-browser"));
-            if (!addonManager->ensureDistributionPackage(!installedRadio.isEmpty() && QFileInfo::exists(installedRadio)
-                ? installedRadio : buildRadio, QStringLiteral("org.hakone.radio-browser")))
-                msg_Warn(m_intf, "Cannot install bundled add-on radio-browser: %s", qtu(addonManager->errorMessage()));
-            const auto installedSubtitles = installedRoot.isEmpty() ? QString()
-                : QDir(installedRoot).filePath(QStringLiteral("thesubtitledb"));
-            const auto buildSubtitles = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("thesubtitledb"));
-            if (!addonManager->ensureDistributionPackage(!installedSubtitles.isEmpty() && QFileInfo::exists(installedSubtitles)
-                ? installedSubtitles : buildSubtitles, QStringLiteral("org.hakone.thesubtitledb")))
-                msg_Warn(m_intf, "Cannot install bundled add-on thesubtitledb: %s", qtu(addonManager->errorMessage()));
             metadataService = new AddonMetadataService(addonManager, this);
             if (!metadataService->bindApplicationLifetime(m_mainCtx->addonStreamLifetime()))
                 metadataService->shutdown();
@@ -473,16 +484,21 @@ void MainUI::registerQMLTypes()
             connect(sourceOwner, &vlc::addons::AddonDiscoverySourceOwner::changed, addonManager,
                 [sourceAccess, sourceManager] {
                     if (sourceManager) sourceManager->setNativeStreamAvailable(sourceAccess && sourceAccess->active());
+                    if (sourceManager) sourceManager->setNativeStreamTransportHint(
+                        sourceAccess && sourceAccess->transportKnown(),
+                        sourceAccess && sourceAccess->transportAvailable());
                 });
             connect(m_mainCtx, &MainCtx::addonWorkRetiring, sourceOwner,
                 [sourceAccess, sourceManager, sourcePanel] {
                     if (sourceManager) sourceManager->setNativeStreamAvailable(false);
+                    if (sourceManager) sourceManager->setNativeStreamTransportHint(false, false);
                     if (sourceAccess) sourceAccess->close();
                     if (sourcePanel) sourcePanel->close();
                 }, Qt::DirectConnection);
             connect(m_intf->p_mainPlayerController, &QObject::destroyed, sourceOwner,
                 [sourceAccess, sourceManager, sourcePanel] {
                     if (sourceManager) sourceManager->setNativeStreamAvailable(false);
+                    if (sourceManager) sourceManager->setNativeStreamTransportHint(false, false);
                     if (sourceAccess) sourceAccess->close();
                     if (sourcePanel) sourcePanel->close();
                 });

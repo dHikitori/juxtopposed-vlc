@@ -8,8 +8,9 @@ Performance is the current priority. The published build repeats synchronous
 package scans during basic UI work. Focused session host and session UI idle
 timer fixes pass. The mounted source owner, resolver, and consent UI also have
 verified idle timer fixes. Source TLS initialization is deferred until explicit
-joined work. The shared display view, startup work, transport-hint UI wiring,
-visualizer inactivity, and full app measurements remain open. See
+joined work. MainUI now mounts the shared display view and joined startup
+batch before the display consumers. Transport hints and visualizer inactivity
+are wired. Full app measurements remain open. See
 [the performance requirements and evidence](performance-contract.md).
 
 The default HTTP transport and artwork cache scan now wait for explicit work.
@@ -17,8 +18,10 @@ Their 73 and 13 normal cases pass. The shared display foundation is now in
 application source. Its matching normal host passes 551 cases across 18 suites
 with no warnings or skips, including the corrected reader unlock and Session
 request cleanup. The UI passes 302 cases with two exact baseline Qt warnings.
-Consumer mounting, matching sanitizers, native runtime checks, the Windows
-rebuild, and the full app comparison remain in progress.
+The related native runtime suites pass 103 cases with no warnings or skips.
+The configured MainUI object and 21 native producer objects compile against
+the matching headers. Matching sanitizers, the Windows rebuild, and the full
+app comparison remain in progress.
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 

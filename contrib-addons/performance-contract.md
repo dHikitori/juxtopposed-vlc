@@ -511,7 +511,7 @@ open. The published Windows build still contains the earlier UI read path.
 ## Shared display foundation
 
 The shared display reader, View, Manager facade, and joined startup batch are
-now in the application source. They are not mounted by MainUI yet. A fresh
+now in the application source and mounted by MainUI. A fresh
 matching normal host passes all 18 suites and 551 cases with no warnings or
 skips. This includes the corrected reader unlock and Session request cleanup.
 The producer contains 66 CPP files and its aggregate MOC object. The record is
@@ -524,8 +524,8 @@ tickets bound retained documents and forms. Store unlock notifications retry
 actual contention; permanent errors do not create a retry loop. Settings saves
 still use fresh authority and an exact revision stamp.
 
-The matching sanitizer run, native runtime checks, consumer mounting, and new
-Windows package remain in progress. These normal tests do not establish full
+The matching sanitizer run and new Windows package remain in progress.
+The native consumer checks are recorded below. These tests do not establish full
 app responsiveness.
 
 ## Cached display consumers
@@ -550,3 +550,13 @@ The native records are
 and `/tmp/hakone-subtitle-observer-fixture/normal-proof/progress.json`.
 The 551-case shared normal run and 302-case QML run cover the matching
 consumer source. Matching sanitizers and the Windows build remain in progress.
+
+MainUI starts the joined distribution batch, then attaches the display View
+and summary before it constructs the consumers. The View holds its first
+capture until the startup batch ends. All seven bundled IDs are registered
+as one batch. Source-owner signals publish retained transport hints for the
+display path. The actual configured MainUI object compiles with the corrected
+private Snapshot header; its proof is
+`/tmp/hakone-mainui-display-successor-object/runs/1793223997174226768/proof.json`.
+The final integration audit found no source or registration drift. The local
+Windows candidate is the next app build checkpoint.
