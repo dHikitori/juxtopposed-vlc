@@ -471,3 +471,39 @@ The reader checkpoint is
 `e01d7d6c544132b9dcde48e32c63bcffc69eeccf2ef43db0f7637c6ee7c83cde`.
 Row parity, shared-view integration, startup work, and full app performance
 remain open.
+
+## Shared integration checkpoint
+
+The copied shared host now compiles all 66 producer CPP files and its MOCs.
+The old reader cohort reached all 18 suites: 17 were clean with 509 passing
+cases. Session UI had 34 passing cases and one failed cleanup case. The new
+Manager facade returned an outer request ID, but Session UI released it as an
+inner View ID. A separate correction uses the exact issuing Manager in both
+cleanup paths. The record is
+`/tmp/hakone-addon-display-host-proof/normal-baseline-terminal-report.json`.
+
+Actual reader contention also exposed a missing wake after an owned reader
+releases the store lock. An unconditional unlock wake alone can make a corrupt
+reader retry itself. The corrected private reader reports lock contention
+separately and waits for an actual unlock. Permanent errors wait for changed
+inputs, a Store epoch change, or explicit refresh. Pending document work can
+resume while the base screen stays current. All 55 focused normal cases pass;
+five old or incomplete controls fail their designated checks. No timer or new
+authority grant is added. This is copied work, with the private Snapshot header
+changed. Its record is
+`/tmp/hakone-display-reader-unlock/final-validation.json`, SHA-256
+`ded549ffe59c3d5efdbf9c6d21509a80c159a547f143c790db6148b665ac4e09`.
+
+The combined copied QML check passes 302 cases across 11 suites. Two exact
+Track animation-driver warnings also occur with the old production controls
+under both runners. They are kept as two known warnings; no warning is hidden.
+The record is `/tmp/hakone-addon-final-qml-v2/final-validation.json`, SHA-256
+`464224309536299820a02208664c15f4f3746e5902850255625e2eff69ba24ff`.
+These checks use an existing test executable and injected backends. They do
+not establish native ABI, app latency, or Windows performance.
+
+The actual MainUI object and 21 native producer objects compiled with the
+earlier matching headers. Their dependency records identify the objects that
+must rebuild for the corrected private Snapshot header. The successor shared
+cohort, native runtime cases, sanitizers, and full app measurements remain
+open. The published Windows build still contains the earlier UI read path.
