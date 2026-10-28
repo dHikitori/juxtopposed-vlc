@@ -1,0 +1,115 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#include "addon_package_summaries.hpp"
+#include "addon_manager.hpp"
+#include <QPointer>
+#include <QThread>
+
+namespace vlc::addons {
+AddonPackageSummaries::AddonPackageSummaries(AddonManager* manager,
+    AddonStreamLifetime::Handle lifetime, QObject* parent)
+    : AddonPackageSummaries([manager = QPointer<AddonManager>(manager)] {
+        return manager ? manager->packageReader() : PackageSummaryReader{};
+    }, std::move(lifetime), parent)
+{
+    if (manager) {
+        connect(manager, &AddonManager::revisionChanged, this, [this] { if (m_started) refresh(); });
+        connect(manager, &AddonManager::retiring, this, &AddonPackageSummaries::close, Qt::DirectConnection);
+        connect(manager, &QObject::destroyed, this, &AddonPackageSummaries::close);
+    } else close();
+}
+AddonPackageSummaries::AddonPackageSummaries(Capture capture,
+    AddonStreamLifetime::Handle lifetime, QObject* parent)
+    : QObject(parent), m_capture(std::move(capture)), m_lifetime(std::move(lifetime)), m_jobs(m_lifetime)
+{
+    m_poll.setInterval(100);
+    connect(&m_poll, &QTimer::timeout, this, [this] {
+        if (!m_lifetime.current()) { close(); return; }
+        if (m_snapshot && !m_snapshot->authority.current()) refresh();
+    });
+    // No background read or polling until the view explicitly requests rows.
+}
+AddonPackageSummaries::~AddonPackageSummaries()
+{
+    // Destruction does not publish another intermediate view state.
+    m_closed = true; m_poll.stop(); m_jobs.close();
+}
+bool AddonPackageSummaries::isCurrent() const noexcept
+{
+    return !m_closed && !m_loading && m_lifetime.current() && m_snapshot
+        && m_generation == m_publishedGeneration && m_snapshot->authority.current();
+}
+void AddonPackageSummaries::publish(quint64 generation, bool terminal, bool success)
+{
+    const QPointer<AddonPackageSummaries> alive(this);
+    emit stateChanged();
+    if (!alive || m_generation != generation) return;
+    if (terminal) emit loadingFinished(success);
+}
+void AddonPackageSummaries::refresh()
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    if (m_closed) return;
+    if (!m_lifetime.current()) { close(); return; }
+    if (!m_started) { m_started = true; m_poll.start(); }
+    const auto generation = ++m_generation;
+    m_pending = true; m_loading = true; m_error.clear();
+    std::optional<PackageSummarySnapshot> retired; retired.swap(m_snapshot);
+    if (m_jobs.busy()) m_jobs.cancel(); else schedule();
+    publish(generation, false, false);
+}
+void AddonPackageSummaries::schedule()
+{
+    if (m_scheduled || m_closed) return;
+    m_scheduled = true;
+    QTimer::singleShot(0, this, [this] { m_scheduled = false; start(); });
+}
+void AddonPackageSummaries::start()
+{
+    if (m_closed || !m_pending || m_jobs.busy()) return;
+    const auto generation = m_generation;
+    const auto capture = m_capture;
+    const QPointer<AddonPackageSummaries> alive(this);
+    PackageSummaryReader reader;
+    try { if (capture) reader = capture(); } catch (...) {}
+    if (!alive || m_closed || m_generation != generation) return;
+    m_pending = false;
+    if (!reader || !m_lifetime.current()) {
+        m_loading = false; m_error = tr("The app cannot read the add-on list.");
+        publish(generation, true, false); return;
+    }
+    auto result = std::make_shared<std::optional<PackageSummarySnapshot>>();
+    const bool submitted = m_jobs.submit([reader = std::move(reader), result] {
+        *result = reader();
+    }, [this, generation, result](auto state) { completed(generation, result, state); });
+    if (!alive || m_closed || m_generation != generation) return;
+    if (!submitted) {
+        m_loading = false; m_error = tr("Wait for the other add-on work to end, then try again.");
+        publish(generation, true, false);
+    }
+}
+void AddonPackageSummaries::completed(quint64 generation,
+    const std::shared_ptr<std::optional<PackageSummarySnapshot>>& result, AddonRepositoryJobs::Result state)
+{
+    if (m_closed) return;
+    if (generation != m_generation) { if (m_pending) schedule(); return; }
+    m_loading = false;
+    if (state == AddonRepositoryJobs::Result::Finished && *result && (*result)->authority.current() && m_lifetime.current()) {
+        m_snapshot.swap(*result); m_publishedGeneration = generation; m_error.clear();
+        publish(generation, true, true);
+    } else {
+        m_error = tr("The add-on list changed or could not be read. Try again.");
+        publish(generation, true, false);
+    }
+}
+void AddonPackageSummaries::close()
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    if (m_closed) return;
+    m_closed = true; const auto generation = ++m_generation;
+    m_pending = false; m_loading = false; m_error.clear();
+    std::optional<PackageSummarySnapshot> retired; retired.swap(m_snapshot);
+    Capture capture; capture.swap(m_capture);
+    m_poll.stop(); m_jobs.close();
+    publish(generation, false, false);
+}
+}

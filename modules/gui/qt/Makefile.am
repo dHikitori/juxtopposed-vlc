@@ -124,6 +124,9 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_credentials.hpp \
 	addons/addon_manager.cpp \
 	addons/addon_manager.hpp \
+	addons/addon_package_reader.hpp \
+	addons/addon_package_summaries.cpp \
+	addons/addon_package_summaries.hpp \
 	addons/addon_native_authority.hpp \
 	addons/addon_network.cpp \
 	addons/addon_network.hpp \
@@ -259,6 +262,7 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_native_artwork_assets.hpp
 QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
+	addons/addon_package_summaries.moc.cpp \
 	addons/addon_network.moc.cpp \
 	addons/addon_worker.moc.cpp \
 	addons/addon_metadata_coordinator.moc.cpp \
@@ -2267,6 +2271,17 @@ test_qt_addon_native_authority_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_lda
 test_qt_addon_native_authority_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_native_authority
 TESTS += test_qt_addon_native_authority
+
+test_qt_addon_package_summaries_SOURCES = tests/test_addon_package_summaries.cpp
+nodist_test_qt_addon_package_summaries_SOURCES = tests/test_addon_package_summaries.moc
+BUILT_SOURCES += tests/test_addon_package_summaries.moc
+CLEANFILES += tests/test_addon_package_summaries.moc
+test_qt_addon_package_summaries_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_package_summaries_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_package_summaries_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_package_summaries_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_package_summaries
+TESTS += test_qt_addon_package_summaries
 
 test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.cpp
 nodist_test_qt_addon_repository_jobs_SOURCES = tests/test_addon_repository_jobs.moc

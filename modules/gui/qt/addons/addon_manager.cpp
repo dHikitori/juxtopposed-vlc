@@ -4,6 +4,7 @@
 #include "addon_ui_assets.hpp"
 #include "addon_store_authority.hpp"
 #include "addon_repository_jobs.hpp"
+#include "addon_repository_cancellation.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -389,6 +390,102 @@ QVariantList AddonManager::packages() const
             {"enabled", false}, {"configured", false}, {"removing", true}});
     }
     return result;
+}
+PackageSummaryReader AddonManager::packageReader() const
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    const auto store = m_store;
+    const auto authority = store.authorityToken();
+    const auto credentials = m_secrets.snapshotReader();
+    const auto distributions = m_distributionPackages;
+    const auto directories = m_distributionDirectories;
+    const auto removing = m_removingPackages, withdrawing = m_withdrawingPackages;
+    const bool retiring = m_retiring;
+    return [store, authority, credentials, distributions, directories, removing, withdrawing, retiring]
+        () -> std::optional<PackageSummarySnapshot> {
+        const auto current = [&] { return !retiring && authority.current() && !RepositoryCancellation::requested(); };
+        const auto boundedObject = [](const QString& path) {
+            QFile file(path); if (!file.open(QIODevice::ReadOnly)) return QJsonObject{};
+            const auto bytes = file.read(256 * 1024 + 1);
+            if (bytes.size() > 256 * 1024 || !file.atEnd() || file.error() != QFile::NoError) return QJsonObject{};
+            return QJsonDocument::fromJson(bytes).object();
+        };
+        if (!current()) return std::nullopt;
+        QVariantList result;
+        const auto installedIds = store.installedIds(), savedDataIds = store.savedDataIds();
+        if (installedIds.size() > 256 || savedDataIds.size() > 256 || directories.size() > 256 || removing.size() > 256)
+            return std::nullopt;
+        for (const auto& id : installedIds) {
+            if (!current()) return std::nullopt;
+            InstalledPackage package; QString error;
+            if (!store.installed(id, &package, &error)) {
+                result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", true}, {"enabled", false},
+                    {"configured", false}, {"recoveryRequired", true}, {"error", error}, {"removing", removing.contains(id)}});
+                continue;
+            }
+            if (!current()) return std::nullopt;
+            const auto document = package.manifest.settingsSchema.isEmpty()
+                ? QJsonObject{{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}}
+                : boundedObject(QDir(package.directory).filePath(package.manifest.settingsSchema));
+            QJsonObject saved; store.settings(id, &saved);
+            const auto properties = document.value("properties").toObject();
+            QJsonObject values;
+            for (auto it = properties.begin(); it != properties.end(); ++it) {
+                if (secretField(it.value().toObject())) continue;
+                if (saved.contains(it.key())) values.insert(it.key(), saved.value(it.key()));
+                else if (it.value().toObject().contains("default")) values.insert(it.key(), it.value().toObject().value("default"));
+            }
+            bool configured = !withdrawing.contains(id) && !removing.contains(id) && !store.packageRetiring(id)
+                && document.value("type").toString() == QLatin1String("object");
+            if (configured) for (const auto& required : document.value("required").toArray()) {
+                const auto name = required.toString();
+                if (secretField(properties.value(name).toObject())) {
+                    const auto reference = saved.value("_credentials").toObject().value(name).toString();
+                    if (reference.isEmpty() || credentials(id, reference).isEmpty()) { configured = false; break; }
+                } else if (!values.contains(name) || !valueValid(values.value(name), properties.value(name).toObject())) {
+                    configured = false; break;
+                }
+            }
+            const auto app = distributions.value(id);
+            SemanticVersion offered, installed;
+            const bool appUpdate = package.identity.distributionSource && !package.recoveryRequired
+                && app.value("source").toString() == package.identity.source
+                && SemanticVersion::parse(app.value("version").toString(), &offered)
+                && SemanticVersion::parse(package.manifest.version, &installed) && offered.compare(installed) > 0;
+            result.append(QVariantMap{{"id", id}, {"name", package.manifest.name}, {"version", package.manifest.version},
+                {"source", package.identity.source}, {"tag", package.identity.tag},
+                {"commit", package.identity.distributionSource ? QString{} : package.identity.commitId},
+                {"distributionSource", package.identity.distributionSource}, {"publisherVerified", false},
+                {"developerSource", package.identity.developerSource}, {"digest", QString::fromLatin1(package.digest)},
+                {"enabled", package.enabled}, {"configured", configured}, {"hasPrevious", !package.previousDigest.isEmpty()},
+                {"installed", true}, {"recoveryRequired", package.recoveryRequired}, {"removing", removing.contains(id)},
+                {"appUpdateAvailable", appUpdate}, {"appUpdateVersion", appUpdate ? app.value("version").toString() : QString{}}});
+        }
+        for (auto it = directories.begin(); it != directories.end(); ++it) {
+            if (!current()) return std::nullopt;
+            if (!installedIds.contains(it.key()) && store.distributionSuppressed(it.key())) {
+                const auto manifest = distributions.value(it.key());
+                result.append(QVariantMap{{"id", it.key()}, {"name", manifest.value("name", it.key()).toString()},
+                    {"distributionSource", true}, {"publisherVerified", false}, {"installed", false},
+                    {"suppressed", true}, {"enabled", false}, {"configured", false}, {"savedData", savedDataIds.contains(it.key())}});
+            }
+        }
+        for (const auto& id : savedDataIds)
+            if (!installedIds.contains(id) && !std::any_of(result.begin(), result.end(), [&id](const QVariant& row) { return row.toMap().value("id").toString() == id; }))
+                result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", false}, {"savedData", true},
+                    {"enabled", false}, {"configured", false}, {"removing", removing.contains(id)}});
+        for (const auto& id : removing) {
+            bool present = false;
+            for (auto& value : result) {
+                auto row = value.toMap(); if (row.value("id").toString() != id) continue;
+                row.insert("removing", true); value = row; present = true; break;
+            }
+            if (!present) result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", false},
+                {"enabled", false}, {"configured", false}, {"removing", true}});
+        }
+        if (!current() || result.size() > 256) return std::nullopt;
+        return PackageSummarySnapshot{std::move(result), authority};
+    };
 }
 QVariantList AddonManager::contributionsOfType(const QString& type, bool includeDisabled) const
 {

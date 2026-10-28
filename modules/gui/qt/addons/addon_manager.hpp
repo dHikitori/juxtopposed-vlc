@@ -5,6 +5,7 @@
 #include "addon_network.hpp"
 #include "addon_worker.hpp"
 #include "addon_native_authority.hpp"
+#include "addon_package_reader.hpp"
 #include <QObject>
 #include <QVariantList>
 
@@ -30,6 +31,8 @@ public:
     int revision() const { return m_revision; }
     QString errorMessage() const { return m_error; }
     QVariantList packages() const;
+    // Memory-only preparation. Invoke the owned reader on joined Qt work.
+    PackageSummaryReader packageReader() const;
     QString storageDirectory() const { return m_store.storageDirectory(); }
     // Read these memory snapshots on the manager thread. They contain no key bytes.
     QString workerExecutable() const { return m_workerExecutable; }

@@ -73,6 +73,7 @@
 #include "util/redesign_folder_model.hpp"
 #include "util/subtitle_source_service.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_package_summaries.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "addon_distribution_paths.hpp"
 #include "addons/addon_theme_service.hpp"
@@ -386,6 +387,12 @@ void MainUI::registerQMLTypes()
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
             msg_Dbg(m_intf, "Add-on store directory: %s", qtu(addonManager->storageDirectory()));
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
+            auto* packageSummaries = new vlc::addons::AddonPackageSummaries(addonManager,
+                m_mainCtx->addonStreamLifetime(), this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, packageSummaries,
+                &vlc::addons::AddonPackageSummaries::close, Qt::DirectConnection);
+            qmlRegisterSingletonInstance<vlc::addons::AddonPackageSummaries>(uri, versionMajor, versionMinor,
+                "AddonPackageSummaries", packageSummaries);
             addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
             const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
