@@ -2029,7 +2029,12 @@ QML_RULES_DEPS = $(libqt_plugin_la_QML_MODULES:=/qml.deps)
 
 # Since every QML modules is built into a given directory, we can use $(@D)
 # to get the module name.
-$(QML_RULES_DEPS): Makefile
+# A regenerated Makefile can leave newer includes with the old file list.
+# Compare the current list on each parse; cmp keeps unchanged includes stable.
+.PHONY: force-qml-deps
+force-qml-deps:
+
+$(QML_RULES_DEPS): force-qml-deps
 	$(AM_V_at)$(MKDIR_P) $(@D)
 	$(AM_V_GEN){ \
 	  echo '$(@D)/qmldir.qrc: $(@D)/qmldir'; \
