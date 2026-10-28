@@ -45,6 +45,9 @@ QtObject {
     readonly property color selected: token("surface.selected", lightTheme ? "#b8b8b8" : "#333333")
     readonly property color menuPanel: token("surface.menu", lightTheme ? background : "#191919")
     readonly property color menuHover: token("surface.menuHover", lightTheme ? hover : "#1f1f1f")
+    // Keep the user's swatch selected when accessibility needs a lighter or
+    // darker rendering of that same accent.
+    readonly property color baseAccent: tokenSnapshot && tokenSnapshot.baseAccent !== undefined ? tokenSnapshot.baseAccent : token("accent.primary", accentColor)
     readonly property color accent: token("accent.primary", accentColor)
     readonly property color onAccent: token("text.onAccent", "#161616")
     readonly property color menuAccent: accent.toString() === "#d37918" ? "#ab6314" : Qt.darker(accent, 1.23)

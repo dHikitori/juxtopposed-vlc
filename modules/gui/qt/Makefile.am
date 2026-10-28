@@ -1549,6 +1549,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonSettingsDialog.qml \
 	player/qml/redesign/RedesignAddonTheme.qml \
 	player/qml/redesign/RedesignAddonThemeSelector.qml \
+	player/qml/redesign/RedesignGeneralAppearance.qml \
 	player/qml/redesign/RedesignAddonTrackPreparation.qml \
 	player/qml/redesign/RedesignAddonView.qml \
 	player/qml/redesign/RedesignAddonMount.qml \
@@ -3443,6 +3444,8 @@ EXTRA_DIST += tests/tst_AddonMounts.qml
 TESTS += tests/tst_AddonMounts.qml
 EXTRA_DIST += tests/tst_AddonUi.qml tests/tst_AddonTheme.qml tests/tst_AddonThemeSelection.qml tests/tst_AddonThemeHost.qml tests/tst_AddonIntegration.qml tests/tst_AddonTrackPreparation.qml
 TESTS += tests/tst_AddonUi.qml tests/tst_AddonTheme.qml tests/tst_AddonThemeSelection.qml tests/tst_AddonThemeHost.qml tests/tst_AddonIntegration.qml tests/tst_AddonTrackPreparation.qml
+EXTRA_DIST += tests/tst_GeneralAppearance.qml
+TESTS += tests/tst_GeneralAppearance.qml
 EXTRA_DIST += tests/tst_RedesignCapture.qml
 TESTS += tests/tst_RedesignCapture.qml
 EXTRA_DIST += tests/tst_RedesignGotoTime.qml

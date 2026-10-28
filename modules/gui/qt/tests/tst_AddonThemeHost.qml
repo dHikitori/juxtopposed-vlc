@@ -17,7 +17,7 @@ TestCase {
         property string color: "#9ac6ff"
         property bool contrast: false
         function tokens(light, accent, highContrast, reducedTransparency) {
-            return {customized: true, highContrast: contrast,
+            return {customized: true, highContrast: contrast, baseAccent: color,
                 colors: {"surface.base": light ? "#e9edf5" : "#171923", "surface.panel": "#1e2230",
                     "surface.menu": "#1e2230", "surface.field": "#121520", "surface.hover": "#30394b",
                     "surface.selected": "#36465e", "text.primary": "#edf0f7", "text.secondary": "#b6c0d4",
@@ -70,6 +70,7 @@ TestCase {
         redesignThemeService.contrast = true; ++redesignThemeService.revision
         verify(combo.theme.highContrast)
         compare(combo.theme.accent.toString(), "#ffff00")
+        compare(combo.theme.baseAccent.toString(), "#9ac6ff")
         compare(combo.theme.floatingOpacity, 1)
     }
 }

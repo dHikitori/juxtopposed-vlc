@@ -38,7 +38,9 @@ TestCase {
         compare(service.selectedTheme, "org.example.theme/midnight")
         compare(select.contentItem.textFormat, Text.PlainText)
         compare(select.contentItem.text, "<b>Midnight</b>")
-        mouseClick(item("addonThemeRestoreDefault"))
+        select.forceActiveFocus(Qt.TabFocusReason)
+        item("addonThemeRestoreDefault").forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Space)
         compare(service.selectedTheme, ""); compare(service.selections, 2)
     }
     function test_missingVariantAndRecoveryStayVisible() {
@@ -47,20 +49,18 @@ TestCase {
         verify(item("addonThemeFallbackStatus").text.includes("built-in"))
         service.usingFallback = true; service.errorMessage = "The selected theme is unavailable."
         compare(item("addonThemeFallbackStatus").text, service.errorMessage)
+        item("addonThemeSelection").forceActiveFocus(Qt.TabFocusReason)
         verify(item("addonThemeRestoreDefault").visible)
     }
-    function test_userAndPlatformHighContrast() {
-        const contrast = item("addonThemeHighContrast")
-        mouseClick(contrast); verify(service.highContrast)
+    function test_keyboardSelectionAndRefusal() {
+        const select = item("addonThemeSelection")
+        select.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Down)
+        compare(service.selectedTheme, "org.example.theme/midnight")
+        compare(select.currentIndex, 1)
         service.rejectChange = true
-        mouseClick(contrast); verify(service.highContrast); verify(contrast.checked)
-        service.platformHighContrast = true
-        verify(!contrast.enabled)
-    }
-    function test_userCanReduceVisualizerMotion() {
-        const motion = item("addonThemeReducedMotion")
-        mouseClick(motion); verify(service.reducedMotion)
-        service.rejectChange = true
-        mouseClick(motion); verify(service.reducedMotion); verify(motion.checked)
+        keyClick(Qt.Key_Up)
+        compare(service.selectedTheme, "org.example.theme/midnight")
+        compare(select.currentIndex, 1)
     }
 }

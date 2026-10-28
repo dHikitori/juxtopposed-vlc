@@ -300,19 +300,12 @@ RedesignSettingsDialog {
                 spacing: theme.dp(root.category === "general" || root.usesReferenceSpacing ? 5 : 6)
                 Loader {
                     width: parent.width
+                    asynchronous: true
                     active: root.addonsVisited && typeof AddonManager !== "undefined"
                     visible: root.category === "extensions" && !root.search.length
                     sourceComponent: RedesignAddonManagement {
+                        active: root.visible && root.category === "extensions" && !root.search.length
                         backend: typeof AddonManager !== "undefined" ? AddonManager : null
-                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                    }
-                }
-                Loader {
-                    width: parent.width
-                    active: root.addonsVisited && typeof AddonUiRegistry !== "undefined"
-                    visible: root.category === "extensions" && !root.search.length
-                    sourceComponent: RedesignAddonReplacements {
-                        registry: typeof AddonUiRegistry !== "undefined" ? AddonUiRegistry : null
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     }
                 }
@@ -322,119 +315,13 @@ RedesignSettingsDialog {
                     hook: "settings.addons.sections@1"
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 }
-                Loader {
-                    objectName: "addonSessionsLoader"
-                    width: parent.width
-                    active: root.addonsVisited && typeof AddonSessions !== "undefined"
-                    visible: root.category === "extensions" && !root.search.length
-                    sourceComponent: RedesignAddonSessions {
-                        backend: typeof AddonSessions !== "undefined" ? AddonSessions : null
-                        active: root.visible && root.category === "extensions" && !root.search.length
-                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                    }
-                }
-                Column {
+                RedesignGeneralAppearance {
                     visible: root.category === "general" && !root.search.length
                     width: parent.width
-                    Text {
-                        topPadding: theme.dp(7.5); bottomPadding: theme.dp(9.5)
-                        text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
-                    }
-                    RedesignPreferenceRow { width: parent.width; backend: preferenceStore; optionName: "language"; label: qsTr("Interface language"); scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
-                    Loader {
-                        width: parent.width
-                        active: typeof AddonThemes !== "undefined"
-                        sourceComponent: RedesignAddonThemeSelector {
-                            backend: typeof AddonThemes !== "undefined" ? AddonThemes : null
-                            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                        }
-                    }
-                    Loader {
-                        width: parent.width
-                        active: typeof AddonVisualizers !== "undefined"
-                        sourceComponent: RedesignAddonVisualizerSelector {
-                            controller: typeof AddonVisualizers !== "undefined" ? AddonVisualizers : null
-                            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                        }
-                    }
-                    Item {
-                        width: parent.width; height: theme.dp(46)
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: qsTr("Theme"); color: theme.foreground; font.pixelSize: theme.dp(14) }
-                        Rectangle {
-                            objectName: "settingsThemeChoices"
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            width: theme.dp(320); height: theme.dp(36)
-                            radius: theme.dp(6); color: theme.field
-                            Row {
-                                anchors.fill: parent; anchors.margins: theme.dp(2)
-                                spacing: theme.dp(2)
-                                Repeater {
-                                    model: [{label: qsTr("Dark"), value: 2}, {label: qsTr("Light"), value: 1}, {label: qsTr("System"), value: 0}]
-                                    RedesignButton {
-                                        required property var modelData
-                                        width: theme.dp(104); height: theme.dp(32)
-                                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                                        caption: modelData.label; text: caption
-                                        selected: MainCtx.colorScheme.scheme === modelData.value
-                                        background: Rectangle { color: parent.selected ? theme.progress : root.lightTheme ? theme.background : "#191919"; radius: theme.dp(4) }
-                                        onClicked: { MainCtx.colorScheme.setData(MainCtx.colorScheme.index(modelData.value, 0), true, Qt.CheckStateRole); preferenceStore.save() }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Item {
-                        width: parent.width; height: theme.dp(46)
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: qsTr("Accent color"); color: theme.foreground; font.pixelSize: theme.dp(14) }
-                        Item {
-                            objectName: "settingsAccentChoices"
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            width: theme.dp(320); height: theme.dp(36)
-                            Rectangle { anchors.fill: parent; color: theme.field; radius: theme.dp(6) }
-                            Row {
-                                anchors.fill: parent
-                                Repeater {
-                                    model: ["#d37918", "#e15032", "#c49e23", "#19a234", "#18aad3", "#185dd3", "#8e42ff", "#f052b3", "#afafaf"]
-                                    RedesignButton {
-                                        required property string modelData
-                                        readonly property bool active: { preferenceStore.revision; return theme.accent.toString() === modelData }
-                                        width: theme.dp(320 / 9); height: theme.dp(36)
-                                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                                        text: modelData
-                                        background: Item { Rectangle { anchors.fill: parent; anchors.margins: theme.dp(2); color: parent.parent.active ? theme.progress : "transparent"; radius: theme.dp(4) } }
-                                        contentItem: Item { Rectangle { anchors.centerIn: parent; width: theme.dp(20); height: width; radius: theme.dp(1); color: parent.parent.modelData; opacity: parent.parent.active ? 1 : 0.7 } }
-                                        onClicked: preferenceStore.stage("qt-accent-color", modelData)
-                                    }
-                                }
-                            }
-                            TapHandler { acceptedButtons: Qt.RightButton; onTapped: accentMenu.popup() }
-                            RedesignActionMenu {
-                                id: accentMenu
-                                scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                                entries: [{label: qsTr("Custom accent color"), action: "custom"}]
-                                onActionRequested: {
-                                    const color = preferenceStore.chooseColor(root.accentColor.toString())
-                                    if (color.length) preferenceStore.stage("qt-accent-color", color)
-                                }
-                            }
-                        }
-                    }
-                    RedesignButton {
-                        objectName: "settingsThemeAccent"
-                        caption: qsTr("Use theme accent"); text: caption
-                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                        onClicked: preferenceStore.stage("qt-accent-color", "default")
-                    }
-                    Repeater {
-                        model: specification.sections.general.find(section => section.appearance).rows
-                        delegate: RedesignPreferenceRow {
-                            required property var modelData
-                            width: parent.width
-                            backend: preferenceStore; optionName: modelData[0]; label: modelData[1]
-                            presentation: modelData[2] || {}
-                            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                        }
-                    }
+                    backend: preferenceStore; colorScheme: MainCtx.colorScheme
+                    themeBackend: typeof AddonThemes !== "undefined" ? AddonThemes : null
+                    appearanceRows: specification.sections.general.find(section => section.appearance).rows
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 }
                 Repeater {
                     model: root.search.length ? [] : specification.visibleSections(root.category, preferenceStore)
@@ -519,6 +406,36 @@ RedesignSettingsDialog {
                         }
                         background: Rectangle { color: parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919"; opacity: root.lightTheme ? 1 : 0.95; radius: theme.dp(2) }
                         onClicked: root.advanced = !root.advanced
+                    }
+                }
+                Loader {
+                    width: parent.width
+                    active: root.advanced && root.category === "extensions" && !root.search.length && typeof AddonUiRegistry !== "undefined"
+                    visible: root.category === "extensions" && !root.search.length
+                    sourceComponent: RedesignAddonReplacements {
+                        registry: typeof AddonUiRegistry !== "undefined" ? AddonUiRegistry : null
+                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    }
+                }
+                Loader {
+                    objectName: "addonSessionsLoader"
+                    width: parent.width
+                    active: root.advanced && root.category === "extensions" && !root.search.length && typeof AddonSessions !== "undefined"
+                    visible: root.category === "extensions" && !root.search.length
+                    sourceComponent: RedesignAddonSessions {
+                        backend: typeof AddonSessions !== "undefined" ? AddonSessions : null
+                        active: root.visible && root.advanced && root.category === "extensions" && !root.search.length
+                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    }
+                }
+                Loader {
+                    objectName: "settingsAdvancedVisualizer"
+                    width: parent.width
+                    active: root.advanced && root.category === "general" && !root.search.length && typeof AddonVisualizers !== "undefined"
+                    visible: active
+                    sourceComponent: RedesignAddonVisualizerSelector {
+                        controller: typeof AddonVisualizers !== "undefined" ? AddonVisualizers : null
+                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     }
                 }
                 Repeater {

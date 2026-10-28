@@ -82,7 +82,8 @@ private slots:
         const auto high = AddonThemeService::resolve(document, false, "#12bc89", true, false);
         QCOMPARE(color(high, "surface.base"), QStringLiteral("#000000"));
         QCOMPARE(color(high, "text.primary"), QStringLiteral("#ffffff"));
-        QCOMPARE(color(high, "accent.primary"), QStringLiteral("#ffff00"));
+        QCOMPARE(high.value("baseAccent").toString(), QStringLiteral("#12bc89"));
+        QVERIFY(contrast(color(high, "accent.primary"), color(high, "surface.selected")) >= 4.5);
         QCOMPARE(high.value("effects").toMap().value("panelOpacity").toDouble(), 1.);
         QCOMPARE(AddonThemeService::resolve(document, false, {}, false, true).value("effects").toMap().value("panelOpacity").toDouble(), 1.);
         auto onlyDark = document; auto variants = document.value("variants").toObject(); variants.remove("light"); onlyDark.insert("variants", variants);
@@ -103,6 +104,11 @@ private slots:
         QSignalSpy changed(&themes, &AddonThemeService::revisionChanged);
         QVERIFY(themes.selectTheme(id));
         QCOMPARE(color(themes.tokens(false), "surface.base"), QStringLiteral("#171923"));
+        const auto themeAccent = themes.tokens(false).value("baseAccent");
+        themes.setUserAccentOverride("#12bc89");
+        QCOMPARE(themes.tokens(false).value("baseAccent").toString(), QStringLiteral("#12bc89"));
+        themes.setUserAccentOverride("default");
+        QCOMPARE(themes.tokens(false).value("baseAccent"), themeAccent);
         QVERIFY(!themes.usingFallback());
         QVERIFY(manager.setEnabled("org.hakone.example.midnight", false));
         QVERIFY(themes.usingFallback()); QVERIFY(!themes.errorMessage().isEmpty());
@@ -160,6 +166,41 @@ private slots:
         platform.set("HighContrast"); QVERIFY(themes.highContrast()); QVERIFY(themes.platformHighContrast());
         QVERIFY(themes.setHighContrast(false)); QVERIFY(themes.highContrast());
         platform.set("NoPreference"); QVERIFY(!themes.highContrast());
+    }
+    void highContrastRetainsTheSelectedAccent()
+    {
+        for (const auto light : {false, true})
+            for (const QString accent : {"#d37918", "#e15032", "#c49e23", "#19a234", "#18aad3", "#185dd3", "#8e42ff", "#f052b3", "#afafaf", "#12bc89", "#000000", "#ffffff"}) {
+                const auto high = AddonThemeService::resolve(reference(), light, accent, true);
+                QCOMPARE(high.value("baseAccent").toString(), accent);
+                const auto rendered = color(high, "accent.primary");
+                bool alreadyReadable = true;
+                for (const auto* surface : {"surface.base", "surface.panel", "surface.field", "surface.hover", "surface.selected"}) {
+                    alreadyReadable &= contrast(accent, color(high, surface)) >= 4.5;
+                    QVERIFY2(contrast(rendered, color(high, surface)) >= 4.5, qPrintable(accent));
+                }
+                if (alreadyReadable) QCOMPARE(rendered, accent);
+                // The contrast shade preserves the ordering of the chosen RGB channels.
+                for (int a : {1, 3, 5}) for (int b : {1, 3, 5})
+                    if (accent.mid(a, 2).toInt(nullptr, 16) > accent.mid(b, 2).toInt(nullptr, 16))
+                        QVERIFY(rendered.mid(a, 2).toInt(nullptr, 16) >= rendered.mid(b, 2).toInt(nullptr, 16));
+                QVERIFY(contrast(color(high, "text.onAccent"), rendered) >= 4.5);
+                QCOMPARE(color(AddonThemeService::resolve(reference(), light, accent, false), "accent.primary"), accent);
+            }
+    }
+    void tokenCacheOwnsItsKeyAndSeparatesEveryOption()
+    {
+        AddonThemeService themes(nullptr);
+        for (int iteration = 0; iteration < 64; ++iteration)
+            for (const auto light : {false, true}) for (const auto high : {false, true}) for (const auto reduced : {false, true}) {
+                const QString accent = iteration % 2 ? QStringLiteral("#12bc89") : QStringLiteral("#185dd3");
+                const auto expected = AddonThemeService::resolve({}, light, accent, high, reduced);
+                QCOMPARE(themes.tokens(light, accent, high, reduced), expected);
+                // Disturb stack and heap storage between repeated cache reads.
+                const QByteArray noise(8192, char(iteration));
+                QVERIFY(!noise.isEmpty());
+                QCOMPARE(themes.tokens(light, accent, high, reduced), expected);
+            }
     }
     void textualStatusRolesHaveContrastAcrossCoreAndAddonSurfaces()
     {

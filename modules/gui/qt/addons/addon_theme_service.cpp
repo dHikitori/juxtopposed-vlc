@@ -52,6 +52,23 @@ bool readableStatus(const QString& foreground, const QVariantMap& colors)
         if (contrast(foreground, colors.value(surface).toString()) < 4.5) return false;
     return true;
 }
+QString contrastAccent(const QString& accent, const QVariantMap& colors, bool light)
+{
+    if (readableStatus(accent, colors)) return accent;
+    // Blend toward the contrast endpoint without changing the selected hue.
+    // Choose the first representable shade that is readable on every surface.
+    const int endpoint = light ? 0 : 255;
+    for (int step = 1; step <= 255; ++step) {
+        QString shade = QStringLiteral("#");
+        for (int offset : {1, 3, 5}) {
+            const int channel = accent.mid(offset, 2).toInt(nullptr, 16);
+            const int value = (channel * (255 - step) + endpoint * step + 127) / 255;
+            shade += QStringLiteral("%1").arg(value, 2, 16, QLatin1Char('0'));
+        }
+        if (readableStatus(shade, colors)) return shade;
+    }
+    return light ? QStringLiteral("#000000") : QStringLiteral("#ffffff");
+}
 QVariantMap merged(const QJsonObject& variant, bool light)
 {
     auto result = defaults(light);
@@ -156,6 +173,7 @@ QVariantMap AddonThemeService::resolve(const QJsonObject& document, bool light, 
     const auto variant = validate(document) ? document.value("variants").toObject().value(light ? "light" : "dark").toObject() : QJsonObject{};
     auto result = merged(variant, light), colors = result.value("colors").toMap();
     if (hexColor(accent)) colors.insert(QStringLiteral("accent.primary"), accent.toLower());
+    result.insert(QStringLiteral("baseAccent"), colors.value(QStringLiteral("accent.primary")));
     auto effects = result.value("effects").toMap();
     if (highContrast) {
         const auto background = light ? QStringLiteral("#ffffff") : QStringLiteral("#000000");
@@ -164,7 +182,7 @@ QVariantMap AddonThemeService::resolve(const QJsonObject& document, bool light, 
         colors.insert(QStringLiteral("surface.hover"), light ? "#dddddd" : "#333333");
         colors.insert(QStringLiteral("surface.selected"), light ? "#cccccc" : "#444444");
         colors.insert(QStringLiteral("text.primary"), foreground); colors.insert(QStringLiteral("text.secondary"), foreground);
-        colors.insert(QStringLiteral("accent.primary"), light ? "#00428f" : "#ffff00");
+        colors.insert(QStringLiteral("accent.primary"), contrastAccent(colors.value(QStringLiteral("accent.primary")).toString(), colors, light));
         colors.insert(QStringLiteral("status.danger"), foreground);
         colors.insert(QStringLiteral("focus.ring"), colors.value("accent.primary")); colors.insert(QStringLiteral("border.default"), foreground);
         effects.insert(QStringLiteral("panelOpacity"), 1);
@@ -205,7 +223,7 @@ QVariantMap AddonThemeService::resolve(const QJsonObject& document, bool light, 
 QVariantMap AddonThemeService::tokens(bool light, const QString& accent, bool contrast, bool reducedTransparency) const
 {
     const auto effectiveAccent = accent.isEmpty() ? m_userAccent : accent;
-    const auto key = QString::number(light) + QLatin1Char(':') + effectiveAccent + QLatin1Char(':')
+    const QString key = QString::number(light) + QLatin1Char(':') + effectiveAccent + QLatin1Char(':')
         + QString::number(contrast || highContrast()) + QLatin1Char(':') + QString::number(reducedTransparency);
     const auto found = m_tokenCache.constFind(key);
     if (found != m_tokenCache.cend()) return found.value();
