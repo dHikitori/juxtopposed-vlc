@@ -41,6 +41,7 @@ public:
     bool consume(const QString& handle, const QString& expectedIntent, NativeConsumer);
     void close();
 private:
+    friend class AddonPlayableGateTestAccess;
     struct Pending { Context context; QVariantMap proposal; Completion completion; QString native, handle; QPointer<QTimer> timer; bool ready = false; };
     struct Playable { Context context; QVariantMap proposal; std::shared_ptr<Lease> lease; qint64 expires = 0; };
     QVariantMap registration(const QString&) const;

@@ -11,7 +11,7 @@ AddonPlayableGate::AddonPlayableGate(AddonManager* manager, QObject* parent) : A
 AddonPlayableGate::AddonPlayableGate(AddonManager* manager, Backend backend, QObject* parent)
     : QObject(parent), m_manager(manager), m_backend(std::move(backend))
 {
-    m_clock.start(); m_expiry.setInterval(250); connect(&m_expiry, &QTimer::timeout, this, &AddonPlayableGate::expire); m_expiry.start();
+    m_clock.start(); m_expiry.setInterval(250); connect(&m_expiry, &QTimer::timeout, this, &AddonPlayableGate::expire);
     if (manager) {
         connect(manager, &QObject::destroyed, this, &AddonPlayableGate::close);
         connect(manager, &AddonManager::packageWithdrawn, this, [this](const QString& package) {
@@ -102,6 +102,7 @@ void AddonPlayableGate::prepared(const QString& job, Result result)
     }
     if (lifetime < 1) { deliver(job, tr("The prepared stream expired.")); return; }
     const auto handle = token(); m_handles.insert(handle, {pending->context, pending->proposal, std::move(result.lease), m_clock.elapsed() + lifetime});
+    if (!m_expiry.isActive()) m_expiry.start();
     m_issued.insert(job, handle); m_pending[job].handle = handle;
     // Keep the job-to-handle link until consumption or release. cancel(job)
     // can then revoke a result that the coordinator has not accepted yet.
@@ -129,6 +130,7 @@ void AddonPlayableGate::release(const QString& handle)
 {
     const auto prepared = m_handles.take(handle); const auto active = m_active.take(handle);
     const auto jobs = m_issued.keys(handle); for (const auto& job : jobs) m_issued.remove(job);
+    if (m_handles.isEmpty()) m_expiry.stop();
 }
 bool AddonPlayableGate::consume(const QString& handle, const QString& intent, NativeConsumer consumer)
 {
@@ -144,6 +146,7 @@ bool AddonPlayableGate::consume(const QString& handle, const QString& intent, Na
     if (!m_handles.contains(handle) || !current(playable.context) || m_active.size() >= 4) { release(handle); return false; }
     m_handles.remove(handle); const auto jobs = m_issued.keys(handle); for (const auto& job : jobs) m_issued.remove(job);
     m_active.insert(handle, playable);
+    if (m_handles.isEmpty()) m_expiry.stop();
     const bool consumed = consumer(playable.lease->item.get());
     if (!owner) return false;
     if (!consumed) { release(handle); return false; }

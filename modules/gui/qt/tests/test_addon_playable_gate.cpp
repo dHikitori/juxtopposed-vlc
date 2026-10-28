@@ -9,6 +9,16 @@
 #include "addons/addon_playable_gate.hpp"
 using namespace vlc::addons;
 
+namespace vlc::addons {
+class AddonPlayableGateTestAccess {
+public:
+    static bool expiryActive(const AddonPlayableGate& gate) { return gate.m_expiry.isActive(); }
+    static void expireHandle(AddonPlayableGate& gate, const QString& handle) {
+        gate.m_handles[handle].expires = gate.m_clock.elapsed() - 1;
+    }
+};
+}
+
 class TestAddonPlayableGate : public QObject
 {
     Q_OBJECT
@@ -51,6 +61,68 @@ class TestAddonPlayableGate : public QObject
         return package(directory) && manager.installLocalPackage(directory, true) && manager.setEnabled(QStringLiteral("org.example.stream"), true);
     }
 private slots:
+    void idleAndPendingGatesHaveNoExpiryPolling() {
+        AddonPlayableGate unavailable(nullptr);
+        QVERIFY(!AddonPlayableGateTestAccess::expiryActive(unavailable));
+        QTemporaryDir files; AddonManager manager(files.path() + QStringLiteral("/profile"));
+        QVERIFY2(install(manager, files.path() + QStringLiteral("/package")), qPrintable(manager.errorMessage()));
+        Transport transport; AddonPlayableGate gate(&manager, transport.backend());
+        QVERIFY(gate.supported());
+        QVERIFY(!AddonPlayableGateTestAccess::expiryActive(gate));
+        const auto job = gate.authorize(source(), proposal(), [](const auto&, const auto&) {});
+        QVERIFY(!job.isEmpty()); QCOMPARE(transport.starts, 1);
+        QVERIFY(!AddonPlayableGateTestAccess::expiryActive(gate));
+        gate.cancel(job);
+        QVERIFY(!AddonPlayableGateTestAccess::expiryActive(gate));
+        QCOMPARE(transport.cancellations, 1);
+    }
+    void expiryPollingStopsAfterTheLastHandleAndRestarts() {
+        QTemporaryDir files; AddonManager manager(files.path() + QStringLiteral("/profile"));
+        QVERIFY2(install(manager, files.path() + QStringLiteral("/package")), qPrintable(manager.errorMessage()));
+        Transport transport; AddonPlayableGate gate(&manager, transport.backend()); QStringList handles;
+        for (int cycle = 0; cycle < 2; ++cycle) {
+            for (int i = 0; i < 2; ++i) {
+                gate.authorize(source(), proposal(), [&](const auto& value, const auto& error) {
+                    QVERIFY(error.isEmpty()); handles.append(value);
+                });
+                transport.ready(transport.result()); QTRY_COMPARE(handles.size(), i + 1);
+                QVERIFY(AddonPlayableGateTestAccess::expiryActive(gate));
+            }
+            gate.release(handles.first());
+            QVERIFY(AddonPlayableGateTestAccess::expiryActive(gate));
+            gate.release(handles.last()); handles.clear();
+            QVERIFY(!AddonPlayableGateTestAccess::expiryActive(gate));
+            QCOMPARE(transport.releases, 2 * (cycle + 1));
+        }
+    }
+    void consumptionAndCancellationStopUnusedExpiryChecks() {
+        QTemporaryDir files; AddonManager manager(files.path() + QStringLiteral("/profile"));
+        QVERIFY2(install(manager, files.path() + QStringLiteral("/package")), qPrintable(manager.errorMessage()));
+        Transport transport; AddonPlayableGate gate(&manager, transport.backend()); QString handle;
+        gate.authorize(source(), proposal(), [&](const auto& value, const auto& error) { QVERIFY(error.isEmpty()); handle = value; });
+        transport.ready(transport.result()); QTRY_VERIFY(!handle.isEmpty());
+        QVERIFY(AddonPlayableGateTestAccess::expiryActive(gate));
+        QVERIFY(gate.consume(handle, QStringLiteral("play"), [](auto*) { return true; }));
+        QVERIFY(!AddonPlayableGateTestAccess::expiryActive(gate));
+        QCOMPARE(transport.releases, 0); gate.release(handle); QCOMPARE(transport.releases, 1);
+        handle.clear();
+        const auto job = gate.authorize(source(), proposal(), [&](const auto& value, const auto& error) { QVERIFY(error.isEmpty()); handle = value; });
+        transport.ready(transport.result()); QTRY_VERIFY(!handle.isEmpty());
+        QVERIFY(AddonPlayableGateTestAccess::expiryActive(gate)); gate.cancel(job);
+        QVERIFY(!AddonPlayableGateTestAccess::expiryActive(gate)); QCOMPARE(transport.releases, 2);
+    }
+    void finalHandleExpiryStopsPollingAndReleasesTheLease() {
+        QTemporaryDir files; AddonManager manager(files.path() + QStringLiteral("/profile"));
+        QVERIFY2(install(manager, files.path() + QStringLiteral("/package")), qPrintable(manager.errorMessage()));
+        Transport transport; AddonPlayableGate gate(&manager, transport.backend()); QString handle;
+        gate.authorize(source(), proposal(), [&](const auto& value, const auto& error) { QVERIFY(error.isEmpty()); handle = value; });
+        transport.ready(transport.result()); QTRY_VERIFY(!handle.isEmpty());
+        QVERIFY(AddonPlayableGateTestAccess::expiryActive(gate));
+        AddonPlayableGateTestAccess::expireHandle(gate, handle);
+        QTRY_COMPARE(transport.releases, 1);
+        QVERIFY(!AddonPlayableGateTestAccess::expiryActive(gate));
+        QVERIFY(!gate.consume(handle, QStringLiteral("play"), [](auto*) { return true; }));
+    }
     void defaultGateHasNoTransportAuthority() {
         QTemporaryDir files; AddonManager manager(files.path() + QStringLiteral("/profile"));
         QVERIFY2(install(manager, files.path() + QStringLiteral("/package")), qPrintable(manager.errorMessage()));

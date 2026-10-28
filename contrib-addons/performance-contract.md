@@ -146,3 +146,24 @@ performance result. The constructor health check, background display snapshots,
 startup batching, worker costs, and full app measurements remain in the audit.
 The published Windows build still uses `fd3fed4173` and does not contain this
 idle-session change yet.
+
+## Stream handle expiry helper
+
+The stream preparation helper no longer starts its 250 ms expiry timer at
+construction. It starts that timer when an unconsumed handle exists, and stops
+it after the last handle is consumed, released, canceled, or expires. Pending
+preparation keeps its own deadline. Active stream leases keep their existing
+cleanup and authority checks.
+
+The new idle regression fails against the previous helper. All 16 cases pass
+normally and with focused AddressSanitizer and UndefinedBehaviorSanitizer
+checks, with no failed or skipped cases or runtime diagnostics. Tests include
+two activation cycles, multiple handles, consumption, cancellation, expiry,
+late completion, and callbacks that delete the helper. Proofs are in
+`/tmp/hakone-playable-idle-cost/{before,normal,san}/proof.json`. An initial test
+recipe include-path failure is retained separately.
+
+The current MainUI uses `createPlayerDiscoveryWithSources`; it does not mount
+this helper. This change hardens the alternate host path. It does not establish
+a performance gain in the published app. Mounted session UI, source consent,
+source resolver, catalogue, and visualizer idle costs are still under repair.
