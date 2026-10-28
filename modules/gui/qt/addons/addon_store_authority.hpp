@@ -8,6 +8,15 @@
 namespace vlc::addons {
 struct StoreAuthorityState;
 struct StoreAuthorityCallback;
+struct StoreAuthorityChangeCallback;
+class StoreAuthorityChanges final {
+public:
+    StoreAuthorityChanges() = default;
+    explicit operator bool() const noexcept;
+private:
+    friend class StoreAuthority;
+    std::shared_ptr<StoreAuthorityChangeCallback> m_callback;
+};
 class StoreAuthorityWatch final
 {
 public:
@@ -70,6 +79,15 @@ public:
     // Hold the store lock before this gate. Keep it through the last write.
     StoreAuthorityMutation mutation() const noexcept;
     void invalidate() const noexcept;
+    // Persistent display wake only. Callback uses native/std state, must not
+    // block, throw, retain Qt values or reenter Store. No authority is granted.
+    // Notifications may repeat. The native wake/caller coalesces them; a final
+    // mutation notification follows writer drop.
+    StoreAuthorityChanges onChanged(std::function<void()> nativeWake) const noexcept;
+    static constexpr unsigned ChangeLimit = 64;
+    // Call only after an owned store.lock is released. Display notification,
+    // not an epoch advance or authority grant. No native cancellation changes.
+    void displayUnlocked() const noexcept;
     // Memory-only package withdrawal. Retain it through background cleanup.
     StorePackageRetirement retirePackage(const QString&) const;
     bool packageRetiring(const QString&) const noexcept;

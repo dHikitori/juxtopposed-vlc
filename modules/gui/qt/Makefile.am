@@ -130,6 +130,9 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_package_store.hpp \
 	addons/addon_store_authority.cpp \
 	addons/addon_store_authority.hpp \
+	addons/addon_native_wake.cpp \
+	addons/addon_native_wake.hpp \
+	addons/addon_catalogue_store_lock.hpp \
 	addons/addon_credentials.cpp \
 	addons/addon_credentials.hpp \
 	addons/addon_manager.cpp \
@@ -2526,6 +2529,17 @@ test_qt_addon_store_authority_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldad
 test_qt_addon_store_authority_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_store_authority
 TESTS += test_qt_addon_store_authority
+
+test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.cpp
+nodist_test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.moc
+BUILT_SOURCES += tests/test_addon_catalogue_native.moc
+CLEANFILES += tests/test_addon_catalogue_native.moc
+test_qt_addon_catalogue_native_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_catalogue_native_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_catalogue_native_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_catalogue_native_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_catalogue_native
+TESTS += test_qt_addon_catalogue_native
 
 test_qt_addon_metadata_catalogue_SOURCES = tests/test_addon_metadata_catalogue.cpp
 nodist_test_qt_addon_metadata_catalogue_SOURCES = tests/test_addon_metadata_catalogue.moc

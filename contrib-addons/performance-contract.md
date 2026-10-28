@@ -203,3 +203,44 @@ The current MainUI uses `createPlayerDiscoveryWithSources`; it does not mount
 this helper. This change hardens the alternate host path. It does not establish
 a performance gain in the published app. Mounted session UI, source consent,
 source resolver, catalogue, and visualizer idle costs are still under repair.
+
+## Native change notification foundation
+
+The host now has a native wake with a Windows event or a nonblocking POSIX
+pipe. It has no polling timer. Native callbacks retain only its native state;
+the OS handle remains alive through an in-flight callback after the Qt owner
+closes. The owner destroys its Qt notifier before it drops its handle owner.
+
+Store display notifications use a separate bounded subscription quota. They
+cannot grant authority or take a native cancellation watch slot. Notifications
+can repeat; the wake and display view coalesce them. The store lock wrapper
+sends a final display notification after it releases the actual file lock.
+An early notification at mutation completion cannot replace that final wake.
+The native invalidation and cancellation barriers remain in place.
+
+All 14 native foundation cases pass normally and with focused sanitizers. They
+cover idle silence, burst coalescing, close during a paused native signal,
+callback deletion, quota cleanup, and actual lock release order. A deliberately
+wrong lock wrapper fails the release-order assertion after cleanup. The record
+is `/tmp/hakone-addon-catalogue-view/native-slice-final/final-validation.json`,
+SHA-256 `98ebb9414a2ba22d2f69171ba4b3f4bfb5c8ea5d532c31b09d9c75a518f65331`.
+
+A separate fresh 44-source host build includes the exact Store wrapper changes
+and all matching meta-objects. Its six suites pass 147 cases, including all 13
+existing Store authority cases. Three old-source controls each fail their
+intended idle-timer assertion. That larger copied cohort also contains source
+timer changes which are not yet applied. Its normal record is
+`/tmp/hakone-source-idle-timers/normal-build-result.json`; its sanitizer run is
+still pending. The Windows wake branch and full app integration also remain
+open. No shared display view or consumer is enabled by this foundation alone.
+
+An earlier test manifest write damaged a Linux LibVLC build output. The pin
+check stopped that run before configuration or compilation. The library was
+relinked from unchanged retained objects and matched its original SHA-256
+before atomic restoration. Core, application source, and the Windows test
+build were unchanged. The recovery record is
+`/tmp/hakone-libvlc-recovery/proof.json`, SHA-256
+`92955e4c186823a49e541093064aed86505ef1d350e35501b339b804757b7310`.
+The replacement manifest writer checks fixed output names and resolved paths,
+writes only inside its temporary packet, and treats native libraries as
+read-only inputs.

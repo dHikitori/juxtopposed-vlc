@@ -82,6 +82,8 @@ public:
     explicit PackageStore(QString storageDirectory);
     QString storageDirectory() const;
     StoreAuthorityToken authorityToken() const noexcept { return m_authority.capture(); }
+    StoreAuthorityChanges onDisplayChanged(std::function<void()> nativeWake) const noexcept
+    { return m_authority.onChanged(std::move(nativeWake)); }
     void invalidateAuthority() const noexcept { m_authority.invalidate(); }
     StorePackageRetirement retirePackage(const QString& id) const { return m_authority.retirePackage(id); }
     bool packageRetiring(const QString& id) const noexcept { return m_authority.packageRetiring(id); }
