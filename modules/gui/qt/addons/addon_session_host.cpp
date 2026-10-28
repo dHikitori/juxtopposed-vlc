@@ -135,7 +135,7 @@ AddonSessionHost::AddonSessionHost(SessionPlayerBackend player,AuthoritySource a
     if(!m_state->closed && m_player.snapshot().closed) m_state->closed=true;
     if(m_authorityLifetime) connect(m_authorityLifetime,&QObject::destroyed,this,&AddonSessionHost::close);
     if(m_playerLifetime) connect(m_playerLifetime,&QObject::destroyed,this,&AddonSessionHost::close);
-    m_timer.setInterval(50); connect(&m_timer,&QTimer::timeout,this,&AddonSessionHost::tick); if(!m_state->closed) m_timer.start();
+    m_timer.setSingleShot(true); connect(&m_timer,&QTimer::timeout,this,&AddonSessionHost::tick);
 }
 AddonSessionHost::~AddonSessionHost() { close(); }
 bool AddonSessionHost::setTransportFactoryForTesting(TransportFactory factory) {
@@ -152,11 +152,12 @@ QString AddonSessionHost::prepareApproval(const QString& contribution,const QUrl
     const auto reader=m_authorities.capture(contribution); if(!reader) return {};
     const auto id=token("hakone-session-approval:");
     m_state->approvals.insert(id,{contribution,room,relay,operations,protocols,m_player.monotonicUs()+30000000,{}, {}});
+    updateTimer();
     const auto gate=m_gate; const auto lifetime=m_lifetime;
     if(!lifetime.startQtWork([reader,gate,lifetime,id] {
         std::optional<AddonNativeAuthority> result; if(lifetime.current()) try { result=reader(); } catch(...) {}
         gate->post([id,result=std::move(result)](AddonSessionHost* owner) mutable { owner->prepared(id,std::move(result)); });
-    },[] {},[permit](AddonStreamLifetime::NetworkTicket ticket) { if(!ticket.retain(permit)) throw 0; })) { m_state->approvals.remove(id); return {}; }
+    },[] {},[permit](AddonStreamLifetime::NetworkTicket ticket) { if(!ticket.retain(permit)) throw 0; })) { m_state->approvals.remove(id); updateTimer(); return {}; }
     return id;
 }
 void AddonSessionHost::prepared(const QString& id,std::optional<AddonNativeAuthority> authority) {
@@ -164,12 +165,12 @@ void AddonSessionHost::prepared(const QString& id,std::optional<AddonNativeAutho
     if(!authority || !authority->package.enabled || authority->package.recoveryRequired || authority->accountReference.isEmpty()
         || !authority->onInvalidated || !check(authority->live) || authority->globalId!=it->contribution || authority->contribution.type!=QLatin1String("session.controller")
         || authority->contribution.contract!=QLatin1String("session@1") || !authority->contribution.operations.contains(QStringLiteral("run")) || !scope(*authority,QStringLiteral("playback.observe"))
-        || !scope(*authority,QStringLiteral("session.background"))) { m_state->approvals.erase(it); emit approvalReady(id); return; }
+        || !scope(*authority,QStringLiteral("session.background"))) { m_state->approvals.erase(it); updateTimer(); emit approvalReady(id); return; }
     QStringList permitted; for(const auto& op:it->operations) if(allowedOperation(*authority,op)) permitted.append(op); it->operations=std::move(permitted);
     const auto origin=relayOrigin(it->relay);
     if(!authority->package.manifest.permissionScope(QStringLiteral("network.websocket")).value("origins").toArray().contains(origin)
         || !authority->package.grants.value("network.websocket").toObject().value("origins").toArray().contains(origin)) {
-        m_state->approvals.erase(it); emit approvalReady(id); return;
+        m_state->approvals.erase(it); updateTimer(); emit approvalReady(id); return;
     }
     it->authority=std::move(authority); it->stamp=m_player.snapshot().stamp; emit approvalReady(id);
 }
@@ -196,11 +197,12 @@ QString AddonSessionHost::approve(const QString& ticket,const QStringList& opera
     session->stamp=approved.stamp; session->native=nativeId(); session->relay=approved.relay; session->room=approved.room;
     session->protocols=approved.protocols; session->operations=operations; session->expires=m_player.monotonicUs()+30000000;
     m_state->sessions.insert(session->id,session); if(!operations.isEmpty()) m_state->controller=session->id;
+    updateTimer();
     const auto id=session->id;
     if(!authorize(session,[this,id](bool allowed) { activated(id,allowed); })) { end(id); return {}; }
     return id;
 }
-void AddonSessionHost::cancelApproval(const QString& id) { m_state->approvals.remove(id); }
+void AddonSessionHost::cancelApproval(const QString& id) { m_state->approvals.remove(id); updateTimer(); }
 bool AddonSessionHost::authorize(const std::shared_ptr<Session>& session,std::function<void(bool)> complete,bool bound) {
     if(m_state->closed || !m_lifetime.current() || !session->control->open.load(std::memory_order_acquire) || m_state->checks.size()>=32 || m_state->nextCheck==UINT64_MAX) return false;
     if(bound && !invocationCurrent(session,session->invocation)) return false;
@@ -285,6 +287,7 @@ void AddonSessionHost::end(const QString& id) {
         AddonHostServices::Completion reply; reply.swap(it->reply); m_state->commands.erase(it); if(reply) replies.append(std::move(reply));
     }
     if(m_state->controller==id) m_state->controller.clear();
+    updateTimer();
     const QPointer<AddonSessionHost> alive(this);
     for(const auto& reply:replies) { reply(refused()); if(!alive) return; }
     for(const auto& done:retiredChecks) { if(done) done(false); if(!alive) return; }
@@ -296,6 +299,7 @@ void AddonSessionHost::revokePackage(const QString& package) {
     const auto tickets=m_state->approvals.keys(); for(const auto& ticket:tickets) {
         const auto& value=m_state->approvals[ticket]; if(value.contribution.section(QLatin1Char('/'),0,0)==package) m_state->approvals.remove(ticket);
     }
+    updateTimer();
 }
 QVariantList AddonSessionHost::sessions() const {
     QVariantList result;
@@ -389,10 +393,35 @@ QVariantMap AddonSessionHost::observation(const QString& id) const {
     for(auto it=fields.begin();it!=fields.end();++it) if(declared.contains(it.key()) && granted.contains(it.key())) result.insert(it.key(),it.value());
     return result;
 }
+void AddonSessionHost::updateTimer() {
+    const bool pending=!m_state->closed && (!m_state->approvals.isEmpty()
+        || !m_state->sessions.isEmpty() || !m_state->commands.isEmpty());
+    if(!pending) { m_timer.stop(); return; }
+    int delay=50;
+    if(m_state->sessions.isEmpty() && m_state->commands.isEmpty()) {
+        const auto now=m_player.monotonicUs();
+        qint64 remaining=30000000;
+        for(const auto& approval:m_state->approvals)
+            remaining=approval.expires<=now ? 0 : std::min(remaining,approval.expires-now);
+        delay=int(std::max<qint64>(1,(remaining+999)/1000));
+    }
+    // Keep an earlier wake. Repeated work must not postpone an active check.
+    // With only approvals, wake once at the next expiry instead of polling.
+    if(!m_timer.isActive() || m_timer.remainingTime()>delay) m_timer.start(delay);
+}
 void AddonSessionHost::tick() {
     if(m_state->closed) return;
     if(!m_lifetime.current() || !m_authorityLifetime || !m_playerLifetime) { close(); return; }
+    if(m_state->approvals.isEmpty() && m_state->sessions.isEmpty() && m_state->commands.isEmpty()) {
+        updateTimer(); return;
+    }
     const QPointer<AddonSessionHost> alive(this); const auto now=m_player.monotonicUs();
+    for(auto it=m_state->approvals.begin();it!=m_state->approvals.end();) {
+        if(it->expires<=now) it=m_state->approvals.erase(it); else ++it;
+    }
+    // Approval expiry needs only the clock. Read player state only for an
+    // active session or command; an idle host must not take the player lock.
+    if(m_state->sessions.isEmpty() && m_state->commands.isEmpty()) { updateTimer(); return; }
     const auto completion=m_player.completions();
     for(const auto& done:completion) {
         const auto ids=m_state->commands.keys();
@@ -422,9 +451,7 @@ void AddonSessionHost::tick() {
             || epoch(snapshot.stamp)!=epoch(value.native.expected)) finishCommand(id,QStringLiteral("cancelled"));
         if(!alive) return;
     }
-    for(auto it=m_state->approvals.begin();it!=m_state->approvals.end();) {
-        if(it->expires<=now) it=m_state->approvals.erase(it); else ++it;
-    }
+    updateTimer();
 }
 AddonHostServices::Cancel AddonSessionHost::submit(const QString& sessionId,const QJsonObject& request,AddonHostServices::Completion reply) {
     const auto session=m_state->sessions.value(sessionId); const auto name=request.value("operation").toString(); const auto op=operation(name);
@@ -456,6 +483,7 @@ AddonHostServices::Cancel AddonSessionHost::submit(const QString& sessionId,cons
     const auto id=command.id; session->sequence=sequence; session->seen.insert(commandId); command.reply=std::move(reply);
     auto* timer=new QTimer(this); timer->setSingleShot(true); timer->setTimerType(Qt::PreciseTimer); command.timer=timer;
     m_state->commands.insert(id,std::move(command)); connect(timer,&QTimer::timeout,this,[this,id] { execute(id); });
+    updateTimer();
     timer->start(int(std::max<qint64>(0,(qint64(at)-now+999)/1000)));
     const QPointer<AddonSessionHost> owner(this); return [owner,id] { if(owner) owner->cancelCommand(id); };
 }
@@ -480,6 +508,7 @@ void AddonSessionHost::finishCommand(const QString& id,const QString& status,con
     auto it=m_state->commands.find(id); if(it==m_state->commands.end()) return;
     if(it->timer) { it->timer->stop(); it->timer->deleteLater(); }
     AddonHostServices::Completion reply; reply.swap(it->reply); m_state->commands.erase(it);
+    updateTimer();
     if(reply) reply({{{"status",status}},errorText});
 }
 void AddonSessionHost::cancelCommand(const QString& id) {

@@ -16,6 +16,8 @@ namespace vlc::addons {
 // Exercise the handler's inline completion boundary without the queued broker.
 class AddonSessionHostTestAccess {
 public:
+    static void tick(AddonSessionHost& host) { host.tick(); }
+    static bool polling(const AddonSessionHost& host) { return host.m_timer.isActive(); }
     static AddonHostServices::Cancel receive(AddonSessionHost& host,const AddonHostServices::Context& context,const QString& id,AddonHostServices::Completion complete) {
         return host.handle(context,QStringLiteral("network.websocket.receive"),{{"session",id}},std::move(complete));
     }
@@ -29,7 +31,7 @@ struct Player final : QObject {
     struct Native { std::mutex mutex; SessionPlayerSnapshot state; std::atomic_uint revokes{0},revokeCalls{0}; };
     std::shared_ptr<Native> native=std::make_shared<Native>();
     QList<SessionPlayerCommand> commands; QList<SessionPlayerCompletion> completed;
-    qint64 now=10000000; unsigned grants=0,resumes=0;
+    qint64 now=10000000; unsigned grants=0,resumes=0,snapshots=0,completionReads=0,clockReads=0;
     std::function<void()> afterGrant;
     Player() { auto& s=native->state; s.closed=false; s.media=s.input=s.pausable=s.seekable=s.rateChange=true;
         s.stamp={{1,2},3,4,5,6}; s.positionUs=2000000; s.durationUs=100000000; }
@@ -42,8 +44,8 @@ struct Player final : QObject {
         completed.append({value.expected,value.lease,value.sequence,s.leaseEpoch,value.operation,success});
     }
     SessionPlayerBackend backend() {
-        SessionPlayerBackend value; value.lifetime=this; value.snapshot=[this] { return snapshot(); };
-        value.monotonicUs=[this] { return now; };
+        SessionPlayerBackend value; value.lifetime=this; value.snapshot=[this] { ++snapshots; return snapshot(); };
+        value.monotonicUs=[this] { ++clockReads; return now; };
         value.grant=[this](const auto& stamp,auto lease,quint32,qint64 duration) {
             {
                 std::lock_guard<std::mutex> lock(native->mutex); auto& s=native->state;
@@ -78,7 +80,7 @@ struct Player final : QObject {
             if(!s.active || s.suspended || s.stamp!=command.expected || s.lease!=command.lease) return SessionPlayerResult::Stale;
             commands.append(command); return SessionPlayerResult::Accepted;
         };
-        value.completions=[this] { QList<SessionPlayerCompletion> result; result.swap(completed); return result; }; return value;
+        value.completions=[this] { ++completionReads; QList<SessionPlayerCompletion> result; result.swap(completed); return result; }; return value;
     }
 };
 AddonNativeAuthority authority(const std::shared_ptr<Flags>& flags,const StoreAuthorityToken& token) {
@@ -164,6 +166,57 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(AddonSessionWebSocket::processCount(),0u,5000);
         QTRY_COMPARE_WITH_TIMEOUT(AddonStreamLifetime::processQtWorkCount(),0u,5000);
         QTRY_COMPARE_WITH_TIMEOUT(AddonStreamLifetime::processNetworkCount(),0u,5000);
+    }
+    void idleMountDoesNotReadThePlayer() {
+        Rig rig; QVERIFY(rig.host->mount(&rig.services));
+        const auto snapshots=rig.player.snapshots,completions=rig.player.completionReads,clocks=rig.player.clockReads;
+        AddonSessionHostTestAccess::tick(*rig.host);
+        QCOMPARE(rig.player.snapshots,snapshots); QCOMPARE(rig.player.completionReads,completions);
+        QCOMPARE(rig.player.clockReads,clocks); QVERIFY(!AddonSessionHostTestAccess::polling(*rig.host));
+        QTest::qWait(180);
+        QCOMPARE(rig.player.snapshots,snapshots); QCOMPARE(rig.player.completionReads,completions);
+        QCOMPARE(rig.player.clockReads,clocks);
+    }
+    void approvalExpiryUsesNoPlayerSnapshotOrCompletionRead() {
+        Rig rig; const auto ticket=rig.ticket(); QVERIFY(!ticket.isEmpty());
+        QTRY_VERIFY(!rig.host->approval(ticket).isEmpty());
+        QVERIFY(AddonSessionHostTestAccess::polling(*rig.host));
+        const auto snapshots=rig.player.snapshots,completions=rig.player.completionReads;
+        const auto clocks=rig.player.clockReads;
+        QTest::qWait(150); QCOMPARE(rig.player.clockReads,clocks);
+        AddonSessionHostTestAccess::tick(*rig.host);
+        QCOMPARE(rig.player.snapshots,snapshots); QCOMPARE(rig.player.completionReads,completions);
+        rig.player.now+=30000001; AddonSessionHostTestAccess::tick(*rig.host);
+        QVERIFY(rig.host->approval(ticket).isEmpty()); QVERIFY(!AddonSessionHostTestAccess::polling(*rig.host));
+        QCOMPARE(rig.player.snapshots,snapshots); QCOMPARE(rig.player.completionReads,completions);
+    }
+    void lastApprovalRemovalStopsPolling_data() {
+        QTest::addColumn<int>("action");
+        QTest::newRow("cancel")<<0; QTest::newRow("withdraw")<<1; QTest::newRow("refused")<<2;
+    }
+    void lastApprovalRemovalStopsPolling() {
+        QFETCH(int,action); Rig rig;
+        if(action==2) rig.approved.package.enabled=false;
+        QSignalSpy ready(rig.host.get(),&AddonSessionHost::approvalReady);
+        const auto ticket=rig.ticket(); QVERIFY(!ticket.isEmpty());
+        QTRY_COMPARE(ready.size(),1);
+        if(action==0) rig.host->cancelApproval(ticket);
+        else if(action==1) rig.host->revokePackage(rig.approved.package.manifest.id);
+        QVERIFY(rig.host->approval(ticket).isEmpty()); QVERIFY(!AddonSessionHostTestAccess::polling(*rig.host));
+        const auto snapshots=rig.player.snapshots,completions=rig.player.completionReads;
+        QTest::qWait(120); QCOMPARE(rig.player.snapshots,snapshots); QCOMPARE(rig.player.completionReads,completions);
+    }
+    void activePollingStopsAndRestartsWithSessions() {
+        Rig rig;
+        for(unsigned cycle=0;cycle!=2;++cycle) {
+            const auto id=activate(rig); QVERIFY(!id.isEmpty()); QVERIFY(AddonSessionHostTestAccess::polling(*rig.host));
+            const auto snapshots=rig.player.snapshots,completions=rig.player.completionReads;
+            AddonSessionHostTestAccess::tick(*rig.host);
+            QVERIFY(rig.player.snapshots>snapshots); QVERIFY(rig.player.completionReads>completions);
+            rig.host->end(id); QVERIFY(!AddonSessionHostTestAccess::polling(*rig.host));
+            const auto idleSnapshots=rig.player.snapshots,idleCompletions=rig.player.completionReads;
+            QTest::qWait(120); QCOMPARE(rig.player.snapshots,idleSnapshots); QCOMPARE(rig.player.completionReads,idleCompletions);
+        }
     }
     void consentIsOneUseAndBindsTheCapturedNativeStamp() {
         Rig rig; const auto ticket=rig.ticket(); QVERIFY(!ticket.isEmpty()); QTRY_VERIFY(!rig.host->approval(ticket).isEmpty());

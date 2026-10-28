@@ -57,6 +57,7 @@ private:
     struct Command;
     void prepared(const QString&,std::optional<AddonNativeAuthority>);
     void activated(const QString&,bool);
+    void updateTimer();
     void tick();
     QVariantMap observation(const QString&) const;
     AddonHostServices::Cancel handle(const AddonHostServices::Context&,const QString&,const QJsonObject&,AddonHostServices::Completion);

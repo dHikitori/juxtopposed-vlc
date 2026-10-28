@@ -78,6 +78,13 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 ## Latest verified native checkpoint
 
+- The session host no longer starts its timer while unused. Pending approvals
+  use one expiry wake; player polling runs with active session work. The idle
+  regression fails against the previous host, and all 38 normal and 38 focused
+  sanitizer cases pass with the change. This is a call-count and lifecycle
+  check. Full app performance, repeated UI reads, and startup work remain open.
+  See [the performance requirements](performance-contract.md).
+
 - Desktop Windows remote-file reads now have a native cancellation handshake
   with one sequence per read. Actual Windows checks pass 15 groups and 298
   assertions twice, including the real filesystem and UNC Read functions.
@@ -206,6 +213,12 @@ A shared metadata profile must not silently return to a competing direct HTTP or
 - `7bcf11cd51`: asynchronous visualizers, native clocks, and real lifecycle tests.
 
 ## Open completion gates
+
+- Meet the user's near-zero idle and basic UI performance requirement. Remove
+  recurring inactive-feature work and synchronous UI package I/O. Measure
+  startup, interaction latency, idle CPU, memory, and worker cold/repeated cost
+  against controlled baselines. This gate precedes further owner activation.
+  See [the performance requirements](performance-contract.md).
 
 - Finish supported-platform app/runtime/package tests and repeat release checks after the remaining implementation changes.
 - Verify the implemented application-distribution upgrades, recovery UI, and safe mode in the fresh full app. Repeat the verified Git object-format checks on supported platforms. Keep publisher verification claims consistent with actual evidence.
