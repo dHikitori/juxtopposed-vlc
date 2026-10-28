@@ -89,6 +89,101 @@ bool readJson(const QString& path, QJsonObject* value, QString* error)
     *value = result.object();
     return true;
 }
+QString currentBuiltinId(const QString& id)
+{
+    const auto legacy = QLatin1String("vlc.builtin.");
+    return id.startsWith(legacy) ? QString(QStringLiteral("hakone.builtin.") + id.mid(legacy.size())) : id;
+}
+QJsonObject currentBuiltinPreferences(const QJsonObject& saved)
+{
+    auto result = saved;
+    if (saved.value(QStringLiteral("_builtinEnabled")).isObject()) {
+        const auto previous = saved.value(QStringLiteral("_builtinEnabled")).toObject();
+        auto enabled = previous;
+        for (auto it = previous.begin(); it != previous.end(); ++it) {
+            const auto id = currentBuiltinId(it.key());
+            if (id == it.key()) continue;
+            if (!previous.contains(id)) enabled.insert(id, it.value());
+            enabled.remove(it.key());
+        }
+        result.insert(QStringLiteral("_builtinEnabled"), enabled);
+    }
+    for (auto it = saved.begin(); it != saved.end(); ++it) {
+        if (it.key().startsWith(QLatin1Char('_')) || !it.value().isArray()) continue;
+        const auto previous = it.value().toArray();
+        QSet<QString> explicitIds, seen;
+        for (const auto& entry : previous) if (entry.isString()) explicitIds.insert(entry.toString());
+        QJsonArray order;
+        for (const auto& entry : previous) {
+            if (!entry.isString()) { order.append(entry); continue; }
+            const auto raw = entry.toString(), id = currentBuiltinId(raw);
+            if (raw != id && explicitIds.contains(id)) continue;
+            if (id.startsWith(QLatin1String("hakone.builtin.")) && seen.contains(id)) continue;
+            seen.insert(id); order.append(id);
+        }
+        result.insert(it.key(), order);
+    }
+    return result;
+}
+bool providerFeature(const QString& feature)
+{
+    return !feature.isEmpty() && feature.size() <= 128 && !feature.startsWith(QLatin1Char('_'));
+}
+bool providerIds(const QJsonArray& ids)
+{
+    if (ids.size() > 128) return false;
+    QSet<QString> seen;
+    for (const auto& value : ids) {
+        const auto id = value.toString();
+        if (!value.isString() || id.isEmpty() || id.size() > 256 || seen.contains(id)) return false;
+        seen.insert(id);
+    }
+    return true;
+}
+bool providerPreferencesValid(const QJsonObject& values, QString* error)
+{
+    if (values.size() > 256 || QJsonDocument(values).toJson(QJsonDocument::Compact).size() > 256 * 1024)
+        return fail(error, QStringLiteral("The provider settings exceed the host limits."));
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        if (it.key() == QStringLiteral("_builtinEnabled")) {
+            if (!it.value().isObject() || it.value().toObject().size() > 256)
+                return fail(error, QStringLiteral("The provider settings are not correct."));
+            const auto enabled = it.value().toObject();
+            for (auto value = enabled.begin(); value != enabled.end(); ++value)
+                if (!packageId(value.key()) || !value.value().isBool())
+                    return fail(error, QStringLiteral("The provider settings are not correct."));
+        } else if (!providerFeature(it.key()) || !it.value().isArray() || !providerIds(it.value().toArray()))
+            return fail(error, QStringLiteral("The provider settings are not correct."));
+    }
+    return true;
+}
+bool readProviderPreferences(const QString& root, QJsonObject* values, QString* error)
+{
+    const auto path = QDir(root).filePath(QStringLiteral("provider-order.json"));
+    const QFileInfo info(path);
+    if (!info.exists() && !info.isSymLink()) { *values = {}; return true; }
+    QFile file(path);
+    if (info.isSymLink() || !info.isFile() || !file.open(QIODevice::ReadOnly) || file.size() > 256 * 1024)
+        return fail(error, QStringLiteral("The app cannot read the provider settings."));
+    const auto bytes = file.read(256 * 1024 + 1);
+    if (file.error() != QFileDevice::NoError || bytes.size() > 256 * 1024)
+        return fail(error, QStringLiteral("The app cannot read the provider settings."));
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(bytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+        return fail(error, QStringLiteral("The provider settings are not correct."));
+    const auto raw = document.object();
+    // Bound raw rows before alias normalization can remove duplicates.
+    if (raw.size() > 256) return fail(error, QStringLiteral("The provider settings exceed the host limits."));
+    for (auto it = raw.begin(); it != raw.end(); ++it) {
+        if ((it.value().isArray() && it.value().toArray().size() > 128)
+            || (it.value().isObject() && it.value().toObject().size() > 256))
+            return fail(error, QStringLiteral("The provider settings exceed the host limits."));
+    }
+    auto current = currentBuiltinPreferences(raw);
+    if (!providerPreferencesValid(current, error)) return false;
+    *values = std::move(current); return true;
+}
 bool subset(const QJsonValue& requested, const QJsonValue& declared)
 {
     if (requested.type() != declared.type()) return false;
@@ -1169,6 +1264,62 @@ bool PackageStore::safeMode() const
     if (!QFileInfo::exists(path)) return false;
     QJsonObject recovery;
     return !readJson(path, &recovery, nullptr) || recovery.value("safeMode").toBool(true);
+}
+
+bool PackageStore::providerPreferences(ProviderPreferences* output, QString* error) const
+{
+    if (!output) return fail(error, QStringLiteral("The provider settings output is not available."));
+    *output = {};
+    if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
+    QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    ProviderPreferences captured;
+    captured.authority = m_authority.capture();
+    if (!captured.authority.current() || !readProviderPreferences(m_root, &captured.values, error)
+        || !captured.authority.current())
+        return fail(error, QStringLiteral("The provider settings snapshot is not available."));
+    *output = std::move(captured); return true;
+}
+
+bool PackageStore::saveProviderPreference(const QString& key, const QJsonValue& value,
+                                          bool builtin, QJsonObject* saved, QString* error)
+{
+    if (saved) *saved = {};
+    if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
+    QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    QJsonObject values;
+    if (!readProviderPreferences(m_root, &values, error)) return false;
+    if (builtin) {
+        auto enabled = values.value(QStringLiteral("_builtinEnabled")).toObject();
+        enabled.insert(key, value); values.insert(QStringLiteral("_builtinEnabled"), enabled);
+    } else values.insert(key, value);
+    if (!providerPreferencesValid(values, error)) return false;
+    {
+        // Native watches finish before writeJson can publish the new file.
+        // The mutation remains active through commit and any failed write.
+        const auto mutation = m_authority.mutation();
+        if (!writeJson(QDir(m_root).filePath(QStringLiteral("provider-order.json")), values, error)) return false;
+    }
+    if (saved) *saved = std::move(values);
+    return true;
+}
+
+bool PackageStore::saveProviderOrder(const QString& feature, const QStringList& ids,
+                                     QJsonObject* saved, QString* error)
+{
+    const auto order = QJsonArray::fromStringList(ids);
+    if (!providerFeature(feature) || !providerIds(order))
+        return fail(error, QStringLiteral("The provider order is not correct."));
+    return saveProviderPreference(feature, order, false, saved, error);
+}
+
+bool PackageStore::saveBuiltinProviderEnabled(const QString& id, bool enabled,
+                                              QJsonObject* saved, QString* error)
+{
+    if (!packageId(id) || !id.startsWith(QLatin1String("hakone.builtin.")))
+        return fail(error, QStringLiteral("The provider ID is not correct."));
+    return saveProviderPreference(id, enabled, true, saved, error);
 }
 
 bool PackageStore::setSafeMode(bool enabled, QString* error)

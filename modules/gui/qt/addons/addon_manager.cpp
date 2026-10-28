@@ -12,7 +12,6 @@
 #include <QJsonDocument>
 #include <QLocale>
 #include <QRegularExpression>
-#include <QSaveFile>
 #include <QScopeGuard>
 #include <QSslSocket>
 #include <QMetaProperty>
@@ -101,42 +100,7 @@ QString packageAccountReference(const InstalledPackage& package, const QJsonObje
 }
 QString localPart(const QString& global) { return global.section('/', 1); }
 QString packagePart(const QString& global) { return global.section('/', 0, 0); }
-QString currentBuiltinId(const QString& id)
-{
-    const auto legacy = QLatin1String("vlc.builtin.");
-    return id.startsWith(legacy) ? QString(QStringLiteral("hakone.builtin.") + id.mid(legacy.size())) : id;
-}
-QJsonObject currentBuiltinPreferences(const QJsonObject& saved)
-{
-    auto result = saved;
-    if (saved.value(QStringLiteral("_builtinEnabled")).isObject()) {
-        const auto previous = saved.value(QStringLiteral("_builtinEnabled")).toObject();
-        auto enabled = previous;
-        for (auto it = previous.begin(); it != previous.end(); ++it) {
-            const auto id = currentBuiltinId(it.key());
-            if (id == it.key()) continue;
-            if (!previous.contains(id)) enabled.insert(id, it.value());
-            enabled.remove(it.key());
-        }
-        result.insert(QStringLiteral("_builtinEnabled"), enabled);
-    }
-    for (auto it = saved.begin(); it != saved.end(); ++it) {
-        if (it.key().startsWith(QLatin1Char('_')) || !it.value().isArray()) continue;
-        const auto previous = it.value().toArray();
-        QSet<QString> explicitIds, seen;
-        for (const auto& entry : previous) if (entry.isString()) explicitIds.insert(entry.toString());
-        QJsonArray order;
-        for (const auto& entry : previous) {
-            if (!entry.isString()) { order.append(entry); continue; }
-            const auto raw = entry.toString(), id = currentBuiltinId(raw);
-            if (raw != id && explicitIds.contains(id)) continue;
-            if (id.startsWith(QLatin1String("hakone.builtin.")) && seen.contains(id)) continue;
-            seen.insert(id); order.append(id);
-        }
-        result.insert(it.key(), order);
-    }
-    return result;
-}
+
 }
 
 AddonManager::AddonManager(const QString& directory, QObject* parent)
@@ -159,7 +123,8 @@ AddonManager::AddonManager(const QString& directory, QObject* parent)
         *output = std::move(captured); return true;
     });
     if (!m_storage->mount(&m_hostServices)) m_storage.reset();
-    m_providerOrder = currentBuiltinPreferences(readObject(QDir(directory).filePath(QStringLiteral("provider-order.json"))));
+    ProviderPreferences preferences;
+    if (m_store.providerPreferences(&preferences)) m_providerOrder = preferences.values;
     const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vlc-addon-worker")
 #ifdef Q_OS_WIN
         + QStringLiteral(".exe")
@@ -657,12 +622,9 @@ void AddonManager::unregisterBuiltinProvider(const QString& id)
 bool AddonManager::setProviderOrder(const QString& feature, const QStringList& ids)
 {
     if (feature.isEmpty() || feature.startsWith('_') || feature.size() > 128 || ids.size() > 128 || QSet<QString>(ids.begin(), ids.end()).size() != ids.size()) return changed(false, tr("The provider order is not correct."));
-    auto order = m_providerOrder; order.insert(feature, QJsonArray::fromStringList(ids));
-    QSaveFile file(QDir(m_store.storageDirectory()).filePath(QStringLiteral("provider-order.json")));
-    if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("The app cannot save the provider settings."));
-    const auto bytes = QJsonDocument(order).toJson(QJsonDocument::Compact);
-    if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("The app cannot save the provider settings."));
-    m_providerOrder = order; return changed(true);
+    QJsonObject saved; QString error;
+    if (!m_store.saveProviderOrder(feature, ids, &saved, &error)) return changed(false, error);
+    m_providerOrder = saved; return changed(true);
 }
 
 QVariantMap AddonManager::inspectLocalPackage(const QString& directory) const
@@ -853,13 +815,9 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
     bool builtin = false;
     for (const auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) builtin = true;
     if (builtin) {
-        auto document = m_providerOrder, preferences = document.value("_builtinEnabled").toObject();
-        preferences.insert(id, enabled); document.insert("_builtinEnabled", preferences);
-        QSaveFile file(QDir(m_store.storageDirectory()).filePath(QStringLiteral("provider-order.json")));
-        if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("The app cannot save the provider settings."));
-        const auto bytes = QJsonDocument(document).toJson(QJsonDocument::Compact);
-        if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("The app cannot save the provider settings."));
-        m_providerOrder = document;
+        QJsonObject saved; QString error;
+        if (!m_store.saveBuiltinProviderEnabled(id, enabled, &saved, &error)) return changed(false, error);
+        m_providerOrder = saved;
         for (auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) descriptor.insert("enabled", enabled);
         return changed(true);
     }

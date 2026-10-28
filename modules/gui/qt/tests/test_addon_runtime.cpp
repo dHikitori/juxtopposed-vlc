@@ -479,6 +479,32 @@ private slots:
         QVERIFY(manager.pendingPackage().isEmpty()); QCOMPARE(manager.packages().size(), 1);
         QVERIFY(!manager.packages().first().toMap().value("enabled").toBool());
     }
+    void preferenceWritesMergeAcrossStaleManagers()
+    {
+        QTemporaryDir directory; AddonManager first(directory.path()), second(directory.path());
+        const QVariantMap descriptor{{"id", "hakone.builtin.example/search"}, {"packageId", "hakone.builtin.example"},
+            {"name", "Example"}, {"configured", true}, {"enabled", true}};
+        first.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor);
+        second.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor);
+        auto old = captureStoreAuthority(directory.path()); unsigned revoked = 0;
+        auto watch = old.onInvalidated([&revoked] { ++revoked; }); QVERIFY(bool(watch));
+        QVERIFY(first.setProviderOrder(QStringLiteral("subtitles"), {QStringLiteral("hakone.builtin.example/search")}));
+        QCOMPARE(revoked, 1u); QVERIFY(!old.current());
+        QVERIFY(second.setEnabled(QStringLiteral("hakone.builtin.example"), false));
+        QVERIFY(first.setProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.artwork/lookup")}));
+        AddonManager restored(directory.path()); restored.registerBuiltinProvider(QStringLiteral("subtitles"), descriptor);
+        QCOMPARE(restored.providerOrder(QStringLiteral("subtitles")), QStringList{QStringLiteral("hakone.builtin.example/search")});
+        QCOMPARE(restored.providerOrder(QStringLiteral("artwork")), QStringList{QStringLiteral("org.hakone.artwork/lookup")});
+        QVERIFY(!restored.providersForFeature(QStringLiteral("subtitles")).first().toMap().value("enabled").toBool());
+        PackageStore store(directory.path()); ProviderPreferences captured; QVERIFY(store.providerPreferences(&captured));
+        old = captured.authority; watch = old.onInvalidated([&revoked] { ++revoked; }); QVERIFY(bool(watch));
+        bool revokedBeforeSignal = false;
+        connect(&second, &AddonManager::revisionChanged, &second, [&] { revokedBeforeSignal = !old.current() && revoked == 2; });
+        QVERIFY(second.setEnabled(QStringLiteral("hakone.builtin.example"), true));
+        QVERIFY(revokedBeforeSignal); QVERIFY(!old.current());
+        ProviderPreferences current; QVERIFY(store.providerPreferences(&current));
+        QCOMPARE(current.values.value("artwork").toArray(), QJsonArray{"org.hakone.artwork/lookup"});
+    }
     void builtinProvidersShareOrderingAndKeepDisabledPreference() {
         QTemporaryDir storage; AddonManager manager(storage.path());
         const QVariantMap descriptor{{"id", "hakone.builtin.example/search"}, {"packageId", "hakone.builtin.example"},

@@ -9,6 +9,13 @@
 #include <QTemporaryDir>
 #include <QLockFile>
 #include <QScopeGuard>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#endif
 #include "addons/addon_stream_lifetime.hpp"
 #include "addons/addon_manifest.hpp"
 #include "addons/addon_package_store.hpp"
@@ -88,6 +95,125 @@ class TestAddonPackages : public QObject
         return process.waitForFinished(10000) && process.exitCode() == 0;
     }
 private slots:
+#ifdef Q_OS_UNIX
+    void providerPreferencesRefuseAFifoBeforeOpeningIt()
+    {
+        QTemporaryDir directory; const auto path = directory.filePath(QStringLiteral("provider-order.json"));
+        const auto encoded = QFile::encodeName(path); QCOMPARE(mkfifo(encoded.constData(), 0600), 0);
+        PackageStore store(directory.path()); const auto token = store.authorityToken();
+        ProviderPreferences output; QVERIFY(!store.providerPreferences(&output)); QVERIFY(!output.authority.current());
+        QVERIFY(!store.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.first/art")}));
+        QVERIFY(!store.saveBuiltinProviderEnabled(QStringLiteral("hakone.builtin.example"), false));
+        QVERIFY(token.current());
+    }
+#endif
+    void providerPreferencesMergeAcrossOwnersAndExpireOldPlans()
+    {
+        QTemporaryDir directory, other; QString error;
+        PackageStore first(directory.path()), second(directory.path());
+        ProviderPreferences initial;
+        QVERIFY(first.providerPreferences(&initial, &error)); QVERIFY(initial.values.isEmpty());
+        QVERIFY(initial.authority.current());
+        const auto unrelated = captureStoreAuthority(other.path());
+        unsigned revoked = 0;
+        auto watch = initial.authority.onInvalidated([&revoked] { ++revoked; });
+        QVERIFY(bool(watch));
+        QVERIFY(second.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.first/art")}, nullptr, &error));
+        QCOMPARE(revoked, 1u); QVERIFY(!initial.authority.current()); QVERIFY(!bool(watch));
+        ProviderPreferences ranked; QVERIFY(first.providerPreferences(&ranked, &error));
+        QVERIFY(second.saveBuiltinProviderEnabled(QStringLiteral("hakone.builtin.example"), false, nullptr, &error));
+        QVERIFY(first.saveProviderOrder(QStringLiteral("subtitles"), {QStringLiteral("org.hakone.second/search")}, nullptr, &error));
+        ProviderPreferences current; QVERIFY(second.providerPreferences(&current, &error));
+        QCOMPARE(current.values.value("artwork").toArray(), QJsonArray{"org.hakone.first/art"});
+        QCOMPARE(current.values.value("subtitles").toArray(), QJsonArray{"org.hakone.second/search"});
+        QVERIFY(!current.values.value("_builtinEnabled").toObject().value("hakone.builtin.example").toBool());
+        QVERIFY(!ranked.authority.current());
+        const auto old = current.authority;
+        QVERIFY(first.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.other/art")}));
+        QVERIFY(second.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.first/art")}));
+        QVERIFY(!old.current()); QVERIFY(unrelated.current());
+        ProviderPreferences returned; QVERIFY(first.providerPreferences(&returned));
+        QCOMPARE(returned.values, current.values); QVERIFY(returned.authority.current());
+    }
+    void providerPreferencePublicationWaitsForNativeWatch_data()
+    {
+        QTest::addColumn<bool>("builtin");
+        QTest::newRow("rank") << false;
+        QTest::newRow("builtin-enabled") << true;
+    }
+    void providerPreferencePublicationWaitsForNativeWatch()
+    {
+        QFETCH(bool, builtin);
+        QTemporaryDir directory; PackageStore store(directory.path()), peer(directory.path());
+        QVERIFY(store.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.first/art")}));
+        const auto path = directory.filePath(QStringLiteral("provider-order.json"));
+        QFile original(path); QVERIFY(original.open(QIODevice::ReadOnly)); const auto before = original.readAll(); original.close();
+        ProviderPreferences captured; QVERIFY(store.providerPreferences(&captured));
+        std::mutex mutex; std::condition_variable changed;
+        bool entered = false, released = false, success = false;
+        std::atomic_bool finished{false};
+        auto watch = captured.authority.onInvalidated([&] {
+            std::unique_lock<std::mutex> lock(mutex);
+            entered = true; changed.notify_all(); changed.wait(lock, [&] { return released; });
+        });
+        QVERIFY(bool(watch));
+        std::thread writer([&] {
+            success = builtin ? peer.saveBuiltinProviderEnabled(QStringLiteral("hakone.builtin.example"), false)
+                : peer.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.second/art")});
+            finished.store(true);
+        });
+        const auto joined = qScopeGuard([&] {
+            { std::lock_guard<std::mutex> lock(mutex); released = true; changed.notify_all(); }
+            if (writer.joinable()) writer.join();
+        });
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            QVERIFY(changed.wait_for(lock, std::chrono::seconds(3), [&] { return entered; }));
+        }
+        QVERIFY(!captured.authority.current()); QVERIFY(!store.authorityToken().current());
+        QVERIFY(!finished.load()); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(), before); original.close();
+        ProviderPreferences blocked; QVERIFY(!store.providerPreferences(&blocked)); QVERIFY(!blocked.authority.current());
+        QVERIFY(!store.saveProviderOrder(QStringLiteral("subtitles"), {}));
+        { std::lock_guard<std::mutex> lock(mutex); released = true; changed.notify_all(); }
+        writer.join(); QVERIFY(success); QVERIFY(finished.load());
+        ProviderPreferences current; QVERIFY(store.providerPreferences(&current)); QVERIFY(current.authority.current());
+        QVERIFY(original.open(QIODevice::ReadOnly)); QVERIFY(original.readAll() != before);
+    }
+    void providerPreferencesUseTheExactStoreLock()
+    {
+        QTemporaryDir directory; PackageStore store(directory.path());
+        const auto token = store.authorityToken();
+        QLockFile lock(directory.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0));
+        ProviderPreferences output; output.authority = token; output.values = {{"artwork", QJsonArray{"old"}}};
+        QVERIFY(!store.providerPreferences(&output)); QVERIFY(!output.authority.current()); QVERIFY(output.values.isEmpty());
+        QVERIFY(!store.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.first/art")}));
+        QVERIFY(!store.saveBuiltinProviderEnabled(QStringLiteral("hakone.builtin.example"), false));
+        QVERIFY(token.current()); QVERIFY(!QFile::exists(directory.filePath(QStringLiteral("provider-order.json"))));
+    }
+    void malformedProviderPreferencesCannotBeSilentlyOverwritten_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::newRow("broken-json") << QByteArray("{broken");
+        QTest::newRow("array-document") << QByteArray("[]");
+        QTest::newRow("bad-enabled") << QByteArray("{\"_builtinEnabled\":{\"hakone.builtin.example\":\"false\"}}");
+        QTest::newRow("bad-order") << QByteArray("{\"artwork\":{}}");
+        QTest::newRow("empty-id") << QByteArray("{\"artwork\":[\"\"]}");
+        QTest::newRow("duplicate-portable") << QByteArray("{\"artwork\":[\"org.hakone.first/art\",\"org.hakone.first/art\"]}");
+        QTest::newRow("unknown-reserved-key") << QByteArray("{\"_other\":[]}");
+        QTest::newRow("too-large") << QByteArray(256 * 1024 + 1, ' ');
+        QJsonArray raw; for (int i = 0; i < 129; ++i) raw.append("vlc.builtin.example/art");
+        QTest::newRow("raw-overflow-before-normalization") << QJsonDocument(QJsonObject{{"artwork", raw}}).toJson(QJsonDocument::Compact);
+    }
+    void malformedProviderPreferencesCannotBeSilentlyOverwritten()
+    {
+        QFETCH(QByteArray, bytes);
+        QTemporaryDir directory; const auto path = directory.filePath(QStringLiteral("provider-order.json"));
+        QVERIFY(write(path, bytes)); PackageStore store(directory.path()); const auto token = store.authorityToken();
+        ProviderPreferences output; QVERIFY(!store.providerPreferences(&output)); QVERIFY(!output.authority.current());
+        QVERIFY(!store.saveProviderOrder(QStringLiteral("artwork"), {QStringLiteral("org.hakone.first/art")}));
+        QVERIFY(!store.saveBuiltinProviderEnabled(QStringLiteral("hakone.builtin.example"), false));
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), bytes); QVERIFY(token.current());
+    }
     void storeAuthorityFollowsCommittedStateAcrossOwners()
     {
         QTemporaryDir source, storage, other; QString error;

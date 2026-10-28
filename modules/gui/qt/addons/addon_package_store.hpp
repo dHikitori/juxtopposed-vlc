@@ -40,6 +40,12 @@ struct InstalledPackage
     quint64 generation = 0;
 };
 
+struct ProviderPreferences
+{
+    QJsonObject values;
+    StoreAuthorityToken authority;
+};
+
 class PackageStore
 {
 public:
@@ -64,6 +70,13 @@ public:
     // These IDs permit saved-data cleanup only. They grant no package authority.
     QStringList savedDataIds() const;
     bool setEnabled(const QString& id, bool enabled, QString* error = nullptr);
+    // These operations use store.lock. Capture on joined background work for
+    // native metadata plans. Retain authority watches through final Apply.
+    bool providerPreferences(ProviderPreferences*, QString* error = nullptr) const;
+    bool saveProviderOrder(const QString& feature, const QStringList& ids,
+                           QJsonObject* saved = nullptr, QString* error = nullptr);
+    bool saveBuiltinProviderEnabled(const QString& id, bool enabled,
+                                   QJsonObject* saved = nullptr, QString* error = nullptr);
     bool rollback(const QString& id, QString* error = nullptr);
     bool uninstall(const QString& id, bool removeData, QString* error = nullptr);
     bool canUninstall(const QString& id, bool removeData, QString* error = nullptr) const;
@@ -92,6 +105,8 @@ private:
     bool validateSnapshot(const QString& id, const QJsonObject&, QString* error) const;
     QString privateStorageDirectory(const QString& id) const;
     bool collectPrivateStorage(const QString& id, const QJsonObject& state, QString* error) const;
+    bool saveProviderPreference(const QString&, const QJsonValue&, bool builtin,
+                                QJsonObject* saved, QString* error);
 };
 
 } // namespace vlc::addons
