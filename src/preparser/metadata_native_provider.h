@@ -59,6 +59,23 @@ VLC_API const char *vlc_metadata_native_claim_GetArtworkURI(const vlc_metadata_n
 VLC_API meta_fetcher_outcome_t vlc_metadata_native_claim_GetOutcome(const vlc_metadata_native_claim_t *);
 VLC_API bool vlc_metadata_native_claim_MatchesJob(const vlc_metadata_native_claim_t *, vlc_metadata_job_t *);
 
+/* Admit one negative outcome authority while the exact child remains pending.
+ * Require the expected family and typed NO_MATCH/NTA receipt. The returned
+ * reference holds provider+reservation+admission, never a child/claim. Provider
+ * Close revokes it synchronously, including concurrent repeated Close calls.
+ * A refused registration revokes admission before returning NULL. Keep the
+ * authority in the native-only sideband keeper through final Apply.
+ * At most one admission per claim; it shares the original 32-slot reservation.
+ * The provider list is borrowed. Final Release decrements/unlinks under the
+ * provider lock; Close takes temporary refs under that lock, then revokes and
+ * releases outside it. No provider/authority or job/claim cycle is created. */
+typedef struct vlc_metadata_artwork_admission vlc_metadata_artwork_admission_t;
+typedef struct vlc_metadata_native_outcome_authority vlc_metadata_native_outcome_authority_t;
+VLC_API vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitOutcome(
+    vlc_metadata_native_claim_t *, vlc_metadata_job_t *, meta_fetcher_provider_t expected_family,
+    vlc_metadata_artwork_admission_t *);
+VLC_API void vlc_metadata_native_outcome_authority_Release(vlc_metadata_native_outcome_authority_t *);
+
 #ifdef __cplusplus
 }
 #endif

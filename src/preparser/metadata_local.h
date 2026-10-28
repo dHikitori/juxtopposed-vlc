@@ -56,6 +56,17 @@ VLC_API int vlc_metadata_job_PrepareLocal(vlc_metadata_job_t *, input_item_t *pa
 VLC_API int vlc_metadata_job_PrepareFetchedArtwork(vlc_metadata_job_t *anchor,
                     vlc_metadata_job_t *child, input_item_t *working, bool replace_artwork);
 
+/* Carry only the typed native sideband sealed on the exact successful child.
+ * No sideband is a no-op; a present stale/invalid sideband is an error. working
+ * must be both anchor's exact private item and child's exact target. No target
+ * write/token reservation occurs here. Final Apply takes aggregate admission
+ * before backend/item locks and reserves fields+status together. Artwork and
+ * original status/identity tokens remain authoritative. No protected/fetched
+ * artwork is replaced; NOTFOUND is ORed without clearing another status bit.
+ * The legacy raw bit is not a cache/skip authority for an owned lookup. */
+VLC_API int vlc_metadata_job_PrepareNotFoundArtwork(vlc_metadata_job_t *anchor,
+    vlc_metadata_job_t *exact_completed_child, input_item_t *working);
+
 /* Transfer sideband output once, after successful Apply. A failed or cancelled
  * commit has no output. The caller can now deliver callbacks outside native
  * locks. Clear releases every tree and attachment after those callbacks.

@@ -95,10 +95,12 @@ its receipt through aggregation. The host needs a typed portable attempt
 record and the exact captured provider plan. A generic guest status cannot
 set a native status bit.
 
-The final helper must join the negative result with the parent's prepared
-delta under the original artwork, status and identity tokens. An unavailable,
-missing, canceled, denied, invalid or stale attempt blocks that result.
-Image failure also blocks it. At least one applicable lookup must occur.
+The native final helper now joins a sealed negative result with the parent's
+prepared delta under the original artwork, status and identity tokens. It
+passes 12 fresh-Core normal and eight focused sanitizer suites. The Qt host
+still needs to supply the complete plan and its retained authority. An
+unavailable, missing, canceled, denied, invalid or stale attempt blocks that
+result. Image failure also blocks it. At least one applicable lookup must occur.
 See [the aggregate contract](native-artwork-outcome-contract.md).
 
 Keep every working Core provider until its add-on path passes the complete

@@ -16,6 +16,7 @@
 #include "lib/libvlc_internal.h"
 #include "preparser/fetcher.h"
 #include "preparser/metadata_native_provider.h"
+#include "preparser/metadata_artwork_outcome.h"
 
 /* The wrapper uses real Core objects, jobs, snapshots, and revision tokens.
  * This controlled fetcher replaces only the native provider execution boundary.
@@ -380,6 +381,139 @@ static void failed_and_cancelled_outcomes_release_the_slot(vlc_object_t *object)
     vlc_metadata_native_provider_Delete(provider);
     puts("PASS: failed and cancelled outcomes recover admission slots");
 }
+static vlc_metadata_native_claim_t *negative_claim(vlc_metadata_native_provider_t *provider, struct job *job)
+{
+    struct completion result = {0};
+    assert(vlc_metadata_native_provider_ProbeOutcome(provider, job->job, META_FETCHER_PROVIDER_LASTFM, complete, &result) == VLC_SUCCESS);
+    assert(result.count == 1 && result.status == VLC_SUCCESS && result.claim); return result.claim;
+}
+static vlc_metadata_artwork_admission_t *new_admission(void)
+{
+    vlc_metadata_artwork_admission_t *gate = vlc_metadata_artwork_admission_New(vlc_tick_now()+VLC_TICK_FROM_SEC(5)); assert(gate); return gate;
+}
+static void exact_negative_authority_and_duplicate_refusal(vlc_object_t *object)
+{
+    mode = INLINE; provider_outcome = META_FETCHER_OUTCOME_NO_MATCH; provider_status = VLC_EGENERIC; artwork = NULL;
+    struct job job, other; job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+    job_init(&other, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+    vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+    vlc_metadata_native_claim_t *claim = negative_claim(provider, &job);
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        vlc_metadata_artwork_admission_t *gate = new_admission();
+        assert(!vlc_metadata_native_claim_AdmitOutcome(claim, mode ? other.job : job.job,
+            mode ? META_FETCHER_PROVIDER_LASTFM : META_FETCHER_PROVIDER_MUSICBRAINZ, gate));
+        assert(!vlc_metadata_artwork_admission_IsCurrent(gate)); vlc_metadata_artwork_admission_Release(gate);
+    }
+    vlc_metadata_artwork_admission_t *gate = new_admission(), *duplicate = new_admission();
+    vlc_metadata_native_outcome_authority_t *authority = vlc_metadata_native_claim_AdmitOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate); assert(authority);
+    assert(!vlc_metadata_native_claim_AdmitOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, duplicate));
+    assert(!vlc_metadata_artwork_admission_IsCurrent(duplicate) && vlc_metadata_artwork_admission_IsCurrent(gate));
+    vlc_metadata_native_claim_Release(claim);
+    input_item_t *result = input_item_Copy(vlc_metadata_job_GetRequest(job.job)->item); assert(result);
+    assert(vlc_metadata_job_Complete(job.job, VLC_SUCCESS, result, NULL, 0)); input_item_Release(result);
+    /* No claim/job hold in authority: completed child is not needed by Close. */
+    vlc_metadata_native_provider_Delete(provider); assert(!vlc_metadata_artwork_admission_IsCurrent(gate));
+    vlc_metadata_native_outcome_authority_Release(authority);
+    vlc_metadata_artwork_admission_Release(gate); vlc_metadata_artwork_admission_Release(duplicate);
+    job_clear(&other); job_clear(&job);
+    puts("PASS: exact negative authority, duplicate refusal, and closed completed child");
+}
+static void only_negative_outcomes_can_register_authority(vlc_object_t *object)
+{
+    mode = INLINE;
+    for (unsigned kind = META_FETCHER_OUTCOME_UNKNOWN; kind <= META_FETCHER_OUTCOME_ERROR; ++kind) {
+        struct job job; job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+        vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+        provider_outcome = kind; provider_status = kind == META_FETCHER_OUTCOME_MATCH ? VLC_SUCCESS : VLC_EGENERIC;
+        artwork = kind == META_FETCHER_OUTCOME_MATCH ? "https://example.invalid/art.png" : NULL;
+        vlc_metadata_native_claim_t *claim = negative_claim(provider, &job);
+        vlc_metadata_artwork_admission_t *gate = new_admission();
+        vlc_metadata_native_outcome_authority_t *authority = vlc_metadata_native_claim_AdmitOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate);
+        const bool negative = kind == META_FETCHER_OUTCOME_NO_MATCH || kind == META_FETCHER_OUTCOME_NOT_APPLICABLE;
+        assert((authority != NULL) == negative);
+        assert(vlc_metadata_artwork_admission_IsCurrent(gate) == negative);
+        vlc_metadata_native_claim_Release(claim); vlc_metadata_native_provider_Delete(provider);
+        vlc_metadata_native_outcome_authority_Release(authority); vlc_metadata_artwork_admission_Release(gate); job_clear(&job);
+    }
+    puts("PASS: only typed NO_MATCH and NTA can retain negative authority");
+}
+static void authority_retains_the_receipt_slot_without_the_child(vlc_object_t *object)
+{
+    mode = INLINE; provider_outcome = META_FETCHER_OUTCOME_NO_MATCH; provider_status = VLC_EGENERIC; artwork = NULL;
+    vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+    struct job jobs[33]; vlc_metadata_native_outcome_authority_t *authorities[33] = {0};
+    vlc_metadata_artwork_admission_t *gates[33] = {0};
+    for (unsigned i = 0; i < 32; ++i) {
+        job_init(&jobs[i], "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+        vlc_metadata_native_claim_t *claim = negative_claim(provider, &jobs[i]); gates[i] = new_admission();
+        authorities[i] = vlc_metadata_native_claim_AdmitOutcome(claim, jobs[i].job, META_FETCHER_PROVIDER_LASTFM, gates[i]); assert(authorities[i]);
+        vlc_metadata_native_claim_Release(claim); job_clear(&jobs[i]);
+    }
+    job_init(&jobs[32], "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+    struct completion result = {0};
+    assert(vlc_metadata_native_provider_ProbeOutcome(provider, jobs[32].job, META_FETCHER_PROVIDER_LASTFM, complete, &result) == VLC_ENOMEM);
+    assert(result.count == 0);
+    vlc_metadata_native_outcome_authority_Release(authorities[0]); authorities[0] = NULL;
+    vlc_metadata_native_claim_t *claim = negative_claim(provider, &jobs[32]); gates[32] = new_admission();
+    authorities[32] = vlc_metadata_native_claim_AdmitOutcome(claim, jobs[32].job, META_FETCHER_PROVIDER_LASTFM, gates[32]); assert(authorities[32]);
+    vlc_metadata_native_claim_Release(claim); job_clear(&jobs[32]);
+    vlc_metadata_native_provider_Delete(provider);
+    for (unsigned i = 0; i < 33; ++i) {
+        if (authorities[i]) assert(!vlc_metadata_artwork_admission_IsCurrent(gates[i]));
+        vlc_metadata_native_outcome_authority_Release(authorities[i]); vlc_metadata_artwork_admission_Release(gates[i]);
+    }
+    puts("PASS: authority shares retained32 quota, recovers a slot, and survives Delete");
+}
+struct authority_close_call { vlc_metadata_native_provider_t *provider; vlc_sem_t started; atomic_bool done; };
+static void *authority_close(void *opaque)
+{
+    struct authority_close_call *call = opaque; vlc_sem_post(&call->started);
+    vlc_metadata_native_provider_Close(call->provider); atomic_store(&call->done, true); return NULL;
+}
+static void concurrent_close_joins_the_first_native_revocation(vlc_object_t *object)
+{
+    mode = INLINE; provider_outcome = META_FETCHER_OUTCOME_NO_MATCH; provider_status = VLC_EGENERIC; artwork = NULL;
+    vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+    struct job job; job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+    vlc_metadata_native_claim_t *claim = negative_claim(provider, &job);
+    vlc_metadata_artwork_admission_t *gate = new_admission();
+    vlc_metadata_native_outcome_authority_t *authority = vlc_metadata_native_claim_AdmitOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate); assert(authority);
+    vlc_metadata_native_claim_Release(claim); job_clear(&job);
+    assert(vlc_metadata_artwork_admission_Enter(gate));
+    struct authority_close_call calls[2]; vlc_thread_t threads[2];
+    for (unsigned i = 0; i < 2; ++i) {
+        calls[i].provider = provider; vlc_sem_init(&calls[i].started, 0); atomic_init(&calls[i].done, false);
+        assert(vlc_clone(&threads[i], authority_close, &calls[i]) == 0); vlc_sem_wait(&calls[i].started);
+    }
+    const vlc_tick_t deadline = vlc_tick_now()+VLC_TICK_FROM_SEC(2);
+    while (vlc_metadata_artwork_admission_IsCurrent(gate) && vlc_tick_now()<deadline) vlc_tick_sleep(VLC_TICK_FROM_MS(100));
+    assert(!vlc_metadata_artwork_admission_IsCurrent(gate));
+    assert(!atomic_load(&calls[0].done) && !atomic_load(&calls[1].done));
+    vlc_metadata_artwork_admission_Leave(gate);
+    for (unsigned i = 0; i < 2; ++i) { vlc_join(threads[i], NULL); assert(atomic_load(&calls[i].done)); }
+    vlc_metadata_native_provider_Delete(provider); vlc_metadata_native_outcome_authority_Release(authority);
+    vlc_metadata_artwork_admission_Release(gate);
+    puts("PASS: both provider Close calls join the admitted native section");
+}
+struct authority_release_call { vlc_metadata_native_outcome_authority_t *authority; };
+static void *authority_release(void *opaque)
+{ vlc_metadata_native_outcome_authority_Release(((struct authority_release_call *)opaque)->authority); return NULL; }
+static void final_authority_release_races_close(vlc_object_t *object)
+{
+    mode = INLINE; provider_outcome = META_FETCHER_OUTCOME_NO_MATCH; provider_status = VLC_EGENERIC; artwork = NULL;
+    for (unsigned i = 0; i < 100; ++i) {
+        vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+        struct job job; job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+        vlc_metadata_native_claim_t *claim = negative_claim(provider, &job); vlc_metadata_artwork_admission_t *gate = new_admission();
+        struct authority_release_call release = {vlc_metadata_native_claim_AdmitOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate)}; assert(release.authority);
+        vlc_metadata_native_claim_Release(claim); job_clear(&job);
+        struct authority_close_call close = {.provider=provider}; vlc_sem_init(&close.started, 0); atomic_init(&close.done, false);
+        vlc_thread_t closer, releaser; assert(vlc_clone(&closer, authority_close, &close) == 0);
+        assert(vlc_clone(&releaser, authority_release, &release) == 0); vlc_join(closer, NULL); vlc_join(releaser, NULL);
+        vlc_metadata_native_provider_Delete(provider); vlc_metadata_artwork_admission_Release(gate);
+    }
+    puts("PASS: 100 final authority Release versus Close races");
+}
 int main(void)
 {
     const char *arguments[] = {"--ignore-config", "--quiet", "--no-media-library",
@@ -391,6 +525,9 @@ int main(void)
     assert(fetchers_deleted == 18);
     closed_typed_outcomes(object); retained_inline_receipts_keep_the_admission_slot(object);
     failed_and_cancelled_outcomes_release_the_slot(object);
+    exact_negative_authority_and_duplicate_refusal(object); only_negative_outcomes_can_register_authority(object);
+    authority_retains_the_receipt_slot_without_the_child(object); concurrent_close_joins_the_first_native_revocation(object);
+    final_authority_release_races_close(object);
     assert(fetchers_deleted == fetchers_created); libvlc_release(instance);
     return 0;
 }

@@ -76,7 +76,9 @@ The aggregate is native host state. A guest `status`, provenance map or JSON
 field cannot set a native status bit. A portable provider needs a typed host
 attempt record from its exact admitted invocation. The host must validate its
 completion against the captured plan and result contract. That portable
-record and the final negative staging helper remain implementation work.
+record and its complete plan integration remain implementation work. The
+native sealed staging helper and final transaction now pass focused checks.
+See [the native transaction](native-artwork-outcome.md).
 
 The final helper must join the negative status with the parent's prepared
 delta under the original artwork, status and identity tokens. It must prepare

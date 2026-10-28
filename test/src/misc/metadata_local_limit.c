@@ -59,7 +59,19 @@ int metadata_local_limit_unused_writer(vlc_object_t *, input_item_t *);
 #include "../../../src/input/artwork_policy.c"
 #undef same_string
 #include "../../../src/input/item_parse.c"
+static vlc_sem_t *reserve_entered, *reserve_continue;
+static unsigned reservation_calls;
+static bool observed_reservation(unsigned count, uint64_t *first)
+{
+    ++reservation_calls;
+    if (reserve_entered != NULL) {
+        vlc_sem_post(reserve_entered); vlc_sem_wait(reserve_continue);
+    }
+    return vlc_meta_ReserveRevisions(count, first);
+}
+#define vlc_meta_ReserveRevisions observed_reservation
 #include "../../../src/preparser/metadata_backend.c"
+#undef vlc_meta_ReserveRevisions
 #undef malloc
 #undef calloc
 #undef strdup
@@ -198,6 +210,162 @@ static void limits_leave_no_attached_delta(void)
     assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_ENOMEM && !f.job->local_prepared);
     assert(f.item->i_duration == INPUT_DURATION_UNSET); clean(&f);
 }
+static void notfound_allocation_failures_leave_no_sideband(void)
+{
+    unsigned refused = 0;
+    for (size_t index = 0; index < 256; ++index) {
+        struct fixture f; init(&f); start(&f);
+        for (unsigned tag = 0; tag < 4; ++tag) {
+            char key[32]; snprintf(key, sizeof(key), "Scoped work ID %u", tag);
+            input_item_SetMetaExtra(f.parsed, key, "Bounded native value");
+        }
+        assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+        struct artwork_child child; notfound_child_start(&child, &f);
+        struct exhaustion_keeper keeper = {.gate=vlc_metadata_artwork_admission_New(vlc_tick_now()+VLC_TICK_FROM_SEC(5))}; assert(keeper.gate);
+        const struct vlc_metadata_artwork_exhaustion_summary summary = exhaustion_summary();
+        allocation_at=index; allocation_count=0; allocation_fault=true;
+        const int status=vlc_metadata_job_SealArtworkNotFound(child.job, keeper.gate, &summary, &keeper, exhaustion_keeper_release);
+        allocation_fault=false;
+        if (status != VLC_SUCCESS) {
+            ++refused; assert(status == VLC_ENOMEM && child.job->artwork_exhaustion == NULL && keeper.releases == 0);
+            assert(vlc_metadata_job_SealArtworkNotFound(child.job, keeper.gate, &summary, &keeper, exhaustion_keeper_release) == VLC_SUCCESS);
+        }
+        notfound_child_complete(&child, &f);
+        assert(vlc_metadata_job_PrepareNotFoundArtwork(f.job, child.job, f.parsed) == VLC_SUCCESS);
+        artwork_child_clear(&child); complete(&f); assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == VLC_SUCCESS);
+        assert(vlc_meta_GetStatus(f.item->p_meta)&ITEM_ART_NOTFOUND); clean(&f); assert(keeper.releases==1);
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+        if (status == VLC_SUCCESS) break;
+    }
+    assert(refused >= 3 && refused < 256);
+}
+static void notfound_and_local_status_reserve_only_one_joint_token(void)
+{
+    for (unsigned remaining=3; remaining<=4; ++remaining) {
+        struct exhaustion_keeper keeper = {.gate=vlc_metadata_artwork_admission_New(vlc_tick_now()+VLC_TICK_FROM_SEC(5))}; assert(keeper.gate);
+        struct fixture f; prepare_notfound(&f, &keeper);
+        const uint_fast64_t saved=atomic_load(&metadata_revision_sequence);
+        const uint64_t status_token=vlc_meta_StatusRevision(f.item->p_meta);
+        atomic_store(&metadata_revision_sequence, UINT64_MAX-remaining);
+        const int status=vlc_metadata_job_Apply(f.job, f.item, 0, NULL);
+        if (remaining==3) {
+            assert(status==-EAGAIN && vlc_meta_StatusRevision(f.item->p_meta)==status_token);
+            assert(!(vlc_meta_GetStatus(f.item->p_meta)&ITEM_ART_NOTFOUND) && !input_item_IsPreparsed(f.item));
+            assert(f.item->i_duration==INPUT_DURATION_UNSET); field(f.item,vlc_meta_Description,NULL);
+            assert(vlc_meta_GetExtra(f.item->p_meta,"Native extra")==NULL);
+            assert(atomic_load(&metadata_revision_sequence)==UINT64_MAX-3);
+        } else {
+            assert(status==VLC_SUCCESS && atomic_load(&metadata_revision_sequence)==UINT64_MAX-1);
+            assert((vlc_meta_GetStatus(f.item->p_meta)&(ITEM_PREPARSED|ITEM_ART_NOTFOUND))==(ITEM_PREPARSED|ITEM_ART_NOTFOUND));
+        }
+        atomic_store(&metadata_revision_sequence,saved); clean(&f); assert(keeper.releases==1);
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+    }
+}
+struct notfound_apply_call { struct fixture *fixture; int status; };
+static void *notfound_apply(void *opaque)
+{
+    struct notfound_apply_call *call=opaque;
+    call->status=vlc_metadata_job_Apply(call->fixture->job,call->fixture->item,0,NULL); return NULL;
+}
+struct notfound_revoke_call { vlc_metadata_artwork_admission_t *gate; input_item_t *item; atomic_bool done; };
+static void *notfound_revoke(void *opaque)
+{
+    struct notfound_revoke_call *call=opaque; vlc_metadata_artwork_admission_Revoke(call->gate);
+    vlc_mutex_lock(&call->item->lock); assert(vlc_meta_GetStatus(call->item->p_meta)&ITEM_ART_NOTFOUND); vlc_mutex_unlock(&call->item->lock);
+    atomic_store(&call->done,true); return NULL;
+}
+static void actual_apply_finishes_before_concurrent_revocation_returns(void)
+{
+    struct exhaustion_keeper keeper = {.gate=vlc_metadata_artwork_admission_New(vlc_tick_now()+VLC_TICK_FROM_SEC(5))}; assert(keeper.gate);
+    struct fixture f; prepare_notfound(&f,&keeper);
+    vlc_sem_t entered,proceed; vlc_sem_init(&entered,0);vlc_sem_init(&proceed,0);
+    reserve_entered=&entered;reserve_continue=&proceed;
+    struct notfound_apply_call apply={.fixture=&f};vlc_thread_t writer;assert(vlc_clone(&writer,notfound_apply,&apply)==0);
+    vlc_sem_wait(&entered); /* Actual backend is inside its all-token reservation. */
+    struct notfound_revoke_call revoke={.gate=keeper.gate,.item=f.item};atomic_init(&revoke.done,false);
+    vlc_thread_t invalidator;assert(vlc_clone(&invalidator,notfound_revoke,&revoke)==0);
+    const vlc_tick_t deadline=vlc_tick_now()+VLC_TICK_FROM_SEC(2);
+    while(vlc_metadata_artwork_admission_IsCurrent(keeper.gate)&&vlc_tick_now()<deadline)vlc_tick_sleep(VLC_TICK_FROM_MS(100));
+    assert(!vlc_metadata_artwork_admission_IsCurrent(keeper.gate)&&!atomic_load(&revoke.done));
+    vlc_sem_post(&proceed);vlc_join(writer,NULL);vlc_join(invalidator,NULL);reserve_entered=reserve_continue=NULL;
+    assert(apply.status==VLC_SUCCESS&&atomic_load(&revoke.done));clean(&f);assert(keeper.releases==1);
+    vlc_metadata_artwork_admission_Release(keeper.gate);
+}
+
+static void notfound_effective_scope_refusal_precedes_token_reservation(void)
+{
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        struct exhaustion_keeper keeper = {.gate=vlc_metadata_artwork_admission_New(vlc_tick_now()+VLC_TICK_FROM_SEC(5))}; assert(keeper.gate);
+        struct fixture f; init(&f); start(&f); local_facts(f.parsed);
+        if (mode == 0) input_item_SetTitle(f.parsed, "Lookup title");
+        assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+        if (mode == 1) input_item_SetMetaExtra(f.parsed, "IMDBID", "tt2222222");
+        notfound_seal_and_complete_child(&f, &keeper); complete(&f);
+        const struct notfound_target_tokens before = notfound_tokens(f.item);
+        const unsigned calls = reservation_calls;
+        const uint_fast64_t sequence = atomic_load(&metadata_revision_sequence);
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == -EAGAIN);
+        assert(reservation_calls == calls && atomic_load(&metadata_revision_sequence) == sequence);
+        notfound_no_target_writes(&f, &before); clean(&f); assert(keeper.releases == 1);
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+    }
+}
+static void notfound_oversized_extra_snapshot_has_no_sideband(void)
+{
+    struct fixture f; init(&f); start(&f);
+    char *large = malloc(MAX_JSON + 2); assert(large);
+    memset(large, 'A', MAX_JSON + 1); large[MAX_JSON + 1] = '\0';
+    input_item_SetMetaExtra(f.parsed, "Bounded lookup work ID", large); free(large);
+    assert(vlc_metadata_job_PrepareLocal(f.job, f.parsed, NULL) == VLC_SUCCESS);
+    struct artwork_child child; notfound_child_start(&child, &f);
+    struct exhaustion_keeper keeper = {.gate=vlc_metadata_artwork_admission_New(vlc_tick_now()+VLC_TICK_FROM_SEC(5))}; assert(keeper.gate);
+    const struct vlc_metadata_artwork_exhaustion_summary summary = exhaustion_summary();
+    const struct notfound_target_tokens before = notfound_tokens(f.item);
+    assert(vlc_metadata_job_SealArtworkNotFound(child.job, keeper.gate, &summary, &keeper, exhaustion_keeper_release) == VLC_ENOMEM);
+    assert(child.job->artwork_exhaustion == NULL && keeper.releases == 0);
+    notfound_no_target_writes(&f, &before); artwork_child_clear(&child); clean(&f);
+    assert(keeper.releases == 0); vlc_metadata_artwork_admission_Release(keeper.gate);
+}
+struct notfound_working_mutation {
+    input_item_t *working;
+    vlc_sem_t attempted;
+    atomic_bool writer_holds_working, done;
+};
+static void *notfound_change_working_at_reservation(void *opaque)
+{
+    struct notfound_working_mutation *call = opaque;
+    const int locked = vlc_mutex_trylock(&call->working->lock);
+    atomic_store(&call->writer_holds_working, locked != 0);
+    if (locked == 0) vlc_mutex_unlock(&call->working->lock);
+    vlc_sem_post(&call->attempted);
+    /* The actual same-value native write must wait for final publication. */
+    input_item_SetURI(call->working, "file:///local-parse.flac");
+    atomic_store(&call->done, true); return NULL;
+}
+static void notfound_final_publication_serializes_a_working_mutation(void)
+{
+    struct exhaustion_keeper keeper = {.gate=vlc_metadata_artwork_admission_New(vlc_tick_now()+VLC_TICK_FROM_SEC(5))}; assert(keeper.gate);
+    struct fixture f; prepare_notfound(&f, &keeper);
+    vlc_sem_t entered, proceed; vlc_sem_init(&entered, 0); vlc_sem_init(&proceed, 0);
+    reserve_entered = &entered; reserve_continue = &proceed;
+    struct notfound_apply_call apply = {.fixture=&f}; vlc_thread_t writer;
+    assert(vlc_clone(&writer, notfound_apply, &apply) == 0); vlc_sem_wait(&entered);
+    struct notfound_working_mutation mutation = {.working=f.parsed};
+    vlc_sem_init(&mutation.attempted, 0); atomic_init(&mutation.writer_holds_working, false); atomic_init(&mutation.done, false);
+    vlc_thread_t mutator; assert(vlc_clone(&mutator, notfound_change_working_at_reservation, &mutation) == 0);
+    vlc_sem_wait(&mutation.attempted);
+    /* The writer is stopped inside the actual final token reservation. This
+     * try-lock control proves a real held mutex, not scheduler delay alone. */
+    assert(atomic_load(&mutation.writer_holds_working) && !atomic_load(&mutation.done));
+    vlc_sem_post(&proceed); vlc_join(writer, NULL); vlc_join(mutator, NULL);
+    reserve_entered = reserve_continue = NULL;
+    assert(apply.status == VLC_SUCCESS && atomic_load(&mutation.done));
+    assert(vlc_meta_GetStatus(f.item->p_meta) & ITEM_ART_NOTFOUND);
+    field(f.item, vlc_meta_Description, "Remote description");
+    assert(input_item_IsPreparsed(f.item) && f.item->i_duration == VLC_TICK_FROM_SEC(123));
+    clean(&f); assert(keeper.releases == 1); vlc_metadata_artwork_admission_Release(keeper.gate);
+}
 int main(void)
 {
     allocation_failures_leave_every_fact(); failed_local_snapshot_can_retry();
@@ -205,5 +373,10 @@ int main(void)
     fetched_artwork_reserves_one_combined_status_token();
     fetched_artwork_preparation_failures_leave_no_receipt();
     cancellation_during_value_preparation_has_no_native_writes();
-    saturated_native_token_has_no_partial_commit(); limits_leave_no_attached_delta(); return 0;
+    saturated_native_token_has_no_partial_commit(); limits_leave_no_attached_delta();
+    notfound_allocation_failures_leave_no_sideband(); notfound_and_local_status_reserve_only_one_joint_token();
+    actual_apply_finishes_before_concurrent_revocation_returns();
+    notfound_effective_scope_refusal_precedes_token_reservation();
+    notfound_oversized_extra_snapshot_has_no_sideband();
+    notfound_final_publication_serializes_a_working_mutation(); return 0;
 }

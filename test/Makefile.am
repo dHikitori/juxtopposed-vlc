@@ -283,7 +283,7 @@ test_src_misc_metadata_artwork_LDADD = $(LIBVLCCORE)
 
 if HAVE_LINUX
 check_PROGRAMS += test_src_misc_metadata_commit_limit
-test_src_misc_metadata_commit_limit_SOURCES = src/misc/metadata_commit_limit.c ../src/input/item_parse.c
+test_src_misc_metadata_commit_limit_SOURCES = src/misc/metadata_commit_limit.c ../src/input/item_parse.c ../src/preparser/metadata_artwork_outcome.c
 test_src_misc_metadata_commit_limit_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
 test_src_misc_metadata_commit_limit_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
 test_src_misc_metadata_commit_limit_LDADD = $(LIBVLCCORE)
@@ -1062,7 +1062,7 @@ test_src_misc_metadata_fetcher_SOURCES = src/misc/metadata_fetcher.c ../src/prep
 test_src_misc_metadata_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_fetcher_LDADD = $(LIBVLCCORE)
 
-test_src_misc_metadata_native_provider_SOURCES = src/misc/metadata_native_provider.c ../src/preparser/metadata_native_provider.c
+test_src_misc_metadata_native_provider_SOURCES = src/misc/metadata_native_provider.c ../src/preparser/metadata_native_provider.c ../src/preparser/metadata_artwork_outcome.c
 test_src_misc_metadata_native_provider_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_native_provider_LDADD = $(LIBVLCCORE) $(LIBVLC)
 
@@ -1080,7 +1080,7 @@ test_src_player_addon_session_LOG_COMPILER = env VLC_TEST_TIMEOUT=90
 endif
 
 
-test_src_misc_metadata_local_SOURCES = src/misc/metadata_local.c src/misc/metadata_local_setters.c
+test_src_misc_metadata_local_SOURCES = src/misc/metadata_local.c src/misc/metadata_local_setters.c src/misc/metadata_local_status.c ../src/preparser/metadata_artwork_outcome.c
 test_src_misc_metadata_local_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_local_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
 test_src_misc_metadata_local_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
@@ -1088,7 +1088,7 @@ test_src_misc_metadata_local_LDADD = $(LIBVLCCORE)
 
 if HAVE_LINUX
 check_PROGRAMS += test_src_misc_metadata_local test_src_misc_metadata_local_limit
-test_src_misc_metadata_local_limit_SOURCES = src/misc/metadata_local_limit.c ../src/input/item.c
+test_src_misc_metadata_local_limit_SOURCES = src/misc/metadata_local_limit.c ../src/input/item.c ../src/preparser/metadata_artwork_outcome.c
 test_src_misc_metadata_local_limit_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src \
     -Dinput_item_ApplyOptions=metadata_local_unused_options -Dinput_item_CreateFilename=metadata_local_unused_filename
 test_src_misc_metadata_local_limit_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
@@ -1134,7 +1134,7 @@ test_src_preparser_native_ipc_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
 test_src_preparser_native_ipc_LDADD = $(LIBVLCCORE) ../modules/libvlc_json.la
 
 check_PROGRAMS += test_src_preparser_native_import
-test_src_preparser_native_import_SOURCES = src/preparser/native_import.c ../src/input/item.c
+test_src_preparser_native_import_SOURCES = src/preparser/native_import.c ../src/input/item.c ../src/preparser/metadata_artwork_outcome.c
 test_src_preparser_native_import_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src \
     -Dinput_item_ApplyOptions=metadata_local_unused_options -Dinput_item_CreateFilename=metadata_local_unused_filename
 test_src_preparser_native_import_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
@@ -1181,3 +1181,8 @@ else
 test_modules_lua_meta_art_stream_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
 endif
 endif
+
+check_PROGRAMS += test_src_misc_metadata_artwork_admission
+test_src_misc_metadata_artwork_admission_SOURCES = src/misc/metadata_artwork_admission.c ../src/preparser/metadata_artwork_outcome.c
+test_src_misc_metadata_artwork_admission_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_artwork_admission_LDADD = $(LIBVLCCORE)

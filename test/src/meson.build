@@ -28,7 +28,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_misc_metadata_commit_limit',
-    'sources': files('misc/metadata_commit_limit.c', '../../src/input/item_parse.c'),
+    'sources': files('misc/metadata_commit_limit.c', '../../src/input/item_parse.c', '../../src/preparser/metadata_artwork_outcome.c'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
     'c_args': ['-ffunction-sections', '-fdata-sections'],
@@ -946,7 +946,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_misc_metadata_native_provider',
-    'sources': files('misc/metadata_native_provider.c', '../../src/preparser/metadata_native_provider.c'),
+    'sources': files('misc/metadata_native_provider.c', '../../src/preparser/metadata_native_provider.c', '../../src/preparser/metadata_artwork_outcome.c'),
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlc, libvlccore],
@@ -974,7 +974,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_misc_metadata_local',
-    'sources': files('misc/metadata_local.c', 'misc/metadata_local_setters.c'),
+    'sources': files('misc/metadata_local.c', 'misc/metadata_local_setters.c', 'misc/metadata_local_status.c', '../../src/preparser/metadata_artwork_outcome.c'),
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
@@ -985,7 +985,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_misc_metadata_local_limit',
-    'sources': files('misc/metadata_local_limit.c', '../../src/input/item.c'),
+    'sources': files('misc/metadata_local_limit.c', '../../src/input/item.c', '../../src/preparser/metadata_artwork_outcome.c'),
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
@@ -1089,7 +1089,7 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_preparser_native_import',
-    'sources': files('preparser/native_import.c', '../../src/input/item.c'),
+    'sources': files('preparser/native_import.c', '../../src/input/item.c', '../../src/preparser/metadata_artwork_outcome.c'),
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlc, libvlccore],
@@ -1113,3 +1113,11 @@ if z_dep.found()
         'timeout': 90,
     }
 endif
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_artwork_admission',
+    'sources': files('misc/metadata_artwork_admission.c', '../../src/preparser/metadata_artwork_outcome.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}

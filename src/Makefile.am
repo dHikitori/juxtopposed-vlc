@@ -294,6 +294,8 @@ libvlccore_la_SOURCES = \
 	preparser/ipc.c \
 	preparser/internal.c \
 	preparser/metadata_backend.c \
+	preparser/metadata_artwork_outcome.c \
+	preparser/metadata_artwork_outcome.h \
 	preparser/metadata_native_provider.c \
 	preparser/metadata_native_provider.h \
 	preparser/metadata_owner.c \

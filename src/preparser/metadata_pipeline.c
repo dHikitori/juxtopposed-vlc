@@ -263,6 +263,8 @@ static void remote_ended(vlc_metadata_job_t *job, int status, void *opaque)
             if (status == VLC_SUCCESS && applied == VLC_SUCCESS)
                 applied = vlc_metadata_job_PrepareFetchedArtwork(entry->anchor, job,
                     entry->working, entry->native_artwork_replace);
+            if (status == VLC_SUCCESS && applied == VLC_SUCCESS && call->stage == STAGE_COUNT - 1)
+                applied = vlc_metadata_job_PrepareNotFoundArtwork(entry->anchor, job, entry->working);
             if (applied != VLC_SUCCESS) entry_finish(entry, applied);
             else entry_next(entry);
         }

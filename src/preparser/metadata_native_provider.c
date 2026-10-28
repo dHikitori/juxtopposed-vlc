@@ -10,6 +10,7 @@
 #include <vlc_metadata_revision.h>
 #include <vlc_threads.h>
 #include "metadata_native_provider.h"
+#include "metadata_artwork_outcome.h"
 #include "fetcher.h"
 #include "../input/item.h"
 
@@ -34,6 +35,7 @@ struct vlc_metadata_native_claim {
     char *artwork;
     meta_fetcher_outcome_t outcome;
     struct native_reservation *reservation;
+    bool outcome_admitted; /* Protected by provider->lock. */
 };
 struct vlc_metadata_native_provider {
     vlc_atomic_rc_t refs;
@@ -42,6 +44,8 @@ struct vlc_metadata_native_provider {
     vlc_object_t *object;
     input_fetcher_t *fetcher;
     struct native_probe *head;
+    struct vlc_metadata_native_outcome_authority *authorities;
+    unsigned authority_batches;
     unsigned calls, retained, reserved;
     bool closed, deleting;
 };
@@ -60,6 +64,15 @@ struct native_reservation {
     vlc_atomic_rc_t refs;
     vlc_metadata_native_provider_t *provider;
     bool counted;
+};
+struct vlc_metadata_native_outcome_authority {
+    /* Protected by provider->lock, including the final decrement. */
+    unsigned refs;
+    bool listed;
+    vlc_metadata_native_provider_t *provider;
+    struct native_reservation *reservation;
+    vlc_metadata_artwork_admission_t *admission;
+    struct vlc_metadata_native_outcome_authority *next;
 };
 static struct native_reservation *reservation_hold(struct native_reservation *reservation)
 { vlc_atomic_rc_inc(&reservation->refs); return reservation; }
@@ -171,13 +184,61 @@ bool vlc_metadata_native_claim_MatchesJob(const vlc_metadata_native_claim_t *cla
     return open && snapshot_current(&claim->snapshot, job);
 }
 
+void vlc_metadata_native_outcome_authority_Release(vlc_metadata_native_outcome_authority_t *authority)
+{
+    if (authority == NULL) return;
+    vlc_metadata_native_provider_t *provider = authority->provider;
+    vlc_mutex_lock(&provider->lock);
+    assert(authority->refs != 0);
+    const bool last = --authority->refs == 0;
+    if (last && authority->listed) {
+        struct vlc_metadata_native_outcome_authority **link = &provider->authorities;
+        while (*link != authority) { assert(*link != NULL); link = &(*link)->next; }
+        *link = authority->next; authority->listed = false;
+    }
+    vlc_mutex_unlock(&provider->lock);
+    if (!last) return;
+    vlc_metadata_artwork_admission_Release(authority->admission);
+    reservation_release(authority->reservation); free(authority);
+    vlc_metadata_native_provider_Release(provider);
+}
+vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitOutcome(
+    vlc_metadata_native_claim_t *claim, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t expected_family, vlc_metadata_artwork_admission_t *admission)
+{
+    if (claim == NULL || job == NULL || claim->family != expected_family
+        || (claim->outcome != META_FETCHER_OUTCOME_NO_MATCH && claim->outcome != META_FETCHER_OUTCOME_NOT_APPLICABLE)
+        || !vlc_metadata_artwork_admission_IsCurrent(admission) || !snapshot_current(&claim->snapshot, job)) {
+        vlc_metadata_artwork_admission_Revoke(admission); return NULL;
+    }
+    vlc_metadata_native_outcome_authority_t *authority = calloc(1, sizeof(*authority));
+    if (authority == NULL) { vlc_metadata_artwork_admission_Revoke(admission); return NULL; }
+    vlc_metadata_native_provider_t *provider = claim->provider;
+    authority->refs = 1; authority->provider = vlc_metadata_native_provider_Hold(provider);
+    authority->reservation = reservation_hold(claim->reservation);
+    authority->admission = vlc_metadata_artwork_admission_Hold(admission);
+    vlc_mutex_lock(&provider->lock);
+    const bool accepted = !provider->closed && !provider->deleting && !claim->outcome_admitted;
+    if (accepted) {
+        claim->outcome_admitted = true; authority->listed = true;
+        authority->next = provider->authorities; provider->authorities = authority;
+    }
+    vlc_mutex_unlock(&provider->lock);
+    if (!accepted || !snapshot_current(&claim->snapshot, job)
+        || !vlc_metadata_artwork_admission_IsCurrent(admission)) {
+        vlc_metadata_native_outcome_authority_Release(authority);
+        vlc_metadata_artwork_admission_Revoke(admission); return NULL;
+    }
+    return authority;
+}
+
 vlc_metadata_native_provider_t *vlc_metadata_native_provider_Hold(vlc_metadata_native_provider_t *provider)
 { vlc_atomic_rc_inc(&provider->refs); return provider; }
 void vlc_metadata_native_provider_Release(vlc_metadata_native_provider_t *provider)
 {
     if (!vlc_atomic_rc_dec(&provider->refs)) return;
     assert(provider->fetcher == NULL && provider->object == NULL && !provider->calls
-        && !provider->retained && !provider->reserved);
+        && !provider->retained && !provider->reserved && provider->authorities == NULL && !provider->authority_batches);
     free(provider);
 }
 vlc_metadata_native_provider_t *vlc_metadata_native_provider_New(vlc_object_t *parent)
@@ -213,13 +274,30 @@ void vlc_metadata_native_provider_Close(vlc_metadata_native_provider_t *provider
 {
     vlc_metadata_native_provider_Hold(provider);
     vlc_metadata_job_t *jobs[MAX_PROBES]; unsigned count = 0;
+    vlc_metadata_native_outcome_authority_t *authorities[MAX_PROBES]; unsigned issued = 0;
     vlc_mutex_lock(&provider->lock); const bool first = !provider->closed; provider->closed = true;
     input_fetcher_t *fetcher = first ? provider->fetcher : NULL;
     if (fetcher != NULL) { input_fetcher_Hold(fetcher); ++provider->calls; }
     if (first) for (struct native_probe *probe = provider->head; probe != NULL; probe = probe->next) {
         assert(count < MAX_PROBES); jobs[count++] = vlc_metadata_job_Hold(probe->snapshot.job);
     }
+    if (first) {
+        while (provider->authorities != NULL) {
+            vlc_metadata_native_outcome_authority_t *authority = provider->authorities;
+            provider->authorities = authority->next;
+            assert(issued < MAX_PROBES && authority->refs != 0);
+            ++authority->refs; authority->listed = false; authority->next = NULL;
+            authorities[issued++] = authority;
+        }
+        if (issued != 0) ++provider->authority_batches;
+    } else while (provider->authority_batches != 0) vlc_cond_wait(&provider->idle, &provider->lock);
     vlc_mutex_unlock(&provider->lock);
+    for (unsigned i = 0; i < issued; ++i) vlc_metadata_artwork_admission_Revoke(authorities[i]->admission);
+    for (unsigned i = 0; i < issued; ++i) vlc_metadata_native_outcome_authority_Release(authorities[i]);
+    if (issued != 0) {
+        vlc_mutex_lock(&provider->lock); assert(provider->authority_batches != 0);
+        --provider->authority_batches; vlc_cond_broadcast(&provider->idle); vlc_mutex_unlock(&provider->lock);
+    }
     // A listed request can still be before fetcher submission. Native job
     // cancellation seals that gap before any delayed submission can start.
     for (unsigned i = 0; i < count; ++i) { vlc_metadata_job_Cancel(jobs[i]); vlc_metadata_job_Release(jobs[i]); }
