@@ -17,12 +17,79 @@ AddonWorker::AddonWorker(const InstalledPackage& package, NetworkBroker* network
     connect(&m_process, &QProcess::readyReadStandardOutput, this, &AddonWorker::read);
     connect(&m_process, &QProcess::readyReadStandardError, this, [this] { m_process.readAllStandardError(); });
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
+        const QPointer<AddonWorker> alive(this);
         if (!m_stopping) fail(tr("The add-on worker is not available."));
+        if (alive) notifyPreparedRetired();
     });
-    connect(&m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-        [this](int, QProcess::ExitStatus) { if (!m_stopping) fail(tr("The add-on stopped because of an error.")); });
+    connect(&m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+        this, &AddonWorker::processFinished);
+    m_preparedDeadline.setSingleShot(true);
+    connect(&m_preparedDeadline, &QTimer::timeout, this, [this] {
+        // A forced exit cannot certify a transferred completion receipt.
+        retirePrepared(true);
+    });
 }
 AddonWorker::~AddonWorker() { stop(); }
+void AddonWorker::enablePreparedLifecycle()
+{
+    Q_ASSERT(m_process.state() == QProcess::NotRunning && m_invocations.isEmpty());
+    m_prepared = true;
+}
+void AddonWorker::processFinished(int code, QProcess::ExitStatus status)
+{
+    if (!m_prepared) {
+        if (!m_stopping) fail(tr("The add-on stopped because of an error."));
+        return;
+    }
+    const QPointer<AddonWorker> alive(this);
+    if (!m_preparedAbort && !m_failed) read();
+    if (!alive) return;
+    m_preparedCleanExit = !m_preparedAbort && !m_failed && status == QProcess::NormalExit
+        && code == 0 && m_invocations.isEmpty() && m_queued.isEmpty() && m_buffer.isEmpty();
+    auto terminal = std::move(m_preparedTerminal); m_preparedTerminal.reset();
+    if (terminal) {
+        if (m_preparedCleanExit) terminal->attempt->terminal(terminal->invocation, terminal->status, terminal->data, terminal->error);
+        else terminal->attempt->blocked();
+        if (!alive) return;
+    }
+    if (!m_preparedCleanExit && !m_failed && !m_preparedAbort)
+        fail(tr("The add-on stopped before its output was complete."));
+    if (alive) notifyPreparedRetired();
+}
+void AddonWorker::retirePrepared(bool revoke)
+{
+    Q_ASSERT(m_prepared);
+    const QPointer<AddonWorker> alive(this);
+    m_preparedRetiring = true;
+    if (revoke || !m_invocations.isEmpty()) {
+        m_preparedAbort = true;
+        if (m_preparedTerminal) m_preparedTerminal->attempt->blocked();
+        m_preparedTerminal.reset();
+        revokeAttemptGates();
+        if (!alive) return;
+        m_stopping = true; m_startup.stop(); m_queued.clear();
+        const auto ids = m_invocations.keys();
+        for (const auto& id : ids) { cancel(id); if (!alive) return; }
+        if (m_process.state() != QProcess::NotRunning) m_process.kill();
+    } else if (m_process.state() != QProcess::NotRunning) {
+        // Read through clean EOF. Late frames still pass the normal validator.
+        m_process.closeWriteChannel();
+        if (!m_preparedDeadline.isActive()) m_preparedDeadline.start(2000);
+    }
+    if (alive) notifyPreparedRetired();
+}
+void AddonWorker::notifyPreparedRetired()
+{
+    if (!m_prepared || !m_preparedRetiring || m_preparedNotified
+        || m_process.state() != QProcess::NotRunning) return;
+    m_preparedDeadline.stop();
+    const QPointer<AddonWorker> alive(this);
+    if (!m_preparedAbort && !m_preparedCleanExit) revokeAttemptGates();
+    if (!alive) return;
+    // Forget normal terminal weak records only after the final read and exit.
+    m_attemptGates.clear(); m_stopping = true; m_preparedNotified = true;
+    QTimer::singleShot(0, this, [this] { emit preparedRetired(); });
+}
 void AddonWorker::setExecutable(const QString& executable) { m_executable = executable; }
 void AddonWorker::setConfiguration(const QJsonObject& settings, const QJsonObject& status, NetworkBroker::CredentialResolver resolver)
 {
@@ -223,7 +290,12 @@ void AddonWorker::message(const QJsonObject& object)
             bool clean = object.value(QStringLiteral("error")).isUndefined() || object.value(QStringLiteral("error")).isString();
             for (auto it = object.begin(); it != object.end(); ++it) if (!resultKeys.contains(it.key())) clean = false;
             if (!clean) attempt->blocked();
-            else attempt->terminal(id, status, object.value(QStringLiteral("data")).toObject(), object.value(QStringLiteral("error")).toString());
+            else if (m_prepared) {
+                // A prepared receipt cannot be taken before clean process EOF.
+                if (m_preparedTerminal) { fail(tr("The prepared add-on sent another terminal result.")); return; }
+                m_preparedTerminal = PreparedTerminal{id, status, object.value(QStringLiteral("error")).toString(),
+                    object.value(QStringLiteral("data")).toObject(), attempt};
+            } else attempt->terminal(id, status, object.value(QStringLiteral("data")).toObject(), object.value(QStringLiteral("error")).toString());
         }
         // Guest errors are untrusted strings: only a bounded plain-text value is exposed.
         finish(id, status, object.value(QStringLiteral("data")).toObject(), object.value(QStringLiteral("error")).toString().left(512));
@@ -369,6 +441,11 @@ void AddonWorker::fail(const QString& error)
 }
 void AddonWorker::stop()
 {
+    if (m_prepared) {
+        Q_ASSERT(m_process.state() == QProcess::NotRunning);
+        revokeAttemptGates();
+        return;
+    }
     const QPointer<AddonWorker> alive(this);
     revokeAttemptGates();
     m_stopping = true; m_startup.stop(); m_ready = false; m_queued.clear();

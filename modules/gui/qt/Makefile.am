@@ -118,6 +118,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_manifest.hpp \
 	addons/addon_metadata_attempt.cpp \
 	addons/addon_metadata_attempt.hpp \
+	addons/addon_prepared_metadata_invocation.cpp \
+	addons/addon_prepared_metadata_invocation.hpp \
 	addons/addon_metadata_registry_epoch.cpp \
 	addons/addon_metadata_registry_epoch.hpp \
 	addons/addon_artwork_attempt_plan.cpp \
@@ -2678,6 +2680,27 @@ test_qt_addon_metadata_attempt_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLAT
 test_qt_addon_metadata_attempt$(EXEEXT): addon_metadata_attempt_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
 check_PROGRAMS += test_qt_addon_metadata_attempt
 TESTS += test_qt_addon_metadata_attempt
+
+addon_prepared_metadata_process_SOURCES = tests/fixtures/addon_prepared_metadata_process.c
+check_PROGRAMS += addon_prepared_metadata_process
+test_qt_addon_prepared_metadata_invocation_SOURCES = tests/test_addon_prepared_metadata_invocation.cpp
+nodist_test_qt_addon_prepared_metadata_invocation_SOURCES = tests/test_addon_prepared_metadata_invocation.moc
+BUILT_SOURCES += tests/test_addon_prepared_metadata_invocation.moc
+CLEANFILES += tests/test_addon_prepared_metadata_invocation.moc
+test_qt_addon_prepared_metadata_invocation_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) \
+    -DHAKONE_PREPARED_OWNER_WRAP \
+    -DHAKONE_PREPARED_PROCESS_FIXTURE='"$(abs_builddir)/addon_prepared_metadata_process$(EXEEXT)"' \
+    -DHAKONE_PREPARED_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
+    -DHAKONE_PREPARED_FRENCH_TV_WASM='"$(abs_top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm"' \
+    -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(abs_srcdir)/tests/fixtures/metadata-attempt"'
+test_qt_addon_prepared_metadata_invocation_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_prepared_metadata_invocation_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_prepared_metadata_invocation_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS) -Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv
+test_qt_addon_prepared_metadata_invocation$(EXEEXT): addon_prepared_metadata_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
+tests/test_addon_prepared_metadata_invocation.moc: $(srcdir)/tests/test_addon_prepared_metadata_invocation.cpp
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_PREPARED_OWNER_WRAP $< -o $@
+check_PROGRAMS += test_qt_addon_prepared_metadata_invocation
+TESTS += test_qt_addon_prepared_metadata_invocation
 endif
 endif
 

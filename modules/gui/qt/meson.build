@@ -12,6 +12,8 @@ addon_host_sources = files(
     'addons/addon_manifest.hpp',
     'addons/addon_metadata_attempt.cpp',
     'addons/addon_metadata_attempt.hpp',
+    'addons/addon_prepared_metadata_invocation.cpp',
+    'addons/addon_prepared_metadata_invocation.hpp',
     'addons/addon_metadata_registry_epoch.cpp',
     'addons/addon_metadata_registry_epoch.hpp',
     'addons/addon_artwork_attempt_plan.cpp',
@@ -2009,6 +2011,29 @@ if qt6_dep.found()
                 ],
                 'link_args': qt_link_args,
                 'depends': [addon_worker_dependencies, addon_metadata_attempt_process],
+                'env': addon_worker_environment,
+            }
+            addon_prepared_metadata_process = executable('addon_prepared_metadata_process',
+                files('tests/fixtures/addon_prepared_metadata_process.c'), install: false, build_by_default: false)
+            vlc_tests += {
+                'name': 'test_qt_addon_prepared_metadata_invocation',
+                'sources': files('tests/test_addon_prepared_metadata_invocation.cpp'),
+                'moc_sources': files('tests/test_addon_prepared_metadata_invocation.cpp'),
+                'moc_args': ['-DHAKONE_PREPARED_OWNER_WRAP'],
+                'link_with': [addon_host_library, libvlccore],
+                'suite': ['qt', 'addons'],
+                'timeout': 180,
+                'include_directories': qt_include_dir,
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': [
+                    '-DHAKONE_PREPARED_OWNER_WRAP',
+                    '-DHAKONE_PREPARED_PROCESS_FIXTURE="' + addon_prepared_metadata_process.full_path() + '"',
+                    '-DHAKONE_PREPARED_RUST_WORKER="' + addon_worker_target.full_path() + '"',
+                    '-DHAKONE_PREPARED_FRENCH_TV_WASM="' + meson.project_source_root() / 'contrib-addons/examples/french-tv/dist/addon.wasm' + '"',
+                    '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
+                ],
+                'link_args': qt_link_args + ['-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv'],
+                'depends': [addon_worker_dependencies, addon_prepared_metadata_process],
                 'env': addon_worker_environment,
             }
         endif

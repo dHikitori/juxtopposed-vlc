@@ -9,6 +9,7 @@
 #include "addon_metadata_catalogue_source.hpp"
 #include "addon_display_catalogue_reader.hpp"
 #include "addon_distribution_bootstrap.hpp"
+#include "addon_prepared_metadata_invocation.hpp"
 #include <QObject>
 #include <QVariantList>
 #include <atomic>
@@ -18,6 +19,7 @@ class AddonStorage;
 class AddonCatalogueView;
 class AddonRepositoryJobs;
 struct UiAssetCapture;
+struct PrivateStorageContext;
 class AddonManager : public QObject
 {
     Q_OBJECT
@@ -69,6 +71,10 @@ public:
     Q_INVOKABLE QVariantMap displaySettingsSecretStatus(const QString&) const;
     // C++ only. This call reads memory on the Manager thread.
     std::optional<MetadataCatalogueSource> metadataCatalogueSource() const;
+    MetadataInvocationPreparer metadataInvocationPreparer(std::shared_ptr<const ArtworkAttemptPlan>, unsigned slot) const;
+    // Owner admission uses memory only. An empty ID means admission refused.
+    QString invokePreparedMetadata(std::unique_ptr<PreparedMetadataInvocation>, NetworkBroker::RequestGuard,
+                                   std::shared_ptr<AddonMetadataAttemptAdmission>);
     QString storageDirectory() const { return m_store.storageDirectory(); }
     // Read these memory snapshots on the manager thread. They contain no key bytes.
     QString workerExecutable() const { return m_workerExecutable; }
@@ -173,6 +179,11 @@ private:
     QHash<QString,DisplayRequest> m_displayRequests;
     void finishDistributionBootstrap(const QList<DistributionBootstrapEntry>&,
         const DistributionBootstrapBatch*,bool canceled,const QString& error);
+    void initializePreparedMetadata();
+    void retirePreparedMetadata(const QString& package = {});
+    bool cancelPreparedMetadata(const QString& invocation);
+    std::optional<bool> preparedStorageContext(const AddonHostServices::Context&, PrivateStorageContext*, QString*) const;
+    std::shared_ptr<PreparedMetadataRuntime> m_preparedMetadata;
     PackageStore m_store;
     mutable CredentialStore m_secrets;
     NetworkBroker m_network;

@@ -18,6 +18,12 @@ An SDK statement that the current host returns `unsupported` records a limit. It
 | Metadata result retention and cache policy. `03-providers-and-discovery.md:65,117,123,125,127`. | Account/config partitions and retry backoff exist. `addon_metadata_coordinator.cpp:369` has bounded retry handling. Line389 uses fixed 15-second negative and 60-second positive/partial TTLs. It does not apply a result's retention or expiry policy. This is less than the provider retention/expiry contract. | Define a bounded retention/expiry record in the metadata schema. Clamp cache life to host and provider limits. Support no-cache and expired results. Keep offline stale use explicit. Add tests for account rotation, provider expiry, forbidden retention and partial results. Verify user-cleared field policy in the same consumer acceptance matrix. |
 | Coherent native metadata cutover and artwork outcomes. `03-providers-and-discovery.md:176,178`; `metadata-provider-migration.md`. | Shared enrichment/search, native request guards, and provider-family work exist. The native fetched-outcome transaction passes eight fresh-Core suites and 28 focused real-source sanitizer groups. The Service/factory baseline passes 104 normal and 104 focused sanitizer cases. The later owner cleanup check passes 11 cases in each build. Its old-code control fails only the address-reuse case. The factory is not active in the app. The sealed native not-found transaction now passes 12 fresh-Core normal and eight focused sanitizer suites. Typed Qt aggregation, complete provider authority and the full Subtitle53 app closure remain open. | Finish the coherent owner, Core/Qt/consumer, and subtitle checks. The native receipt, stream/filter completion and HTTP witnesses now pass the fresh 13-suite normal group and 13 focused sanitizer suites. Connect them to a typed planned-attempt aggregate and the final native not-found transaction. Verify every preserved provider, local work, cancellation, status bits, and the no-legacy-bypass rule before activation. |
 
+The prepared portable invocation stage now passes 120 normal and 120
+sanitizer checks. Its shutdown control exposes the missing-owner-check
+use-after-free. This closes the prepared component's teardown gap. Native
+owner activation, planned outcome integration, and general metadata-plan
+adaptation remain open. See [prepared invocations](prepared-metadata-invocations.md).
+
 ## Validation and optional distribution gates
 
 - The session platform is not empty. `test_addon_native_session_player.cpp:157` uses two actual players and reduces a known seek-target offset from 18 seconds to 0. Host control, WSS, local priority and actual app assembly also have focused evidence. That test explicitly does not measure output clocks. The drift/rate/uncertainty experiment in `05-visualizers-and-sessions.md:97` remains a validation item if the v1 coordinated-playback claim includes it. It does not require a real watch-party service.
@@ -41,6 +47,11 @@ UI state updates and navigation already have registry/result-driven paths. Missi
 
 ## Progress assessment
 
-The current overall effort estimate is about 80–85 percent complete. This estimate includes work beyond the secure desktop foundation and the requested subtitle-provider example. Identity selection, subscriptions, guest adapters, author schemas and tools, and account setup need more implementation work. The remaining platform and integration checks can also find defects that need code changes. These open requirements limit confidence in the estimate.
+The earlier overall effort estimate was about 80–85 percent complete. It
+predates the UI performance findings and is not a current readiness measure.
+Identity selection, subscriptions, guest adapters, author schemas and tools,
+and account setup need more implementation work. The platform, integration,
+and full app performance checks can also find defects that need code changes.
+The open requirements above determine completion.
 
-Prepared branding patches and all active source files remain unchanged by this audit.
+This backlog does not enable native provider replacement.

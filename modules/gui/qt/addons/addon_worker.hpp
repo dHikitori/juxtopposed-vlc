@@ -36,7 +36,18 @@ public:
 signals:
     void completed(const QString& invocation, const QString& status, const QJsonObject& data, const QString& error);
     void unavailable(const QString& error);
+    void preparedRetired();
 private:
+    friend class AddonManager;
+    // Only the prepared Manager path can select this process lifecycle.
+    void enablePreparedLifecycle();
+    void retirePrepared(bool revoke);
+    struct PreparedTerminal {
+        QString invocation, status, error;
+        QJsonObject data;
+        std::shared_ptr<AddonMetadataAttemptAdmission> attempt;
+    };
+    std::optional<PreparedTerminal> m_preparedTerminal;
     struct Invocation {
         QString contribution;
         QPointer<QTimer> deadline;
@@ -56,13 +67,15 @@ private:
     void finish(const QString&, const QString&, const QJsonObject&, const QString&);
     void rememberRetired(const QString&);
     void revokeAttemptGates();
+    void processFinished(int, QProcess::ExitStatus);
+    void notifyPreparedRetired();
     InstalledPackage m_package;
     QString m_attemptWorkerId;
     QHash<QString, std::weak_ptr<AddonMetadataNativeAdmission>> m_attemptGates;
     NetworkBroker* m_network;
     QPointer<AddonHostServices> m_services;
     QProcess m_process;
-    QTimer m_startup;
+    QTimer m_startup, m_preparedDeadline;
     QByteArray m_buffer;
     QQueue<QJsonObject> m_queued;
     QHash<QString, Invocation> m_invocations;
@@ -74,5 +87,7 @@ private:
     NetworkBroker::RequestGuard m_requestGuard;
     QString m_executable;
     bool m_ready = false, m_stopping = false, m_failed = false;
+    bool m_prepared = false, m_preparedRetiring = false, m_preparedAbort = false;
+    bool m_preparedCleanExit = false, m_preparedNotified = false;
 };
 }

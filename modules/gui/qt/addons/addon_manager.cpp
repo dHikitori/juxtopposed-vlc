@@ -52,11 +52,13 @@ std::unique_ptr<AddonManager> AddonManager::withNetworkTransport(const QString& 
 AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAccessManager> value, QObject* parent)
     : QObject(parent), m_store(directory), m_network(std::move(value), this), m_hostServices(this)
 {
+    initializePreparedMetadata();
     m_repositoryJobs=std::make_unique<AddonRepositoryJobs>(AddonStreamLifetime::applicationHandle());
     connect(&m_hostServices, &AddonHostServices::availabilityChanged, this, &AddonManager::capabilitiesChanged);
     connect(this, &AddonManager::revisionChanged, this, &AddonManager::capabilitiesChanged);
     m_storage = std::make_unique<AddonStorage>(m_store, [this](const AddonHostServices::Context& host, PrivateStorageContext* output, QString* error) {
         const auto reject = [error] { if (error) *error = QStringLiteral("The private storage invocation is no longer current."); return false; };
+        if (const auto prepared = preparedStorageContext(host, output, error); prepared.has_value()) return *prepared;
         const auto instance = QPointer<AddonWorker>(m_workers.value(host.package));
         if (!instance || m_invocationPackages.value(host.invocation) != host.package
             || m_invocationContributions.value(host.invocation) != host.contribution || !instance->configurationCurrent()) return reject();
@@ -85,6 +87,7 @@ AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAcc
 AddonManager::~AddonManager()
 {
     m_retiring = true;
+    retirePreparedMetadata();
     // All public outer requests are dead before any member teardown. Detached
     // QObject-owned destroyed hooks still release their exact weak View; they
     // contain no Manager access and do not depend on this map's lifetime.
@@ -1329,6 +1332,7 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
 void AddonManager::cancel(const QString& request)
 {
     const auto package = m_invocationPackages.take(request); m_invocationContributions.remove(request);
+    if (cancelPreparedMetadata(request)) return;
     if (m_workers.contains(package)) m_workers.value(package)->cancel(request);
 }
 quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback callback)
@@ -1370,6 +1374,8 @@ bool AddonManager::withdraw(const QString& packageId)
         m_invocationPackages.remove(request);
     }
     m_store.invalidateAuthority();
+    if (!alive) return false;
+    retirePreparedMetadata(id);
     if (!alive) return false;
     if (const QPointer<AddonWorker> instance = m_workers.take(id)) {
         instance->stop();
