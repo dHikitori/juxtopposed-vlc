@@ -10,6 +10,44 @@ using namespace MediaIdentity;
 class TestMediaIdentity : public QObject {
     Q_OBJECT
 private slots:
+    void sourceLocatorsDoNotSupplyFilenameEvidence() {
+        for (const QString scheme : {QStringLiteral("hakone-addon-source"), QStringLiteral("VLC-ADDON-SOURCE")}) {
+            const QUrl locator(scheme + QStringLiteral(":PRIVATE_LOCATOR_ONLY_987654321"));
+            const auto empty = identify(locator);
+            QVERIFY(empty.title.isEmpty()); QVERIFY(empty.release.isEmpty()); QCOMPARE(empty.kind, Kind::Unknown);
+            QVERIFY(identify(locator, {{"title", locator.toString()}}).title.isEmpty());
+            QVERIFY(identify(locator, {{"title", locator.path()}}).title.isEmpty());
+            const auto display = identify(locator, {{"title", "Admitted display title"}, {"type", "movie"}});
+            QCOMPARE(display.title, "Admitted display title"); QCOMPARE(display.kind, Kind::Movie);
+            QVERIFY(display.release.isEmpty());
+        }
+        QCOMPARE(identify(QUrl("file:///Example.Movie.2020.mkv")).title, "Example Movie");
+    }
+    void unknownScopedIdsKeepTransportFactsWithoutStrongAuthority() {
+        Identity value; value.kind = Kind::Movie; value.title = "An explicit title";
+        value.ids.insert("external:example.catalog:edition", "281");
+        value.ids.insert("external:tmdb:season", "281");
+        const auto transport = toMap(value).value("externalIds").toList();
+        QVERIFY(transport.contains(QVariantMap{{"namespace", "example.catalog"}, {"scope", "edition"}, {"value", "281"}}));
+        QVERIFY(transport.contains(QVariantMap{{"namespace", "tmdb"}, {"scope", "season"}, {"value", "281"}}));
+        const auto roundtrip = fromMap(toMap(value)); QCOMPARE(roundtrip.ids, value.ids);
+        QVERIFY(!compare(value, roundtrip).strong);
+    }
+    void seriesIdentityKeepsItsScope() {
+        Identity series; series.kind = Kind::Series; series.title = "Example";
+        series.ids.insert("seriesTmdb", "42");
+        const auto roundtrip = fromMap(toMap(series));
+        QCOMPARE(roundtrip.kind, Kind::Series); QCOMPARE(roundtrip.ids, series.ids);
+        QVERIFY(compare(series, roundtrip).strong);
+        auto episode = series; episode.kind = Kind::Episode; episode.season = 1; episode.episodes = {2};
+        QVERIFY(compare(series, episode).conflict);
+        auto movie = series; movie.kind = Kind::Movie; movie.ids.clear(); movie.ids.insert("tmdbMovie", "42");
+        QVERIFY(compare(series, movie).conflict);
+        auto unknown = episode; unknown.ids.clear(); unknown.ids.insert("external:example:series", "42");
+        auto other = unknown; other.title = "Different";
+        QVERIFY(!compare(unknown, other).strong);
+        QCOMPARE(parse("Example.2020.mkv").kind, Kind::Movie);
+    }
     void episodeNamesExcludeFilenameReaderTitles() {
         const QUrl url("file://server/share/The%20Walking%20Dead%20-%20S01E03%20-%201080p.mkv");
         for (const auto& title : {QString("The Walking Dead - S01E03 - 1080p.mkv"),

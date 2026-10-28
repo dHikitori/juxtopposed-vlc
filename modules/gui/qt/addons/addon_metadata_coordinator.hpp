@@ -39,6 +39,8 @@ public:
     explicit AddonMetadataCoordinator(Backend backend, QObject* parent = nullptr);
     ~AddonMetadataCoordinator() override;
 
+    // Identification returns explicit choices. It does not change identity.
+    Q_INVOKABLE QString identify(const QString& feature, const QVariantMap& context);
     Q_INVOKABLE QString searchAssets(const QString& feature, const QVariantMap& context,
                                      bool aggregate = false);
     Q_INVOKABLE QString enrich(const QString& feature, const QVariantMap& context,

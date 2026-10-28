@@ -40,6 +40,7 @@ public:
     QVariantMap selected(const QString& selection, const QVariantMap& expectedContext) const;
     void releaseSet(const QString& set);
     void releaseSelection(const QString& selection);
+    void invalidateMedia(const QString& media);
     void invalidate();
 
 private:

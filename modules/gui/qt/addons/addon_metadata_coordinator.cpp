@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QTimer>
 #include <QPointer>
+#include <QRegularExpression>
 #include <algorithm>
 
 namespace {
@@ -94,6 +95,95 @@ QVariantMap normalizedIdentity(QVariantMap identity)
     return identity;
 }
 
+std::optional<QVariantMap> identifiedIdentity(const QVariantMap& input)
+{
+    if (input.isEmpty() || QJsonDocument::fromVariant(input).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) return {};
+    auto value = normalizedIdentity(input);
+    const auto kind = MediaIdentity::kindFromName(value.value(QStringLiteral("kind")).toString());
+    if (kind == MediaIdentity::Kind::Unknown) return {};
+    value.insert(QStringLiteral("type"), MediaIdentity::kindName(kind));
+    value.insert(QStringLiteral("kind"), MediaIdentity::kindName(kind));
+    if (input.value(QStringLiteral("title")).toString().size() > 1024) return {};
+    auto ids = input.value(QStringLiteral("ids")).toMap();
+    const auto external = input.value(QStringLiteral("externalIds")).toList();
+    if (ids.size() > 32 || external.size() > 32) return {};
+    static const QRegularExpression atom(QStringLiteral("^[a-z][a-z0-9._-]{0,31}$"));
+    for (const auto& entry : external) {
+        const auto id = entry.toMap();
+        const auto space = id.value(QStringLiteral("namespace")).toString();
+        const auto scope = id.value(QStringLiteral("scope")).toString();
+        const auto text = id.value(QStringLiteral("value")).toString();
+        if (!atom.match(space).hasMatch() || !atom.match(scope).hasMatch() || text.isEmpty() || text.size() > 256) return {};
+        QString key = QStringLiteral("external:%1:%2").arg(space, scope);
+        if (space == QStringLiteral("imdb")) {
+            if (scope == QStringLiteral("movie")) key = QStringLiteral("imdb");
+            else if (scope == QStringLiteral("series")) key = QStringLiteral("seriesImdb");
+            else if (scope == QStringLiteral("episode")) key = QStringLiteral("episodeImdb");
+        } else if (space == QStringLiteral("tmdb")) {
+            if (scope == QStringLiteral("movie")) key = QStringLiteral("tmdbMovie");
+            else if (scope == QStringLiteral("series")) key = QStringLiteral("seriesTmdb");
+            else if (scope == QStringLiteral("episode")) key = QStringLiteral("tmdbEpisode");
+        } else if (space == QStringLiteral("tvdb")) {
+            if (scope == QStringLiteral("series")) key = QStringLiteral("seriesTvdb");
+            else if (scope == QStringLiteral("episode")) key = QStringLiteral("tvdbEpisode");
+        } else if (space == QStringLiteral("tvmaze")) {
+            if (scope == QStringLiteral("series")) key = QStringLiteral("tvmazeShow");
+            else if (scope == QStringLiteral("episode")) key = QStringLiteral("tvmazeEpisode");
+        } else if (space == QStringLiteral("musicbrainz")) {
+            if (scope == QStringLiteral("track")) key = QStringLiteral("musicBrainzTrackId");
+            else if (scope == QStringLiteral("album")) key = QStringLiteral("musicBrainzAlbumId");
+            else if (scope == QStringLiteral("artist")) key = QStringLiteral("musicBrainzArtistId");
+        }
+        if (ids.contains(key) && ids.value(key).toString() != text) return {};
+        ids.insert(key, text);
+    }
+    if (ids.size() > 32) return {};
+    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+        if (it.key().isEmpty() || it.key().size() > 128 || it.value().toString().isEmpty() || it.value().toString().size() > 256) return {};
+    value.insert(QStringLiteral("ids"), ids);
+    const auto numbering = input.value(QStringLiteral("episodeNumbering"), input.value(QStringLiteral("episode"))).toMap();
+    if (input.contains(QStringLiteral("episodeNumbering")) && input.value(QStringLiteral("episode")).canConvert<QVariantMap>()
+        && !input.value(QStringLiteral("episode")).toMap().isEmpty()
+        && input.value(QStringLiteral("episode")).toMap() != numbering) return {};
+    if (!numbering.isEmpty()) {
+        if (kind != MediaIdentity::Kind::Episode && kind != MediaIdentity::Kind::PodcastEpisode) return {};
+        const auto put = [&](const QString& key, const QVariant& data) {
+            if (input.contains(key) && input.value(key) != data) return false;
+            value.insert(key, data); return true;
+        };
+        const auto scheme = numbering.value(QStringLiteral("scheme")).toString();
+        if (scheme == QStringLiteral("seasonal")) {
+            bool valid = false;
+            const auto season = numbering.value(QStringLiteral("season")).toInt(&valid);
+            const auto episodes = numbering.value(QStringLiteral("episodes")).toList();
+            if (!valid || numbering.value(QStringLiteral("season")).toDouble() != season
+                || season < 0 || season > 999 || episodes.isEmpty() || episodes.size() > 128) return {};
+            QVariantList normalized;
+            for (const auto& episode : episodes) {
+                const int number = episode.toInt(&valid);
+                if (!valid || number < 0 || number > 9999 || episode.toDouble() != number) return {};
+                normalized.append(number);
+            }
+            if (!put(QStringLiteral("season"), season) || !put(QStringLiteral("episodes"), normalized)) return {};
+        } else if (scheme == QStringLiteral("absolute")) {
+            const auto number = numbering.value(QStringLiteral("number")).toString();
+            static const QRegularExpression absolute(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?$"));
+            if (!absolute.match(number).hasMatch() || !put(QStringLiteral("absoluteEpisode"), number)) return {};
+        } else if (scheme == QStringLiteral("air-date")) {
+            const auto text = numbering.value(QStringLiteral("date")).toString();
+            const auto date = QDate::fromString(text, Qt::ISODate);
+            if (!date.isValid() || date.toString(Qt::ISODate) != text || !put(QStringLiteral("airDate"), text)) return {};
+        } else return {};
+    }
+    const auto parsed = MediaIdentity::fromMap(value);
+    if (parsed.kind != kind || parsed.title.isEmpty() || parsed.title.size() > 1024 || parsed.aliases.size() > 32 || parsed.episodes.size() > 128) return {};
+    for (const auto& alias : parsed.aliases) if (alias.size() > 1024) return {};
+    auto result = MediaIdentity::toMap(parsed);
+    result.insert(QStringLiteral("kind"), result.value(QStringLiteral("type")));
+    result.remove(QStringLiteral("provenance")); result.remove(QStringLiteral("conflicts"));
+    return result;
+}
+
 MediaIdentity::Comparison compare(const QVariantMap& target, const QVariantMap& candidate)
 {
     return MediaIdentity::compare(MediaIdentity::fromMap(normalizedIdentity(target)),
@@ -109,6 +199,15 @@ QString keyFor(const QString& provider, const QString& operation, const QVariant
     return QString::fromLatin1(QCryptographicHash::hash(
         QJsonDocument(QJsonObject::fromVariantMap(key)).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
 }
+
+bool manualVideoIdentity(const QString& feature, const QString& operation, const QVariantMap& context)
+{
+    return feature == QStringLiteral("video.identity") && operation == QStringLiteral("identify")
+        && context.value(QStringLiteral("manual")).toBool()
+        && !context.value(QStringLiteral("query")).toString().trimmed().isEmpty();
+}
+bool videoKind(const QString& kind)
+{ return kind == QStringLiteral("movie") || kind == QStringLiteral("series") || kind == QStringLiteral("episode"); }
 
 int statusWeight(const QString& status)
 {
@@ -133,6 +232,9 @@ AddonMetadataCoordinator::~AddonMetadataCoordinator()
         if (!job.invocation.isEmpty() && m_backend.cancel) m_backend.cancel(job.invocation);
 }
 
+QString AddonMetadataCoordinator::identify(const QString& feature, const QVariantMap& context)
+{ return start(feature, QStringLiteral("identify"), context, {}, false); }
+
 QString AddonMetadataCoordinator::searchAssets(const QString& feature, const QVariantMap& context, bool aggregate)
 {
     return start(feature, QStringLiteral("searchAssets"), context, {}, aggregate);
@@ -148,10 +250,13 @@ QString AddonMetadataCoordinator::enrichNative(const QString& feature, const QVa
     return start(feature, QStringLiteral("enrich"), context, fields, false, scope);
 }
 
-QString AddonMetadataCoordinator::start(const QString& feature, const QString& operation,
-                                       const QVariantMap& context, const QStringList& fields, bool aggregate,
-                                       const QString& privateScope)
+QString AddonMetadataCoordinator::start(const QString& featureInput, const QString& operationInput,
+                                       const QVariantMap& contextInput, const QStringList& fieldsInput, bool aggregate,
+                                       const QString& privateScopeInput)
 {
+    const auto feature = featureInput, operation = operationInput, privateScope = privateScopeInput;
+    const auto context = contextInput;
+    const auto fields = fieldsInput;
     const auto id = QStringLiteral("metadata-%1").arg(++m_sequence);
     if (feature.isEmpty() || feature.size() > 128 || fields.size() > 64
         || privateScope.size() > 128 || m_consumers.size() >= MaxConsumers) {
@@ -167,7 +272,11 @@ QString AddonMetadataCoordinator::start(const QString& feature, const QString& o
     consumer.required = fields;
     consumer.required.removeDuplicates();
     consumer.aggregate = aggregate;
-    const auto registrations = m_backend.providersForFeature ? m_backend.providersForFeature(feature) : QVariantList{};
+    const auto query = m_backend.providersForFeature;
+    const auto nativeQuery = m_backend.requiresNativeScope;
+    const QPointer<AddonMetadataCoordinator> owner(this);
+    const auto registrations = query ? query(feature) : QVariantList{};
+    if (!owner) return id;
     QHash<QString, QVariantMap> eligible;
     QStringList defaults;
     const auto kind = consumer.context.value(QStringLiteral("identity")).toMap().value(QStringLiteral("kind")).toString();
@@ -175,10 +284,18 @@ QString AddonMetadataCoordinator::start(const QString& feature, const QString& o
         const auto provider = registration.toMap();
         const auto providerId = provider.value(QStringLiteral("id")).toString();
         if (providerId.isEmpty() || eligible.contains(providerId) || !provider.value(QStringLiteral("enabled")).toBool()) continue;
-        if (m_backend.requiresNativeScope && m_backend.requiresNativeScope(providerId)
-            && (privateScope.isEmpty() || !m_backend.invokeNative)) continue;
+        const bool native = nativeQuery && nativeQuery(providerId);
+        if (!owner) return id;
+        if (native && (privateScope.isEmpty() || !m_backend.invokeNative)) continue;
+        if (operation == QStringLiteral("identify")
+            && (!provider.value(QStringLiteral("operations")).toStringList().contains(operation)
+                || !provider.value(QStringLiteral("features")).toStringList().contains(feature))) continue;
         const auto kinds = provider.value(QStringLiteral("mediaKinds")).toStringList();
-        if (!kinds.isEmpty() && !kinds.contains(kind)) continue;
+        if (!kinds.isEmpty()) {
+            if (manualVideoIdentity(feature, operation, consumer.context)) {
+                if (std::none_of(kinds.cbegin(), kinds.cend(), videoKind)) continue;
+            } else if (!kinds.contains(kind)) continue;
+        }
         if (!provider.value(QStringLiteral("configured")).toBool()) {
             consumer.status = QStringLiteral("auth_required");
             consumer.error = tr("Set up a metadata provider in Add-on settings.");
@@ -251,6 +368,12 @@ QVariantMap AddonMetadataCoordinator::providerContext(const Consumer& consumer) 
             QStringLiteral("query"), QStringLiteral("manual"), QStringLiteral("cursor"), QStringLiteral("fingerprints"),
             QStringLiteral("media")})
         if (consumer.context.contains(key)) projection.insert(key, consumer.context.value(key));
+    if (consumer.operation == QStringLiteral("identify") && projection.value(QStringLiteral("manual")).toBool()
+        && !projection.value(QStringLiteral("query")).toString().trimmed().isEmpty()) {
+        auto identity = projection.value(QStringLiteral("identity")).toMap();
+        identity.remove(QStringLiteral("ids")); identity.remove(QStringLiteral("externalIds"));
+        projection.insert(QStringLiteral("identity"), identity); projection.remove(QStringLiteral("fingerprints"));
+    }
     projection.insert(QStringLiteral("feature"), consumer.feature);
     if (consumer.operation == QStringLiteral("enrich")) projection.insert(QStringLiteral("fields"), missing(consumer));
     return projection;
@@ -258,10 +381,12 @@ QVariantMap AddonMetadataCoordinator::providerContext(const Consumer& consumer) 
 
 void AddonMetadataCoordinator::advance(const QString& consumerId)
 {
+    const QPointer<AddonMetadataCoordinator> owner(this);
     auto it = m_consumers.find(consumerId);
     if (it == m_consumers.end()) return;
     if ((it->operation == QStringLiteral("enrich") && missing(*it).isEmpty())
-        || (!it->aggregate && it->operation == QStringLiteral("searchAssets") && !it->candidates.isEmpty())) {
+        || (!it->aggregate && (it->operation == QStringLiteral("searchAssets")
+            || it->operation == QStringLiteral("identify")) && !it->candidates.isEmpty())) {
         finish(consumerId); return;
     }
     const int concurrency = it->aggregate ? 4 : 1;
@@ -269,6 +394,7 @@ void AddonMetadataCoordinator::advance(const QString& consumerId)
            && it->next < it->providers.size() && it->outstanding < concurrency) {
         const auto registration = it->providers.at(it->next++).toMap();
         subscribe(consumerId, registration);
+        if (!owner) return;
     }
     it = m_consumers.find(consumerId);
     if (it != m_consumers.end() && it->outstanding == 0 && it->next >= it->providers.size()) finish(consumerId);
@@ -281,7 +407,12 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
     const auto provider = registration.value(QStringLiteral("id")).toString();
     const auto context = providerContext(*it);
     const auto partition = registration.value(QStringLiteral("cachePartition")).toString();
-    const bool native = m_backend.requiresNativeScope && m_backend.requiresNativeScope(provider);
+    const auto query = m_backend.requiresNativeScope;
+    const QPointer<AddonMetadataCoordinator> owner(this);
+    const bool native = query && query(provider);
+    if (!owner) return;
+    it = m_consumers.find(consumerId);
+    if (it == m_consumers.end()) return;
     // Do not reuse a result without a release, account, and settings identity.
     const QString key = keyFor(provider, it->operation, context, partition, m_policy)
         + (partition.isEmpty() ? consumerId : QString{})
@@ -377,7 +508,7 @@ void AddonMetadataCoordinator::complete(const QString& invocation, const QString
         m_backoff.insert(backoffKey, {status, data, error.left(512), m_clock.elapsed() + qint64(seconds) * 1000});
     }
     bool cacheable = job.privateScope.isEmpty();
-    if (job.operation == QStringLiteral("searchAssets")) {
+    if (job.operation == QStringLiteral("searchAssets") || job.operation == QStringLiteral("identify")) {
         const auto candidates = data.value(QStringLiteral("candidates")).toList();
         cacheable = cacheable && candidates.size() <= MaxCandidates;
         for (const auto& candidate : candidates)
@@ -409,13 +540,45 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     if (status == QStringLiteral("ambiguous")) { it->ambiguous = true; it->entityAmbiguous = true; }
     const bool manual = it->context.value(QStringLiteral("manual")).toBool()
         || (it->operation == QStringLiteral("searchAssets") && it->context.value(QStringLiteral("interactive")).toBool());
-    const bool explicitAlternatives = status == QStringLiteral("ambiguous") && manual
-        && it->operation == QStringLiteral("searchAssets");
+    const bool explicitAlternatives = status == QStringLiteral("ambiguous")
+        && (it->operation == QStringLiteral("identify") || (manual && it->operation == QStringLiteral("searchAssets")));
     if (status != QStringLiteral("match") && status != QStringLiteral("partial") && !explicitAlternatives) return;
     const auto target = it->context.value(QStringLiteral("identity")).toMap();
     const auto provider = registration.value(QStringLiteral("id")).toString();
     const QVariantMap provenance{{QStringLiteral("provider"), provider}, {QStringLiteral("feature"), it->feature},
         {QStringLiteral("cachePartition"), registration.value(QStringLiteral("cachePartition"))}};
+    if (it->operation == QStringLiteral("identify")) {
+        QSet<QString> seen;
+        for (const auto& value : data.value(QStringLiteral("candidates")).toList().mid(0, MaxCandidates)) {
+            const auto candidate = value.toMap();
+            if (QJsonDocument::fromVariant(candidate).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) continue;
+            const auto entity = identifiedIdentity(candidate.value(QStringLiteral("identity")).toMap());
+            if (!entity) continue;
+            const auto kind = entity->value(QStringLiteral("kind")).toString();
+            const auto kinds = registration.value(QStringLiteral("mediaKinds")).toStringList();
+            if (it->feature == QStringLiteral("video.identity") && !videoKind(kind)) continue;
+            if (!manualVideoIdentity(it->feature, it->operation, it->context)) {
+                const auto targetKind = target.value(QStringLiteral("kind")).toString();
+                if ((!targetKind.isEmpty() && targetKind != QStringLiteral("unknown") && kind != targetKind)
+                    || (!kinds.isEmpty() && !kinds.contains(kind))) continue;
+            }
+            const auto encoded = QJsonDocument::fromVariant(*entity).toJson(QJsonDocument::Compact);
+            const auto key = QString::fromLatin1(QCryptographicHash::hash(encoded, QCryptographicHash::Sha256).toHex());
+            if (seen.contains(key)) continue;
+            seen.insert(key);
+            const auto match = compare(target, *entity);
+            auto source = provenance;
+            source.insert(QStringLiteral("accountReference"), registration.value(QStringLiteral("accountReference")));
+            const auto credit = attribution(candidate.value(QStringLiteral("attribution")));
+            if (!credit.isEmpty()) source.insert(QStringLiteral("attribution"), credit);
+            it->candidates.append(QVariantMap{{QStringLiteral("identity"), *entity},
+                {QStringLiteral("provider"), provider}, {QStringLiteral("provenance"), source},
+                {QStringLiteral("attribution"), credit}, {QStringLiteral("hostMatch"), QVariantMap{
+                    {QStringLiteral("strong"), match.strong}, {QStringLiteral("conflicts"), match.conflicts},
+                    {QStringLiteral("requiresConfirmation"), true}}}});
+        }
+        return;
+    }
     const bool native = m_backend.requiresNativeScope && m_backend.requiresNativeScope(provider);
     if (native && it->feature == QStringLiteral("artwork") && it->operation == QStringLiteral("enrich")) {
         if (it->privateScope.isEmpty() || it->entityAmbiguous || !missing(*it).contains(QStringLiteral("artwork"))
@@ -569,7 +732,7 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
         {QStringLiteral("targetRevision"), consumer.context.value(QStringLiteral("targetRevision"))},
         {QStringLiteral("expectedFieldRevisions"), consumer.context.value(QStringLiteral("fieldRevisions"))}};
     QString status = consumer.status;
-    if (consumer.operation == QStringLiteral("searchAssets")) {
+    if (consumer.operation == QStringLiteral("searchAssets") || consumer.operation == QStringLiteral("identify")) {
         auto candidates = consumer.candidates;
         QHash<QString, int> rank;
         for (int i = 0; i < consumer.providers.size(); ++i)
@@ -579,7 +742,9 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
                 < rank.value(b.toMap().value(QStringLiteral("provider")).toString(), MaxProviders);
         });
         data.insert(QStringLiteral("candidates"), candidates);
-        if (!consumer.candidates.isEmpty()) status = QStringLiteral("match");
+        if (consumer.operation == QStringLiteral("identify")) data.insert(QStringLiteral("requiresSelection"), true);
+        if (!consumer.candidates.isEmpty()) status = consumer.operation == QStringLiteral("identify")
+            && (consumer.candidates.size() > 1 || consumer.ambiguous) ? QStringLiteral("ambiguous") : QStringLiteral("match");
         else if (consumer.ambiguous) status = QStringLiteral("ambiguous");
         else if (status == QStringLiteral("match") || status == QStringLiteral("partial")) status = QStringLiteral("no_match");
     } else {

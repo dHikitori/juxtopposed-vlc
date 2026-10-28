@@ -9,6 +9,8 @@
 typedef struct vlc_metadata_backend vlc_metadata_backend_t;
 typedef struct vlc_metadata_job vlc_metadata_job_t;
 class AddonNativeArtworkAssets;
+class AddonMetadataChoices;
+struct input_item_t;
 
 namespace vlc::addons { class AddonManager; }
 
@@ -69,6 +71,26 @@ public:
     void releaseMedia(const QString& reference);
     int mediaCount() const { return m_media.size(); }
 
+    // The caller owns the retained StartLocal anchor and the exact target.
+    // This API requires NETWORK and adds native holds. It does not start,
+    // complete, or apply the job. Automatic jobs also require network consent.
+    // Change the host context through a new binding, not an existing reference.
+    QString bindIdentityTarget(vlc_metadata_job_t* anchor, input_item_t* exactTarget,
+                               const QVariantMap& hostContext = {});
+    void releaseIdentityTarget(const QString& target);
+    int identityTargetCount() const { return m_identityTargets.size(); }
+    QString identify(const QString& feature, const QString& target);
+    QString acceptIdentity(const QString& target, const QString& choice);
+    QVariantMap selectedIdentity(const QString& target, const QString& selection) const;
+    QString enrichSelected(const QString& feature, const QString& target, const QString& selection,
+                           const QStringList& fields);
+    // The host must use the normal native Complete/Apply path. A held job does
+    // not permit a write. Apply must still validate its exact original target.
+    // The write adapter must retain provider/account authority through commit.
+    vlc_metadata_job_t* holdIdentityAnchor(const QString& target, const QString& selection) const;
+    void releaseIdentityChoiceSet(const QString& set);
+    void releaseIdentitySelection(const QString& selection);
+
     QString searchAssets(const QString& feature, const QVariantMap& context, bool aggregate = false);
     QString enrich(const QString& feature, const QVariantMap& context, const QStringList& fields);
     void cancel(const QString& consumer);
@@ -105,6 +127,13 @@ signals:
 private:
     struct CoreState;
     struct Media { QUrl url; QVariantMap identity; QString key; unsigned refs = 0; };
+    struct IdentityTarget {
+        std::shared_ptr<vlc_metadata_job_t> anchor;
+        std::shared_ptr<input_item_t> target;
+        QString media, nonce;
+        QVariantMap context;
+    };
+    struct IdentityRequest { QString target, selection, feature; QVariantMap context; };
     struct Builtin {
         QStringList features;
         QVariantMap descriptor;
@@ -145,6 +174,9 @@ private:
     void cancelCore(quint64 key);
     void finishCore(quint64 key, const QString&, const QVariantMap&);
     bool holdMedia(const QString&);
+    std::optional<QVariantMap> identitySubject(const QString& media) const;
+    bool identityCurrent(const QString& target) const;
+    void retireIdentityTargets(const QString& target = {});
     bool applicationCurrent() const;
     static Backend managerBackend(vlc::addons::AddonManager*);
 
@@ -152,6 +184,12 @@ private:
     AddonMetadataCoordinator m_coordinator;
     QHash<QString, Media> m_media;
     QHash<QString, QString> m_mediaKeys;
+    QHash<QString, IdentityTarget> m_identityTargets;
+    QHash<QString, QString> m_identityMedia;
+    QHash<QString, IdentityRequest> m_identityRequests;
+    std::unique_ptr<AddonMetadataChoices> m_choices;
+    bool m_identityInvalidating = false;
+    bool m_invalidateActive = false;
     QHash<QString, Builtin> m_builtins;
     QHash<QString, NativeCall> m_nativeCalls;
     QHash<QString, Consumer> m_consumers;

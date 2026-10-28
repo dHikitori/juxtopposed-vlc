@@ -3,6 +3,8 @@
 # include <config.h>
 #endif
 #include "addon_metadata_service.hpp"
+#include "addon_metadata_choices.hpp"
+#include "../../../../src/preparser/metadata_local.h"
 #include <vlc_metadata_backend.h>
 #include <vlc_artwork_policy.h>
 #include "addon_manager.hpp"
@@ -17,6 +19,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QUuid>
+#include <QScopeGuard>
 #include <atomic>
 #include <mutex>
 
@@ -38,6 +41,28 @@ const QMap<QString, vlc_meta_type_t>& nativeFields()
         {QStringLiteral("disc"), vlc_meta_DiscNumber}, {QStringLiteral("artwork"), vlc_meta_ArtworkURL},
         {QStringLiteral("artworkUrl"), vlc_meta_ArtworkURL}};
     return fields;
+}
+QVariantMap publicNativeIdentity(input_item_t* item, const QUrl& url, const QVariantMap& explicitIdentity = {})
+{
+    bool locatorEvidence = false;
+    if (MediaIdentity::isSourceLocator(url)) {
+        const auto provenance = explicitIdentity.value(QStringLiteral("provenance")).toMap();
+        for (const auto& value : provenance)
+            if (value == QStringLiteral("filename") || value == QStringLiteral("folder")) locatorEvidence = true;
+        QVariantList titles = explicitIdentity.value(QStringLiteral("titles")).toList();
+        titles.append(explicitIdentity.value(QStringLiteral("title")));
+        titles.append(explicitIdentity.value(QStringLiteral("aliases")).toList());
+        const auto payload = MediaIdentity::compact(url.path());
+        for (const auto& value : titles) {
+            const auto title = value.toString().trimmed();
+            if (MediaIdentity::isSourceLocator(QUrl(title))
+                || (!payload.isEmpty() && MediaIdentity::compact(title) == payload)) locatorEvidence = true;
+        }
+    }
+    if (!explicitIdentity.isEmpty() && !locatorEvidence) return explicitIdentity;
+    // Source contexts use native display tags. A context must not restore
+    // filename evidence from a private source locator.
+    return MediaIdentity::toMap(MediaIdentity::identify(url, MediaIdentity::inputMetadata(item)));
 }
 int nativeStatus(const QString& status)
 {
@@ -237,6 +262,20 @@ AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
           }}, this),
       m_core(std::make_shared<CoreState>())
 {
+    const QPointer<AddonMetadataService> owner(this);
+    m_choices = std::make_unique<AddonMetadataChoices>(AddonMetadataChoices::Backend{
+        [owner](const QString& media) -> std::optional<QVariantMap> {
+            return owner ? owner->identitySubject(media) : std::nullopt;
+        },
+        [owner](const QString& media) {
+            return owner && owner->identitySubject(media) && owner->holdMedia(media);
+        },
+        [owner](const QString& media) { if (owner) owner->releaseMedia(media); },
+        [owner](const QString& feature, const QString& id) {
+            const auto rows = owner ? owner->providers(feature) : QVariantList{};
+            for (const auto& value : rows) if (value.toMap().value(QStringLiteral("id")) == id) return value.toMap();
+            return QVariantMap{};
+        }});
     m_core->owner = this;
     const vlc_metadata_backend_operations operations{CoreState::dispatch, CoreState::cancel, CoreState::destroy};
     auto* state = new std::shared_ptr<CoreState>(m_core);
@@ -249,13 +288,31 @@ AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
 }
 AddonMetadataService::~AddonMetadataService()
 {
+    { std::lock_guard<std::mutex> lock(m_core->lock); m_core->owner = nullptr; }
     shutdown();
-    if (m_coreBackend) vlc_metadata_backend_Release(m_coreBackend);
+    // A callback can enter destruction during invalidate(). Drain here even
+    // when its reentry guard prevented the ordinary shutdown invalidation.
+    // All cancellation maps must remain alive until the coordinator is empty.
+    m_coordinator.invalidate();
+    const auto consumers = m_consumers.keys();
+    for (const auto& consumer : consumers) retireConsumer(consumer);
+    QHash<QString, NativeCall> calls;
+    calls.swap(m_nativeCalls);
+    for (auto it = calls.cbegin(); it != calls.cend(); ++it)
+        if (it->lifetime && it->cancel) it->cancel(it.key());
+    if (m_coreBackend) {
+        vlc_metadata_backend_Close(m_coreBackend);
+        vlc_metadata_backend_Release(m_coreBackend);
+    }
 }
 
 QVariantList AddonMetadataService::providers(const QString& feature) const
 {
-    auto list = m_backend.providers.providersForFeature ? m_backend.providers.providersForFeature(feature) : QVariantList{};
+    const auto query = m_backend.providers.providersForFeature;
+    const QPointer<const AddonMetadataService> owner(this);
+    auto list = query ? query(feature) : QVariantList{};
+    if (!owner) return {};
+
     QSet<QString> registered;
     for (const auto& entry : list) registered.insert(entry.toMap().value(QStringLiteral("id")).toString());
     for (auto it = m_builtins.cbegin(); it != m_builtins.cend(); ++it)
@@ -422,6 +479,134 @@ void AddonMetadataService::releaseMedia(const QString& reference)
     if (found == m_media.end() || --found->refs) return;
     m_mediaKeys.remove(found->key); m_media.erase(found);
 }
+bool AddonMetadataService::identityCurrent(const QString& reference) const
+{
+    if (m_closed || m_identityInvalidating || m_invalidateActive || !applicationCurrent()) return false;
+    const auto found = m_identityTargets.constFind(reference);
+    if (found == m_identityTargets.cend()) return false;
+    const auto& value = *found;
+    const auto* request = vlc_metadata_job_GetRequest(value.anchor.get());
+    return (request->flags & VLC_METADATA_REQUEST_NETWORK)
+        && (!(request->flags & VLC_METADATA_REQUEST_AUTOMATIC) || automaticNetworkAllowed())
+        && vlc_metadata_job_IsCurrentFor(value.anchor.get(), value.target.get());
+}
+std::optional<QVariantMap> AddonMetadataService::identitySubject(const QString& media) const
+{
+    const auto reference = m_identityMedia.value(media);
+    if (reference.isEmpty() || !identityCurrent(reference)) return {};
+    const auto value = m_identityTargets.value(reference);
+    // The anchor seals the native URI, policy, owner, and revision tokens.
+    // Only this host binding uses the nonce. Providers and views never receive it.
+    return QVariantMap{{QStringLiteral("nativeSubject"), value.nonce}};
+}
+QString AddonMetadataService::bindIdentityTarget(vlc_metadata_job_t* anchor, input_item_t* target,
+                                                const QVariantMap& hostContext)
+{
+    if (!anchor || !target || m_closed || m_identityInvalidating || m_invalidateActive || !applicationCurrent()
+        || m_identityTargets.size() >= 64 || m_media.size() >= 8192
+        || QJsonDocument::fromVariant(hostContext).toJson(QJsonDocument::Compact).size() > 32768
+        || !vlc_metadata_job_IsCurrentFor(anchor, target)) return {};
+    const auto* request = vlc_metadata_job_GetRequest(anchor);
+    if (!request->item || !(request->flags & VLC_METADATA_REQUEST_NETWORK)
+        || ((request->flags & VLC_METADATA_REQUEST_AUTOMATIC) && !automaticNetworkAllowed())) return {};
+    char* address = input_item_GetURI(request->item);
+    const auto url = address ? QUrl(QString::fromUtf8(address)) : QUrl{}; free(address);
+    if (url.isEmpty() || !url.isValid() || url.toEncoded().size() > 32768) return {};
+    const auto entity = publicNativeIdentity(request->item, url, MediaIdentity::isSourceLocator(url)
+        ? hostContext.value(QStringLiteral("identity")).toMap() : QVariantMap{});
+    const auto reference = nonce("metadata-target:");
+    const auto media = nonce("metadata-media:");
+    auto context = hostContext;
+    context.insert(QStringLiteral("media"), media);
+    context.insert(QStringLiteral("identity"), entity);
+    context.insert(QStringLiteral("generation"), QString::number(request->generation));
+    context.insert(QStringLiteral("targetRevision"), QString::number(request->target_revision));
+    context.insert(QStringLiteral("automatic"), bool(request->flags & VLC_METADATA_REQUEST_AUTOMATIC));
+    m_media.insert(media, {url, entity, {}, 1});
+    m_identityTargets.insert(reference, {holdJob(anchor),
+        std::shared_ptr<input_item_t>(input_item_Hold(target), input_item_Release), media, nonce("native-subject:"), context});
+    m_identityMedia.insert(media, reference);
+    return reference;
+}
+void AddonMetadataService::retireIdentityTargets(const QString& reference)
+{
+    if (m_identityInvalidating && (!reference.isEmpty() || m_identityTargets.isEmpty())) return;
+    const bool outerRetirement = m_identityInvalidating;
+    const QPointer<AddonMetadataService> owner(this);
+    m_identityInvalidating = true;
+    QList<IdentityTarget> retired;
+    const auto references = reference.isEmpty() ? m_identityTargets.keys() : QStringList{reference};
+    QSet<QString> removed;
+    for (const auto& id : references) {
+        if (!m_identityTargets.contains(id)) continue;
+        const auto value = m_identityTargets.take(id); removed.insert(id);
+        m_identityMedia.remove(value.media); retired.append(value);
+        m_choices->invalidateMedia(value.media); releaseMedia(value.media);
+    }
+    QStringList consumers;
+    for (auto it = m_identityRequests.cbegin(); it != m_identityRequests.cend(); ++it)
+        if (removed.contains(it->target)) consumers.append(it.key());
+    // Finish every detached native obligation even if one callback deletes us.
+    for (const auto& value : retired) vlc_metadata_job_Cancel(value.anchor.get());
+    if (!owner) return;
+    for (const auto& id : consumers) { cancel(id); if (!owner) return; }
+    m_identityInvalidating = outerRetirement;
+}
+void AddonMetadataService::releaseIdentityTarget(const QString& target)
+{ retireIdentityTargets(target); }
+QString AddonMetadataService::identify(const QString& featureInput, const QString& targetInput)
+{
+    const auto feature = featureInput, target = targetInput;
+    if (!identityCurrent(target)) return {};
+    const auto value = m_identityTargets.value(target);
+    if (!holdMedia(value.media)) return {};
+    const QPointer<AddonMetadataService> owner(this);
+    const auto id = m_coordinator.identify(feature, value.context);
+    if (!owner) return id;
+    if (!identityCurrent(target)) { releaseMedia(value.media); m_coordinator.cancel(id); return id; }
+    m_consumers.insert(id, {value.media, 0, value.context.value(QStringLiteral("automatic")).toBool()});
+    m_identityRequests.insert(id, {target, {}, feature, value.context});
+    return id;
+}
+QString AddonMetadataService::acceptIdentity(const QString& target, const QString& choice)
+{
+    if (!identityCurrent(target)) return {};
+    const auto context = m_identityTargets.value(target).context;
+    return m_choices->select(choice, context);
+}
+QVariantMap AddonMetadataService::selectedIdentity(const QString& target, const QString& selection) const
+{
+    if (!identityCurrent(target)) return {};
+    return m_choices->selected(selection, m_identityTargets.value(target).context);
+}
+QString AddonMetadataService::enrichSelected(const QString& featureInput, const QString& targetInput,
+                                            const QString& selectionInput, const QStringList& fieldsInput)
+{
+    const auto feature = featureInput, target = targetInput, selection = selectionInput;
+    const auto fields = fieldsInput;
+    const QPointer<AddonMetadataService> owner(this);
+    const auto accepted = selectedIdentity(target, selection);
+    if (!owner || accepted.isEmpty() || !identityCurrent(target)) return {};
+    const auto value = m_identityTargets.value(target);
+    auto context = value.context; context.insert(QStringLiteral("identity"), accepted.value(QStringLiteral("identity")));
+    if (!holdMedia(value.media)) return {};
+    const auto id = m_coordinator.enrich(feature, context, fields);
+    if (!owner) return id;
+    if (!identityCurrent(target)) { releaseMedia(value.media); m_coordinator.cancel(id); return id; }
+    m_consumers.insert(id, {value.media, 0, context.value(QStringLiteral("automatic")).toBool()});
+    m_identityRequests.insert(id, {target, selection, feature, context});
+    return id;
+}
+vlc_metadata_job_t* AddonMetadataService::holdIdentityAnchor(const QString& targetInput, const QString& selectionInput) const
+{
+    const auto target = targetInput, selection = selectionInput;
+    const QPointer<const AddonMetadataService> owner(this);
+    if (selectedIdentity(target, selection).isEmpty() || !owner || !identityCurrent(target)) return nullptr;
+    return vlc_metadata_job_Hold(m_identityTargets.value(target).anchor.get());
+}
+void AddonMetadataService::releaseIdentityChoiceSet(const QString& set) { m_choices->releaseSet(set); }
+void AddonMetadataService::releaseIdentitySelection(const QString& selection) { m_choices->releaseSelection(selection); }
+
 QString AddonMetadataService::searchAssets(const QString& feature, const QVariantMap& context, bool aggregate)
 { return start(feature, context, {}, aggregate, true); }
 QString AddonMetadataService::enrich(const QString& feature, const QVariantMap& context, const QStringList& fields)
@@ -443,9 +628,11 @@ QString AddonMetadataService::start(const QString& feature, QVariantMap context,
         return consumer;
     }
     if (!media.isEmpty()) context.insert(QStringLiteral("identity"), m_media.value(media).identity);
+    const QPointer<AddonMetadataService> owner(this);
     const auto consumer = assets ? m_coordinator.searchAssets(feature, context, aggregate)
         : privateScope.isEmpty() ? m_coordinator.enrich(feature, context, fields)
         : m_coordinator.enrichNative(feature, context, fields, privateScope);
+    if (!owner) return consumer;
     m_consumers.insert(consumer, {media, 0, automatic});
     return consumer;
 }
@@ -463,6 +650,7 @@ void AddonMetadataService::retireConsumer(const QString& consumer)
     if (!m_consumers.contains(consumer)) return;
     const QPointer<AddonMetadataService> alive(this);
     const auto record = m_consumers.take(consumer);
+    m_identityRequests.remove(consumer);
     const auto result = m_results.take(consumer);
     releaseMedia(record.media);
     NativeJob job;
@@ -478,7 +666,12 @@ void AddonMetadataService::retireConsumer(const QString& consumer)
 }
 void AddonMetadataService::invalidate()
 {
+    if (m_invalidateActive) return;
     QPointer<AddonMetadataService> guard(this);
+    m_invalidateActive = true;
+    const auto reset = qScopeGuard([guard] { if (guard) guard->m_invalidateActive = false; });
+    retireIdentityTargets();
+    if (!guard) return;
     if (m_coreBackend) {
         const auto backend = std::shared_ptr<vlc_metadata_backend_t>(
             vlc_metadata_backend_Hold(m_coreBackend), vlc_metadata_backend_Release);
@@ -570,6 +763,8 @@ void AddonMetadataService::shutdown()
     if (m_closed) return;
     QPointer<AddonMetadataService> guard(this);
     m_closed = true;
+    retireIdentityTargets();
+    if (!guard) return;
     const auto retiredPlan = std::move(m_providerPlan);
     m_planOwner.clear(); m_nativeOwner.clear();
     { std::lock_guard<std::mutex> guard(m_core->lock); m_core->owner = nullptr; }
@@ -596,6 +791,31 @@ void AddonMetadataService::coordinatorFinished(const QString& consumer, const QS
 {
     if (!m_consumers.contains(consumer)) return;
     if (!applicationCurrent()) { cancel(consumer); return; }
+    const auto identityRequest = m_identityRequests.value(consumer);
+    if (!identityRequest.target.isEmpty()) {
+        const QPointer<AddonMetadataService> owner(this);
+        if (!identityCurrent(identityRequest.target)) { cancel(consumer); return; }
+        if (identityRequest.selection.isEmpty()) {
+            auto result = data;
+            result.remove(QStringLiteral("candidates"));
+            if (status == QStringLiteral("match") || status == QStringLiteral("ambiguous") || status == QStringLiteral("partial")) {
+                const auto offer = m_choices->issue(identityRequest.feature, identityRequest.context,
+                    data.value(QStringLiteral("candidates")).toList());
+                if (!owner) return;
+                if (!m_consumers.contains(consumer)) {
+                    m_choices->releaseSet(offer.value(QStringLiteral("choiceSet")).toString()); return;
+                }
+                for (auto it = offer.cbegin(); it != offer.cend(); ++it) result.insert(it.key(), it.value());
+                if (!offer.contains(QStringLiteral("choiceSet"))) { deliver(consumer, QStringLiteral("unsupported"), result,
+                    offer.value(QStringLiteral("error")).toString()); return; }
+            }
+            deliver(consumer, status, result, error); return;
+        }
+        if (selectedIdentity(identityRequest.target, identityRequest.selection).isEmpty()) {
+            if (owner) cancel(consumer); return;
+        }
+        if (!owner) return;
+    }
     auto fields = data.value(QStringLiteral("fields")).toMap();
     QStringList assets;
     for (const auto& field : {QStringLiteral("artwork"), QStringLiteral("artworkUrl")}) if (fields.contains(field)) assets.append(field);
@@ -671,8 +891,18 @@ void AddonMetadataService::deliver(const QString& consumer, const QString& statu
 {
     const auto found = m_consumers.find(consumer);
     if (found == m_consumers.end()) return;
-    const auto record = *found;
-    m_consumers.erase(found); releaseMedia(record.media);
+    const auto identityRequest = m_identityRequests.value(consumer);
+    if (!identityRequest.target.isEmpty()) {
+        const QPointer<AddonMetadataService> owner(this);
+        const bool valid = identityRequest.selection.isEmpty() ? identityCurrent(identityRequest.target)
+            : !selectedIdentity(identityRequest.target, identityRequest.selection).isEmpty();
+        if (!owner) return;
+        if (!valid) { cancel(consumer); return; }
+    }
+    if (!m_consumers.contains(consumer)) return;
+    const auto record = m_consumers.take(consumer);
+    m_identityRequests.remove(consumer);
+    releaseMedia(record.media);
     if (record.core) { m_coreConsumers.remove(record.core); finishCore(record.core, status, data); return; }
     emit finished(consumer, status, data, error);
 }
@@ -701,8 +931,7 @@ void AddonMetadataService::startCore(quint64 key)
         char* uri = input_item_GetURI(request->item);
         const auto url = uri ? QUrl(QString::fromUtf8(uri)) : QUrl{}; free(uri);
         const auto tags = MediaIdentity::inputMetadata(request->item);
-        const auto identity = context.value(QStringLiteral("identity")).toMap().isEmpty()
-            ? MediaIdentity::toMap(MediaIdentity::identify(url, tags)) : context.value(QStringLiteral("identity")).toMap();
+        const auto identity = publicNativeIdentity(request->item, url, context.value(QStringLiteral("identity")).toMap());
         media = acquireMedia(url, identity);
         if (media.isEmpty()) {
             auto owned = m_core->take(key); if (owned) vlc_metadata_job_Complete(owned.get(), VLC_EINVAL, nullptr, nullptr, 0); return;
@@ -725,6 +954,7 @@ void AddonMetadataService::startCore(quint64 key)
     for (size_t i = 0; i < request->field_count; ++i) fields.append(QString::fromUtf8(request->fields[i]));
     const auto operation = QString::fromUtf8(request->operation);
     QString consumer;
+    const QPointer<AddonMetadataService> owner(this);
     if (operation == QStringLiteral("enrich"))
         consumer = start(QString::fromUtf8(request->feature), context, fields, false, false, m_core->issueScope(key));
     else if (operation == QStringLiteral("searchAssets")) consumer = searchAssets(QString::fromUtf8(request->feature), context, context.value(QStringLiteral("aggregate")).toBool());
@@ -732,6 +962,7 @@ void AddonMetadataService::startCore(quint64 key)
         releaseMedia(media);
         auto owned = m_core->take(key); if (owned) vlc_metadata_job_Complete(owned.get(), VLC_ENOTSUP, nullptr, nullptr, 0); return;
     }
+    if (!owner) return;
     releaseMedia(media);
     m_consumers[consumer].core = key; m_coreConsumers.insert(key, consumer);
     if (!vlc_metadata_job_IsPending(job.get())) cancelCore(key);

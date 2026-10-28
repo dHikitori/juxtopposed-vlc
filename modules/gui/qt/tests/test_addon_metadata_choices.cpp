@@ -40,6 +40,36 @@ class TestAddonMetadataChoices : public QObject
 {
     Q_OBJECT
 private slots:
+    void mediaInvalidationKeepsOtherSubjectsAndBalancesDetachedHolds()
+    {
+        Fake fake; AddonMetadataChoices choices(fake.backend());
+        const auto first = choices.issue("video.identity", fake.context(), {fake.candidate()});
+        const auto accepted = choices.select(choice(first), fake.context()); QVERIFY(!accepted.isEmpty());
+        auto otherContext = fake.context(); otherContext.insert("media", "media-two");
+        const auto second = choices.issue("video.identity", otherContext, {fake.candidate()});
+        choices.invalidateMedia("media-one");
+        QVERIFY(choices.selected(accepted, fake.context()).isEmpty());
+        QVERIFY(choices.select(choice(first), fake.context()).isEmpty());
+        QVERIFY(!choices.select(choice(second), otherContext).isEmpty());
+        QCOMPARE(fake.references.value("media-one"), 1);
+    }
+    void mediaInvalidationReleasesAllDetachedHoldsIfTheFirstReleaseDeletesStore()
+    {
+        Fake fake; AddonMetadataChoices* store = nullptr; bool armed = false;
+        auto backend = fake.backend();
+        backend.releaseMedia = [&, release=backend.releaseMedia](const QString& media) {
+            release(media); if (armed) delete std::exchange(store, nullptr);
+        };
+        store = new AddonMetadataChoices(std::move(backend));
+        const auto cleanup = qScopeGuard([&] { delete std::exchange(store, nullptr); });
+        const auto offered = store->issue("video.identity", fake.context(), {fake.candidate()});
+        QVERIFY(!store->select(choice(offered), fake.context()).isEmpty());
+        auto otherContext = fake.context(); otherContext.insert("media", "media-two");
+        const auto other = store->issue("video.identity", otherContext, {fake.candidate()});
+        QVERIFY(!store->select(choice(other), otherContext).isEmpty());
+        armed = true; store->invalidateMedia("media-one"); QVERIFY(!store);
+        QCOMPARE(fake.references.value("media-one"), 1); QCOMPARE(fake.references.value("media-two"), 1);
+    }
     void callbackDeletionBalancesEveryHold_data()
     {
         QTest::addColumn<QString>("operation"); QTest::addColumn<QString>("callback"); QTest::addColumn<int>("ordinal");

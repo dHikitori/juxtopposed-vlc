@@ -251,9 +251,31 @@ void AddonMetadataChoices::releaseSelection(const QString& id)
     if (m_sets.isEmpty() && m_selections.isEmpty()) m_sweep.stop();
     if (release) release(value.media);
 }
+void AddonMetadataChoices::invalidateMedia(const QString& media)
+{
+    if (blocked()) return;
+    const QPointer<AddonMetadataChoices> owner(this);
+    const auto release = m_backend.releaseMedia;
+    QStringList sets, selections, holds;
+    for (auto it = m_sets.cbegin(); it != m_sets.cend(); ++it) if (it->media == media) sets.append(it.key());
+    for (auto it = m_selections.cbegin(); it != m_selections.cend(); ++it) if (it->media == media) selections.append(it.key());
+    if (sets.isEmpty() && selections.isEmpty()) return;
+    m_invalidating = true; changed();
+    for (const auto& id : sets) {
+        const auto set = m_sets.take(id); holds.append(set.media);
+        for (const auto& choice : set.choices) m_bytes -= m_choices.take(choice).bytes;
+    }
+    for (const auto& id : selections) {
+        const auto value = m_selections.take(id); holds.append(value.media); m_bytes -= value.bytes;
+    }
+    if (m_sets.isEmpty() && m_selections.isEmpty()) m_sweep.stop();
+    if (release) for (const auto& held : holds) release(held);
+    if (owner) owner->m_invalidating = false;
+}
 void AddonMetadataChoices::invalidate()
 {
-    if (m_invalidating) return;
+    if (m_invalidating && m_sets.isEmpty() && m_selections.isEmpty() && m_choices.isEmpty()) return;
+    const bool outerInvalidation = m_invalidating;
     const QPointer<AddonMetadataChoices> owner(this);
     m_invalidating = true; changed(); m_sweep.stop();
     const auto release = m_backend.releaseMedia;
@@ -266,7 +288,7 @@ void AddonMetadataChoices::invalidate()
     for (const auto& selection : selections) holds.append(selection.media);
     // Detached holds must all end even if the first callback deletes this store.
     if (release) for (const auto& media : holds) release(media);
-    if (owner) owner->m_invalidating = false;
+    if (owner) owner->m_invalidating = outerInvalidation;
 }
 bool AddonMetadataChoices::expire()
 {

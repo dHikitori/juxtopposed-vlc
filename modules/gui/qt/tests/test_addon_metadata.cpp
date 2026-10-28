@@ -31,7 +31,7 @@ QVariantMap registration(const QString& id) {
     const QString cachePartition = id + QStringLiteral(":release-1:account-1:settings-1");
     return {{"id", id}, {"packageId", id.section('/', 0, 0)}, {"name", id}, {"enabled", true},
         {"configured", true}, {"cachePartition", cachePartition},
-        {"mediaKinds", QStringList{"movie", "episode"}}, {"features", QStringList{"subtitles", "video.details"}}};
+        {"mediaKinds", QStringList{"movie", "episode"}}, {"features", QStringList{"subtitles", "video.details", "video.identity"}}};
 }
 QVariantMap identity(const QString& imdb = QStringLiteral("tt1234567")) {
     return {{"kind", "movie"}, {"title", "Example Movie"}, {"year", 2020}, {"ids", QVariantMap{{"imdb", imdb}}}};
@@ -58,6 +58,150 @@ class TestAddonMetadata : public QObject
 {
     Q_OBJECT
 private slots:
+    void manualVideoIdentificationOffersAllVideoKindsAndExcludesOtherKinds()
+    {
+        for (const bool manual : {false, true}) {
+            FakeBackend fake; auto undeclared = registration("undeclared/identity"), music = registration("music/identity"), source = registration("video/identity");
+            for (auto* row : {&undeclared, &music, &source}) row->insert("operations", QStringList{"identify"});
+            undeclared.insert("features", QStringList{"video.details"});
+            music.insert("mediaKinds", QStringList{"musicTrack"}); source.insert("mediaKinds", QStringList{"series"});
+            fake.providers = {undeclared, music, source}; AddonMetadataCoordinator coordinator(fake.backend());
+            QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished); auto request = context();
+            request.insert("manual", manual); request.insert("query", "Example");
+            coordinator.identify("video.identity", request);
+            if (!manual) { QTRY_COMPARE(results.size(), 1); QCOMPARE(fake.calls.size(), 0); continue; }
+            QTRY_COMPARE(fake.calls.size(), 1); QCOMPARE(fake.calls.first().provider, "video/identity");
+            QVariantList rows;
+            for (const auto& kind : {QStringLiteral("movie"), QStringLiteral("series"), QStringLiteral("episode"), QStringLiteral("musicTrack")})
+                rows.append(QVariantMap{{"identity", QVariantMap{{"kind", kind}, {"title", "Example"}}}});
+            complete(coordinator, fake.calls.first(), "ambiguous", {{"candidates", rows}, {"manual", false}});
+            QTRY_COMPARE(results.size(), 1); const auto result = results.first()[2].toMap();
+            QCOMPARE(result.value("candidates").toList().size(), 3); QVERIFY(result.value("requiresSelection").toBool());
+            for (const auto& value : result.value("candidates").toList())
+                QVERIFY(value.toMap().value("identity").toMap().value("kind") != QStringLiteral("musicTrack"));
+        }
+    }
+    void identifyRequiresDeclaredOperationAndStopsAtRankedAmbiguity()
+    {
+        FakeBackend fake;
+        auto undeclared = registration("old/search");
+        auto first = registration("a/identity"); first.insert("operations", QStringList{"identify"});
+        auto second = registration("b/identity"); second.insert("operations", QStringList{"identify"});
+        fake.providers = {undeclared, first, second};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.identify("video.identity", context()); QTRY_COMPARE(fake.calls.size(), 1);
+        QCOMPARE(fake.calls.first().provider, "a/identity"); QCOMPARE(fake.calls.first().operation, "identify");
+        complete(coordinator, fake.calls.first(), "ambiguous", {{"candidates", QVariantList{
+            QVariantMap{{"identity", identity()}}, QVariantMap{{"identity", identity("tt7654321")}}}}});
+        QTRY_COMPARE(results.size(), 1); QCOMPARE(fake.calls.size(), 1);
+        QCOMPARE(results.first()[1].toString(), "ambiguous");
+        const auto data = results.first()[2].toMap(); QVERIFY(data.value("requiresSelection").toBool());
+        QCOMPARE(data.value("candidates").toList().size(), 2); QVERIFY(!data.contains("fields"));
+        for (const auto& value : data.value("candidates").toList()) {
+            const auto row = value.toMap(); QCOMPARE(row.value("provider").toString(), "a/identity");
+            QVERIFY(row.value("hostMatch").toMap().value("requiresConfirmation").toBool());
+        }
+    }
+    void identifyNormalizesScopedIdsAndNumbering_data()
+    {
+        QTest::addColumn<QVariantMap>("numbering"); QTest::addColumn<QString>("field"); QTest::addColumn<QVariant>("expected");
+        QTest::newRow("seasonal") << QVariantMap{{"scheme", "seasonal"}, {"season", 2}, {"episodes", QVariantList{3, 4}}}
+            << QString("season") << QVariant(2);
+        QTest::newRow("absolute") << QVariantMap{{"scheme", "absolute"}, {"number", "12.5"}}
+            << QString("absoluteEpisode") << QVariant("12.5");
+        QTest::newRow("date") << QVariantMap{{"scheme", "air-date"}, {"date", "2026-10-28"}}
+            << QString("airDate") << QVariant("2026-10-28");
+    }
+    void identifyNormalizesScopedIdsAndNumbering()
+    {
+        QFETCH(QVariantMap, numbering); QFETCH(QString, field); QFETCH(QVariant, expected);
+        FakeBackend fake; auto registered = registration("a/identity"); registered.insert("operations", QStringList{"identify"});
+        fake.providers = {registered}; AddonMetadataCoordinator coordinator(fake.backend());
+        QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        auto request = context(); request.insert("identity", QVariantMap{{"kind", "episode"}, {"title", "Example"}});
+        coordinator.identify("video.identity", request); QTRY_COMPARE(fake.calls.size(), 1);
+        const QVariantMap entity{{"kind", "episode"}, {"titles", QVariantList{"Example"}}, {"episodeNumbering", numbering},
+            {"externalIds", QVariantList{QVariantMap{{"namespace", "tmdb"}, {"scope", "series"}, {"value", "42"}},
+                QVariantMap{{"namespace", "tmdb"}, {"scope", "season"}, {"value", "9"}},
+                QVariantMap{{"namespace", "example"}, {"scope", "episode"}, {"value", "7"}}}}};
+        complete(coordinator, fake.calls.first(), "match", {{"candidates", QVariantList{QVariantMap{{"identity", entity}}}}});
+        QTRY_COMPARE(results.size(), 1); const auto data = results.first()[2].toMap();
+        const auto output = data.value("candidates").toList().first().toMap().value("identity").toMap();
+        QCOMPARE(output.value(field), expected); QCOMPARE(output.value("kind").toString(), "episode");
+        const auto ids = output.value("ids").toMap(); QCOMPARE(ids.value("seriesTmdb").toString(), "42");
+        QCOMPARE(ids.value("external:tmdb:season").toString(), "9");
+        QCOMPARE(ids.value("external:example:episode").toString(), "7"); QVERIFY(!ids.contains("tmdbEpisode"));
+        QVERIFY(data.value("requiresSelection").toBool());
+    }
+    void identifyRejectsInvalidOrConflictingNumbering()
+    {
+        const QVariantList invalid{
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1.5}, {"episodes", QVariantList{2}}},
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", QVariantList{2.5}}},
+            QVariantMap{{"scheme", "absolute"}, {"number", "not a number"}},
+            QVariantMap{{"scheme", "air-date"}, {"date", "2026-02-30"}},
+            QVariantMap{{"scheme", "unknown"}, {"season", 1}, {"episodes", QVariantList{2}}}};
+        for (const auto& numbering : invalid) {
+            FakeBackend fake; auto source = registration("a/identity"); source.insert("operations", QStringList{"identify"}); fake.providers = {source};
+            AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+            auto request = context(); request.insert("identity", QVariantMap{{"kind", "episode"}, {"title", "Example"}});
+        coordinator.identify("video.identity", request); QTRY_COMPARE(fake.calls.size(), 1);
+            complete(coordinator, fake.calls.first(), "match", {{"candidates", QVariantList{QVariantMap{{"identity", QVariantMap{
+                {"kind", "episode"}, {"title", "Example"}, {"episodeNumbering", numbering}}}}}}});
+            QTRY_COMPARE(results.size(), 1); QCOMPARE(results.first()[1].toString(), "no_match");
+            QVERIFY(results.first()[2].toMap().value("candidates").toList().isEmpty());
+        }
+    }
+    void identifyRejectsConflictingMappingsAndFallsBack()
+    {
+        FakeBackend fake; auto first = registration("a/identity"), second = registration("b/identity");
+        first.insert("operations", QStringList{"identify"}); second.insert("operations", QStringList{"identify"});
+        fake.providers = {first, second}; AddonMetadataCoordinator coordinator(fake.backend());
+        QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.identify("video.identity", context()); QTRY_COMPARE(fake.calls.size(), 1);
+        auto invalid = identity(); invalid.insert("externalIds", QVariantList{QVariantMap{
+            {"namespace", "imdb"}, {"scope", "movie"}, {"value", "tt9999999"}}});
+        complete(coordinator, fake.calls.first(), "match", {{"candidates", QVariantList{QVariantMap{{"identity", invalid}}}}});
+        QTRY_COMPARE(fake.calls.size(), 2); complete(coordinator, fake.calls.last(), "match",
+            {{"candidates", QVariantList{QVariantMap{{"identity", identity()}}}}});
+        QTRY_COMPARE(results.size(), 1); QCOMPARE(results.first()[1].toString(), "match");
+        QCOMPARE(results.first()[2].toMap().value("candidates").toList().first().toMap().value("provider").toString(), "b/identity");
+    }
+    void identifySeriesRoundtripAndManualQueryProjection()
+    {
+        FakeBackend fake; auto source = registration("a/identity"); source.insert("operations", QStringList{"identify"});
+        source.insert("mediaKinds", QStringList{"movie", "series"}); fake.providers = {source};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        auto request = context(); request.insert("manual", true); request.insert("query", "New series"); request.insert("fingerprints", "private hash");
+        coordinator.identify("video.identity", request); QTRY_COMPARE(fake.calls.size(), 1);
+        QVERIFY(!fake.calls.first().context.contains("fingerprints"));
+        QVERIFY(!fake.calls.first().context.value("identity").toMap().contains("ids"));
+        complete(coordinator, fake.calls.first(), "match", {{"candidates", QVariantList{QVariantMap{{"identity", QVariantMap{
+            {"kind", "series"}, {"title", "New series"}, {"externalIds", QVariantList{QVariantMap{
+                {"namespace", "tmdb"}, {"scope", "series"}, {"value", "42"}}}}}}}}}});
+        QTRY_COMPARE(results.size(), 1); const auto output = results.first()[2].toMap().value("candidates").toList().first().toMap();
+        QCOMPARE(output.value("identity").toMap().value("kind").toString(), "series");
+        QCOMPARE(output.value("identity").toMap().value("ids").toMap().value("seriesTmdb").toString(), "42");
+        QVERIFY(output.value("hostMatch").toMap().value("requiresConfirmation").toBool());
+    }
+    void aProviderQueryCanDeleteTheCoordinator()
+    {
+        AddonMetadataCoordinator* owner = nullptr; AddonMetadataCoordinator::Backend backend;
+        backend.providersForFeature = [&](const QString&) { delete std::exchange(owner, nullptr); return QVariantList{}; };
+        owner = new AddonMetadataCoordinator(std::move(backend)); owner->identify("video.identity", context()); QVERIFY(!owner);
+    }
+
+    void anIdentityScopeQueryCanDeleteTheCoordinatorAtSubscription()
+    {
+        FakeBackend fake; auto provider = registration("a/identity"); provider.insert("operations", QStringList{"identify"});
+        fake.providers = {provider}; AddonMetadataCoordinator* owner = nullptr; auto backend = fake.backend(); int queries = 0;
+        backend.requiresNativeScope = [&](const QString&) {
+            if (++queries == 2) delete std::exchange(owner, nullptr); return false;
+        };
+        owner = new AddonMetadataCoordinator(std::move(backend)); owner->identify("video.identity", context());
+        QTRY_VERIFY(!owner); QCOMPARE(fake.calls.size(), 0);
+    }
+
     void anInvokeCanDeleteTheOwnerAndItsReturnedWorkIsCanceled()
     {
         for (const bool native : {false, true}) {

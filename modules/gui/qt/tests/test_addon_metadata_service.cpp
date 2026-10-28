@@ -33,7 +33,7 @@ QVariantMap identity()
 QVariantMap provider(const QString& id = QStringLiteral("example/details"))
 {
     return {{"id", id}, {"packageId", id.section('/', 0, 0)}, {"name", "Example"}, {"enabled", true},
-        {"configured", true}, {"features", QStringList{"video.details"}}, {"mediaKinds", QStringList{"movie"}},
+        {"configured", true}, {"features", QStringList{"video.details", "video.identity"}}, {"mediaKinds", QStringList{"movie"}},
         {"cachePartition", "release-1:account-1:settings-1"}};
 }
 QVariantMap claims(const QVariantMap& fields)
@@ -106,6 +106,291 @@ class TestAddonMetadataService : public QObject
 {
     Q_OBJECT
 private slots:
+    void identityTargetsRequireNativeNetworkAuthority_data()
+    {
+        QTest::addColumn<unsigned>("flags"); QTest::addColumn<bool>("consent");
+        QTest::newRow("manual-local") << 0u << true;
+        QTest::newRow("automatic-local") << unsigned(VLC_METADATA_REQUEST_AUTOMATIC) << true;
+        QTest::newRow("automatic-without-consent") << unsigned(VLC_METADATA_REQUEST_NETWORK | VLC_METADATA_REQUEST_AUTOMATIC) << false;
+    }
+    void identityTargetsRequireNativeNetworkAuthority()
+    {
+        QFETCH(unsigned, flags); QFETCH(bool, consent); Fake fake; AddonMetadataService service(fake.backend());
+        service.setAutomaticNetworkAllowed(consent);
+        auto* backend = service.holdCoreBackend(); auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original"); Ended ended;
+        auto* job = coreJob(backend, ended, item, flags);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(job); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(job), VLC_SUCCESS);
+        QVERIFY(service.bindIdentityTarget(job, item, {{"manual", true}, {"query", "A manual work query"}}).isEmpty());
+        QCOMPARE(service.identityTargetCount(), 0); QCOMPARE(fake.calls.size(), 0);
+        QVERIFY(vlc_metadata_job_Cancel(job)); QCOMPARE(ended.count.load(), 1);
+    }
+
+    void nativeIdentityOffersRequireSelectionAndNativeCommit()
+    {
+        Fake fake; auto registration = provider(); registration.insert("operations", QStringList{"identify", "enrich"});
+        fake.providers = {registration}; AddonMetadataService service(fake.backend());
+        auto* backend = service.holdCoreBackend(); auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original");
+        Ended ended; auto* job = coreJob(backend, ended, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(job); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QVERIFY(job); QCOMPARE(vlc_metadata_job_StartLocal(job), VLC_SUCCESS);
+        const auto target = service.bindIdentityTarget(job, item, {{"manual", true}, {"query", "Example Movie"}});
+        QVERIFY(!target.isEmpty()); QSignalSpy results(&service, &AddonMetadataService::finished);
+        const auto consumer = service.identify("video.identity", target); QVERIFY(!consumer.isEmpty());
+        QTRY_COMPARE(fake.calls.size(), 1); const auto call = fake.calls.first(); QCOMPARE(call.operation, "identify");
+        QVERIFY(!QJsonDocument::fromVariant(call.context).toJson().contains(target.toUtf8()));
+        QVERIFY(!call.context.contains("media"));
+        const QVariantList scopedIds{QVariantMap{{"namespace", "example.catalog"}, {"scope", "edition"}, {"value", "281"}},
+            QVariantMap{{"namespace", "tmdb"}, {"scope", "season"}, {"value", "281"}}};
+        auto identified = identity(); identified.insert("externalIds", scopedIds);
+        service.operationFinished(call.id, call.provider, "match", {{"candidates", QVariantList{QVariantMap{{"identity", identified}}}}}, {});
+        QTRY_COMPARE(results.size(), 1); const auto offered = results.first()[2].toMap();
+        QVERIFY(offered.value("requiresSelection").toBool()); QVERIFY(!offered.contains("fields"));
+        const auto row = offered.value("candidates").toList().first().toMap();
+        QVERIFY(!row.contains("id")); QVERIFY(!row.contains("nativeSubject"));
+        const auto selection = service.acceptIdentity(target, row.value("reference").toString()); QVERIFY(!selection.isEmpty());
+        QVERIFY(!input_item_GetDescription(item)); QCOMPARE(fake.calls.size(), 1);
+        QCOMPARE(service.selectedIdentity(target, selection).value("identity").toMap().value("title").toString(), "Example Movie");
+        service.enrichSelected("video.details", target, selection, {"description"}); QTRY_COMPARE(fake.calls.size(), 2);
+        const auto projectedIds = fake.calls.last().context.value("identity").toMap().value("externalIds").toList();
+        for (const auto& id : scopedIds) QVERIFY(projectedIds.contains(id));
+        fake.complete(service, {{"description", "Selected description"}}); QTRY_COMPARE(results.size(), 2);
+        QVERIFY(!input_item_GetDescription(item));
+        auto* held = service.holdIdentityAnchor(target, selection); QCOMPARE(held, job); vlc_metadata_job_Release(held);
+        auto* copy = vlc_metadata_job_CopyLocalItem(job); QVERIFY(copy);
+        input_item_SetDescription(copy, "Selected description");
+        QCOMPARE(vlc_metadata_job_PrepareLocal(job, copy, nullptr), VLC_SUCCESS);
+        QVERIFY(vlc_metadata_job_Complete(job, VLC_SUCCESS, copy, nullptr, 0)); input_item_Release(copy);
+        QCOMPARE(vlc_metadata_job_Apply(job, item, 0, nullptr), VLC_SUCCESS);
+        char* description = input_item_GetDescription(item); QCOMPARE(QString::fromUtf8(description), "Selected description"); free(description);
+        QVERIFY(service.selectedIdentity(target, selection).isEmpty());
+        service.releaseIdentityTarget(target); QCOMPARE(service.identityTargetCount(), 0);
+    }
+    void identitySelectionsBindExactTargetsAndProviderPartitions()
+    {
+        Fake fake; auto registration = provider(); registration.insert("operations", QStringList{"identify"}); fake.providers = {registration};
+        AddonMetadataService service(fake.backend()); auto* backend = service.holdCoreBackend();
+        auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original"); Ended firstEnd, secondEnd;
+        auto* first = coreJob(backend, firstEnd, item); auto* second = coreJob(backend, secondEnd, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(first); vlc_metadata_job_Release(second); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(first), VLC_SUCCESS); QCOMPARE(vlc_metadata_job_StartLocal(second), VLC_SUCCESS);
+        const auto target = service.bindIdentityTarget(first, item), other = service.bindIdentityTarget(second, item);
+        QVERIFY(!target.isEmpty()); QVERIFY(target != other);
+        QSignalSpy results(&service, &AddonMetadataService::finished); service.identify("video.identity", target);
+        QTRY_COMPARE(fake.calls.size(), 1); const auto call = fake.calls.first();
+        service.operationFinished(call.id, call.provider, "ambiguous", {{"candidates", QVariantList{QVariantMap{{"identity", identity()}}}}}, {});
+        QTRY_COMPARE(results.size(), 1); const auto reference = results.first()[2].toMap().value("candidates").toList().first().toMap().value("reference").toString();
+        QVERIFY(service.acceptIdentity(other, reference).isEmpty());
+        const auto accepted = service.acceptIdentity(target, reference); QVERIFY(!accepted.isEmpty());
+        registration.insert("cachePartition", "release-2:account-2:settings-2"); fake.providers = {registration};
+        QVERIFY(service.acceptIdentity(target, reference).isEmpty()); QVERIFY(service.selectedIdentity(target, accepted).isEmpty());
+        QVERIFY(!service.holdIdentityAnchor(target, accepted));
+        service.invalidate(); QCOMPARE(service.identityTargetCount(), 0);
+        QCOMPARE(firstEnd.count.load(), 1); QCOMPARE(secondEnd.count.load(), 1);
+    }
+    void nativeIdentityRejectsUriAbaAndCancelsLateDrafts()
+    {
+        Fake fake; auto registration = provider(); registration.insert("operations", QStringList{"identify", "enrich"}); fake.providers = {registration};
+        AddonMetadataService service(fake.backend()); auto* backend = service.holdCoreBackend();
+        auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original"); Ended ended; auto* job = coreJob(backend, ended, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(job); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(job), VLC_SUCCESS); const auto target = service.bindIdentityTarget(job, item);
+        QSignalSpy results(&service, &AddonMetadataService::finished), canceled(&service, &AddonMetadataService::canceled);
+        service.identify("video.identity", target); QTRY_COMPARE(fake.calls.size(), 1); const auto call = fake.calls.first();
+        service.operationFinished(call.id, call.provider, "match", {{"candidates", QVariantList{QVariantMap{{"identity", identity()}}}}}, {});
+        QTRY_COMPARE(results.size(), 1); const auto reference = results.first()[2].toMap().value("candidates").toList().first().toMap().value("reference").toString();
+        const auto accepted = service.acceptIdentity(target, reference); QVERIFY(!accepted.isEmpty());
+        service.enrichSelected("video.details", target, accepted, {"description"}); QTRY_COMPARE(fake.calls.size(), 2);
+        input_item_SetURI(item, "file:///private/other.mkv"); input_item_SetURI(item, "file:///private/Example.Movie.2020.mkv");
+        QVERIFY(service.selectedIdentity(target, accepted).isEmpty()); QVERIFY(!service.holdIdentityAnchor(target, accepted));
+        fake.complete(service, {{"description", "Late text"}}); QTRY_COMPARE(canceled.size(), 1);
+        QCOMPARE(results.size(), 1); QVERIFY(!input_item_GetDescription(item)); service.releaseIdentityTarget(target);
+    }
+    void nativeIdentityTargetReleaseCancelsBeforeReentrantServiceDeletion()
+    {
+        Fake fake; AddonMetadataService* service = new AddonMetadataService(fake.backend());
+        const auto cleanupService = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        auto* backend = service->holdCoreBackend(); auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original");
+        Ended secondEnd;
+        const char* fields[]{"description"}; vlc_metadata_request definition{}; definition.feature = "video.details";
+        definition.operation = "enrich"; definition.flags = VLC_METADATA_REQUEST_NETWORK; definition.item = item; definition.fields = fields; definition.field_count = 1;
+        auto* first = vlc_metadata_job_New(backend, &definition, [](vlc_metadata_job_t*, int, void* data) {
+            auto** value = static_cast<AddonMetadataService**>(data); delete std::exchange(*value, nullptr);
+        }, &service);
+        auto* second = coreJob(backend, secondEnd, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(first); vlc_metadata_job_Release(second); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(first), VLC_SUCCESS); QCOMPARE(vlc_metadata_job_StartLocal(second), VLC_SUCCESS);
+        QVERIFY(!service->bindIdentityTarget(first, item).isEmpty()); QVERIFY(!service->bindIdentityTarget(second, item).isEmpty());
+        service->invalidate(); QVERIFY(!service); QCOMPARE(secondEnd.count.load(), 1);
+    }
+
+    void identityTargetsHaveASeparateBoundAndCloseReleasesEveryHold()
+    {
+        Fake fake; AddonMetadataService service(fake.backend()); auto* backend = service.holdCoreBackend();
+        auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original"); Ended ended;
+        auto* anchor = coreJob(backend, ended, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(anchor); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(anchor), VLC_SUCCESS);
+        for (int i = 0; i < 64; ++i) QVERIFY(!service.bindIdentityTarget(anchor, item).isEmpty());
+        QCOMPARE(service.identityTargetCount(), 64); QVERIFY(service.bindIdentityTarget(anchor, item).isEmpty());
+        service.shutdown(); QCOMPARE(service.identityTargetCount(), 0); QCOMPARE(service.mediaCount(), 0);
+        QCOMPARE(ended.count.load(), 1); QVERIFY(!vlc_metadata_job_IsCurrentFor(anchor, item));
+    }
+    void identityAdmissionCannotSurviveAProviderQueryThatInvalidatesTheTarget()
+    {
+        Fake fake; AddonMetadataService* owner = nullptr; bool armed = false;
+        auto backendCallbacks = fake.backend();
+        backendCallbacks.providers.providersForFeature = [&](const QString&) {
+            if (armed) owner->invalidate(); return fake.providers;
+        };
+        AddonMetadataService service(std::move(backendCallbacks)); owner = &service;
+        auto* backend = service.holdCoreBackend(); auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original"); Ended ended;
+        auto* anchor = coreJob(backend, ended, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(anchor); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(anchor), VLC_SUCCESS); const auto target = service.bindIdentityTarget(anchor, item);
+        armed = true; service.identify("video.identity", target); QCoreApplication::processEvents();
+        QCOMPARE(service.identityTargetCount(), 0); QCOMPARE(service.mediaCount(), 0); QCOMPARE(fake.calls.size(), 0);
+        QCOMPARE(ended.count.load(), 1);
+    }
+
+    void anIdentityProviderQueryCanDeleteTheService()
+    {
+        Fake fake; AddonMetadataService* service = nullptr; bool armed = false; auto callbacks = fake.backend();
+        callbacks.providers.providersForFeature = [&](const QString&) {
+            if (armed) delete std::exchange(service, nullptr); return fake.providers;
+        };
+        service = new AddonMetadataService(std::move(callbacks));
+        const auto cleanupService = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        auto* backend = service->holdCoreBackend(); auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original"); Ended ended;
+        auto* anchor = coreJob(backend, ended, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(anchor); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(anchor), VLC_SUCCESS); const auto target = service->bindIdentityTarget(anchor, item);
+        armed = true; service->identify("video.identity", target); QVERIFY(!service); QCOMPARE(ended.count.load(), 1);
+    }
+
+    void outstandingIdentityWorkEndsWhenAnAnchorDeletesTheService_data()
+    {
+        QTest::addColumn<bool>("native"); QTest::newRow("portable") << false; QTest::newRow("native") << true;
+    }
+    void outstandingIdentityWorkEndsWhenAnAnchorDeletesTheService()
+    {
+        QFETCH(bool, native); Fake fake; QObject lifetime; QString nativeInvocation; int nativeCanceled = 0;
+        auto registration = provider(native ? QStringLiteral("hakone.builtin.identity/search") : QStringLiteral("portable/identity"));
+        registration.insert("operations", QStringList{"identify"});
+        fake.providers = native ? QVariantList{} : QVariantList{registration};
+        AddonMetadataService* service = new AddonMetadataService(fake.backend());
+        const auto cleanupService = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        if (native) QVERIFY(service->registerBuiltinProvider("video.identity", registration, &lifetime,
+            [&](const QString& id, const QString&, const QVariantMap&) { nativeInvocation = id; },
+            [&](const QString& id) { QCOMPARE(id, nativeInvocation); ++nativeCanceled; }));
+        auto* backend = service->holdCoreBackend(); auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original");
+        const char* fields[]{"description"}; vlc_metadata_request request{}; request.feature = "video.details";
+        request.operation = "enrich"; request.flags = VLC_METADATA_REQUEST_NETWORK; request.item = item; request.fields = fields; request.field_count = 1;
+        auto* anchor = vlc_metadata_job_New(backend, &request, [](vlc_metadata_job_t*, int, void* data) {
+            auto** owner = static_cast<AddonMetadataService**>(data); delete std::exchange(*owner, nullptr);
+        }, &service);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(anchor); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_StartLocal(anchor), VLC_SUCCESS);
+        const auto target = service->bindIdentityTarget(anchor, item); QVERIFY(!target.isEmpty());
+        service->identify("video.identity", target);
+        if (native) QTRY_VERIFY(!nativeInvocation.isEmpty()); else QTRY_COMPARE(fake.calls.size(), 1);
+        service->invalidate(); QVERIFY(!service);
+        if (native) { QCOMPARE(nativeCanceled, 1); QVERIFY(fake.canceled.isEmpty()); }
+        else QCOMPARE(fake.canceled, QStringList{fake.calls.first().id});
+    }
+
+    void sourceIdentityProjectionUsesDisplayTagsOnly_data()
+    {
+        QTest::addColumn<QString>("scheme"); QTest::addColumn<bool>("display");
+        QTest::newRow("hakone-empty") << QString("hakone-addon-source") << false;
+        QTest::newRow("hakone-display") << QString("hakone-addon-source") << true;
+        QTest::newRow("legacy-empty") << QString("VLC-ADDON-SOURCE") << false;
+        QTest::newRow("legacy-display") << QString("VLC-ADDON-SOURCE") << true;
+    }
+    void sourceIdentityProjectionUsesDisplayTagsOnly()
+    {
+        QFETCH(QString, scheme); QFETCH(bool, display); Fake fake;
+        auto registration = provider(); registration.insert("operations", QStringList{"enrich", "identify"});
+        registration.insert("mediaKinds", QStringList{}); fake.providers = {registration};
+        AddonMetadataService service(fake.backend()); auto* backend = service.holdCoreBackend();
+        const QString address = scheme + QStringLiteral(":PRIVATE_LOCATOR_ONLY_987654321");
+        auto* item = input_item_New(address.toUtf8().constData(), "Source");
+        if (display) input_item_SetTitle(item, "Admitted display title");
+        Ended remoteEnd, anchorEnd;
+        const auto inferred = MediaIdentity::toMap(MediaIdentity::parse(QUrl(address).fileName()));
+        const auto privateContext = QJsonDocument::fromVariant(QVariantMap{{"identity", inferred}}).toJson(QJsonDocument::Compact);
+        const char* fields[]{"description"}; vlc_metadata_request request{};
+        request.feature = "video.details"; request.operation = "enrich"; request.item = item;
+        request.fields = fields; request.field_count = 1; request.flags = VLC_METADATA_REQUEST_NETWORK;
+        request.context_json = privateContext.constData(); request.context_size = privateContext.size();
+        auto* remote = vlc_metadata_job_New(backend, &request, Ended::callback, &remoteEnd);
+        auto* anchor = coreJob(backend, anchorEnd, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(remote); vlc_metadata_job_Release(anchor); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QVERIFY(remote); QVERIFY(anchor); QCOMPARE(vlc_metadata_job_Start(remote), VLC_SUCCESS);
+        QTRY_COMPARE(fake.calls.size(), 1);
+        const auto checkProjection = [&](const QVariantMap& context) {
+            const auto identity = context.value("identity").toMap();
+            QCOMPARE(identity.value("title").toString(), display ? QString("Admitted display title") : QString{});
+            const auto serialized = QJsonDocument::fromVariant(context).toJson(QJsonDocument::Compact);
+            QVERIFY(!serialized.contains("PRIVATE_LOCATOR_ONLY")); QVERIFY(!serialized.contains("native-subject:"));
+            QVERIFY(identity.value("release").toMap().isEmpty());
+        };
+        checkProjection(fake.calls.first().context);
+        service.operationFinished(fake.calls.first().id, fake.calls.first().provider, "no_match", {}, {});
+        QTRY_COMPARE(remoteEnd.count.load(), 1);
+        QCOMPARE(vlc_metadata_job_StartLocal(anchor), VLC_SUCCESS);
+        const auto target = service.bindIdentityTarget(anchor, item, {{"manual", true}, {"query", "A work title"}, {"identity", inferred}});
+        QVERIFY(!target.isEmpty()); service.identify("video.identity", target); QTRY_COMPARE(fake.calls.size(), 2);
+        checkProjection(fake.calls.last().context);
+        service.releaseIdentityTarget(target); QCOMPARE(anchorEnd.count.load(), 1);
+    }
+
+    void sourceContextCanUseAnExplicitPublicIdentity()
+    {
+        Fake fake; AddonMetadataService service(fake.backend()); auto* backend = service.holdCoreBackend();
+        auto* item = input_item_New("hakone-addon-source:PRIVATE_LOCATOR_ONLY", "Source"); Ended ended;
+        auto* job = coreJob(backend, ended, item);
+        const auto cleanup = qScopeGuard([&] { vlc_metadata_job_Release(job); input_item_Release(item); vlc_metadata_backend_Release(backend); });
+        QCOMPARE(vlc_metadata_job_Start(job), VLC_SUCCESS); QTRY_COMPARE(fake.calls.size(), 1);
+        QCOMPARE(fake.calls.first().context.value("identity").toMap().value("title").toString(), "Example Movie");
+        QVERIFY(!QJsonDocument::fromVariant(fake.calls.first().context).toJson().contains("PRIVATE_LOCATOR_ONLY"));
+        fake.complete(service, {{"description", "A public claim"}}); QTRY_COMPARE(ended.count.load(), 1);
+    }
+
+    void selectiveIdentityRetirementDrainsAnExternalAnchorAfterOwnerDeletion()
+    {
+        Fake fake; AddonMetadataService* service = new AddonMetadataService(fake.backend());
+        const auto cleanupService = qScopeGuard([&] { delete std::exchange(service, nullptr); });
+        auto* ownBackend = service->holdCoreBackend();
+        // StartLocal has no dispatched work. The native backend still runs its
+        // real cancellation and terminal callback paths.
+        const vlc_metadata_backend_operations operations{
+            [](void*, vlc_metadata_job_t*) { return VLC_ENOTSUP; },
+            [](void*, vlc_metadata_job_t*) {}, nullptr};
+        auto* external = vlc_metadata_backend_New(&operations, nullptr); QVERIFY(external);
+        auto* item = input_item_New("file:///private/Example.Movie.2020.mkv", "Original"); Ended externalEnd;
+        const char* fields[]{"description"}; vlc_metadata_request request{};
+        request.feature = "video.details"; request.operation = "enrich"; request.item = item;
+        request.fields = fields; request.field_count = 1; request.flags = VLC_METADATA_REQUEST_NETWORK;
+        auto* first = vlc_metadata_job_New(ownBackend, &request, [](vlc_metadata_job_t*, int, void* data) {
+            auto** owner = static_cast<AddonMetadataService**>(data); delete std::exchange(*owner, nullptr);
+        }, &service);
+        auto* second = coreJob(external, externalEnd, item);
+        const auto cleanup = qScopeGuard([&] {
+            vlc_metadata_job_Release(first); vlc_metadata_job_Release(second);
+            vlc_metadata_backend_Close(external); vlc_metadata_backend_Release(external);
+            input_item_Release(item); vlc_metadata_backend_Release(ownBackend);
+        });
+        QVERIFY(first); QVERIFY(second); QCOMPARE(vlc_metadata_job_StartLocal(first), VLC_SUCCESS);
+        QCOMPARE(vlc_metadata_job_StartLocal(second), VLC_SUCCESS);
+        const auto target = service->bindIdentityTarget(first, item); QVERIFY(!target.isEmpty());
+        QVERIFY(!service->bindIdentityTarget(second, item).isEmpty());
+        service->releaseIdentityTarget(target); QVERIFY(!service);
+        QCOMPARE(externalEnd.count.load(), 1); QVERIFY(!vlc_metadata_job_IsPending(second));
+        QVERIFY(!vlc_metadata_job_IsCurrentFor(second, item));
+        QVERIFY(!vlc_metadata_backend_IsClosed(external));
+    }
+
     void providerInvalidationRevokesACompletedAutomaticAnchor()
     {
         Fake fake; AddonMetadataService service(fake.backend()); service.setAutomaticNetworkAllowed(true);

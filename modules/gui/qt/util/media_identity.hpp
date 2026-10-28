@@ -29,13 +29,14 @@ inline QDateTime publicationDate(QString value)
     return date.isValid() ? date : QDateTime::fromString(value, Qt::ISODate);
 }
 
-enum class Kind { Unknown, Movie, Episode, MusicTrack, Album, Artist, Podcast, PodcastEpisode, Audiobook };
+enum class Kind { Unknown, Movie, Episode, MusicTrack, Album, Artist, Podcast, PodcastEpisode, Audiobook, Series };
 
 inline QString kindName(Kind kind)
 {
     switch (kind) {
     case Kind::Movie: return QStringLiteral("movie");
     case Kind::Episode: return QStringLiteral("episode");
+    case Kind::Series: return QStringLiteral("series");
     case Kind::MusicTrack: return QStringLiteral("musicTrack");
     case Kind::Album: return QStringLiteral("album");
     case Kind::Artist: return QStringLiteral("artist");
@@ -48,7 +49,7 @@ inline QString kindName(Kind kind)
 inline Kind kindFromName(const QString& name)
 {
     for (auto kind : {Kind::Movie, Kind::Episode, Kind::MusicTrack, Kind::Album, Kind::Artist,
-                      Kind::Podcast, Kind::PodcastEpisode, Kind::Audiobook})
+                      Kind::Podcast, Kind::PodcastEpisode, Kind::Audiobook, Kind::Series})
         if (kindName(kind).compare(name, Qt::CaseInsensitive) == 0) return kind;
     return Kind::Unknown;
 }
@@ -297,6 +298,7 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
     }
     const auto type = text("type");
     if (type == "movie") identity.kind = Kind::Movie;
+    if (type == "series") identity.kind = Kind::Series;
     if (!audio && (type == "episode" || !text("showName").isEmpty())) identity.kind = Kind::Episode;
     for (const auto& field : {qMakePair("artist", &identity.artist), qMakePair("albumArtist", &identity.albumArtist),
              qMakePair("album", &identity.album), qMakePair("series", &identity.series),
@@ -376,8 +378,24 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
     identity.conflicts.removeDuplicates();
 }
 
+inline bool isSourceLocator(const QUrl& url)
+{
+    return url.scheme().compare(QStringLiteral("hakone-addon-source"), Qt::CaseInsensitive) == 0
+        || url.scheme().compare(QStringLiteral("vlc-addon-source"), Qt::CaseInsensitive) == 0;
+}
+
 inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
 {
+    if (isSourceLocator(url)) {
+        // A source locator is private. Only explicit tags may enter identity.
+        auto tags = metadata;
+        for (const auto& key : {QStringLiteral("title"), QStringLiteral("showName")}) {
+            const auto value = tags.value(key).toString().trimmed();
+            const auto payload = compact(url.path());
+            if (isSourceLocator(QUrl(value)) || (!payload.isEmpty() && compact(value) == payload)) tags.remove(key);
+        }
+        Identity result; applyMetadata(result, tags); return result;
+    }
     auto result = parse(url.fileName(), kindFromName(metadata.value("type").toString()));
     auto parent = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
     auto folder = parse(parent.fileName());
@@ -468,6 +486,31 @@ inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata, bool u
     return usable(title) ? title.left(1024) : QString();
 }
 
+inline QVariantList externalIds(const Identity& identity)
+{
+    static const QMap<QString, QStringList> known{
+        {"imdb", {"imdb", "movie"}}, {"seriesImdb", {"imdb", "series"}}, {"episodeImdb", {"imdb", "episode"}},
+        {"tmdbMovie", {"tmdb", "movie"}}, {"seriesTmdb", {"tmdb", "series"}}, {"tmdbEpisode", {"tmdb", "episode"}},
+        {"seriesTvdb", {"tvdb", "series"}}, {"tvdbEpisode", {"tvdb", "episode"}},
+        {"tvmazeShow", {"tvmaze", "series"}}, {"tvmazeEpisode", {"tvmaze", "episode"}},
+        {"musicBrainzTrackId", {"musicbrainz", "track"}}, {"musicBrainzAlbumId", {"musicbrainz", "album"}},
+        {"musicBrainzArtistId", {"musicbrainz", "artist"}}};
+    static const QRegularExpression atom(QStringLiteral("^[a-z][a-z0-9._-]{0,31}$"));
+    QVariantList result;
+    for (auto it = identity.ids.cbegin(); it != identity.ids.cend(); ++it) {
+        auto scope = known.value(it.key());
+        if (scope.isEmpty()) {
+            const auto parts = it.key().split(QLatin1Char(':'));
+            if (parts.size() != 3 || parts.first() != QStringLiteral("external")
+                || !atom.match(parts[1]).hasMatch() || !atom.match(parts[2]).hasMatch()) continue;
+            scope = {parts[1], parts[2]};
+        }
+        if (it.value().isEmpty() || it.value().size() > 256) continue;
+        result.append(QVariantMap{{"namespace", scope[0]}, {"scope", scope[1]}, {"value", it.value()}});
+    }
+    return result;
+}
+
 inline QVariantMap toMap(const Identity& identity)
 {
     QVariantList episodes;
@@ -482,7 +525,7 @@ inline QVariantMap toMap(const Identity& identity)
         {"series", identity.series}, {"guid", identity.guid}, {"feedUrl", identity.feedUrl},
         {"track", identity.track}, {"disc", identity.disc},
         {"season", identity.season}, {"episodes", episodes}, {"absoluteEpisode", identity.absoluteEpisode},
-        {"airDate", identity.airDate.toString(Qt::ISODate)}, {"ids", ids}, {"release", release},
+        {"airDate", identity.airDate.toString(Qt::ISODate)}, {"ids", ids}, {"externalIds", externalIds(identity)}, {"release", release},
         {"provenance", provenance}, {"conflicts", identity.conflicts}};
 }
 
@@ -537,7 +580,14 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     for (auto it = target.ids.cbegin(); it != target.ids.cend(); ++it) {
         if (!candidate.ids.contains(it.key())) continue;
         if (candidate.ids.value(it.key()) != it.value()) reject(it.key());
-        else { idMatch = true; result.agreements.append(it.key()); }
+        else {
+            const bool known = target.kind == Kind::Series
+                ? QSet<QString>{"seriesImdb", "seriesTmdb", "seriesTvdb", "tvmazeShow"}.contains(it.key())
+                : target.kind == Kind::Episode
+                ? QSet<QString>{"seriesImdb", "seriesTmdb", "seriesTvdb", "tvmazeShow", "episodeImdb", "tmdbEpisode", "tvdbEpisode", "tvmazeEpisode"}.contains(it.key())
+                : QSet<QString>{"imdb", "tmdbMovie", "musicBrainzTrackId", "musicBrainzAlbumId", "musicBrainzArtistId"}.contains(it.key());
+            idMatch = idMatch || known; result.agreements.append(it.key());
+        }
     }
     if (target.year >= 0 && candidate.year >= 0 && target.year != candidate.year) reject("year");
     if (target.season >= 0 && candidate.season >= 0 && target.season != candidate.season) reject("season");
@@ -594,8 +644,11 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     // A parent series ID identifies the series, not an episode.
     const bool workId = result.agreements.contains("imdb") || result.agreements.contains("tmdbMovie")
         || result.agreements.contains("tmdbEpisode") || result.agreements.contains("tvdbEpisode");
+    const bool seriesId = target.kind == Kind::Series && (result.agreements.contains("seriesImdb")
+        || result.agreements.contains("seriesTmdb") || result.agreements.contains("seriesTvdb") || result.agreements.contains("tvmazeShow"));
     result.strong = episodic ? (episode || absolute || date) && (result.exactTitle || idMatch || workId)
                                 && (target.year < 0 || year || idMatch)
+                            : target.kind == Kind::Series ? seriesId || (result.exactTitle && year)
                             : workId || (result.exactTitle && year);
     return result;
 }
