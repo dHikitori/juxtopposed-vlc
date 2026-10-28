@@ -31,8 +31,10 @@ quit, repeated requests, native retirement, callback reentry, deletion, and four
 actual QCoreApplication exit paths. They test callback ordering; they do not
 claim playback of the user's network file.
 
-The copied DialogsProvider and Qt startup call sites still need the coherent
-app build. The proof is in `/tmp/hakone-shutdown-ordering/final-proof.json`.
+The complete `a51d1c9fc3` Windows app now compiles and links the DialogsProvider
+and Qt startup call sites. All 416 PE files pass the dependency check. The local
+build has been published to `build-windows/vlc-win64`. The focused proof is in
+`/tmp/hakone-shutdown-ordering/final-proof.json`.
 The source audit and parity with the earlier Windows build are in
 `/tmp/hakone-windows-close-audit`.
 
@@ -45,3 +47,5 @@ A local diagnostic recorder passes its minidump self-test against an owned
 helper process. Its five-minute recording window saw no matching VLC process
 and collected no user-app dump. A later repeat needs a fresh capture. Recorder
 files are in `/tmp/hakone-close-capture`; no user process was stopped by it.
+A second five-minute window after publication also saw no matching process.
+The actual Close test with the user's network file remains open.

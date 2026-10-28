@@ -55,7 +55,11 @@ The focused proof compiles eight current production files. It uses no previous
 host archive or aggregate metadata file. The input hashes, commands, logs, and
 results are in `/tmp/hakone-metadata-catalogue`. The reviewed patch hash is
 `b296c755c0dae4212ade3647fa34595b9cd0957abb2ed284ed66a1ee4b57f691`.
-The Windows file-reader branch still needs its platform build and runtime check.
+The later Windows build compiles this file-reader branch. A fresh Windows
+console probe imports all seven real packages and captures seven packages and
+seven contributions in joined work, with a current 32-byte digest. This proves
+the normal seven-package read. Windows file-type swap cases remain untested.
+The evidence is in `/tmp/hakone-win-catalogue-probe/final-proof.json`.
 
 The later saved-settings check rejects declared protected keys and malformed
 credential references before it publishes a row. Its catalogue suite passes

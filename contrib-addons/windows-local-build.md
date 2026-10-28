@@ -2,19 +2,21 @@
 
 The local Windows x86_64 test build is in `build-windows/vlc-win64`.
 The current checkpoint includes the Windows add-on loader repair, background
-package summaries and the revised General and Extensions settings screens.
-The private full-app startup check loads all seven bundled add-ons and closes
-normally. The actual Extensions click still needs a user retest. See
+package summaries, revised General and Extensions settings screens, and the
+playback-stop ordering fix. The current Windows console check imports all seven
+bundled add-ons and reads the complete provider snapshot. The earlier private
+GUI startup check applies to `2a689c3a11`. The actual Extensions click still needs
+a user retest. See
 [the loader repair](windows-addon-loader-repair.md) and
 [the background list](package-summary-ui.md).
 
 The user later reported a separate Close delay while a network file was playing.
-The prepared [playback-stop ordering fix](windows-close-ordering.md) passes its
-focused checks. It is not yet in this published build; the coherent rebuild is
-the next step. The exact one-minute blocker has no captured stack.
+The [playback-stop ordering fix](windows-close-ordering.md) passes 22 normal and
+22 sanitizer cases and is included in this published build. The exact one-minute
+blocker has no captured stack; the user's network-file Close still needs a retest.
 
 `BUILD-INFO.json` records app and Core source
-`2a689c3a11f1cbe60410253312e2783ebd797335`, with a clean source snapshot.
+`a51d1c9fc37681df70181f2e72f51219646ce9fa`, with a clean source snapshot.
 The build uses the existing dependency cache at
 `4ca4eb0c3e3d1181a48f1e216f4324c6e2670ef7`. Its media library has all seven
 current patches and the playlist transaction capability.
@@ -33,15 +35,24 @@ worker into the app.
 
 ## Verification
 
+The current build and package checks apply to `a51d1c9fc3`. GUI window and
+startup observations below were collected from `2a689c3a11`; they are retained
+as that earlier build's evidence.
+
 - The complete Core, Qt interface, compiled UI resources, media modules, and
   launcher build and link.
 - All 868 owned output files have recorded hashes. All 416 PE files pass the
   x86_64 and dependency inventory check.
+- The fresh Windows console probe uses the current host archive. It imports all
+  seven packages and captures seven packages and seven raw contributions in
+  joined work. The snapshot has a current 32-byte digest. TheSubtitleDB requires
+  its protected key and is unconfigured with no saved key in this temporary
+  profile. This probe performs no GUI action or playback.
 - The same worker passes all seven unit tests on Windows.
 - The packaged worker loads the packaged TheSubtitleDB module on Windows.
   With no key, it returns `auth_required`, makes no host call, and exits cleanly.
 - The build export retains the existing portable profile.
-- The current complete build kept at least 9,232,093,184 bytes free. The helper
+- The current complete build kept at least 8,772,661,248 bytes free. The helper
   passes the debug-strip link option directly to avoid large debug DLL copies.
 - The actual private Windows app creates all seven enabled distribution
   installs. TheSubtitleDB has its protected required key field and no saved
@@ -105,6 +116,13 @@ from this WSL workspace. Production-control tests do not replace that check.
 
 Full Windows UI, rendering, media-library runtime, account, Git, and shutdown
 conformance remain open. The complete architecture backlog remains active.
+
+The current complete build and publication records are in
+`/tmp/hakone-windows-close-rebuild`. Publication checked for a running VLC
+instance, then replaced only managed runtime files and metadata. All 868 owned
+file hashes match the verified staging copy. It did not traverse portable
+settings. The fresh Windows console evidence is in
+`/tmp/hakone-win-catalogue-probe/final-proof.json`.
 
 ## Build fixes
 

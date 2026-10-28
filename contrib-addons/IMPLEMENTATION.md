@@ -78,6 +78,8 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 ## Latest verified native checkpoint
 
+- The local Windows build now uses clean source `a51d1c9fc3` and includes playback Stop before user-quit cleanup. Its full build, 868 managed file hashes, and 416 PE checks pass. A fresh Windows console probe imports seven packages and captures all seven raw contributions. The user's network-file Close and full GUI checks remain open. See [the Windows record](windows-local-build.md).
+
 - The [private artwork plan](artwork-attempt-plan.md) retains all raw providers, fixes the restored-provider preference case, and shares exact configuration and identity projection with the Manager. The combined current-source host build passes 359 cases, including all 90 package cases. Separate plan and catalogue sanitizer groups pass 49 and 77 cases. Native runner and owner activation remain open.
 
 - The [native artwork keeper](native-artwork-attempt-keeper.md) connects completion admission to the Core gate and retains native authority through final Apply. It passes 11 copied normal and 11 sanitizer cases, then 11 fresh working-tree normal cases. The typed aggregate, registration gate, and owner activation remain open.
