@@ -61,6 +61,18 @@ costs. It is not accepted against this contract.
   a capability signal, so that path repeats its catalogue work.
 - The mounted session host starts a 50 ms timer without a session. Its tick
   reads completions and a player snapshot, which takes the native player lock.
+- The mounted session UI starts a 250 ms review timer without a review. Source
+  playback starts two 20 ms maintenance timers and a 250 ms consent timer when
+  it becomes available, even with no source request. The three source timers
+  schedule about 104 callbacks per second. This is a source-derived rate, not
+  a measured CPU value.
+- The default Artwork view in audio playback makes the visualizer surface
+  visible. Its host starts a 34 ms refresh timer with no selected scene, then
+  each refresh returns without work. The native visualizer clock listener is
+  also installed before a visualizer is selected. Audio sample analysis itself
+  is lazy.
+- Opening the package summary view starts a 100 ms authority check timer. It
+  remains active after that first use.
 - Ordinary workers start on first use and reuse one compiled runtime per
   package. The worker waits for pipe input while idle. Used workers remain
   resident. A small offline worker test is recorded below; full host execution
@@ -146,6 +158,30 @@ performance result. The constructor health check, background display snapshots,
 startup batching, worker costs, and full app measurements remain in the audit.
 The published Windows build still uses `fd3fed4173` and does not contain this
 idle-session change yet.
+
+## Verified idle session UI change
+
+The session UI now starts its 250 ms review timer only after it gets a review
+ticket. It stops the timer on cancellation, acceptance, refusal, expiry,
+invalidation, or close. An active session with no open review does not need
+this timer. Current review checks remain in place while a review is open.
+
+The idle regression fails against the previous UI implementation. All 22
+cases pass normally and with focused AddressSanitizer and
+UndefinedBehaviorSanitizer checks. There are no failed or skipped cases,
+runtime diagnostics, or test warnings. Cases cover pending and inline reviews,
+repeat activation, expiry, changed reviews, refusal, replacement during a
+callback, and owner deletion. Existing host consent and media-change cases
+also pass.
+
+The changed UI and test fixture are compiled fresh. Other host dependencies and
+matching-layout meta-objects come from the pinned normal host archive; Qt is
+also uninstrumented. The separate current SessionHost proof above covers its
+timer change. A combined full app measurement remains required. The records
+are `/tmp/hakone-session-ui-idle-cost/{before,normal,san}/proof.json`; the final
+sanitizer proof SHA-256 is
+`ef06445b7577c6dcf5fa8f3f24fe2f695c9609e3ad9acac87509ccd26062b393`.
+This change is not in the published Windows build yet.
 
 ## Stream handle expiry helper
 

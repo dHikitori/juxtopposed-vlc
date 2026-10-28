@@ -60,6 +60,7 @@ public:
 signals:
     void changed();
 private:
+    friend class AddonSessionUiTestAccess;
     void publish();
     void clearReview();
     bool fail(const QString&);

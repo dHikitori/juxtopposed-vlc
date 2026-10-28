@@ -49,7 +49,7 @@ AddonSessionUi::AddonSessionUi(Backend backend,QObject* parent)
             if(current.isEmpty() || current!=m_review) { clearReview(); if(alive) fail(tr("The add-on or playback changed. Open the review again.")); }
         }
     });
-    if(!m_closed) m_timer.start(); refresh();
+    refresh();
 }
 AddonSessionUi::AddonSessionUi(AddonSessionHost* host,Catalog catalog,QObject* parent)
     :AddonSessionUi(hostBackend(host,std::move(catalog)),parent) {
@@ -60,6 +60,7 @@ AddonSessionUi::~AddonSessionUi() { m_destroying=true; close(); }
 void AddonSessionUi::publish() { ++m_revision; emit changed(); }
 bool AddonSessionUi::fail(const QString& error) { m_error=error; m_status.clear(); publish(); return false; }
 void AddonSessionUi::clearReview() {
+    m_timer.stop();
     ++m_generation;
     QString ticket; ticket.swap(m_ticket); m_review.clear(); m_preparing=false; m_expires=0; m_earlyReady.clear();
     const auto cancel=m_backend.cancel; const auto owner=m_owner; if(owner && cancel && !ticket.isEmpty()) cancel(ticket);
@@ -116,7 +117,7 @@ bool AddonSessionUi::prepare(const QString& id,const QString& relay,const QStrin
     if(!alive) { if(owner && cancel && !ticket.isEmpty()) cancel(ticket); return false; }
     m_creating=false; if(m_closed || !m_owner || m_generation!=generation) { if(owner && cancel && !ticket.isEmpty()) cancel(ticket); return false; }
     if(ticket.isEmpty() || ticket.size()>128) { m_preparing=false; return fail(tr("The app cannot prepare this session.")); }
-    m_ticket=ticket; const auto early=m_earlyReady; m_earlyReady.clear();
+    m_ticket=ticket; m_timer.start(); const auto early=m_earlyReady; m_earlyReady.clear();
     if(early==ticket) approvalReady(ticket); else publish(); return true;
 }
 void AddonSessionUi::approvalReady(const QString& ticket) {
@@ -137,7 +138,7 @@ bool AddonSessionUi::accept(const QStringList& operations) {
     const auto current=read(ticket);
     if(!alive || m_closed || !m_owner || !m_catalogOwner || ticket!=m_ticket || generation!=m_generation || displayed!=m_review) return false;
     if(current.isEmpty() || current!=displayed) { clearReview(); if(alive) fail(tr("The review changed. Open it again.")); return false; }
-    m_ticket.clear(); m_review.clear(); m_preparing=false; m_expires=0; m_error.clear();
+    m_timer.stop(); m_ticket.clear(); m_review.clear(); m_preparing=false; m_expires=0; m_error.clear();
     m_accepting=true; m_earlySessions.clear();
     const auto accept=m_backend.accept; const auto result=accept(ticket,operations); if(!alive) return false;
     m_accepting=false;

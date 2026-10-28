@@ -1,8 +1,14 @@
 # Implementation status
 
-This file records implementation progress and test evidence. Updated 28 October 2026.
+This file records implementation progress and test evidence. Updated 29 October 2026.
 
-The full scope in this directory remains the objective. SDK v1 still has open completion gates. The current effort estimate is about 80–85% complete, with about 15–20% of the effort left. This is an estimate of work, not a count of finished features. The [completion backlog](completion-backlog.md) records the remaining requirements and the evidence for each gap. The open gates below determine release readiness.
+The full scope in this directory remains the objective. SDK v1 still has open completion gates. The earlier effort estimate was about 80–85% complete, with about 15–20% left. That estimate came before the measured UI performance findings. It does not establish current readiness. The [completion backlog](completion-backlog.md) records the remaining requirements and the evidence for each gap. The open gates below determine release readiness.
+
+Performance is the current priority. The published build repeats synchronous
+package scans during basic UI work. Focused session host and session UI idle
+timer fixes pass, but the shared display view, startup work, source timers,
+visualizer inactivity, and full app measurements remain open. See
+[the performance requirements and evidence](performance-contract.md).
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 

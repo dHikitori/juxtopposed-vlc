@@ -6,6 +6,13 @@
 #include <QTemporaryDir>
 #include <QScopeGuard>
 using namespace vlc::addons;
+namespace vlc::addons {
+class AddonSessionUiTestAccess {
+public:
+    static bool reviewTimerActive(const AddonSessionUi& ui) { return ui.m_timer.isActive(); }
+    static void expireReview(AddonSessionUi& ui) { ui.m_expires=0; }
+};
+}
 namespace {
 const QString controller=QStringLiteral("org.example.session/controller");
 QVariantList catalogRows() { return {QVariantMap{{"id",controller},{"name",QStringLiteral("<b>Controller</b>")},{"enabled",true},{"configured",true},
@@ -70,6 +77,57 @@ struct Actual {
 class TestAddonSessionUi : public QObject {
     Q_OBJECT
 private slots:
+    void idleFacadeHasNoReviewTimer() {
+        AddonSessionUi unavailable(AddonSessionUi::Backend{});
+        QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(unavailable));
+        Fake fake; AddonSessionUi ui(fake.backend()); fake.ui=&ui;
+        QCOMPARE(ui.controllers().size(),1);
+        QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(ui));
+        ui.refresh(); QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(ui));
+    }
+    void reviewTimerRunsOnlyUntilCancelAcceptOrClose() {
+        for(const bool inlineReady:{false,true}) {
+            Fake fake; fake.inlineReady=inlineReady; AddonSessionUi ui(fake.backend()); fake.ui=&ui;
+            for(int cycle=0;cycle<2;++cycle) {
+                QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+                QVERIFY(AddonSessionUiTestAccess::reviewTimerActive(ui));
+                ui.viewClosed(); QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(ui));
+                QCOMPARE(fake.canceled.size(),cycle+1);
+            }
+            QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+            ui.approvalReady(QStringLiteral("ticket-1"));
+            QVERIFY(AddonSessionUiTestAccess::reviewTimerActive(ui));
+            QVERIFY(ui.accept()); QVERIFY(ui.starting());
+            QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(ui));
+            QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+            QVERIFY(AddonSessionUiTestAccess::reviewTimerActive(ui)); ui.close();
+            QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(ui));
+        }
+    }
+    void expiredOrChangedReviewStopsTheTimer() {
+        for(const bool expired:{false,true}) {
+            Fake fake; fake.inlineReady=true; AddonSessionUi ui(fake.backend()); fake.ui=&ui;
+            QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+            QVERIFY(!ui.review().isEmpty()); QVERIFY(AddonSessionUiTestAccess::reviewTimerActive(ui));
+            if(expired) AddonSessionUiTestAccess::expireReview(ui); else fake.review.clear();
+            QTRY_VERIFY(!AddonSessionUiTestAccess::reviewTimerActive(ui));
+            QVERIFY(ui.review().isEmpty()); QVERIFY(!ui.errorMessage().isEmpty());
+            QCOMPARE(fake.canceled.size(),1);
+        }
+    }
+    void refusedPreparationOrAcceptanceLeavesNoIdleTimer() {
+        Fake fake; auto backend=fake.backend();
+        backend.prepare=[](const auto&,const auto&,const auto&,const auto&) { return QString{}; };
+        AddonSessionUi refused(std::move(backend)); fake.ui=&refused;
+        QVERIFY(!refused.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(refused));
+        fake.inlineReady=true; backend=fake.backend();
+        backend.accept=[](const auto&,const auto&) { return QString{}; };
+        AddonSessionUi ui(std::move(backend)); fake.ui=&ui;
+        QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        QVERIFY(AddonSessionUiTestAccess::reviewTimerActive(ui)); QVERIFY(!ui.accept());
+        QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(ui));
+    }
     void reviewDoesNotApproveAndDefaultsToObservationOnly() {
         Fake fake; AddonSessionUi ui(fake.backend()); fake.ui=&ui;
         QCOMPARE(ui.controllers().size(),1); QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("<i>Room</i>")));
@@ -161,6 +219,7 @@ private slots:
         QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room"))); ui.approvalReady(QStringLiteral("ticket-1"));
         if(duringAccept) { armed=true; QVERIFY(!ui.accept()); }
         QVERIFY(fired); QCOMPARE(fake.accepted,0u); QCOMPARE(ui.review().value("name").toString(),QStringLiteral("Replacement"));
+        QVERIFY(AddonSessionUiTestAccess::reviewTimerActive(ui));
     }
     void actualHostWaitsForAcceptAndChangedMediaRefusesPendingStart() {
         Actual actual; AddonSessionUi ui(actual.host.get(),{&actual.owner,[] { return catalogRows(); }});
