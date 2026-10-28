@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addons/addon_package_summaries.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_catalogue_view.hpp"
 #include <QFile>
 #include <QPointer>
 #include <QScopeGuard>
@@ -44,6 +45,25 @@ private slots:
     {
         QTRY_COMPARE_WITH_TIMEOUT(AddonRepositoryJobs::processCount(), 0u, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(AddonStreamLifetime::processQtWorkCount(), 0u, 5000);
+    }
+    void attachedSafeModeDistinguishesInitialUnknownEmptyAndRetainedData()
+    {
+        Scope scope; QTemporaryDir directory; PackageStore store(directory.path());
+        unsigned captures=0;
+        AddonCatalogueView::Backend backend{
+            [&]() -> std::optional<DisplayCatalogueSource> {
+                ++captures; DisplayCatalogueSource source;source.queuedAuthority=store.authorityToken();
+                source.reader=store.displayCatalogueReader(QStringLiteral("en"));return source;
+            },[&](std::function<void()> wake){return store.onDisplayChanged(std::move(wake));}};
+        AddonCatalogueView view(std::move(backend),scope.owner.handle());
+        AddonPackageSummaries service(view,scope.owner.handle());service.refresh();
+        QVERIFY(service.displayBacked());QVERIFY(!service.safeModeKnown());QVERIFY(!service.safeMode());QVERIFY(!service.retainedAvailable());
+        QTRY_VERIFY(service.isCurrent());QVERIFY(service.rows().isEmpty());QVERIFY(service.safeModeKnown());QVERIFY(!service.safeMode());QVERIFY(service.retainedAvailable());
+        QString error;QVERIFY(store.setSafeMode(true,&error));QVERIFY(!service.isCurrent());
+        QVERIFY(service.safeModeKnown());QVERIFY(!service.safeMode());QVERIFY(service.rows().isEmpty());
+        QTRY_VERIFY(service.isCurrent());QVERIFY(service.safeMode());QVERIFY(service.safeModeKnown());
+        const auto reads=captures;QTest::qWait(250);QCOMPARE(captures,reads);
+        view.close();QVERIFY(!service.isCurrent());QVERIFY(!service.retainedAvailable());
     }
     void unusedServiceAndManagerRevisionsDoNotRead()
     {

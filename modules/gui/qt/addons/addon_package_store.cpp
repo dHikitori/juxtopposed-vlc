@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_package_store.hpp"
+#include "addon_display_catalogue_reader.hpp"
 #include "addon_catalogue_store_lock.hpp"
+#include "addon_distribution_bootstrap.hpp"
+#include "addon_theme_document.hpp"
 #include "addon_settings_migrations.hpp"
 #include "addon_storage.hpp"
 #include "addon_storage_data.hpp"
@@ -42,6 +45,7 @@
 #endif
 
 namespace vlc::addons {
+
 namespace {
 bool fail(QString* error, const QString& message)
 {
@@ -940,6 +944,10 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The app cannot create the add-on store."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    return installLocked(candidate,grants,error,distributionApproval);
+}
+bool PackageStore::installLocked(const PackageCandidate& candidate,const QJsonObject& grants,QString* error,bool distributionApproval,bool cancelBeforeCommit)
+{
     const auto id = candidate.manifest.id;
     if (distributionApproval && (!candidate.identity.distributionSource || candidate.identity.developerSource))
         return fail(error, QStringLiteral("Only an app distribution package can use this approval."));
@@ -1089,7 +1097,47 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
         {"credentialReferences", state.value("credentialReferences").toObject()}
     };
     if (distributionApproval) next.insert("distributionApproval", QString::fromLatin1(candidate.digest));
+    // Startup cancellation can discard staged immutable bytes before activation.
+    // Passing this last check admits the state commit and its paired enable.
+    if(cancelBeforeCommit && RepositoryCancellation::requested())
+        return fail(error,QStringLiteral("The app canceled the startup package check."));
     return saveState(id, next, error);
+}
+bool PackageStore::ensureDistributionPackage(const QString& directory,const Manifest& offer,
+    DistributionInstallResult* output,QString* error)
+{
+    if(output)*output={};
+    const auto id=offer.id;
+    if(!packageId(id))return fail(error,QStringLiteral("The distribution package ID is not correct."));
+    if(RepositoryCancellation::requested())return fail(error,QStringLiteral("The app canceled the startup package check."));
+    if(!QDir().mkpath(m_root))return fail(error,QStringLiteral("The app cannot create the add-on store."));
+    CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
+    if(!lock.tryLock(0))return fail(error,QStringLiteral("The add-on store is busy."));
+    if(packageRetiring(id))return fail(error,QStringLiteral("The add-on is being removed."));
+    if(distributionSuppressed(id)) {
+        if(output)output->state=DistributionInstallResult::State::Suppressed;
+        return true;
+    }
+    InstalledPackage existing;
+    if(installed(id,&existing)) {
+        if(output){output->state=DistributionInstallResult::State::Existing;output->recoveryRequired=existing.recoveryRequired;}
+        return true;
+    }
+    const auto state=QDir(m_root).filePath(QStringLiteral("packages/")+id+QStringLiteral("/state.json"));
+    if(QFileInfo::exists(state) || QFileInfo::exists(state+QStringLiteral(".backup")))
+        return fail(error,QStringLiteral("The installed package state is not correct. Recover or remove the package first."));
+    ReleaseIdentity identity;identity.source=offer.source.toString();identity.tag=QStringLiteral("v")+offer.version;identity.distributionSource=true;
+    PackageCandidate candidate;
+    if(!inspectDirectory(directory,identity,&candidate,error))return false;
+    if(!validateGrants(candidate.manifest,offer.requiredPermissions,error))return false;
+    if(candidate.manifest.document!=offer.document)
+        return fail(error,QStringLiteral("The app package changed. Start the app again before a package review."));
+    if(RepositoryCancellation::requested())return fail(error,QStringLiteral("The app canceled the startup package check."));
+    // Once this entry commits, finish its enable under the same lock even if
+    // cancellation arrives. The next entry will not start after cancellation.
+    if(!installLocked(candidate,offer.requiredPermissions,error,false,true) || !setEnabledLocked(id,true,error))return false;
+    if(output)output->state=DistributionInstallResult::State::Installed;
+    return true;
 }
 bool PackageStore::installed(const QString& id, InstalledPackage* output, QString* error) const
 {
@@ -1117,7 +1165,8 @@ bool PackageStore::installed(const QString& id, InstalledPackage* output, QStrin
             || (policy.value("removed").toObject().value(id).toBool()
                 && state.value("distributionApproval").toString() != digest))) result.enabled = false;
     }
-    result.generation = quint64(state.value("generation").toDouble());
+    const auto generation=state.contains("generation")?state.value("generation"):QJsonValue(0);
+    if(!catalogueInteger(generation,&result.generation))return fail(error,QStringLiteral("The package generation is not correct."));
     result.previousDigest = state.value("previous").toObject().value("digest").toString();
     if (output) *output = result;
     return true;
@@ -1136,6 +1185,10 @@ bool PackageStore::setEnabled(const QString& id, bool enabled, QString* error)
 {
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    return setEnabledLocked(id,enabled,error);
+}
+bool PackageStore::setEnabledLocked(const QString& id,bool enabled,QString* error)
+{
     QJsonObject state;
     if (!loadState(id, &state, error)) return false;
     if (enabled) {
@@ -1291,7 +1344,10 @@ bool PackageStore::settings(const QString& id, QJsonObject* output, quint64* rev
     if (!loadState(id, &state, error)) return false;
     const auto current = state.value("current").toObject();
     if (output) *output = current.value("settings").toObject();
-    if (revision) *revision = quint64(current.value("settingsRevision").toDouble());
+    if(revision) {
+        const auto value=current.contains("settingsRevision")?current.value("settingsRevision"):QJsonValue(0);
+        if(!catalogueInteger(value,revision))return fail(error,QStringLiteral("The settings revision is not correct."));
+    }
     return true;
 }
 bool PackageStore::networkConfiguration(const InstalledPackage& package, QJsonObject* settings, quint64* revision) const
@@ -1314,7 +1370,9 @@ bool PackageStore::networkConfigurationMatches(const InstalledPackage& package, 
     QJsonObject current; quint64 currentRevision = 0;
     return networkConfiguration(package, &current, &currentRevision) && currentRevision == revision && current == settings;
 }
-bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, quint64 revision, QString* error)
+bool PackageStore::saveSettings(const QString& id,const QJsonObject& settings,quint64 revision,QString* error)
+{ return saveSettings(id,settings,revision,QString{},error); }
+bool PackageStore::saveSettings(const QString& id,const QJsonObject& settings,quint64 revision,const QString& expectedStamp,QString* error)
 {
     if (QJsonDocument(settings).toJson(QJsonDocument::Compact).size() > 256 * 1024)
         return fail(error, QStringLiteral("The settings are too large."));
@@ -1323,8 +1381,18 @@ bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, 
     QJsonObject state;
     if (!loadState(id, &state, error)) return false;
     auto current = state.value("current").toObject();
-    if (quint64(current.value("settingsRevision").toDouble()) != revision)
-        return fail(error, QStringLiteral("The settings changed. Read the settings again before a save."));
+    quint64 actualRevision=0;
+    const auto revisionValue=current.contains("settingsRevision")?current.value("settingsRevision"):QJsonValue(0);
+    if(!catalogueInteger(revisionValue,&actualRevision) || actualRevision!=revision || revision>=9007199254740991ULL)
+        return fail(error,QStringLiteral("The settings changed or their revision is full. Read the settings again before a save."));
+    if(!expectedStamp.isEmpty()) {
+        quint64 generation=0;const auto digest=current.value(QStringLiteral("digest")).toString();
+        if(expectedStamp.size()>128 || state.value(QStringLiteral("recoveryRequired")).toBool()
+            || !digestId(digest) || !catalogueInteger(state.value(QStringLiteral("generation")),&generation,true))
+            return fail(error,QStringLiteral("The package changed. Read the current settings before a save."));
+        const QString actualStamp=digest+QLatin1Char(':')+QString::number(generation)+QLatin1Char(':')+QString::number(actualRevision);
+        if(actualStamp!=expectedStamp)return fail(error,QStringLiteral("The package or settings changed. Read the current settings before a save."));
+    }
     InstalledPackage package;
     if (!installed(id, &package, error)) return false;
     QJsonObject settingsSchema;
@@ -1426,19 +1494,71 @@ MetadataCatalogueReader PackageStore::metadataCatalogueReader() const
         return store.readMetadataCatalogue(queued, output, error);
     };
 }
-bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
-                                         MetadataCatalogueSnapshot* output, QString* error) const
+bool PackageStore::cataloguePackage(const QString& id,bool safeMode,const QJsonObject& distributionPolicy,
+    MetadataCataloguePackage* output,QMap<QString,QByteArray>* contents,QString* error) const
 {
-    if (!output) return fail(error, QStringLiteral("The metadata catalogue output is not available."));
-    *output = {};
-    if (!queued.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
-    if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
-    CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
-    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
-    MetadataCatalogueSnapshot captured;
-    captured.queuedAuthority = queued;
-    captured.authority = m_authority.capture();
-    if (!captured.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
+    QJsonObject state;
+    const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
+    if (!catalogueObject(QDir(folder).filePath(QStringLiteral("state.json")), 4 * 1024 * 1024, &state, error))
+        return fail(error, QStringLiteral("The current package state is not correct."));
+    return catalogueStatePackage(id,state,safeMode,distributionPolicy,output,contents,error);
+}
+bool PackageStore::catalogueStatePackage(const QString& id,const QJsonObject& state,bool safeMode,
+    const QJsonObject& distributionPolicy,MetadataCataloguePackage* output,
+    QMap<QString,QByteArray>* contents,QString* error) const
+{
+    MetadataCataloguePackage row;
+    const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
+    if (state.value(QStringLiteral("formatVersion")) != 1 || state.value(QStringLiteral("id")) != id
+        || !state.value(QStringLiteral("enabled")).isBool() || !state.value(QStringLiteral("current")).isObject())
+        return fail(error, QStringLiteral("The current package state is not correct."));
+    const auto current = state.value(QStringLiteral("current")).toObject();
+    row.savedEnabled = state.value(QStringLiteral("enabled")).toBool();
+    row.package.recoveryRequired = state.value(QStringLiteral("recoveryRequired")).toBool();
+    if (!catalogueInteger(state.value(QStringLiteral("generation")), &row.package.generation, true)
+        || !catalogueInteger(current.value(QStringLiteral("settingsRevision")), &row.settingsRevision)
+        || !current.value(QStringLiteral("settings")).isObject()
+        || !current.value(QStringLiteral("identity")).isObject() || !current.value(QStringLiteral("grants")).isObject()
+        || (state.contains(QStringLiteral("recoveryRequired")) && !state.value(QStringLiteral("recoveryRequired")).isBool()))
+        return fail(error, QStringLiteral("The current package generation or settings are not correct."));
+    const auto digest = current.value(QStringLiteral("digest")).toString();
+    if (!digestId(digest) || !catalogueDirectory(QDir(folder).filePath(QStringLiteral("releases")), false, error))
+        return fail(error, QStringLiteral("The current package release is not correct."));
+    row.package.directory = releaseDirectory(id, digest);
+    PackageCandidate candidate;
+    if (!catalogueContents(row.package.directory, &candidate.manifest, &candidate.contents, error)) return false;
+    candidate.digest = digest.toLatin1();
+    const auto identity = current.value(QStringLiteral("identity")).toObject();
+    candidate.identity = readIdentity(identity);
+    if (identity != identityJson(candidate.identity) || candidate.manifest.id != id
+        || current.value(QStringLiteral("version")) != candidate.manifest.version
+        || current.value(QStringLiteral("settingsVersion")) != candidate.manifest.settingsVersion
+        || !validateCandidate(candidate, error)
+        || !validateGrants(candidate.manifest, current.value(QStringLiteral("grants")).toObject(), error))
+        return fail(error, QStringLiteral("The installed package failed its complete catalogue check."));
+    row.package.manifest = std::move(candidate.manifest);
+    row.package.identity = std::move(candidate.identity);
+    row.package.digest = candidate.digest;
+    row.package.grants = current.value(QStringLiteral("grants")).toObject();
+    row.package.previousDigest = state.value(QStringLiteral("previous")).toObject().value(QStringLiteral("digest")).toString();
+    row.package.enabled = row.savedEnabled && !row.package.recoveryRequired && !safeMode && !packageRetiring(id);
+    if (row.package.identity.distributionSource
+        && distributionPolicy.value(QStringLiteral("removed")).toObject().value(id).toBool()
+        && state.value(QStringLiteral("distributionApproval")).toString() != digest) row.package.enabled = false;
+    row.settings = current.value(QStringLiteral("settings")).toObject();
+    row.schema = {{QStringLiteral("type"), QStringLiteral("object")},
+        {QStringLiteral("properties"), QJsonObject{}}, {QStringLiteral("additionalProperties"), false}};
+    if (!row.package.manifest.settingsSchema.isEmpty())
+        row.schema = QJsonDocument::fromJson(candidate.contents.value(row.package.manifest.settingsSchema)).object();
+    if (!credentialSettingsValid(row.package.manifest, row.schema, row.settings, error)) return false;
+    row.contributions=row.package.manifest.contributions;
+    if(contents) *contents=std::move(candidate.contents);
+    *output=std::move(row);
+    return true;
+}
+bool PackageStore::cataloguePolicy(MetadataCatalogueSnapshot* output,QString* error) const
+{
+    auto& captured=*output;
     if (!readProviderPreferences(m_root, &captured.providerPreferences, error)) return false;
     const auto recoveryPath = QDir(m_root).filePath(QStringLiteral("recovery.json"));
     QJsonObject recovery;
@@ -1460,6 +1580,22 @@ bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
             if (!packageId(it.key()) || !it.value().isBool())
                 return fail(error, QStringLiteral("The distribution policy entry is not correct."));
     }
+    return true;
+}
+bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
+                                         MetadataCatalogueSnapshot* output, QString* error) const
+{
+    if (!output) return fail(error, QStringLiteral("The metadata catalogue output is not available."));
+    *output = {};
+    if (!queued.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
+    if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
+    CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    MetadataCatalogueSnapshot captured;
+    captured.queuedAuthority = queued;
+    captured.authority = m_authority.capture();
+    if (!captured.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
+    if(!cataloguePolicy(&captured,error)) return false;
     QStringList ids;
     if (!catalogueCandidates(QDir(m_root).filePath(QStringLiteral("packages")), &ids, error)) return false;
     captured.candidateCount = ids.size();
@@ -1475,57 +1611,14 @@ bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
     qsizetype contributions = 0;
     for (const auto& id : ids) {
         if (!captured.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
-        QJsonObject state;
-        const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
-        if (!catalogueObject(QDir(folder).filePath(QStringLiteral("state.json")), 4 * 1024 * 1024, &state, error)
-            || state.value(QStringLiteral("formatVersion")) != 1 || state.value(QStringLiteral("id")) != id
-            || !state.value(QStringLiteral("enabled")).isBool() || !state.value(QStringLiteral("current")).isObject())
-            return fail(error, QStringLiteral("The current package state is not correct."));
-        const auto current = state.value(QStringLiteral("current")).toObject();
         MetadataCataloguePackage row;
-        row.savedEnabled = state.value(QStringLiteral("enabled")).toBool();
-        row.package.recoveryRequired = state.value(QStringLiteral("recoveryRequired")).toBool();
-        if (!catalogueInteger(state.value(QStringLiteral("generation")), &row.package.generation, true)
-            || !catalogueInteger(current.value(QStringLiteral("settingsRevision")), &row.settingsRevision)
-            || !current.value(QStringLiteral("settings")).isObject()
-            || !current.value(QStringLiteral("identity")).isObject() || !current.value(QStringLiteral("grants")).isObject()
-            || (state.contains(QStringLiteral("recoveryRequired")) && !state.value(QStringLiteral("recoveryRequired")).isBool()))
-            return fail(error, QStringLiteral("The current package generation or settings are not correct."));
-        const auto digest = current.value(QStringLiteral("digest")).toString();
-        if (!digestId(digest) || !catalogueDirectory(QDir(folder).filePath(QStringLiteral("releases")), false, error))
-            return fail(error, QStringLiteral("The current package release is not correct."));
-        row.package.directory = releaseDirectory(id, digest);
-        PackageCandidate candidate;
-        if (!catalogueContents(row.package.directory, &candidate.manifest, &candidate.contents, error)) return false;
-        candidate.digest = digest.toLatin1();
-        const auto identity = current.value(QStringLiteral("identity")).toObject();
-        candidate.identity = readIdentity(identity);
-        if (identity != identityJson(candidate.identity) || candidate.manifest.id != id
-            || current.value(QStringLiteral("version")) != candidate.manifest.version
-            || current.value(QStringLiteral("settingsVersion")) != candidate.manifest.settingsVersion
-            || !validateCandidate(candidate, error)
-            || !validateGrants(candidate.manifest, current.value(QStringLiteral("grants")).toObject(), error))
-            return fail(error, QStringLiteral("The installed package failed its complete catalogue check."));
-        row.package.manifest = std::move(candidate.manifest);
-        row.package.identity = std::move(candidate.identity);
-        row.package.digest = candidate.digest;
-        row.package.grants = current.value(QStringLiteral("grants")).toObject();
-        row.package.previousDigest = state.value(QStringLiteral("previous")).toObject().value(QStringLiteral("digest")).toString();
-        row.package.enabled = row.savedEnabled && !row.package.recoveryRequired && !captured.safeMode && !packageRetiring(id);
-        if (row.package.identity.distributionSource
-            && captured.distributionPolicy.value(QStringLiteral("removed")).toObject().value(id).toBool()
-            && state.value(QStringLiteral("distributionApproval")).toString() != digest) row.package.enabled = false;
-        row.settings = current.value(QStringLiteral("settings")).toObject();
-        row.schema = {{QStringLiteral("type"), QStringLiteral("object")},
-            {QStringLiteral("properties"), QJsonObject{}}, {QStringLiteral("additionalProperties"), false}};
-        if (!row.package.manifest.settingsSchema.isEmpty())
-            row.schema = QJsonDocument::fromJson(candidate.contents.value(row.package.manifest.settingsSchema)).object();
-        if (!credentialSettingsValid(row.package.manifest, row.schema, row.settings, error)) return false;
+        if(!cataloguePackage(id,captured.safeMode,captured.distributionPolicy,&row,nullptr,error)) return false;
         for (const auto& contribution : row.package.manifest.contributions) {
             if (++contributions > MetadataCatalogueSnapshot::MaximumContributions)
                 return fail(error, QStringLiteral("The metadata catalogue has too many contributions."));
-            row.contributions.append(contribution);
+            (void)contribution;
         }
+        const auto digest=QString::fromLatin1(row.package.digest);
         QJsonArray declarations;
         for (const auto& contribution : row.contributions) declarations.append(contribution.document);
         rows.append(QJsonObject{{QStringLiteral("manifest"), row.package.manifest.document},
@@ -1548,6 +1641,157 @@ bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
     *output = std::move(captured);
     if (error) error->clear();
     return true;
+}
+
+std::function<bool(const DisplayCatalogueRequest&,DisplayCatalogueSnapshot*,QString*)> PackageStore::displayCatalogueReader(QString locale) const
+{
+    return [store=*this,queued=m_authority.capture(),locale=std::move(locale)](const DisplayCatalogueRequest& request,DisplayCatalogueSnapshot* output,QString* error) {
+        return store.readDisplayCatalogue(queued,locale,request,output,error);
+    };
+}
+bool PackageStore::readDisplayCatalogue(const StoreAuthorityToken& queued,const QString& locale,
+    const DisplayCatalogueRequest& request,DisplayCatalogueSnapshot* output,QString* error) const
+{
+    if(!output) return fail(error,QStringLiteral("The display catalogue is not available."));
+    *output={};
+    if(request.documents.size()+request.settingsPackages.size()>48 || request.presenceFeatures.size()>16)
+        return fail(error,QStringLiteral("Too many display resources are open."));
+    if(!queued.current()) return fail(error,QStringLiteral("The add-on catalogue changed."));
+    if(!QDir().mkpath(m_root)) return fail(error,QStringLiteral("The add-on store is not available."));
+    CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
+    if(!lock.tryLock(0)) {
+        if(lock.error()==QLockFile::LockFailedError)
+            output->refusal=DisplayCatalogueSnapshot::Refusal::StoreBusy;
+        return fail(error,QStringLiteral("The add-on store is busy."));
+    }
+    MetadataCatalogueSnapshot policy;
+    policy.queuedAuthority=queued;policy.authority=m_authority.capture();
+    if(!policy.current() || !cataloguePolicy(&policy,error)) return false;
+    DisplayCatalogueSnapshot result;
+    result.queuedAuthority=queued;result.authority=policy.authority;
+    result.preferences=policy.providerPreferences;result.distributionPolicy=policy.distributionPolicy;result.safeMode=policy.safeMode;
+    // Display preferences use the same bounds as their former GUI readers.
+    // A corrupt optional display preference falls back to its default; it never
+    // changes package authority or the strict raw catalogue.
+    const auto displayPreference=[&](const QString& name,qint64 cap) {
+        QJsonObject value;const auto path=QDir(m_root).filePath(name);
+        if(QFileInfo::exists(path))catalogueObject(path,cap,&value,nullptr);
+        return value;
+    };
+    const auto appearance=displayPreference(QStringLiteral("theme-selection.json"),4096);
+    result.selectedTheme=appearance.value(QStringLiteral("selectedTheme")).toString().left(256);
+    result.displayPreferences={{QStringLiteral("appearance"),appearance},
+        {QStringLiteral("uiReplacements"),displayPreference(QStringLiteral("ui-replacements.json"),64*1024)},
+        {QStringLiteral("visualizers"),displayPreference(QStringLiteral("visualizers.json"),8192)}};
+    result.savedDataIds=savedDataIds();
+    QStringList ids;
+    if(!catalogueCandidates(QDir(m_root).filePath(QStringLiteral("packages")),&ids,error)) return false;
+    const auto retain=[&](DisplayCataloguePackage row) {
+        const auto descriptor=QJsonDocument(QJsonObject{{QStringLiteral("manifest"),row.package.manifest.document},
+            {QStringLiteral("settings"),row.settings},{QStringLiteral("schema"),row.schema}}).toJson(QJsonDocument::Compact).size();
+        if(descriptor>DisplayCatalogueSnapshot::MaximumDescriptorBytes-result.retainedDescriptorBytes)
+            return fail(error,QStringLiteral("The display catalogue exceeds its descriptor limit."));
+        result.retainedDescriptorBytes+=descriptor;
+        QJsonObject resources;
+        for(auto it=row.resources.cbegin();it!=row.resources.cend();++it)resources.insert(it.key(),it.value());
+        const auto retained=QJsonDocument(QJsonObject{{QStringLiteral("resources"),resources},
+            {QStringLiteral("messages"),row.messages}}).toJson(QJsonDocument::Compact).size();
+        if(retained>DisplayCatalogueSnapshot::MaximumResourceBytes-result.retainedResourceBytes)
+            return fail(error,QStringLiteral("The active display documents exceed the memory limit."));
+        result.retainedResourceBytes+=retained;
+        // contents, including any Wasm entry, is discarded before next package.
+        result.packages.append(std::move(row));
+        return true;
+    };
+    qsizetype contributionCount=0;
+    for(const auto& id:ids) {
+        if(!result.current() || RepositoryCancellation::requested()) return fail(error,QStringLiteral("The add-on catalogue changed."));
+        MetadataCataloguePackage raw;QMap<QString,QByteArray> contents;QString rowError;
+        DisplayCataloguePackage row;
+        if(!cataloguePackage(id,result.safeMode,result.distributionPolicy,&raw,&contents,&rowError)) {
+            // A verified backup is display recovery information only. Strict
+            // metadata capture never reaches this branch or accepts backup.
+            QJsonObject currentState,backup;MetadataCataloguePackage recovered;
+            const auto currentPath=QDir(m_root).filePath(QStringLiteral("packages/")+id+QStringLiteral("/state.json"));
+            const bool primaryEnvelope=catalogueObject(currentPath,4*1024*1024,&currentState,nullptr)
+                && currentState.value(QStringLiteral("formatVersion"))==1 && currentState.value(QStringLiteral("id"))==id
+                && currentState.value(QStringLiteral("current")).isObject();
+            const auto path=currentPath+QStringLiteral(".backup");
+            if(!primaryEnvelope && catalogueObject(path,4*1024*1024,&backup,nullptr)
+                && catalogueStatePackage(id,backup,true,result.distributionPolicy,&recovered,nullptr,nullptr)) {
+                row.package=std::move(recovered.package);row.package.enabled=false;row.package.recoveryRequired=true;
+                row.package.manifest.contributions.clear();row.settings=std::move(recovered.settings);row.schema=std::move(recovered.schema);
+                row.settingsRevision=recovered.settingsRevision;row.savedEnabled=recovered.savedEnabled;row.retiring=packageRetiring(id);
+                row.summaryOnly=true;
+            } else {
+                row.package.manifest.id=id;row.package.manifest.name=id;
+                row.package.enabled=false;row.package.recoveryRequired=true;row.corrupt=true;row.error=rowError;
+            }
+            if(!retain(std::move(row)))return false;continue;
+        }
+        row.package=std::move(raw.package);row.schema=std::move(raw.schema);row.settings=std::move(raw.settings);
+        row.settingsRevision=raw.settingsRevision;row.savedEnabled=raw.savedEnabled;row.retiring=packageRetiring(id);
+        contributionCount+=row.package.manifest.contributions.size();
+        if(contributionCount>MetadataCatalogueSnapshot::MaximumContributions)
+            return fail(error,QStringLiteral("The add-on catalogue has too many contributions."));
+        const auto json=[&](const QString& path) {
+            if(!row.package.manifest.files.contains(path)) return QJsonObject{};
+            const auto found=contents.constFind(path);
+            // Same cap as the existing Manager::readObject display API.
+            if(found==contents.cend() || found->size()>256*1024) return QJsonObject{};
+            return QJsonDocument::fromJson(*found).object();
+        };
+        if(!row.package.manifest.settingsSchema.isEmpty())row.schema=json(row.package.manifest.settingsSchema);
+        bool localeNeeded=request.settingsPackages.contains(id);
+        for(const auto& contribution:row.package.manifest.contributions) {
+            QString field;
+            if(contribution.type==QLatin1String("theme"))
+                field=contribution.document.contains(QStringLiteral("theme"))?QStringLiteral("theme"):QStringLiteral("resource");
+            else if(contribution.type.startsWith(QLatin1String("ui.")))
+                field=contribution.document.contains(QStringLiteral("view"))?QStringLiteral("view"):QStringLiteral("resource");
+            else if(contribution.type==QLatin1String("visualizer"))field=QStringLiteral("scene");
+            if(field.isEmpty())continue;
+            const QString global=id+QLatin1Char('/')+contribution.id;
+            const QString key=global+QLatin1Char('/')+field;
+            const bool requested=request.documents.contains(key);
+            const bool theme=contribution.type==QLatin1String("theme");
+            if(!theme && !requested)continue;
+            auto document=json(contribution.document.value(field).toString());
+            if(theme) {
+                if(!themeDocument::validate(document))continue;
+                result.themes.append(QVariantMap{{"id",global},{"packageId",id},
+                    {"name",contribution.document.value(QStringLiteral("name")).toString(row.package.manifest.name)},
+                    {"field",field},{"enabled",row.package.enabled},
+                    {"light",document.value(QStringLiteral("variants")).toObject().contains(QStringLiteral("light"))},
+                    {"dark",document.value(QStringLiteral("variants")).toObject().contains(QStringLiteral("dark"))}});
+            }
+            if(requested || (theme && global==result.selectedTheme)) {
+                if(!document.isEmpty())row.resources.insert(contribution.id+QLatin1Char('/')+field,std::move(document));
+                localeNeeded|=!theme;
+            }
+        }
+        if(request.settingsPackages.contains(id) && !row.package.manifest.settingsUi.isEmpty())
+            row.resources.insert(QStringLiteral("@settingsUi"),json(row.package.manifest.settingsUi));
+        if(localeNeeded) {
+            const auto locales=row.package.manifest.document.value(QStringLiteral("locales")).toObject();
+            const auto files=locales.value(QStringLiteral("files")).toObject();
+            QString language=locale;
+            if(!files.contains(language))language=language.section(QLatin1Char('-'),0,0);
+            if(!files.contains(language))language=locales.value(QStringLiteral("default")).toString();
+            if(!files.isEmpty()) {
+                const auto path=files.value(language).toString();
+                const auto found=contents.constFind(path);QJsonParseError parse;
+                const auto document=found!=contents.cend() && found->size()<=256*1024
+                    ?QJsonDocument::fromJson(*found,&parse):QJsonDocument{};
+                row.messagesReady=found!=contents.cend() && found->size()<=256*1024
+                    && parse.error==QJsonParseError::NoError && document.isObject();
+                if(row.messagesReady)row.messages=document.object();
+            }
+        }
+        if(!retain(std::move(row)))return false;
+    }
+    if(!result.current()) return fail(error,QStringLiteral("The add-on catalogue changed."));
+    *output=std::move(result);if(error)error->clear();return true;
 }
 
 bool PackageStore::providerPreferences(ProviderPreferences* output, QString* error) const

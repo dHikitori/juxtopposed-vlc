@@ -13,12 +13,12 @@ visualizer inactivity, and full app measurements remain open. See
 [the performance requirements and evidence](performance-contract.md).
 
 The default HTTP transport and artwork cache scan now wait for explicit work.
-Their 73 and 13 normal cases pass. The shared display integration is still
-copied work. Its broad normal run found a session request cleanup defect, and
-reader tests found a missing unlock wake. The corrected reader passes 55
-focused cases; the UI passes 302 cases with two exact baseline Qt warnings.
-The next shared cohort must validate the fixes together before application
-integration, sanitizer checks, a Windows rebuild, and the full app comparison.
+Their 73 and 13 normal cases pass. The shared display foundation is now in
+application source. Its matching normal host passes 551 cases across 18 suites
+with no warnings or skips, including the corrected reader unlock and Session
+request cleanup. The UI passes 302 cases with two exact baseline Qt warnings.
+Consumer mounting, matching sanitizers, native runtime checks, the Windows
+rebuild, and the full app comparison remain in progress.
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 

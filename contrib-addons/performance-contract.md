@@ -507,3 +507,23 @@ earlier matching headers. Their dependency records identify the objects that
 must rebuild for the corrected private Snapshot header. The successor shared
 cohort, native runtime cases, sanitizers, and full app measurements remain
 open. The published Windows build still contains the earlier UI read path.
+
+## Shared display foundation
+
+The shared display reader, View, Manager facade, and joined startup batch are
+now in the application source. They are not mounted by MainUI yet. A fresh
+matching normal host passes all 18 suites and 551 cases with no warnings or
+skips. This includes the corrected reader unlock and Session request cleanup.
+The producer contains 66 CPP files and its aggregate MOC object. The record is
+`/tmp/hakone-addon-display-host-proof/normal-successor-terminal-report.json`,
+SHA-256 `33d85e69c7c90d7cd3ebc9a68ee8dcdb862378604f79ea8a42e934dbd25e6d1d`.
+
+Display getters read retained memory. File verification, settings documents,
+and requested credential-presence checks run on joined work. Exact request
+tickets bound retained documents and forms. Store unlock notifications retry
+actual contention; permanent errors do not create a retry loop. Settings saves
+still use fresh authority and an exact revision stamp.
+
+The matching sanitizer run, native runtime checks, consumer mounting, and new
+Windows package remain in progress. These normal tests do not establish full
+app responsiveness.

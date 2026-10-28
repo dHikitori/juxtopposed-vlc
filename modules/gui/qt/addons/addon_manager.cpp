@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
+#include "addon_catalogue_view.hpp"
 #include "addon_package_configuration.hpp"
 #include "addon_metadata_attempt.hpp"
 #include "addon_metadata_completion_policy.hpp"
@@ -24,6 +25,7 @@
 #include <QUuid>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace vlc::addons {
 namespace {
@@ -83,6 +85,14 @@ AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAcc
 AddonManager::~AddonManager()
 {
     m_retiring = true;
+    // All public outer requests are dead before any member teardown. Detached
+    // QObject-owned destroyed hooks still release their exact weak View; they
+    // contain no Manager access and do not depend on this map's lifetime.
+    m_displayRequests.clear();
+    if(m_distributionBootstrapInProgress) {
+        if(m_distributionBootstrapCancel)m_distributionBootstrapCancel->store(true,std::memory_order_release);
+        m_repositoryJobs->cancel();
+    }
     m_store.invalidateAuthority();
     emit retiring();
     if (m_storage) m_storage->close();
@@ -92,6 +102,11 @@ AddonManager::~AddonManager()
     const auto workers = m_workers; for (auto* worker : workers) worker->stop(); m_secrets.clearSession();
 }
 bool AddonManager::busy() const { return m_repositoryJobs->busy(); }
+StoreAuthorityToken AddonManager::storeAuthorityToken() const noexcept
+{
+    if(QThread::currentThread()!=thread() || m_retiring || m_distributionBootstrapInProgress)return {};
+    m_readerCaptureBegun=true;return m_store.authorityToken();
+}
 void AddonManager::setWorkerExecutable(const QString& value)
 { m_workerExecutable = value; emit capabilitiesChanged(); }
 QVariantMap AddonManager::capabilities() const
@@ -122,6 +137,14 @@ void AddonManager::setNativeStreamAvailable(bool available)
     const QPointer<AddonManager> alive(this);
     setProperty("hakoneNativeStreamAvailable", available);
     if (alive && !m_retiring) emit capabilitiesChanged();
+}
+void AddonManager::setNativeStreamTransportHint(bool known,bool available)
+{
+    if(QThread::currentThread()!=thread() || m_retiring)return;
+    const int next=known?(available?2:1):0;
+    if(property("hakoneNativeStreamTransport").toInt()==next)return;
+    const QPointer<AddonManager> alive(this);setProperty("hakoneNativeStreamTransport",next);
+    if(alive && !m_retiring)emit capabilitiesChanged();
 }
 void AddonManager::setMediaCapabilitiesSource(QObject* source)
 {
@@ -183,6 +206,11 @@ QByteArray AddonManager::credential(const QString& id, const QString& field) con
 { return m_secrets.read(id, savedSettings(id).value("_credentials").toObject().value(field).toString()); }
 NetworkBroker::CredentialResolver AddonManager::credentialResolver(const InstalledPackage& package, NetworkBroker::RequestGuard* current) const
 {
+    if(QThread::currentThread()!=thread() || m_distributionBootstrapInProgress) {
+        if(current)*current=[] {return false;};
+        return [](const QString&) {return QByteArray{};};
+    }
+    m_readerCaptureBegun=true;
     if (m_retiring || m_withdrawingPackages.contains(package.manifest.id)) {
         if (current) *current = [] { return false; };
         return [](const QString&) { return QByteArray{}; };
@@ -224,7 +252,17 @@ bool AddonManager::configured(const InstalledPackage& package) const
         [this, id = package.manifest.id](const QString& reference) { return m_secrets.present(id, reference); });
 }
 
-bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input, const QVariantMap& secretOperations)
+bool AddonManager::saveAddonSettings(const QString& id,const QVariantMap& input,const QVariantMap& secretOperations)
+{ return saveSettingsImpl(id,input,secretOperations,{}); }
+bool AddonManager::saveDisplaySettings(const QString& id,const QString& expectedStamp,const QVariantMap& input,const QVariantMap& secretOperations)
+{
+    const auto* display=displayCatalogue();
+    if(expectedStamp.isEmpty() || expectedStamp.size()>128 || !display || !display->isCurrent()
+        || !display->settingsReady(id) || display->settingsStamp(id)!=expectedStamp)
+        return changed(false,tr("The settings changed. Wait for the current settings before a save."));
+    return saveSettingsImpl(id,input,secretOperations,expectedStamp);
+}
+bool AddonManager::saveSettingsImpl(const QString& id,const QVariantMap& input,const QVariantMap& secretOperations,const QString& expectedStamp)
 {
     if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
     InstalledPackage package; QString error;
@@ -233,6 +271,10 @@ bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input
     if (document.value("type").toString() != QLatin1String("object") || properties.size() > 64) return changed(false, tr("The app cannot use this settings schema."));
     QJsonObject saved; quint64 expectedRevision = 0;
     if (!m_store.settings(id, &saved, &expectedRevision, &error)) return changed(false, error);
+    const QString currentStamp=QString::fromLatin1(package.digest)+QLatin1Char(':')+QString::number(package.generation)
+        +QLatin1Char(':')+QString::number(expectedRevision);
+    if(!expectedStamp.isEmpty() && currentStamp!=expectedStamp)
+        return changed(false,tr("The settings changed. Read the current settings before a save."));
     const auto originalReferences = saved.value("_credentials").toObject();
     auto references = originalReferences; QJsonObject values;
     QStringList created, deletedFields;
@@ -267,7 +309,7 @@ bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input
         }
     }
     values.insert("_credentials", references);
-    if (!m_store.saveSettings(id, values, expectedRevision, &error)) return reject(error);
+    if (!m_store.saveSettings(id, values, expectedRevision, expectedStamp, &error)) return reject(error);
     // Keep old credentials for rollback. Explicit account deletion revokes all generations.
     if (!withdraw(id)) return false;
     for (const auto& field : deletedFields)
@@ -330,14 +372,17 @@ QVariantList AddonManager::packages() const
 PackageSummaryReader AddonManager::packageReader() const
 {
     Q_ASSERT(QThread::currentThread() == thread());
+    if(m_distributionBootstrapInProgress)return {};
+    m_readerCaptureBegun=true;
     const auto store = m_store;
     const auto authority = store.authorityToken();
     const auto credentials = m_secrets.snapshotReader();
     const auto distributions = m_distributionPackages;
     const auto directories = m_distributionDirectories;
     const auto removing = m_removingPackages, withdrawing = m_withdrawingPackages;
+    const auto bootstrapResults=m_distributionBootstrapResults;
     const bool retiring = m_retiring;
-    return [store, authority, credentials, distributions, directories, removing, withdrawing, retiring]
+    return [store, authority, credentials, distributions, directories, removing, withdrawing, bootstrapResults, retiring]
         () -> std::optional<PackageSummarySnapshot> {
         const auto current = [&] { return !retiring && authority.current() && !RepositoryCancellation::requested(); };
         const auto boundedObject = [](const QString& path) {
@@ -419,14 +464,191 @@ PackageSummaryReader AddonManager::packageReader() const
             if (!present) result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", false},
                 {"enabled", false}, {"configured", false}, {"removing", true}});
         }
+        for(const auto& value:bootstrapResults) {
+            const auto bootstrap=value.toMap();if(bootstrap.value(QStringLiteral("success")).toBool())continue;
+            const auto id=bootstrap.value(QStringLiteral("id")).toString(),error=bootstrap.value(QStringLiteral("error")).toString();
+            bool found=false;
+            for(auto& existing:result) {
+                auto row=existing.toMap();if(row.value(QStringLiteral("id")).toString()!=id)continue;
+                row.insert(QStringLiteral("bootstrapFailed"),true);row.insert(QStringLiteral("bootstrapError"),error);
+                if(row.value(QStringLiteral("error")).toString().isEmpty())row.insert(QStringLiteral("error"),error);
+                existing=row;found=true;break;
+            }
+            if(!found)result.append(QVariantMap{{"id",id},{"name",bootstrap.value(QStringLiteral("name"),id)},
+                {"installed",false},{"enabled",false},{"configured",false},{"bootstrapFailed",true},
+                {"error",error},{"recoveryRequired",bootstrap.value(QStringLiteral("recoveryRequired"))}});
+        }
         if (!current() || result.size() > 256) return std::nullopt;
         return PackageSummarySnapshot{std::move(result), authority};
     };
 }
+std::optional<DisplayCatalogueSource> AddonManager::displayCatalogueSource() const
+{
+    if(QThread::currentThread()!=thread() || m_retiring)return std::nullopt;
+    DisplayCatalogueSource result;
+    result.bootstrapping=distributionBootstrapInProgress();
+    result.bootstrapGeneration=distributionBootstrapGeneration();
+    result.bootstrapResults=distributionBootstrapResults();
+    result.queuedAuthority=m_store.authorityToken();
+    if(result.bootstrapping)return result;
+    m_readerCaptureBegun=true;
+    result.locale=QLocale().name().replace(QLatin1Char('_'),QLatin1Char('-'));
+    result.reader=m_store.displayCatalogueReader(result.locale);
+    result.tlsProbe=[authority=result.queuedAuthority]()->std::optional<bool> {
+        if(!authority.current())return std::nullopt;
+        const bool supported=QSslSocket::supportsSsl();
+        return authority.current()?std::optional<bool>(supported):std::nullopt;
+    };
+    result.credentialPresence=m_secrets.presenceSnapshot();
+    const auto credentials=m_secrets.snapshotReader();
+    result.credentials=[credentials,authority=result.queuedAuthority](const QString& package,const QString& reference) {
+        if(!authority.current())return QByteArray{};
+        auto value=credentials(package,reference);
+        if(!authority.current()){value.fill('\0');value.clear();}
+        return value;
+    };
+    result.distributions=m_distributionPackages;result.distributionIds=m_distributionDirectories.keys();
+    result.withdrawing=m_withdrawingPackages;result.removing=m_removingPackages;
+    result.workerExecutable=m_workerExecutable;
+    // Only known scalar/list fields enter joined work. No QObject or callable
+    // from a host registration is copied into the display recipe.
+    for(const auto& source:m_builtinProviders) {
+        QVariantMap row;
+        for(const auto& key:{QStringLiteral("id"),QStringLiteral("packageId"),QStringLiteral("name"),
+                QStringLiteral("accountReference"),QStringLiteral("cachePartition")})
+            if(source.value(key).metaType().id()==QMetaType::QString)row.insert(key,source.value(key));
+        for(const auto& key:{QStringLiteral("enabled"),QStringLiteral("configured"),QStringLiteral("builtin"),QStringLiteral("requiresNativeAnchor")})
+            if(source.value(key).metaType().id()==QMetaType::Bool)row.insert(key,source.value(key));
+        for(const auto& key:{QStringLiteral("features"),QStringLiteral("operations"),QStringLiteral("mediaKinds")})
+            row.insert(key,source.value(key).toStringList());
+        result.builtins.append(row);
+    }
+    return result;
+}
+StoreAuthorityChanges AddonManager::watchDisplayCatalogue(std::function<void()> nativeWake) const
+{
+    if(QThread::currentThread()!=thread() || m_retiring)return {};
+    return m_store.onDisplayChanged(std::move(nativeWake));
+}
+AddonCatalogueView* AddonManager::displayCatalogue() const
+{ return QThread::currentThread()==thread()?AddonCatalogueView::attached(const_cast<AddonManager*>(this)):nullptr; }
+quint64 AddonManager::displayCatalogueRevision() const
+{const auto* display=displayCatalogue();return display?display->revision():0;}
+bool AddonManager::displayCatalogueReady() const
+{const auto* display=displayCatalogue();return display && display->isCurrent();}
+bool AddonManager::displayCatalogueLoading() const
+{const auto* display=displayCatalogue();return display && display->loading();}
+QString AddonManager::displayCatalogueError() const
+{const auto* display=displayCatalogue();return display?display->error():tr("The extension list is not available.");}
+void AddonManager::refreshDisplayCatalogue()
+{if(auto* display=displayCatalogue())display->refresh();}
+QVariantList AddonManager::displayProvidersForFeature(const QString& feature) const
+{const auto* display=displayCatalogue();return display?display->providers(feature):QVariantList{};}
+QString AddonManager::prepareDisplayFeature(const QString& feature)
+{ return prepareDisplayRequest(feature,false); }
+QString AddonManager::prepareDisplaySettings(const QString& package)
+{ return prepareDisplayRequest(package,true); }
+QString AddonManager::prepareDisplayRequest(const QString& subject,bool settings)
+{
+    if(QThread::currentThread()!=thread() || m_retiring)return {};
+    const QPointer<AddonManager> alive(this);
+    const QPointer<AddonCatalogueView> captured(displayCatalogue());
+    // A successor cannot inherit stale reservations or their inner IDs.
+    QList<DisplayRequest> obsolete;
+    for(auto it=m_displayRequests.begin();it!=m_displayRequests.end();) {
+        if(!it->view || it->view!=captured) {obsolete.append(*it);it=m_displayRequests.erase(it);}else ++it;
+    }
+    for(const auto& request:obsolete) {
+        disconnect(request.ownerDestroyed);
+        if(request.view && !request.inner.isEmpty())request.view->release(request.inner);
+    }
+    if(!alive || m_retiring || !captured || captured!=displayCatalogue() || m_displayRequests.size()>=32)return {};
+    static std::atomic<quint64> sequence{0};
+    auto previous=sequence.load(std::memory_order_relaxed);
+    for(;;) {
+        if(previous==std::numeric_limits<quint64>::max())return {};
+        if(sequence.compare_exchange_weak(previous,previous+1,std::memory_order_relaxed))break;
+    }
+    const QString outer=QStringLiteral("display:")+QString::number(previous+1,16);
+    m_displayRequests.insert(outer,DisplayRequest{captured,{},{}}); // pending before callback-prone acquisition
+    const auto inner=settings?captured->acquireSettings(subject):captured->acquireFeature(subject);
+    if(!alive) {if(captured && !inner.isEmpty())captured->release(inner);return {};}
+    auto found=m_displayRequests.find(outer);
+    if(inner.isEmpty() || m_retiring || !captured || captured!=displayCatalogue() || !captured->requestCurrent(inner)
+        || found==m_displayRequests.end() || found->view!=captured) {
+        m_displayRequests.remove(outer);
+        if(captured && !inner.isEmpty())captured->release(inner);
+        return {};
+    }
+    found->inner=inner;
+    // This detached cleanup survives the derived Manager's member teardown.
+    // QObject emits destroyed before deleting children; the exact weak View is
+    // still valid or already closed. The callback never accesses this Manager.
+    found->ownerDestroyed=connect(this,&QObject::destroyed,captured,[captured,inner] {
+        if(captured)captured->release(inner);
+    });
+    return outer;
+}
+void AddonManager::releaseDisplayRequest(const QString& outer)
+{
+    if(QThread::currentThread()!=thread())return;
+    const auto found=m_displayRequests.find(outer);if(found==m_displayRequests.end())return;
+    const auto request=*found;m_displayRequests.erase(found);
+    disconnect(request.ownerDestroyed);
+    if(request.view && !request.inner.isEmpty())request.view->release(request.inner);
+}
+bool AddonManager::displayRequestCurrent(const QString& outer) const
+{
+    if(QThread::currentThread()!=thread() || m_retiring)return false;
+    const auto found=m_displayRequests.constFind(outer);
+    return found!=m_displayRequests.cend() && found->view && !found->inner.isEmpty()
+        && found->view==displayCatalogue() && found->view->requestCurrent(found->inner);
+}
+QString AddonManager::displaySettingsState(const QString& package) const
+{const auto* display=displayCatalogue();return display?display->settingsState(package):QStringLiteral("unavailable");}
+QString AddonManager::displaySettingsStamp(const QString& package) const
+{const auto* display=displayCatalogue();return display?display->settingsStamp(package):QString{};}
+bool AddonManager::displayCatalogueAttached() const
+{return displayCatalogue()!=nullptr;}
+QVariantMap AddonManager::displaySettingsSchema(const QString& package) const
+{const auto* display=displayCatalogue();return display?display->settingsSchema(package):QVariantMap{};}
+QVariantMap AddonManager::displaySettingsValues(const QString& package) const
+{const auto* display=displayCatalogue();return display?display->settingsValues(package):QVariantMap{};}
+QVariantMap AddonManager::displaySettingsMessages(const QString& package) const
+{const auto* display=displayCatalogue();return display?display->settingsMessages(package):QVariantMap{};}
+QVariantMap AddonManager::displaySettingsSecretStatus(const QString& package) const
+{const auto* display=displayCatalogue();return display?display->settingsSecretStatus(package):QVariantMap{};}
+QVariantMap AddonManager::displayCapabilities() const
+{
+    if(QThread::currentThread()!=thread())return {};
+    const auto* display=displayCatalogue();
+    auto result=display?display->capabilities():QVariantMap{{"safeMode",true},{"safeModeKnown",false},
+        {"workerKnown",false},{"workerAvailable",false},{"networkHttpKnown",false},{"networkHttpAvailable",false},
+        {"webSocketKnown",false},{"webSocketAvailable",false}};
+    const auto operations=m_hostServices.availableOperations();
+    const auto all=[&](const QStringList& required){for(const auto& value:required)if(!operations.contains(value))return false;return true;};
+    const bool mediaKnown=m_mediaCapabilitiesSource && m_mediaCapabilitiesSource->thread()==QThread::currentThread()
+        && m_mediaCapabilitiesSource->property("isStarted").isValid();
+    QVariantMap media{{"known",mediaKnown}};
+    const std::pair<const char*,const char*> fields[]={{"isStarted","loaded"},{"seekable","seekable"},
+        {"pausable","pausable"},{"ratechangable","rateChange"},{"hasVideoOutput","videoOutput"}};
+    for(const auto& field:fields)
+        media.insert(QString::fromLatin1(field.second),mediaKnown && m_mediaCapabilitiesSource->property(field.first).toBool());
+    result.insert(QStringLiteral("media"),media);
+    result.insert(QStringLiteral("coreOperations"),operations);result.insert(QStringLiteral("workerProtocol"),QStringLiteral("wasm-message-v1"));
+    const bool route=!m_retiring && property("hakoneNativeStreamAvailable").toBool();
+    const int transport=property("hakoneNativeStreamTransport").toInt();
+    result.insert(QStringLiteral("mediaStreamKnown"),route && transport!=0);
+    result.insert(QStringLiteral("mediaStreamAvailable"),route && transport==2);
+    result.insert(QStringLiteral("privateStorageAvailable"),all({QStringLiteral("storage.get"),QStringLiteral("storage.set"),QStringLiteral("storage.remove")}));
+    result.insert(QStringLiteral("webSocketAvailable"),result.value(QStringLiteral("webSocketAvailable")).toBool() && all({QStringLiteral("network.websocket.open"),QStringLiteral("network.websocket.send"),QStringLiteral("network.websocket.receive"),QStringLiteral("network.websocket.close")}));
+    return result;
+}
 std::optional<MetadataCatalogueSource> AddonManager::metadataCatalogueSource() const
 {
     if (QThread::currentThread() != thread()) return std::nullopt;
-    if (m_retiring || !m_withdrawingPackages.isEmpty() || !m_removingPackages.isEmpty()) return std::nullopt;
+    if (m_retiring || m_distributionBootstrapInProgress || !m_withdrawingPackages.isEmpty() || !m_removingPackages.isEmpty()) return std::nullopt;
+    m_readerCaptureBegun=true;
     MetadataCatalogueSource source;
     source.queuedAuthority = m_store.authorityToken();
     if (!source.current()) return std::nullopt;
@@ -491,6 +713,8 @@ QByteArray AddonManager::contributionFile(const QString& global, const QString& 
 }
 std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& global) const
 {
+    if(QThread::currentThread()!=thread() || m_distributionBootstrapInProgress)return {};
+    m_readerCaptureBegun=true;
     if (m_retiring) return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on manager is closing."); return result; };
     if (m_withdrawingPackages.contains(packagePart(global)))
         return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on is not available."); return result; };
@@ -578,6 +802,8 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
 }
 AddonNativeAuthorityReader AddonManager::nativeAuthorityReader(const QString& global) const
 {
+    if(QThread::currentThread()!=thread() || m_distributionBootstrapInProgress)return {};
+    m_readerCaptureBegun=true;
     if (m_retiring) return []() -> std::optional<AddonNativeAuthority> { return std::nullopt; };
     if (m_withdrawingPackages.contains(packagePart(global)) || m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
         return []() -> std::optional<AddonNativeAuthority> { return std::nullopt; };
@@ -712,31 +938,85 @@ bool AddonManager::stageLocalPackage(const QString& directory)
     if (!PackageStore::inspectDirectory(directory, identity, candidate.get(), &error)) return changed(false, error);
     m_pendingPackage = std::move(candidate); m_updateResult.clear(); return changed(true);
 }
-bool AddonManager::ensureDistributionPackage(const QString& directory, const QString& expectedPackageId)
+bool AddonManager::ensureDistributionPackage(const QString& directory,const QString& expectedPackageId)
 {
-    Manifest manifest; QString error;
-    if (!Manifest::loadDirectory(directory, &manifest, nullptr, &error)) return changed(false, error);
-    if (manifest.id != expectedPackageId)
-        return changed(false, tr("The distribution package ID is not correct."));
-    const auto source = manifest.source.toString();
-    if (m_distributionPackages.contains(expectedPackageId)
-        && m_distributionPackages.value(expectedPackageId).value("source").toString() != source)
-        return changed(false, tr("The app package source changed."));
-    m_distributionDirectories.insert(expectedPackageId, directory);
-    m_distributionPackages.insert(expectedPackageId, {{"name", manifest.name}, {"version", manifest.version}, {"source", source}});
-    if (m_store.distributionSuppressed(expectedPackageId)) return true;
-    InstalledPackage existing;
-    if (m_store.installed(expectedPackageId, &existing)) return true;
-    if (QFileInfo::exists(QDir(m_store.storageDirectory()).filePath(QStringLiteral("packages/") + expectedPackageId + QStringLiteral("/state.json"))))
-        return changed(false, tr("The installed package state is not correct. Recover or remove the package first."));
-    ReleaseIdentity identity;
-    identity.source = source; identity.tag = QStringLiteral("v") + manifest.version;
-    identity.distributionSource = true;
-    PackageCandidate candidate;
-    if (!PackageStore::inspectDirectory(directory, identity, &candidate, &error)
-        || !m_store.install(candidate, manifest.requiredPermissions, &error)
-        || !m_store.setEnabled(manifest.id, true, &error)) return changed(false, error);
-    return changed(true);
+    if(m_distributionBootstrapInProgress)return changed(false,tr("The app is preparing the bundled add-ons. Try again after it finishes."));
+    const auto result=distributionBootstrap::ensure(m_store,directory,expectedPackageId,
+        m_distributionPackages.value(expectedPackageId).value(QStringLiteral("source")).toString());
+    if(!result.offer.isEmpty()) {
+        m_distributionDirectories.insert(expectedPackageId,result.directory);
+        m_distributionPackages.insert(expectedPackageId,result.offer);
+    }
+    // Existing/suppressed packages never caused a revision publication in the
+    // synchronous API. Keep that behavior for isolated tools and host tests.
+    if(result.success && result.status!=QLatin1String("installed"))return true;
+    return changed(result.success,result.error);
+}
+bool AddonManager::beginDistributionBootstrap(QList<DistributionBootstrapEntry> entries)
+{
+    if(QThread::currentThread()!=thread())return false;
+    if(m_retiring || m_readerCaptureBegun || m_distributionBootstrapStarted || m_distributionBootstrapInProgress
+        || busy() || !m_distributionPackages.isEmpty() || !m_workers.isEmpty() || m_pendingPackage
+        || !m_removingPackages.isEmpty() || !m_withdrawingPackages.isEmpty()
+        || findChild<QObject*>(QStringLiteral("hakoneDisplayCatalogue"),Qt::FindDirectChildrenOnly)) {
+        m_error=tr("The startup package batch is not available.");return false;
+    }
+    try {if(!distributionBootstrap::validEntries(entries)){m_error=tr("The startup package list is not correct.");return false;}}
+    catch(...){m_error=tr("The startup package list is not available.");return false;}
+    std::shared_ptr<DistributionBootstrapBatch> result;
+    std::shared_ptr<std::atomic_bool> cancellation;
+    try {result=std::make_shared<DistributionBootstrapBatch>();cancellation=std::make_shared<std::atomic_bool>(false);}
+    catch(...){m_error=tr("The startup package batch is not available.");return false;}
+    m_distributionBootstrapCancel=cancellation;
+    m_distributionBootstrapStarted=true;m_distributionBootstrapInProgress=true;
+    ++m_distributionBootstrapGeneration;m_distributionBootstrapResults.clear();m_distributionBootstrapError.clear();
+    const QPointer<AddonManager> alive(this);emit distributionBootstrapChanged();if(!alive)return false;
+    const auto store=m_store;const auto ownedEntries=entries;
+    bool accepted=false;
+    try {accepted=m_repositoryJobs->submit([store,entries=std::move(entries),result,cancellation] {
+        if(cancellation->load(std::memory_order_acquire)){result->canceled=true;return;}
+        *result=distributionBootstrap::run(store,entries);
+    },[this,ownedEntries,result](AddonRepositoryJobs::Result state) {
+        finishDistributionBootstrap(ownedEntries,result.get(),state==AddonRepositoryJobs::Result::Canceled,
+            state==AddonRepositoryJobs::Result::Failed?tr("The startup package batch did not finish."):QString{});
+    });}catch(...){}
+    if(!alive)return false;
+    if(accepted && cancellation->load(std::memory_order_acquire))m_repositoryJobs->cancel();
+    if(!accepted) {
+        finishDistributionBootstrap(ownedEntries,nullptr,false,tr("The app cannot start the package batch. Start the app again to retry."));
+        return false;
+    }
+    return true;
+}
+void AddonManager::cancelDistributionBootstrap()
+{
+    if(QThread::currentThread()!=thread() || !m_distributionBootstrapInProgress)return;
+    // The flag does not claim that owned work has ended. Keep bootstrap active
+    // until real completion, or app retirement prevents further delivery.
+    if(m_distributionBootstrapCancel)m_distributionBootstrapCancel->store(true,std::memory_order_release);
+    m_repositoryJobs->cancel();
+}
+void AddonManager::finishDistributionBootstrap(const QList<DistributionBootstrapEntry>& entries,
+    const DistributionBootstrapBatch* batch,bool canceled,const QString& error)
+{
+    if(m_retiring || !m_distributionBootstrapInProgress)return;
+    auto directories=m_distributionDirectories;auto offers=m_distributionPackages;
+    QVariantList rows;QStringList errors;
+    for(qsizetype i=0;i<entries.size();++i) {
+        DistributionBootstrapItem item;item.id=entries[i].expectedId;
+        if(batch && i<batch->items.size() && batch->items[i].id==item.id)item=batch->items[i];
+        else {item.status=canceled?QStringLiteral("canceled"):QStringLiteral("error");item.error=!error.isEmpty()?error
+            :canceled?tr("The app canceled the startup package check."):tr("The startup package check did not finish.");}
+        if(!item.offer.isEmpty()) {directories.insert(item.id,item.directory);offers.insert(item.id,item.offer);}
+        if(!item.success)errors.append(item.id+QStringLiteral(": ")+item.error.left(1024));
+        rows.append(item.row());
+    }
+    m_distributionDirectories=std::move(directories);m_distributionPackages=std::move(offers);
+    m_distributionBootstrapResults=std::move(rows);m_distributionBootstrapError=errors.join(QLatin1Char('\n'));
+    if(m_distributionBootstrapError.isEmpty() && canceled)m_distributionBootstrapError=tr("The app canceled the startup package batch.");
+    m_distributionBootstrapCancel.reset();
+    m_error=m_distributionBootstrapError;m_distributionBootstrapInProgress=false;++m_distributionBootstrapGeneration;++m_revision;
+    const QPointer<AddonManager> alive(this);emit distributionBootstrapChanged();if(alive)emit revisionChanged();
 }
 bool AddonManager::restoreDistributionPackage(const QString& id)
 { return stageDistributionPackage(id); }

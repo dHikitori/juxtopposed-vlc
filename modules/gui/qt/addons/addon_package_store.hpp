@@ -10,6 +10,7 @@
 
 namespace vlc::addons {
 struct PrivateStorageContext;
+struct DistributionInstallResult;
 
 struct ReleaseIdentity
 {
@@ -76,14 +77,14 @@ struct MetadataCatalogueSnapshot
 };
 using MetadataCatalogueReader = std::function<bool(MetadataCatalogueSnapshot*, QString*)>;
 
+struct DisplayCatalogueSnapshot;
+struct DisplayCatalogueRequest;
 class PackageStore
 {
 public:
     explicit PackageStore(QString storageDirectory);
     QString storageDirectory() const;
     StoreAuthorityToken authorityToken() const noexcept { return m_authority.capture(); }
-    StoreAuthorityChanges onDisplayChanged(std::function<void()> nativeWake) const noexcept
-    { return m_authority.onChanged(std::move(nativeWake)); }
     void invalidateAuthority() const noexcept { m_authority.invalidate(); }
     StorePackageRetirement retirePackage(const QString& id) const { return m_authority.retirePackage(id); }
     bool packageRetiring(const QString& id) const noexcept { return m_authority.packageRetiring(id); }
@@ -97,6 +98,10 @@ public:
                                bool developerLocalSource = false, int timeoutMs = 30000) const;
     // Distribution approval is host-only and commits with the current release pointer.
     bool install(const PackageCandidate&, const QJsonObject& approvedGrants, QString* error = nullptr, bool distributionApproval = false);
+    // Host distribution bootstrap. This retains one Store lock across the
+    // suppression/current-state decision and an absent install plus enable.
+    bool ensureDistributionPackage(const QString& directory,const Manifest& verifiedOffer,
+        DistributionInstallResult*,QString* error=nullptr);
     bool installed(const QString& id, InstalledPackage*, QString* error = nullptr) const;
     QStringList installedIds() const;
     // These IDs permit saved-data cleanup only. They grant no package authority.
@@ -109,6 +114,9 @@ public:
     // joined background work. One store.lock covers preferences and all package
     // reads. The snapshot retains both queued and locked authority tokens.
     MetadataCatalogueReader metadataCatalogueReader() const;
+    std::function<bool(const DisplayCatalogueRequest&,DisplayCatalogueSnapshot*,QString*)> displayCatalogueReader(QString locale) const;
+    StoreAuthorityChanges onDisplayChanged(std::function<void()> nativeWake) const noexcept
+    { return m_authority.onChanged(std::move(nativeWake)); }
     bool saveProviderOrder(const QString& feature, const QStringList& ids,
                            QJsonObject* saved = nullptr, QString* error = nullptr);
     bool saveBuiltinProviderEnabled(const QString& id, bool enabled,
@@ -121,6 +129,7 @@ public:
     bool networkConfiguration(const InstalledPackage&, QJsonObject*, quint64* revision = nullptr) const;
     bool networkConfigurationMatches(const InstalledPackage&, const QJsonObject&, quint64 revision) const;
     bool saveSettings(const QString& id, const QJsonObject&, quint64 expectedRevision, QString* error = nullptr);
+    bool saveSettings(const QString& id,const QJsonObject&,quint64 expectedRevision,const QString& expectedStamp,QString* error=nullptr);
     bool privateStorage(const PrivateStorageContext&, const QString& operation, const QJsonObject& request,
                         QJsonObject* response, const std::function<bool()>& pending,
                         const std::function<bool()>& beginCommit, QString* error = nullptr) const;
@@ -135,6 +144,13 @@ public:
 private:
     QString m_root;
     StoreAuthority m_authority;
+    bool installLocked(const PackageCandidate&,const QJsonObject& grants,QString* error,bool distributionApproval,bool cancelBeforeCommit=false);
+    bool setEnabledLocked(const QString&,bool,QString* error);
+    bool cataloguePackage(const QString&,bool,const QJsonObject&,MetadataCataloguePackage*,QMap<QString,QByteArray>*,QString*) const;
+    bool catalogueStatePackage(const QString&,const QJsonObject&,bool,const QJsonObject&,
+        MetadataCataloguePackage*,QMap<QString,QByteArray>*,QString*) const;
+    bool cataloguePolicy(MetadataCatalogueSnapshot*,QString*) const;
+    bool readDisplayCatalogue(const StoreAuthorityToken&,const QString&,const DisplayCatalogueRequest&,DisplayCatalogueSnapshot*,QString*) const;
     bool readMetadataCatalogue(const StoreAuthorityToken&, MetadataCatalogueSnapshot*, QString*) const;
     bool loadState(const QString& id, QJsonObject*, QString* error) const;
     bool saveState(const QString& id, const QJsonObject&, QString* error, bool authority = true) const;

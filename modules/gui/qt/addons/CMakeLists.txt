@@ -12,6 +12,8 @@ add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_store_authority.cpp addon_credentials.cpp
     addon_native_wake.cpp addon_native_wake.hpp addon_catalogue_store_lock.hpp
     addon_native_notifications.cpp addon_native_notifications.hpp
+    addon_catalogue_view.cpp addon_catalogue_view.hpp addon_catalogue_view_manager.cpp addon_display_catalogue_reader.hpp
+    addon_distribution_bootstrap.cpp addon_distribution_bootstrap.hpp addon_package_summaries.cpp addon_package_summaries.hpp
     addon_metadata_attempt.cpp addon_metadata_attempt.hpp addon_metadata_completion_policy.cpp addon_metadata_completion_policy.hpp addon_metadata_identity.hpp
     addon_metadata_catalogue_source.hpp
     addon_metadata_registry_epoch.cpp addon_metadata_registry_epoch.hpp
@@ -40,12 +42,27 @@ elseif(APPLE)
 endif()
 add_executable(addon_visualizer_process "../tests/fixtures/addon_visualizer_process.c")
 set_target_properties(addon_visualizer_process PROPERTIES AUTOMOC OFF)
-foreach(name packages runtime metadata metadata_choices broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority catalogue_native native_notifications stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs native_authority)
+foreach(name display_integration distribution_bootstrap catalogue_view display_catalogue package_summaries packages runtime metadata metadata_choices broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority catalogue_native native_notifications stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs native_authority)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
     add_test(NAME addon_${name} COMMAND test_addon_${name})
 endforeach()
+target_compile_definitions(test_addon_display_integration PRIVATE HAKONE_DISPLAY_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
+target_compile_definitions(test_addon_distribution_bootstrap PRIVATE HAKONE_STARTUP_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
+set_tests_properties(addon_display_integration addon_distribution_bootstrap PROPERTIES TIMEOUT 180)
+set_tests_properties(addon_catalogue_view addon_display_catalogue addon_package_summaries PROPERTIES TIMEOUT 90)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(test_addon_display_catalogue PRIVATE HAKONE_DISPLAY_READER_LOCK_WRAP)
+    target_link_options(test_addon_display_catalogue PRIVATE "-Wl,--wrap=open")
+    target_compile_definitions(test_addon_display_integration PRIVATE HAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP HAKONE_DISPLAY_ACQUIRE_WRAP)
+    target_link_options(test_addon_display_integration PRIVATE
+        "-Wl,--wrap=_ZN3vlc6addons15CredentialStore6createERK7QStringS4_RK10QByteArrayb"
+        "-Wl,--wrap=_ZN3vlc6addons18AddonCatalogueView15acquireSettingsERK7QString")
+    target_compile_definitions(test_addon_distribution_bootstrap PRIVATE HAKONE_BOOTSTRAP_RUN_WRAP)
+    target_link_options(test_addon_distribution_bootstrap PRIVATE
+        "-Wl,--wrap=_ZN3vlc6addons21distributionBootstrap3runENS0_12PackageStoreE5QListINS0_26DistributionBootstrapEntryEE")
+endif()
 add_executable(test_addon_metadata_catalogue "../tests/test_addon_metadata_catalogue.cpp")
 target_link_libraries(test_addon_metadata_catalogue PRIVATE vlc_addon_host Qt6::Test)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

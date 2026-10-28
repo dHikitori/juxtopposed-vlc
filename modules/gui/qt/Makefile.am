@@ -143,6 +143,12 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_metadata_catalogue_source.hpp \
 	addons/addon_package_summaries.cpp \
 	addons/addon_package_summaries.hpp \
+	addons/addon_catalogue_view.cpp \
+	addons/addon_catalogue_view.hpp \
+	addons/addon_catalogue_view_manager.cpp \
+	addons/addon_display_catalogue_reader.hpp \
+	addons/addon_distribution_bootstrap.cpp \
+	addons/addon_distribution_bootstrap.hpp \
 	addons/addon_native_authority.hpp \
 	addons/addon_network.cpp \
 	addons/addon_network.hpp \
@@ -285,6 +291,7 @@ QT_ADDON_HOST_SOURCES = \
 QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
 	addons/addon_package_summaries.moc.cpp \
+	addons/addon_catalogue_view.moc.cpp \
 	addons/addon_network.moc.cpp \
 	addons/addon_worker.moc.cpp \
 	addons/addon_metadata_coordinator.moc.cpp \
@@ -2303,7 +2310,7 @@ test_qt_addon_package_summaries_SOURCES = tests/test_addon_package_summaries.cpp
 nodist_test_qt_addon_package_summaries_SOURCES = tests/test_addon_package_summaries.moc
 BUILT_SOURCES += tests/test_addon_package_summaries.moc
 CLEANFILES += tests/test_addon_package_summaries.moc
-test_qt_addon_package_summaries_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_package_summaries_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
 test_qt_addon_package_summaries_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_package_summaries_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_package_summaries_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2556,6 +2563,72 @@ test_qt_addon_native_notifications_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_
 check_PROGRAMS += test_qt_addon_native_notifications
 TESTS += test_qt_addon_native_notifications
 
+# Shared display catalogue and startup contracts.
+test_qt_addon_display_integration_SOURCES = tests/test_addon_display_integration.cpp
+nodist_test_qt_addon_display_integration_SOURCES = tests/test_addon_display_integration.moc
+BUILT_SOURCES += tests/test_addon_display_integration.moc
+CLEANFILES += tests/test_addon_display_integration.moc
+test_qt_addon_display_integration_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DHAKONE_DISPLAY_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_display_integration_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_display_integration_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_display_integration_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_display_integration
+TESTS += test_qt_addon_display_integration
+
+test_qt_addon_distribution_bootstrap_SOURCES = tests/test_addon_distribution_bootstrap.cpp
+nodist_test_qt_addon_distribution_bootstrap_SOURCES = tests/test_addon_distribution_bootstrap.moc
+BUILT_SOURCES += tests/test_addon_distribution_bootstrap.moc
+CLEANFILES += tests/test_addon_distribution_bootstrap.moc
+test_qt_addon_distribution_bootstrap_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DHAKONE_STARTUP_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_distribution_bootstrap_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_distribution_bootstrap_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_distribution_bootstrap_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_distribution_bootstrap
+TESTS += test_qt_addon_distribution_bootstrap
+
+test_qt_addon_catalogue_view_SOURCES = tests/test_addon_catalogue_view.cpp
+nodist_test_qt_addon_catalogue_view_SOURCES = tests/test_addon_catalogue_view.moc
+BUILT_SOURCES += tests/test_addon_catalogue_view.moc
+CLEANFILES += tests/test_addon_catalogue_view.moc
+test_qt_addon_catalogue_view_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_catalogue_view_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_catalogue_view_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_catalogue_view_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_catalogue_view
+TESTS += test_qt_addon_catalogue_view
+
+test_qt_addon_display_catalogue_SOURCES = tests/test_addon_display_catalogue.cpp
+nodist_test_qt_addon_display_catalogue_SOURCES = tests/test_addon_display_catalogue.moc
+BUILT_SOURCES += tests/test_addon_display_catalogue.moc
+CLEANFILES += tests/test_addon_display_catalogue.moc
+test_qt_addon_display_catalogue_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_display_catalogue_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_display_catalogue_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_display_catalogue_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_display_catalogue
+TESTS += test_qt_addon_display_catalogue
+
+if HAVE_LINUX
+test_qt_addon_display_catalogue_CPPFLAGS += -DHAKONE_DISPLAY_READER_LOCK_WRAP
+test_qt_addon_display_catalogue_LDFLAGS += -Wl,--wrap=open
+tests/test_addon_display_catalogue.moc: $(srcdir)/tests/test_addon_display_catalogue.cpp
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_DISPLAY_READER_LOCK_WRAP $< -o $@
+endif
+
+if HAVE_LINUX
+test_qt_addon_display_integration_CPPFLAGS += -DHAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP -DHAKONE_DISPLAY_ACQUIRE_WRAP
+test_qt_addon_display_integration_LDFLAGS += -Wl,--wrap=_ZN3vlc6addons15CredentialStore6createERK7QStringS4_RK10QByteArrayb -Wl,--wrap=_ZN3vlc6addons18AddonCatalogueView15acquireSettingsERK7QString
+tests/test_addon_display_integration.moc: $(srcdir)/tests/test_addon_display_integration.cpp
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP -DHAKONE_DISPLAY_ACQUIRE_WRAP $< -o $@
+endif
+
+if HAVE_LINUX
+test_qt_addon_distribution_bootstrap_CPPFLAGS += -DHAKONE_BOOTSTRAP_RUN_WRAP
+test_qt_addon_distribution_bootstrap_LDFLAGS += -Wl,--wrap=_ZN3vlc6addons21distributionBootstrap3runENS0_12PackageStoreE5QListINS0_26DistributionBootstrapEntryEE
+tests/test_addon_distribution_bootstrap.moc: $(srcdir)/tests/test_addon_distribution_bootstrap.cpp
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_BOOTSTRAP_RUN_WRAP $< -o $@
+endif
+
 test_qt_addon_metadata_catalogue_SOURCES = tests/test_addon_metadata_catalogue.cpp
 nodist_test_qt_addon_metadata_catalogue_SOURCES = tests/test_addon_metadata_catalogue.moc
 BUILT_SOURCES += tests/test_addon_metadata_catalogue.moc
@@ -2713,6 +2786,7 @@ test_qt_addon_native_player_analysis_LDADD = libqt_addon_host.la $(QT_QTEST_COMM
 test_qt_addon_native_player_analysis_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_native_player_analysis
 TESTS += test_qt_addon_native_player_analysis
+
 
 test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.cpp
 nodist_test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.moc
@@ -3766,3 +3840,5 @@ EXTRA_DIST += tests/test_addon_metadata_attempt.cpp tests/fixtures/addon_metadat
 EXTRA_DIST += tests/test_addon_artwork_attempt_keeper.cpp tests/fixtures/addon_artwork_attempt_keeper.c tests/fixtures/addon_artwork_attempt_keeper.h
 
 EXTRA_DIST += tests/test_addon_metadata_registry_epoch.cpp
+
+EXTRA_DIST += tests/tst_AddonSettingsDisplay.qml

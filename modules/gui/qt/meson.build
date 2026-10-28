@@ -37,6 +37,12 @@ addon_host_sources = files(
     'addons/addon_metadata_catalogue_source.hpp',
     'addons/addon_package_summaries.cpp',
     'addons/addon_package_summaries.hpp',
+    'addons/addon_catalogue_view.cpp',
+    'addons/addon_catalogue_view.hpp',
+    'addons/addon_catalogue_view_manager.cpp',
+    'addons/addon_display_catalogue_reader.hpp',
+    'addons/addon_distribution_bootstrap.cpp',
+    'addons/addon_distribution_bootstrap.hpp',
     'addons/addon_native_authority.hpp',
     'addons/addon_network.cpp',
     'addons/addon_network.hpp',
@@ -181,6 +187,7 @@ addon_host_moc_headers = files(
     'addons/addon_native_metadata_owner.hpp',
     'addons/addon_manager.hpp',
     'addons/addon_package_summaries.hpp',
+    'addons/addon_catalogue_view.hpp',
     'addons/addon_network.hpp',
     'addons/addon_worker.hpp',
     'addons/addon_metadata_coordinator.hpp',
@@ -1921,21 +1928,45 @@ if qt6_dep.found()
         addon_visualizer_process = executable('addon_visualizer_process', files('tests/fixtures/addon_visualizer_process.c'), install: false, build_by_default: false)
         addon_discovery_source_process = executable('addon_discovery_source_process', files('tests/fixtures/addon_discovery_source_process.c'), install: false, build_by_default: false)
         addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
-        foreach addon_test : ['packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
+        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
             native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
+            addon_timeout = addon_test in ['catalogue_view', 'display_catalogue', 'package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver'] ? 90 : 30
+            if addon_test in ['display_integration', 'distribution_bootstrap']
+                addon_timeout = 180
+            endif
+            display_defines = []
+            display_links = []
+            display_roots = []
+            if addon_test == 'display_integration'
+                display_roots += ['-DHAKONE_DISPLAY_SOURCE_ROOT="' + meson.project_source_root() + '"']
+                if host_system == 'linux'
+                    display_defines += ['-DHAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP', '-DHAKONE_DISPLAY_ACQUIRE_WRAP']
+                    display_links += ['-Wl,--wrap=_ZN3vlc6addons15CredentialStore6createERK7QStringS4_RK10QByteArrayb', '-Wl,--wrap=_ZN3vlc6addons18AddonCatalogueView15acquireSettingsERK7QString']
+                endif
+            elif addon_test == 'distribution_bootstrap'
+                display_roots += ['-DHAKONE_STARTUP_SOURCE_ROOT="' + meson.project_source_root() + '"']
+                if host_system == 'linux'
+                    display_defines += ['-DHAKONE_BOOTSTRAP_RUN_WRAP']
+                    display_links += ['-Wl,--wrap=_ZN3vlc6addons21distributionBootstrap3runENS0_12PackageStoreE5QListINS0_26DistributionBootstrapEntryEE']
+                endif
+            endif
+            if addon_test == 'display_catalogue' and host_system == 'linux'
+                display_defines += ['-DHAKONE_DISPLAY_READER_LOCK_WRAP']
+                display_links += ['-Wl,--wrap=open']
+            endif
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,
                 'sources': files('tests/test_addon_' + addon_test + '.cpp'),
                 'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
-                'moc_args': native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : [],
-                'timeout': addon_test in ['package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver'] ? 90 : 30,
+                'moc_args': (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines,
+                'timeout': addon_timeout,
                 'module_depends': native_stream ? ['adaptive', 'ts', 'araw', 'adummy', 'wav', 'avcodec'] : [],
                 'link_with': addon_test in ['native_artwork_assets', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_proxy'] ? [addon_host_library, libvlccore, libvlc] : [addon_host_library, libvlccore],
                 'suite': ['qt', 'addons'],
                 'include_directories': addon_test in ['native_artwork_assets', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_proxy'] ? [qt_include_dir, include_directories('../../..')] : qt_include_dir,
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []),
-                'link_args': qt_link_args,
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines + display_roots,
+                'link_args': qt_link_args + display_links,
                 'depends': [addon_worker_dependencies, addon_visualizer_process],
                 'env': addon_worker_environment,
             }
