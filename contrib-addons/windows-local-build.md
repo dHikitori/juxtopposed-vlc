@@ -8,6 +8,11 @@ normally. The actual Extensions click still needs a user retest. See
 [the loader repair](windows-addon-loader-repair.md) and
 [the background list](package-summary-ui.md).
 
+The user later reported a separate Close delay while a network file was playing.
+The prepared [playback-stop ordering fix](windows-close-ordering.md) passes its
+focused checks. It is not yet in this published build; the coherent rebuild is
+the next step. The exact one-minute blocker has no captured stack.
+
 `BUILD-INFO.json` records app and Core source
 `2a689c3a11f1cbe60410253312e2783ebd797335`, with a clean source snapshot.
 The build uses the existing dependency cache at

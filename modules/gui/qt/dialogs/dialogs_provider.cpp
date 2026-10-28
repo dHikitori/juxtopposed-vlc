@@ -638,12 +638,21 @@ void DialogsProvider::quit()
         return;
     b_isDying = true;
     assert(qApp);
+    const QPointer<DialogsProvider> alive(this);
+    // A real quit stops playback before joined add-on cleanup. Window-close
+    // to the system tray does not call this path.
+    if(p_intf->p_mi) p_intf->p_mi->addonStreamLifetime().close();
+    if(p_intf->p_mainPlaylistController) p_intf->p_mainPlaylistController->stop();
+    if(!alive) return;
     qApp->setProperty("isDying", true);
+    if(!alive) return;
     if(p_intf->p_mi)
     {
-        if(!p_intf->p_mi->requestAddonRetirement([intf=p_intf] {
+        const bool accepted=p_intf->p_mi->requestAddonRetirement([intf=p_intf] {
             libvlc_Quit(vlc_object_instance(intf));
-        }))
+        });
+        if(!alive) return;
+        if(!accepted)
         {
             if(!m_quitRetryReported)
             {
@@ -652,6 +661,7 @@ void DialogsProvider::quit()
             }
             b_isDying=false;
             qApp->setProperty("isDying",false);
+            if(!alive) return;
             if(!m_quitRetryScheduled)
             {
                 m_quitRetryScheduled=true;

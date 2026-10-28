@@ -12,7 +12,10 @@ class AddonAppShutdown final : public QObject
 {
 public:
     using Action=std::function<void()>;
-    struct Hooks { Action retiring,joined,timedOut; };
+    // userQuitting is optional, app-thread only, once per real user quit.
+    // Admission is closed before it runs. It may request playback Stop;
+    // retirement and Core quit stay behind its return and the joined barrier.
+    struct Hooks { Action retiring,joined,timedOut; Action userQuitting{}; };
     struct Options { int timeoutMs=5000,retryMs=100; };
     explicit AddonAppShutdown(QCoreApplication&);
     AddonAppShutdown(QCoreApplication&,Hooks,Options);
@@ -37,6 +40,7 @@ private:
     void waitForWork();
     void finish();
     void scheduleActions();
+    bool deliverReadyActions();
     QCoreApplication& m_app;
     AddonStreamShutdown m_stream;
     QTimer m_retry;
@@ -47,7 +51,7 @@ private:
     std::vector<Action> m_ready;
     bool m_valid=false,m_retiring=false,m_joined=false,m_waiting=false;
     bool m_finishing=false,m_retiringHook=false,m_failed=false,m_destroying=false,m_reported=false;
-    bool m_userRequested=false,m_userQueued=false,m_userDelivered=false;
+    bool m_userRequested=false,m_userQueued=false,m_userDelivered=false,m_userQuittingHook=false,m_deliveringReady=false;
     bool m_exitRequested=false,m_exitQueued=false;
     int m_exitCode=0;
 };

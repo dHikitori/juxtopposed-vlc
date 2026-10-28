@@ -986,7 +986,8 @@ static void *Thread( void *obj )
     addonShutdown.setHooks({
         [p_intf] { if(p_intf->p_mi) p_intf->p_mi->retireAddonWork(); },
         [p_intf] { if(p_intf->p_mi) p_intf->p_mi->completeAddonRetirement(); },
-        [p_intf] { msg_Warn(p_intf,"The add-on work did not stop. The app will wait."); }
+        [p_intf] { msg_Warn(p_intf,"The add-on work did not stop. The app will wait."); },
+        [p_intf] { if(p_intf->p_mainPlaylistController) p_intf->p_mainPlaylistController->stop(); }
     });
     if(!vlc::addons::AddonStreamLifetime::registerApplication(addonLifetime))
     {
