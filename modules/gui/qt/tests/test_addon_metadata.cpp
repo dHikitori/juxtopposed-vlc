@@ -58,6 +58,141 @@ class TestAddonMetadata : public QObject
 {
     Q_OBJECT
 private slots:
+    void enrichmentUsesSdkIdentityEvidence_data()
+    {
+        QTest::addColumn<QVariantMap>("target"); QTest::addColumn<QVariantMap>("candidate"); QTest::addColumn<bool>("accepted");
+        const auto external = [](const QString& space, const QString& scope) {
+            return QVariantList{QVariantMap{{"namespace", space}, {"scope", scope}, {"value", "42"}}};
+        };
+        for (const auto& scheme : {QStringLiteral("seasonal"), QStringLiteral("absolute"), QStringLiteral("air-date")}) {
+            QVariantMap target{{"kind", "episode"}, {"title", "Example"}}, numbering{{"scheme", scheme}};
+            if (scheme == "seasonal") { target["season"] = numbering["season"] = 2; target["episodes"] = numbering["episodes"] = QVariantList{3, 4}; }
+            if (scheme == "absolute") { target["absoluteEpisode"] = numbering["number"] = "123456.125"; }
+            if (scheme == "air-date") { target["airDate"] = numbering["date"] = "2026-10-28"; }
+            const QVariantMap candidate{{"kind", "episode"}, {"titles", QVariantList{"Example"}}, {"episodeNumbering", numbering}};
+            QTest::newRow(qPrintable(scheme)) << target << candidate << true;
+        }
+        const QList<QStringList> scopedIds{{"movie", "imdb", "movie", "imdb"}, {"series", "tvdb", "series", "seriesTvdb"},
+            {"episode", "imdb", "episode", "episodeImdb"}, {"episode", "tvmaze", "episode", "tvmazeEpisode"},
+            {"musicTrack", "musicbrainz", "track", "musicBrainzTrackId"}, {"album", "musicbrainz", "album", "musicBrainzAlbumId"},
+            {"artist", "musicbrainz", "artist", "musicBrainzArtistId"}};
+        for (const auto& row : scopedIds) {
+            const QVariantMap target{{"kind", row[0]}, {"title", "Original label"}, {"ids", QVariantMap{{row[3], "42"}}}};
+            const QVariantMap candidate{{"kind", row[0]}, {"title", "Changed label"}, {"externalIds", external(row[1], row[2])}};
+            QTest::newRow(qPrintable(row[0] + '/' + row[3])) << target << candidate << true;
+        }
+        QVariantMap podcast{{"kind", "podcastEpisode"}, {"title", "Weekly news"}, {"artist", "Reporter"},
+            {"series", "Daily feed"}, {"feedUrl", "https://example.com/feed"}};
+        QTest::newRow("podcast-parent-only") << podcast << podcast << false;
+        podcast["guid"] = "episode-42";
+        QTest::newRow("podcast-exact-guid") << podcast << podcast << true;
+        auto other = podcast; other["guid"] = "episode-43";
+        QTest::newRow("podcast-wrong-guid") << podcast << other << false;
+    }
+    void enrichmentUsesSdkIdentityEvidence()
+    {
+        QFETCH(QVariantMap, target); QFETCH(QVariantMap, candidate); QFETCH(bool, accepted);
+        FakeBackend fake; auto source = registration("a/details"); source["mediaKinds"] = QStringList{target.value("kind").toString()};
+        fake.providers = {source}; AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrich("video.details", {{"identity", target}}, {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(coordinator, fake.calls.first(), "match", claims({{"description", "Admitted description"}}, candidate));
+        QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(results.first()[2].toMap().value("fields").toMap().contains("description"), accepted);
+        if (accepted) QCOMPARE(results.first()[1].toString(), "match");
+    }
+    void enrichmentRejectsMalformedSdkIdentity_data()
+    {
+        QTest::addColumn<QVariantMap>("invalid");
+        auto conflicting = identity(); conflicting["externalIds"] = QVariantList{QVariantMap{{"namespace", "imdb"}, {"scope", "movie"}, {"value", "tt9999999"}}};
+        QTest::newRow("host-id-conflict") << conflicting;
+        auto kinds = identity(); kinds["type"] = "episode"; QTest::newRow("kind-conflict") << kinds;
+        auto fraction = identity(); fraction["year"] = 2020.5; QTest::newRow("fractional-year") << fraction;
+        auto overflow = identity(); overflow["year"] = 1e100; QTest::newRow("overflow-year") << overflow;
+        auto wrongShape = identity(); wrongShape["externalIds"] = "not a list"; QTest::newRow("external-list-shape") << wrongShape;
+        auto hugeId = identity(); hugeId["ids"] = QVariantMap{{"imdb", QString(257, QLatin1Char('x'))}}; QTest::newRow("id-size") << hugeId;
+        auto ids = identity(); QVariantMap manyIds; for (int i = 0; i < 33; ++i) manyIds[QString::number(i)] = "id";
+        ids["ids"] = manyIds; QTest::newRow("id-count") << ids;
+        auto duplicate = identity(); duplicate["externalIds"] = QVariantList{
+            QVariantMap{{"namespace", "catalog"}, {"scope", "work"}, {"value", "one"}},
+            QVariantMap{{"namespace", "catalog"}, {"scope", "work"}, {"value", "two"}}};
+        QTest::newRow("unknown-id-conflict") << duplicate;
+        const QVariantMap base{{"kind", "episode"}, {"title", "Example"}, {"ids", QVariantMap{{"episodeImdb", "tt1234567"}}}};
+        const QVariantList malformed{
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", QVariantList{2}}, {"number", "99"}},
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", QVariantList{2}}, {"date", "2026-10-28"}},
+            QVariantMap{{"scheme", "absolute"}, {"number", "99"}, {"episodes", QVariantList{2}}},
+            QVariantMap{{"scheme", "air-date"}, {"date", "2026-10-28"}, {"season", 1}},
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1.5}, {"episodes", QVariantList{2}}},
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", QVariantList{2.5}}},
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", "2"}},
+            QVariantMap{{"scheme", "absolute"}, {"number", "1234567"}},
+            QVariantMap{{"scheme", "air-date"}, {"date", "2026-02-30"}}, QVariantMap{}};
+        for (int i = 0; i < malformed.size(); ++i) {
+            auto value = base; value["episodeNumbering"] = malformed[i];
+            QTest::newRow(qPrintable(QStringLiteral("numbering-%1").arg(i))) << value;
+        }
+        auto season = base; season["season"] = 2; season["episodeNumbering"] = QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", QVariantList{2}}};
+        QTest::newRow("host-season-conflict") << season;
+        auto alias = base; alias["episode"] = QVariantMap{{"scheme", "absolute"}, {"number", "1"}};
+        alias["episodeNumbering"] = QVariantMap{{"scheme", "absolute"}, {"number", "2"}}; QTest::newRow("numbering-alias-conflict") << alias;
+    }
+    void enrichmentRejectsMalformedSdkIdentity()
+    {
+        QFETCH(QVariantMap, invalid);
+        FakeBackend fake; auto first = registration("a/details"), second = registration("b/details");
+        first["mediaKinds"] = second["mediaKinds"] = QStringList{invalid.value("kind").toString()};
+        fake.providers = {first, second}; AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        auto request = context(); auto target = invalid.value("kind").toString() == "episode"
+            ? QVariantMap{{"kind", "episode"}, {"title", "Example"}, {"ids", QVariantMap{{"episodeImdb", "tt1234567"}}}} : identity();
+        request["identity"] = target;
+        coordinator.enrich("video.details", request, {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(coordinator, fake.calls.first(), "match", claims({{"description", "Do not accept"}}, invalid));
+        QTRY_COMPARE(fake.calls.size(), 2);
+        complete(coordinator, fake.calls.last(), "match", claims({{"description", "Valid fallback"}}, target));
+        QTRY_COMPARE(results.size(), 1); QCOMPARE(results.first()[1].toString(), "match");
+        QCOMPARE(results.first()[2].toMap().value("fields").toMap().value("description").toString(), "Valid fallback");
+        // The same malformed shape must also fail before provider admission.
+        coordinator.enrich("video.details", {{"identity", invalid}}, {"description"});
+        QTRY_COMPARE(results.size(), 2); QCOMPARE(results.last()[1].toString(), "error"); QCOMPARE(fake.calls.size(), 2);
+    }
+    void malformedIdentityShapeCannotBecomeAnEmptyManualSearchIdentity()
+    {
+        FakeBackend fake; fake.providers = {registration("a/search")}; AddonMetadataCoordinator coordinator(fake.backend());
+        QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        auto request = context(); request["manual"] = true;
+        coordinator.searchAssets("subtitles", request); QTRY_COMPARE(fake.calls.size(), 1);
+        auto invalid = asset("malformed"); invalid["identity"] = "not an identity map";
+        complete(coordinator, fake.calls.first(), "match", assets(invalid)); QTRY_COMPARE(results.size(), 1);
+        QVERIFY(results.first()[2].toMap().value("candidates").toList().isEmpty());
+        request["identity"] = "not an identity map";
+        coordinator.enrich("video.details", request, {"description"}); QTRY_COMPARE(results.size(), 2);
+        QCOMPARE(results.last()[1].toString(), "error"); QCOMPARE(fake.calls.size(), 1);
+    }
+    void enrichmentKeepsUnknownScopedIdsAndHostSentinels()
+    {
+        FakeBackend fake; auto source = registration("a/details"); source["mediaKinds"] = QStringList{"episode"}; fake.providers = {source};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        const QVariantList external{QVariantMap{{"namespace", "tmdb"}, {"scope", "series"}, {"value", "42"}},
+            QVariantMap{{"namespace", "tmdb"}, {"scope", "season"}, {"value", "9"}},
+            QVariantMap{{"namespace", "catalog.example"}, {"scope", "edition"}, {"value", "7"}}};
+        QVariantMap entity{{"kind", "episode"}, {"title", "Example"}, {"season", -1}, {"episodes", QVariantList{}},
+            {"absoluteEpisode", ""}, {"airDate", ""}, {"release", QVariantMap{}}, {"externalIds", external},
+            {"episodeNumbering", QVariantMap{{"scheme", "seasonal"}, {"season", 2}, {"episodes", QVariantList{3}}}}};
+        coordinator.enrich("video.details", {{"identity", entity}}, {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+        const auto projected = fake.calls.first().context.value("identity").toMap();
+        QCOMPARE(projected.value("season").toInt(), 2); QCOMPARE(projected.value("episodes").toList(), QVariantList{3});
+        QCOMPARE(projected.value("release").toMap(), QVariantMap{});
+        QCOMPARE(projected.value("externalIds").toList().size(), 3);
+        const auto ids = projected.value("ids").toMap(); QCOMPARE(ids.value("seriesTmdb").toString(), "42");
+        QCOMPARE(ids.value("external:tmdb:season").toString(), "9"); QCOMPARE(ids.value("external:catalog.example:edition").toString(), "7");
+        complete(coordinator, fake.calls.first(), "match", claims({{"description", "Valid"}}, entity)); QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(results.first()[1].toString(), "match");
+        coordinator.searchAssets("subtitles", {{"identity", projected}}); QTRY_COMPARE(fake.calls.size(), 2);
+        QCOMPARE(fake.calls.last().context.value("identity").toMap(), projected);
+        complete(coordinator, fake.calls.last(), "match", assets(asset("normalized", entity))); QTRY_COMPARE(results.size(), 2);
+        const auto candidates = results.last()[2].toMap().value("candidates").toList(); QCOMPARE(candidates.size(), 1);
+        QCOMPARE(candidates.first().toMap().value("identity").toMap(), projected);
+    }
     void manualVideoIdentificationOffersAllVideoKindsAndExcludesOtherKinds()
     {
         for (const bool manual : {false, true}) {
@@ -136,6 +271,7 @@ private slots:
     void identifyRejectsInvalidOrConflictingNumbering()
     {
         const QVariantList invalid{
+            QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", QVariantList{2}}, {"number", "99"}},
             QVariantMap{{"scheme", "seasonal"}, {"season", 1.5}, {"episodes", QVariantList{2}}},
             QVariantMap{{"scheme", "seasonal"}, {"season", 1}, {"episodes", QVariantList{2.5}}},
             QVariantMap{{"scheme", "absolute"}, {"number", "not a number"}},

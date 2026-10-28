@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <algorithm>
+#include <cmath>
 
 namespace {
 constexpr int MaxConsumers = 64;
@@ -50,60 +51,46 @@ bool sameArtworkLabel(const QVariantMap& target, const QVariantMap& candidate)
     return true;
 }
 
-QVariantMap normalizedIdentity(QVariantMap identity)
+std::optional<QVariantMap> normalizedIdentity(const QVariantMap& input, bool requireEntity = false)
 {
-    // Use only the declared transport fields. Do not send a local URL or
-    // private caller property in the identity context.
+    if (QJsonDocument::fromVariant(input).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) return {};
+    // Use one SDK-to-host boundary for identify and ordinary enrichment. Private
+    // caller properties and local paths do not enter the provider context.
     const QSet<QString> allowed{QStringLiteral("kind"), QStringLiteral("type"), QStringLiteral("title"),
         QStringLiteral("titles"), QStringLiteral("aliases"), QStringLiteral("year"), QStringLiteral("season"),
-        QStringLiteral("episodes"), QStringLiteral("episode"), QStringLiteral("absoluteEpisode"), QStringLiteral("airDate"),
-        QStringLiteral("ids"), QStringLiteral("externalIds"), QStringLiteral("release"), QStringLiteral("provenance"),
-        QStringLiteral("conflicts"), QStringLiteral("artist"), QStringLiteral("albumArtist"), QStringLiteral("album"),
+        QStringLiteral("episodes"), QStringLiteral("episode"), QStringLiteral("episodeNumbering"),
+        QStringLiteral("absoluteEpisode"), QStringLiteral("airDate"), QStringLiteral("ids"), QStringLiteral("externalIds"),
+        QStringLiteral("release"), QStringLiteral("artist"), QStringLiteral("albumArtist"), QStringLiteral("album"),
         QStringLiteral("series"), QStringLiteral("guid"), QStringLiteral("feedUrl"), QStringLiteral("track"), QStringLiteral("disc")};
-    for (auto it = identity.begin(); it != identity.end();)
-        if (!allowed.contains(it.key())) it = identity.erase(it); else ++it;
-    const auto kind = identity.value(QStringLiteral("kind"), identity.value(QStringLiteral("type"))).toString();
-    identity.insert(QStringLiteral("type"), kind);
-    identity.insert(QStringLiteral("kind"), kind);
-    if (identity.value(QStringLiteral("title")).toString().isEmpty()) {
-        const auto titles = identity.value(QStringLiteral("titles")).toList();
-        if (!titles.isEmpty()) identity.insert(QStringLiteral("title"), titles.first());
+    QVariantMap value;
+    for (auto it = input.cbegin(); it != input.cend(); ++it) if (allowed.contains(it.key())) value.insert(it.key(), it.value());
+    const auto kindText = input.value(QStringLiteral("kind"), input.value(QStringLiteral("type"))).toString();
+    const auto kind = MediaIdentity::kindFromName(kindText);
+    if ((kind == MediaIdentity::Kind::Unknown && !kindText.isEmpty() && kindText.compare(QStringLiteral("unknown"), Qt::CaseInsensitive))
+        || (requireEntity && kind == MediaIdentity::Kind::Unknown)) return {};
+    if (input.contains(QStringLiteral("type"))) {
+        const auto type = input.value(QStringLiteral("type")).toString();
+        const auto parsedType = MediaIdentity::kindFromName(type);
+        if (parsedType != kind || (parsedType == MediaIdentity::Kind::Unknown && !type.isEmpty()
+            && type.compare(QStringLiteral("unknown"), Qt::CaseInsensitive))) return {};
     }
-    const auto numbering = identity.value(QStringLiteral("episode")).toMap();
-    if (numbering.value(QStringLiteral("scheme")).toString() == QStringLiteral("seasonal")) {
-        if (!identity.contains(QStringLiteral("season"))) identity.insert(QStringLiteral("season"), numbering.value(QStringLiteral("season")));
-        if (!identity.contains(QStringLiteral("episodes"))) identity.insert(QStringLiteral("episodes"), numbering.value(QStringLiteral("episodes")));
-    }
-    auto ids = identity.value(QStringLiteral("ids")).toMap();
-    for (const auto& entry : identity.value(QStringLiteral("externalIds")).toList()) {
-        const auto id = entry.toMap();
-        const auto space = id.value(QStringLiteral("namespace")).toString();
-        const auto scope = id.value(QStringLiteral("scope")).toString();
-        QString key;
-        if (space == QStringLiteral("imdb")) {
-            if (scope == QStringLiteral("movie")) key = QStringLiteral("imdb");
-            else if (scope == QStringLiteral("series")) key = QStringLiteral("seriesImdb");
-            else if (scope == QStringLiteral("episode")) key = QStringLiteral("episodeImdb");
-        } else if (space == QStringLiteral("tmdb")) {
-            if (scope == QStringLiteral("movie")) key = QStringLiteral("tmdbMovie");
-            else if (scope == QStringLiteral("series")) key = QStringLiteral("seriesTmdb");
-            else if (scope == QStringLiteral("episode")) key = QStringLiteral("tmdbEpisode");
-        }
-        if (!key.isEmpty() && !ids.contains(key)) ids.insert(key, id.value(QStringLiteral("value")));
-    }
-    identity.insert(QStringLiteral("ids"), ids);
-    return identity;
-}
-
-std::optional<QVariantMap> identifiedIdentity(const QVariantMap& input)
-{
-    if (input.isEmpty() || QJsonDocument::fromVariant(input).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) return {};
-    auto value = normalizedIdentity(input);
-    const auto kind = MediaIdentity::kindFromName(value.value(QStringLiteral("kind")).toString());
-    if (kind == MediaIdentity::Kind::Unknown) return {};
     value.insert(QStringLiteral("type"), MediaIdentity::kindName(kind));
     value.insert(QStringLiteral("kind"), MediaIdentity::kindName(kind));
-    if (input.value(QStringLiteral("title")).toString().size() > 1024) return {};
+    for (const auto& key : {QStringLiteral("title"), QStringLiteral("artist"), QStringLiteral("albumArtist"), QStringLiteral("album"),
+             QStringLiteral("series"), QStringLiteral("guid"), QStringLiteral("feedUrl")})
+        if (input.value(key).toString().size() > 1024) return {};
+    for (const auto& key : {QStringLiteral("titles"), QStringLiteral("aliases")}) {
+        if (input.contains(key) && !input.value(key).canConvert<QVariantList>() && !input.value(key).canConvert<QStringList>()) return {};
+        const auto entries = input.value(key).toList();
+        if (entries.size() > 32) return {};
+        for (const auto& entry : entries) if (entry.toString().isEmpty() || entry.toString().size() > 1024) return {};
+    }
+    if (value.value(QStringLiteral("title")).toString().isEmpty()) {
+        const auto titles = value.value(QStringLiteral("titles")).toList();
+        if (!titles.isEmpty()) value.insert(QStringLiteral("title"), titles.first());
+    }
+    if ((input.contains(QStringLiteral("ids")) && !input.value(QStringLiteral("ids")).canConvert<QVariantMap>())
+        || (input.contains(QStringLiteral("externalIds")) && !input.value(QStringLiteral("externalIds")).canConvert<QVariantList>())) return {};
     auto ids = input.value(QStringLiteral("ids")).toMap();
     const auto external = input.value(QStringLiteral("externalIds")).toList();
     if (ids.size() > 32 || external.size() > 32) return {};
@@ -141,54 +128,107 @@ std::optional<QVariantMap> identifiedIdentity(const QVariantMap& input)
     for (auto it = ids.cbegin(); it != ids.cend(); ++it)
         if (it.key().isEmpty() || it.key().size() > 128 || it.value().toString().isEmpty() || it.value().toString().size() > 256) return {};
     value.insert(QStringLiteral("ids"), ids);
-    const auto numbering = input.value(QStringLiteral("episodeNumbering"), input.value(QStringLiteral("episode"))).toMap();
-    if (input.contains(QStringLiteral("episodeNumbering")) && input.value(QStringLiteral("episode")).canConvert<QVariantMap>()
-        && !input.value(QStringLiteral("episode")).toMap().isEmpty()
-        && input.value(QStringLiteral("episode")).toMap() != numbering) return {};
+    const auto integer = [](const QVariant& data, int minimum, int maximum, int& number) {
+        bool valid = false;
+        const double real = data.toDouble(&valid);
+        if (!valid || data.metaType().id() == QMetaType::Bool || !std::isfinite(real)
+            || real < minimum || real > maximum || std::trunc(real) != real) return false;
+        number = int(real); return true;
+    };
+    for (const auto& key : {QStringLiteral("year"), QStringLiteral("season"), QStringLiteral("track"), QStringLiteral("disc")}) {
+        if (!input.contains(key)) continue;
+        int number;
+        const int maximum = key == QStringLiteral("year") ? 2099 : key == QStringLiteral("season") ? 999 : 9999;
+        if (!integer(input.value(key), -1, maximum, number) || (key == QStringLiteral("year") && number != -1 && number < 1880)) return {};
+        value.insert(key, number);
+    }
+    if (input.contains(QStringLiteral("episodes"))) {
+        if (!input.value(QStringLiteral("episodes")).canConvert<QVariantList>()) return {};
+        const auto episodes = input.value(QStringLiteral("episodes")).toList();
+        if (episodes.size() > 128) return {};
+        QVariantList normalized;
+        for (const auto& entry : episodes) {
+            int number;
+            if (!integer(entry, 0, 9999, number)) return {};
+            normalized.append(number);
+        }
+        value.insert(QStringLiteral("episodes"), normalized);
+    }
+    static const QRegularExpression absolute(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?$"));
+    const auto absoluteText = input.value(QStringLiteral("absoluteEpisode")).toString();
+    if (!absoluteText.isEmpty() && !absolute.match(absoluteText).hasMatch()) return {};
+    const auto dateText = input.value(QStringLiteral("airDate")).toString();
+    if (!dateText.isEmpty() && QDate::fromString(dateText, Qt::ISODate).toString(Qt::ISODate) != dateText) return {};
+    const auto put = [&](const QString& key, const QVariant& data) {
+        const auto prior = value.value(key);
+        // Host-normalized empty fields are absence, not contrary evidence.
+        const bool absent = !value.contains(key)
+            || (key == QStringLiteral("season") && prior.toInt() == -1)
+            || (key == QStringLiteral("episodes") && prior.toList().isEmpty())
+            || ((key == QStringLiteral("absoluteEpisode") || key == QStringLiteral("airDate")) && prior.toString().isEmpty());
+        if (!absent && prior != data) return false;
+        value.insert(key, data); return true;
+    };
+    QVariantMap numbering;
+    if (input.contains(QStringLiteral("episodeNumbering"))) {
+        if (!input.value(QStringLiteral("episodeNumbering")).canConvert<QVariantMap>()) return {};
+        numbering = input.value(QStringLiteral("episodeNumbering")).toMap();
+        if (numbering.isEmpty()) return {};
+    }
+    if (input.contains(QStringLiteral("episode"))) {
+        const auto legacy = input.value(QStringLiteral("episode"));
+        if (legacy.canConvert<QVariantMap>()) {
+            const auto alias = legacy.toMap();
+            if (alias.isEmpty() || (!numbering.isEmpty() && alias != numbering)) return {};
+            numbering = alias;
+        } else {
+            int number;
+            if (!numbering.isEmpty() || !integer(legacy, 0, 9999, number)
+                || !put(QStringLiteral("episodes"), QVariantList{number})) return {};
+        }
+    }
     if (!numbering.isEmpty()) {
         if (kind != MediaIdentity::Kind::Episode && kind != MediaIdentity::Kind::PodcastEpisode) return {};
-        const auto put = [&](const QString& key, const QVariant& data) {
-            if (input.contains(key) && input.value(key) != data) return false;
-            value.insert(key, data); return true;
-        };
         const auto scheme = numbering.value(QStringLiteral("scheme")).toString();
+        const auto keys = QSet<QString>(numbering.keyBegin(), numbering.keyEnd());
         if (scheme == QStringLiteral("seasonal")) {
-            bool valid = false;
-            const auto season = numbering.value(QStringLiteral("season")).toInt(&valid);
+            if (keys != QSet<QString>{QStringLiteral("scheme"), QStringLiteral("season"), QStringLiteral("episodes")}) return {};
+            int season;
             const auto episodes = numbering.value(QStringLiteral("episodes")).toList();
-            if (!valid || numbering.value(QStringLiteral("season")).toDouble() != season
-                || season < 0 || season > 999 || episodes.isEmpty() || episodes.size() > 128) return {};
+            if (!integer(numbering.value(QStringLiteral("season")), 0, 999, season)
+                || !numbering.value(QStringLiteral("episodes")).canConvert<QVariantList>()
+                || episodes.isEmpty() || episodes.size() > 128) return {};
             QVariantList normalized;
-            for (const auto& episode : episodes) {
-                const int number = episode.toInt(&valid);
-                if (!valid || number < 0 || number > 9999 || episode.toDouble() != number) return {};
+            for (const auto& entry : episodes) {
+                int number;
+                if (!integer(entry, 0, 9999, number)) return {};
                 normalized.append(number);
             }
             if (!put(QStringLiteral("season"), season) || !put(QStringLiteral("episodes"), normalized)) return {};
         } else if (scheme == QStringLiteral("absolute")) {
             const auto number = numbering.value(QStringLiteral("number")).toString();
-            static const QRegularExpression absolute(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?$"));
-            if (!absolute.match(number).hasMatch() || !put(QStringLiteral("absoluteEpisode"), number)) return {};
+            if (keys != QSet<QString>{QStringLiteral("scheme"), QStringLiteral("number")}
+                || !absolute.match(number).hasMatch() || !put(QStringLiteral("absoluteEpisode"), number)) return {};
         } else if (scheme == QStringLiteral("air-date")) {
             const auto text = numbering.value(QStringLiteral("date")).toString();
             const auto date = QDate::fromString(text, Qt::ISODate);
-            if (!date.isValid() || date.toString(Qt::ISODate) != text || !put(QStringLiteral("airDate"), text)) return {};
+            if (keys != QSet<QString>{QStringLiteral("scheme"), QStringLiteral("date")}
+                || !date.isValid() || date.toString(Qt::ISODate) != text || !put(QStringLiteral("airDate"), text)) return {};
         } else return {};
     }
     const auto parsed = MediaIdentity::fromMap(value);
-    if (parsed.kind != kind || parsed.title.isEmpty() || parsed.title.size() > 1024 || parsed.aliases.size() > 32 || parsed.episodes.size() > 128) return {};
-    for (const auto& alias : parsed.aliases) if (alias.size() > 1024) return {};
+    if (parsed.kind != kind || (requireEntity && parsed.title.isEmpty()) || parsed.aliases.size() > 32 || parsed.episodes.size() > 128) return {};
     auto result = MediaIdentity::toMap(parsed);
     result.insert(QStringLiteral("kind"), result.value(QStringLiteral("type")));
     result.remove(QStringLiteral("provenance")); result.remove(QStringLiteral("conflicts"));
     return result;
 }
 
+std::optional<QVariantMap> identifiedIdentity(const QVariantMap& input)
+{ return normalizedIdentity(input, true); }
+
 MediaIdentity::Comparison compare(const QVariantMap& target, const QVariantMap& candidate)
-{
-    return MediaIdentity::compare(MediaIdentity::fromMap(normalizedIdentity(target)),
-                                 MediaIdentity::fromMap(normalizedIdentity(candidate)));
-}
+{ return MediaIdentity::compare(MediaIdentity::fromMap(target), MediaIdentity::fromMap(candidate)); }
 
 QString keyFor(const QString& provider, const QString& operation, const QVariantMap& context,
                const QString& partition, quint64 policy)
@@ -268,7 +308,12 @@ QString AddonMetadataCoordinator::start(const QString& featureInput, const QStri
     consumer.operation = operation;
     consumer.privateScope = privateScope;
     consumer.context = context;
-    consumer.context.insert(QStringLiteral("identity"), normalizedIdentity(context.value(QStringLiteral("identity")).toMap()));
+    const auto target = normalizedIdentity(context.value(QStringLiteral("identity")).toMap());
+    if (!target || (context.contains(QStringLiteral("identity")) && !context.value(QStringLiteral("identity")).canConvert<QVariantMap>())) {
+        QTimer::singleShot(0, this, [this, id] { emit finished(id, QStringLiteral("error"), {}, tr("The media identity is not valid.")); });
+        return id;
+    }
+    consumer.context.insert(QStringLiteral("identity"), *target);
     consumer.required = fields;
     consumer.required.removeDuplicates();
     consumer.aggregate = aggregate;
@@ -612,7 +657,11 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
                 it->error = tr("A subtitle candidate exceeds the size limit.");
                 continue;
             }
-            const auto match = compare(target, candidate.value(QStringLiteral("identity")).toMap());
+            if (candidate.contains(QStringLiteral("identity")) && !candidate.value(QStringLiteral("identity")).canConvert<QVariantMap>()) continue;
+            const auto entity = normalizedIdentity(candidate.value(QStringLiteral("identity")).toMap());
+            if (!entity) continue;
+            candidate.insert(QStringLiteral("identity"), *entity);
+            const auto match = compare(target, *entity);
             const bool artworkLabel = it->feature == QStringLiteral("artwork")
                 && candidate.value(QStringLiteral("evidence")).toMap().value(QStringLiteral("type")) == QStringLiteral("label");
             if (!manual && (match.conflict || !match.strong)) { if (!match.conflict) it->ambiguous = true; continue; }
@@ -635,11 +684,13 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     QVariantList accepted;
     for (const auto& value : records.mid(0, 64)) {
         const auto record = value.toMap();
+        if (record.contains(QStringLiteral("identity")) && !record.value(QStringLiteral("identity")).canConvert<QVariantMap>()) continue;
         const auto candidate = normalizedIdentity(record.value(QStringLiteral("identity")).toMap());
-        const auto match = compare(target, candidate);
+        if (!candidate) continue;
+        const auto match = compare(target, *candidate);
         if (match.conflict) continue;
         const bool label = record.value(QStringLiteral("evidence")).toMap().value(QStringLiteral("type")) == QStringLiteral("label");
-        if (it->feature == QStringLiteral("artwork") && (!match.strong || label) && sameArtworkLabel(target, candidate)) {
+        if (it->feature == QStringLiteral("artwork") && (!match.strong || label) && sameArtworkLabel(target, *candidate)) {
             const auto fields = record.value(QStringLiteral("fields")).toMap();
             for (const auto& field : missing(*it)) {
                 if (!isArtwork(field) || !populated(fields.value(field)) || it->labelArtwork.size() >= 64) continue;
@@ -650,13 +701,15 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
                 const auto credit = attribution(record.value(QStringLiteral("attribution")));
                 if (!credit.isEmpty()) evidence.insert(QStringLiteral("attribution"), credit);
                 it->labelArtwork.append(QVariantMap{{QStringLiteral("field"), field}, {QStringLiteral("value"), fields.value(field)},
-                    {QStringLiteral("identity"), candidate}, {QStringLiteral("provenance"), evidence}});
+                    {QStringLiteral("identity"), *candidate}, {QStringLiteral("provenance"), evidence}});
             }
             continue;
         }
         if (label) continue;
         if (!match.strong) { it->ambiguous = true; continue; }
-        accepted.append(record);
+        auto normalizedRecord = record;
+        normalizedRecord.insert(QStringLiteral("identity"), *candidate);
+        accepted.append(normalizedRecord);
     }
     // More than one record for a target is ambiguous. Do not use record
     // order to select an entity or combine unrelated field claims.

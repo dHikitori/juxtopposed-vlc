@@ -576,19 +576,24 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     Comparison result;
     const auto reject = [&](const QString& reason) { result.conflict = true; result.conflicts.append(reason); };
     if (target.kind != Kind::Unknown && candidate.kind != Kind::Unknown && target.kind != candidate.kind) reject("type");
-    bool idMatch = false;
+    const auto kind = target.kind != Kind::Unknown ? target.kind : candidate.kind;
     for (auto it = target.ids.cbegin(); it != target.ids.cend(); ++it) {
-        if (!candidate.ids.contains(it.key())) continue;
+        if (!candidate.ids.contains(it.key()) || it.value().isEmpty()) continue;
         if (candidate.ids.value(it.key()) != it.value()) reject(it.key());
-        else {
-            const bool known = target.kind == Kind::Series
-                ? QSet<QString>{"seriesImdb", "seriesTmdb", "seriesTvdb", "tvmazeShow"}.contains(it.key())
-                : target.kind == Kind::Episode
-                ? QSet<QString>{"seriesImdb", "seriesTmdb", "seriesTvdb", "tvmazeShow", "episodeImdb", "tmdbEpisode", "tvdbEpisode", "tvmazeEpisode"}.contains(it.key())
-                : QSet<QString>{"imdb", "tmdbMovie", "musicBrainzTrackId", "musicBrainzAlbumId", "musicBrainzArtistId"}.contains(it.key());
-            idMatch = idMatch || known; result.agreements.append(it.key());
-        }
+        else result.agreements.append(it.key());
     }
+    const auto agrees = [&](const QStringList& keys) {
+        return std::any_of(keys.cbegin(), keys.cend(), [&](const QString& key) { return result.agreements.contains(key); });
+    };
+    const bool movieId = kind == Kind::Movie && agrees({"imdb", "tmdbMovie"});
+    const bool seriesId = (kind == Kind::Series || kind == Kind::Episode)
+        && agrees({"seriesImdb", "seriesTmdb", "seriesTvdb", "tvmazeShow"});
+    const bool episodeId = kind == Kind::Episode
+        && agrees({"episodeImdb", "tmdbEpisode", "tvdbEpisode", "tvmazeEpisode"});
+    const bool musicId = (kind == Kind::MusicTrack && agrees({"musicBrainzTrackId"}))
+        || (kind == Kind::Album && agrees({"musicBrainzAlbumId"}))
+        || (kind == Kind::Artist && agrees({"musicBrainzArtistId"}));
+    const bool idMatch = movieId || seriesId || episodeId;
     if (target.year >= 0 && candidate.year >= 0 && target.year != candidate.year) reject("year");
     if (target.season >= 0 && candidate.season >= 0 && target.season != candidate.season) reject("season");
     if (!target.episodes.isEmpty() && !candidate.episodes.isEmpty() && target.episodes != candidate.episodes) reject("episode");
@@ -611,15 +616,20 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
         const bool series = !target.series.isEmpty() && normalize(target.series) == normalize(candidate.series);
         const bool guid = !target.guid.isEmpty() && target.guid == candidate.guid;
         const bool feed = !target.feedUrl.isEmpty() && target.feedUrl == candidate.feedUrl;
-        const bool episode = (!target.episodes.isEmpty() && target.episodes == candidate.episodes)
+        const bool numbered = !target.episodes.isEmpty() && target.episodes == candidate.episodes
+            && ((target.season < 0 && candidate.season < 0)
+                || (target.season >= 0 && target.season == candidate.season));
+        const bool episode = numbered
+            || (!target.absoluteEpisode.isEmpty() && target.absoluteEpisode == candidate.absoluteEpisode)
             || (target.airDate.isValid() && target.airDate == candidate.airDate);
-        const bool workId = result.agreements.contains("musicBrainzTrackId")
-            || (target.kind == Kind::Album && result.agreements.contains("musicBrainzAlbumId"))
-            || (target.kind == Kind::Artist && result.agreements.contains("musicBrainzArtistId"));
-        result.strong = !result.conflict && (workId || (result.exactTitle && artist)
-            || (target.kind == Kind::Podcast && feed && result.exactTitle)
-            || (target.kind == Kind::PodcastEpisode && ((guid && (feed || series)) || (series && result.exactTitle && episode))));
-        result.score = result.conflict ? 0 : workId || guid ? 120 : result.strong ? 90 : result.exactTitle ? 70 : 0;
+        // A feed or artist describes a parent. An episode also needs its own
+        // GUID, number, or publication date.
+        const bool podcastEpisode = (guid && (feed || series))
+            || ((feed || series) && result.exactTitle && episode);
+        result.strong = !result.conflict && (kind == Kind::PodcastEpisode ? podcastEpisode
+            : musicId || (result.exactTitle && artist) || (kind == Kind::Podcast && feed && result.exactTitle));
+        result.score = result.conflict ? 0 : musicId || (guid && result.strong) ? 120
+            : result.strong ? 90 : result.exactTitle ? 70 : 0;
         if (result.exactTitle) result.agreements.append("title");
         if (artist) result.agreements.append("artist");
         if (series) result.agreements.append("series");
@@ -640,16 +650,11 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     const bool date = target.airDate.isValid() && target.airDate == candidate.airDate;
     if (year) { result.score += 20; result.agreements.append("year"); }
     if (episode || absolute || date) { result.score += 30; result.agreements.append("episode"); }
-    const bool episodic = target.kind == Kind::Episode || candidate.kind == Kind::Episode;
-    // A parent series ID identifies the series, not an episode.
-    const bool workId = result.agreements.contains("imdb") || result.agreements.contains("tmdbMovie")
-        || result.agreements.contains("tmdbEpisode") || result.agreements.contains("tvdbEpisode");
-    const bool seriesId = target.kind == Kind::Series && (result.agreements.contains("seriesImdb")
-        || result.agreements.contains("seriesTmdb") || result.agreements.contains("seriesTvdb") || result.agreements.contains("tvmazeShow"));
-    result.strong = episodic ? (episode || absolute || date) && (result.exactTitle || idMatch || workId)
-                                && (target.year < 0 || year || idMatch)
-                            : target.kind == Kind::Series ? seriesId || (result.exactTitle && year)
-                            : workId || (result.exactTitle && year);
+    // A parent series ID needs episode numbering. An exact episode ID does not.
+    result.strong = kind == Kind::Episode ? episodeId || ((episode || absolute || date)
+                                && (result.exactTitle || seriesId) && (target.year < 0 || year || seriesId))
+                    : kind == Kind::Series ? seriesId || (result.exactTitle && year)
+                    : movieId || (result.exactTitle && year);
     return result;
 }
 }
