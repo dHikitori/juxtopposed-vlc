@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QScopeGuard>
+#include <QLockFile>
 #include <atomic>
 #include <thread>
 #include "addons/addon_manager.hpp"
@@ -31,6 +32,24 @@ QByteArray credential(const AddonNativeAuthority& authority, const QString& fiel
     QByteArray result;
     std::thread worker([&] { result = authority.credentials(field); });
     worker.join(); return result;
+}
+bool readCatalogue(const MetadataCatalogueSource& source, MetadataCatalogueSnapshot* output, QString* error = nullptr)
+{
+    bool accepted = false;
+    std::thread worker([&] { accepted = source.catalogueReader(output, error); });
+    worker.join(); return accepted;
+}
+QByteArray readCredential(const MetadataCatalogueSource& source, const QString& reference)
+{
+    QByteArray value;
+    std::thread worker([&] { value = source.credentialReader(packageId, reference); });
+    worker.join(); return value;
+}
+QString referenceIn(const QString& directory)
+{
+    PackageStore store(directory); QJsonObject settings;
+    if (!store.settings(packageId, &settings)) return {};
+    return settings.value(QStringLiteral("_credentials")).toObject().value(QStringLiteral("apiKey")).toString();
 }
 bool saveObject(const QString& path, const QJsonObject& value)
 {
@@ -169,6 +188,98 @@ private slots:
         const auto authority = capture(manager.nativeAuthorityReader(contributionId)); QVERIFY(authority);
         QCOMPARE(credential(*authority, QStringLiteral("apiKey")), QByteArray("unit-native-authority"));
         QVERIFY(credential(*authority, QStringLiteral("privateKey")).isEmpty());
+    }
+    void catalogueSourceCapturesOwnedMemory()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path()); QVERIFY(setup(manager));
+        const auto reference = referenceIn(directory.path()); QVERIFY(!reference.isEmpty());
+        const auto executable = directory.filePath(QStringLiteral("absent-worker"));
+        manager.setWorkerExecutable(executable);
+        const auto source = manager.metadataCatalogueSource(); QVERIFY(source); QVERIFY(source->current());
+        QCOMPARE(source->workerExecutable, executable);
+        QVERIFY(source->credentialPresence.value(packageId).value(reference));
+        QVERIFY(manager.metaObject()->indexOfMethod("metadataCatalogueSource()") < 0);
+        MetadataCatalogueSnapshot snapshot; QString error;
+        QVERIFY2(readCatalogue(*source, &snapshot, &error), qPrintable(error)); QVERIFY(snapshot.current());
+        QCOMPARE(snapshot.packages.size(), 1);
+        QCOMPARE(snapshot.packages.first().package.manifest.id, packageId);
+        QCOMPARE(snapshot.packages.first().settings.value(QStringLiteral("language")).toString(), QStringLiteral("en"));
+        QCOMPARE(readCredential(*source, reference), QByteArray("unit-native-authority"));
+        QByteArray other;
+        std::thread worker([&] { other = source->credentialReader(QStringLiteral("org.hakone.other"), reference); });
+        worker.join(); QVERIFY(other.isEmpty());
+    }
+    void catalogueSourceReadersRefuseSettingsChangeAndOwnerDestruction()
+    {
+        QTemporaryDir directory; auto manager = std::make_unique<AddonManager>(directory.path()); QVERIFY(setup(*manager));
+        const auto reference = referenceIn(directory.path()); QVERIFY(!reference.isEmpty());
+        const auto old = manager->metadataCatalogueSource(); QVERIFY(old);
+        QCOMPARE(readCredential(*old, reference), QByteArray("unit-native-authority"));
+        QVERIFY(manager->saveAddonSettings(packageId, {{"language", "fr"}}, {}));
+        QVERIFY(!old->current()); QVERIFY(readCredential(*old, reference).isEmpty());
+        MetadataCatalogueSnapshot snapshot; snapshot.candidateCount = 42; QString error;
+        QVERIFY(!readCatalogue(*old, &snapshot, &error)); QVERIFY(!error.isEmpty());
+        QCOMPARE(snapshot.candidateCount, 0); QVERIFY(snapshot.packages.isEmpty());
+        const auto fresh = manager->metadataCatalogueSource(); QVERIFY(fresh);
+        QVERIFY(readCatalogue(*fresh, &snapshot)); QCOMPARE(readCredential(*fresh, reference), QByteArray("unit-native-authority"));
+        manager.reset(); QVERIFY(!fresh->current());
+        QVERIFY(readCredential(*fresh, reference).isEmpty()); QVERIFY(!readCatalogue(*fresh, &snapshot));
+        QVERIFY(snapshot.packages.isEmpty());
+    }
+    void catalogueSourceRefusesDuringManagerRetirement()
+    {
+        QTemporaryDir directory; auto manager = std::make_unique<AddonManager>(directory.path()); QVERIFY(setup(*manager));
+        const auto source = manager->metadataCatalogueSource(); QVERIFY(source);
+        auto* owner = manager.get(); bool retired = false, refused = false, revoked = false;
+        connect(owner, &AddonManager::retiring, this, [&] {
+            retired = true; revoked = !source->current(); refused = !owner->metadataCatalogueSource();
+        });
+        manager.reset(); QVERIFY(retired); QVERIFY(revoked); QVERIFY(refused);
+    }
+    void catalogueSourcePreparationDoesNotReadSavedStateOrProbeWorker()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path()); QVERIFY(setup(manager));
+        const auto reference = referenceIn(directory.path()); QVERIFY(!reference.isEmpty());
+        const auto executable = directory.filePath(QStringLiteral("absent-worker"));
+        manager.setWorkerExecutable(executable);
+        QLockFile lock(directory.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0));
+        const auto source = manager.metadataCatalogueSource(); QVERIFY(source); QVERIFY(source->current());
+        QCOMPARE(source->workerExecutable, executable);
+        QVERIFY(source->credentialPresence.value(packageId).value(reference));
+        MetadataCatalogueSnapshot snapshot; QString error;
+        QVERIFY(!readCatalogue(*source, &snapshot, &error)); QVERIFY(!error.isEmpty());
+        QCOMPARE(readCredential(*source, reference), QByteArray("unit-native-authority"));
+        std::optional<MetadataCatalogueSource> wrongThread;
+        std::thread worker([&] { wrongThread = manager.metadataCatalogueSource(); }); worker.join();
+        QVERIFY(!wrongThread);
+        lock.unlock(); QVERIFY(readCatalogue(*source, &snapshot));
+    }
+    void catalogueSourceRefusesFromWithdrawalCallbacks()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path()); QVERIFY(setup(manager));
+        manager.setWorkerExecutable(directory.filePath(QStringLiteral("absent-worker")));
+        const auto source = manager.metadataCatalogueSource(); QVERIFY(source);
+        const auto request = manager.invoke(contributionId, QStringLiteral("searchAssets"), {{"query", "Example"}});
+        QVERIFY(!request.isEmpty()); bool observed = false, refused = false, revoked = false;
+        connect(&manager, &AddonManager::operationFinished, this, [&](const QString& id, const QString&, const QString&, const QVariantMap&, const QString&) {
+            if (id != request) return;
+            observed = true; refused = !manager.metadataCatalogueSource(); revoked = !source->current();
+        });
+        QVERIFY(manager.setEnabled(packageId, false));
+        QVERIFY(observed); QVERIFY(refused); QVERIFY(revoked);
+        QVERIFY(manager.metadataCatalogueSource());
+    }
+    void catalogueSourceRefusesFromRemovalCallbacks()
+    {
+        QTemporaryDir directory; AddonManager manager(directory.path()); QVERIFY(setup(manager));
+        bool observed = false, refused = false;
+        connect(&manager, &AddonManager::packageWithdrawn, this, [&](const QString& id) {
+            if (id != packageId) return;
+            observed = true; refused = !manager.metadataCatalogueSource();
+        });
+        // The callback runs before the optional background deletion starts.
+        manager.uninstall(packageId, false);
+        QVERIFY(observed); QVERIFY(refused);
     }
     void preparationAndLiveChecksDoNotWaitForSavedState()
     {

@@ -423,6 +423,30 @@ PackageSummaryReader AddonManager::packageReader() const
         return PackageSummarySnapshot{std::move(result), authority};
     };
 }
+std::optional<MetadataCatalogueSource> AddonManager::metadataCatalogueSource() const
+{
+    if (QThread::currentThread() != thread()) return std::nullopt;
+    if (m_retiring || !m_withdrawingPackages.isEmpty() || !m_removingPackages.isEmpty()) return std::nullopt;
+    MetadataCatalogueSource source;
+    source.queuedAuthority = m_store.authorityToken();
+    if (!source.current()) return std::nullopt;
+    source.catalogueReader = m_store.metadataCatalogueReader();
+    const auto credentials = m_secrets.snapshotReader();
+    source.credentialReader = [credentials, authority = source.queuedAuthority](const QString& package, const QString& reference) {
+        if (!authority.current()) return QByteArray{};
+        auto value = credentials(package, reference);
+        if (!authority.current()) {
+            value.fill('\0');
+            value.clear();
+        }
+        return value;
+    };
+    source.credentialPresence = m_secrets.presenceSnapshot();
+    source.workerExecutable = m_workerExecutable;
+    // Reject a mutation between the independent memory captures.
+    if (!source.current()) return std::nullopt;
+    return source;
+}
 QVariantList AddonManager::contributionsOfType(const QString& type, bool includeDisabled) const
 {
     QVariantList result;

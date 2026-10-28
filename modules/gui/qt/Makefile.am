@@ -118,6 +118,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_manifest.hpp \
 	addons/addon_metadata_attempt.cpp \
 	addons/addon_metadata_attempt.hpp \
+	addons/addon_metadata_registry_epoch.cpp \
+	addons/addon_metadata_registry_epoch.hpp \
 	addons/addon_artwork_attempt_plan.cpp \
 	addons/addon_artwork_attempt_plan.hpp \
 	addons/addon_package_configuration.hpp \
@@ -133,6 +135,7 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_manager.cpp \
 	addons/addon_manager.hpp \
 	addons/addon_package_reader.hpp \
+	addons/addon_metadata_catalogue_source.hpp \
 	addons/addon_package_summaries.cpp \
 	addons/addon_package_summaries.hpp \
 	addons/addon_native_authority.hpp \
@@ -2866,6 +2869,18 @@ check_PROGRAMS += test_qt_addon_source_consent_ui_owner
 TESTS += test_qt_addon_source_consent_ui_owner
 
 if HAVE_LINUX
+test_qt_addon_metadata_registry_epoch_SOURCES = tests/test_addon_metadata_registry_epoch.cpp tests/fixtures/addon_artwork_attempt_keeper.c
+nodist_test_qt_addon_metadata_registry_epoch_SOURCES = tests/test_addon_metadata_registry_epoch.moc
+BUILT_SOURCES += tests/test_addon_metadata_registry_epoch.moc
+CLEANFILES += tests/test_addon_metadata_registry_epoch.moc
+test_qt_addon_metadata_registry_epoch_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src
+test_qt_addon_metadata_registry_epoch_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_metadata_registry_epoch_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_metadata_registry_epoch_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_metadata_registry_epoch
+TESTS += test_qt_addon_metadata_registry_epoch
+
+
 test_qt_addon_artwork_attempt_keeper_SOURCES = tests/test_addon_artwork_attempt_keeper.cpp tests/fixtures/addon_artwork_attempt_keeper.c
 nodist_test_qt_addon_artwork_attempt_keeper_SOURCES = tests/test_addon_artwork_attempt_keeper.moc
 BUILT_SOURCES += tests/test_addon_artwork_attempt_keeper.moc
@@ -3720,3 +3735,5 @@ EXTRA_DIST += tests/test_addon_metadata_attempt.cpp tests/fixtures/addon_metadat
     tests/fixtures/metadata-attempt/receipt-tls-key.pem
 
 EXTRA_DIST += tests/test_addon_artwork_attempt_keeper.cpp tests/fixtures/addon_artwork_attempt_keeper.c tests/fixtures/addon_artwork_attempt_keeper.h
+
+EXTRA_DIST += tests/test_addon_metadata_registry_epoch.cpp

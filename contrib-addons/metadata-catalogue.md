@@ -38,6 +38,15 @@ provider attempt must still check its exact release, grants, settings, account,
 request, and native admission. This snapshot alone cannot set an artwork
 `NOTFOUND` status or activate the native metadata owner.
 
+`AddonManager::metadataCatalogueSource()` prepares the owned readers, cached
+credential presence, store token, and worker path on the Manager thread. This
+factory reads memory only. It refuses during withdrawal, removal, retirement,
+or a change between its captures. It has no guest or QML entry point. Run its
+readers and worker-file probe in joined work. Use the credential reader when a
+declared reference has no cached presence. A store change refuses a key read
+and clears any returned bytes. Discard all readers before a native keeper is
+retained. The immutable artwork plan contains no reader or key bytes.
+
 ## Verification
 
 The exact production sources pass 34 catalogue and 13 existing store-authority
@@ -69,3 +78,16 @@ all 90 package cases. See [the private artwork plan](artwork-attempt-plan.md).
 Automake, Meson, and the standalone CMake build register the test. Linux test
 targets enable the file-open interception checks; other platforms do not claim
 that coverage.
+
+The Manager factory passes 16 normal and 16 focused sanitizer cases in a copied
+build. Manager, Store, credentials, authority, and the fixture compile from the
+reviewed sources. Remaining host dependencies use the pinned 359-case archive.
+There are no failures, skips, warnings, or runtime diagnostics. The factory adds
+no class fields or meta-object entries. Its proof is
+`/tmp/hakone-metadata-catalogue-source/final-proof.json`. This check does not
+activate the native metadata owner or perform playback.
+
+A fresh build of the applied factory passes the same 16 cases. Its Manager,
+Store, credential, and authority sources come from the working tree. The
+remaining host dependency archive keeps its recorded hash. The record is
+`/tmp/hakone-metadata-admission-live/proof.json`.

@@ -11,6 +11,8 @@ get_filename_component(VLC_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.."
 add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_store_authority.cpp addon_credentials.cpp
     addon_metadata_attempt.cpp addon_metadata_attempt.hpp addon_metadata_completion_policy.cpp addon_metadata_completion_policy.hpp addon_metadata_identity.hpp
+    addon_metadata_catalogue_source.hpp
+    addon_metadata_registry_epoch.cpp addon_metadata_registry_epoch.hpp
     addon_artwork_attempt_plan.cpp addon_artwork_attempt_plan.hpp addon_package_configuration.hpp
     addon_network.cpp addon_public_network_policy.cpp addon_worker.cpp addon_manager.cpp addon_native_authority.hpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
@@ -146,6 +148,12 @@ if(VLC_BUILD_DIR)
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
     target_compile_definitions(vlc_addon_native_metadata PUBLIC HAVE_CONFIG_H)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(test_addon_metadata_registry_epoch "../tests/test_addon_metadata_registry_epoch.cpp"
+            "../tests/fixtures/addon_artwork_attempt_keeper.c")
+        target_include_directories(test_addon_metadata_registry_epoch PRIVATE "${VLC_SOURCE_ROOT}" "${VLC_SOURCE_ROOT}/src")
+        target_link_libraries(test_addon_metadata_registry_epoch PRIVATE vlc_addon_native_metadata Qt6::Test)
+        add_test(NAME addon_metadata_registry_epoch COMMAND test_addon_metadata_registry_epoch)
+        set_tests_properties(addon_metadata_registry_epoch PROPERTIES TIMEOUT 90)
         add_executable(test_addon_artwork_attempt_keeper "../tests/test_addon_artwork_attempt_keeper.cpp"
             "../tests/fixtures/addon_artwork_attempt_keeper.c")
         target_include_directories(test_addon_artwork_attempt_keeper PRIVATE "${VLC_SOURCE_ROOT}" "${VLC_SOURCE_ROOT}/src")

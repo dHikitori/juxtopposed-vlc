@@ -78,6 +78,13 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 ## Latest verified native checkpoint
 
+- The memory-only Manager catalogue factory and native registration barrier
+  are in the source. Their copied checks pass 32 normal and 32 focused
+  sanitizer cases. A fresh applied-source build passes all 32 normal cases.
+  The Service mount and native runner remain open. See
+  [registration barriers](metadata-registration-barrier.md) and
+  [provider snapshots](metadata-catalogue.md).
+
 - The local Windows build now uses clean source `a51d1c9fc3` and includes playback Stop before user-quit cleanup. Its full build, 868 managed file hashes, and 416 PE checks pass. A fresh Windows console probe imports seven packages and captures all seven raw contributions. The user's network-file Close and full GUI checks remain open. See [the Windows record](windows-local-build.md).
 
 - The [private artwork plan](artwork-attempt-plan.md) retains all raw providers, fixes the restored-provider preference case, and shares exact configuration and identity projection with the Manager. The combined current-source host build passes 359 cases, including all 90 package cases. Separate plan and catalogue sanitizer groups pass 49 and 77 cases. Native runner and owner activation remain open.

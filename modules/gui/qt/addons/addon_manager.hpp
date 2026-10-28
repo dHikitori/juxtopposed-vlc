@@ -6,6 +6,7 @@
 #include "addon_worker.hpp"
 #include "addon_native_authority.hpp"
 #include "addon_package_reader.hpp"
+#include "addon_metadata_catalogue_source.hpp"
 #include <QObject>
 #include <QVariantList>
 
@@ -36,6 +37,8 @@ public:
     QVariantList packages() const;
     // Memory-only preparation. Invoke the owned reader on joined Qt work.
     PackageSummaryReader packageReader() const;
+    // C++ only. This call reads memory on the Manager thread.
+    std::optional<MetadataCatalogueSource> metadataCatalogueSource() const;
     QString storageDirectory() const { return m_store.storageDirectory(); }
     // Read these memory snapshots on the manager thread. They contain no key bytes.
     QString workerExecutable() const { return m_workerExecutable; }
