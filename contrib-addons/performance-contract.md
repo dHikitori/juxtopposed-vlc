@@ -63,11 +63,59 @@ costs. It is not accepted against this contract.
   reads completions and a player snapshot, which takes the native player lock.
 - Ordinary workers start on first use and reuse one compiled runtime per
   package. The worker waits for pipe input while idle. Used workers remain
-  resident. Cold and repeated execution costs and memory still need benchmarks.
+  resident. A small offline worker test is recorded below; full host execution
+  and active feature costs still need measurements.
 
 The earlier 15–17 second app startup observations disabled the plug-in cache
 and used software rendering. They are not a controlled normal-launch baseline.
 See [the Windows record](windows-local-build.md).
+
+## Controlled Windows baseline
+
+The baseline uses the published `fd3fed4173` host archive, matching source
+headers, and seven real packages. Four separate console processes run in this
+order: local Windows storage, WSL network storage, WSL network storage, local
+Windows storage. Each process gets a byte-identical seed store. Package queries
+return seven valid rows. The five UI contribution types return empty lists.
+
+| Operation | Local Windows storage | WSL network storage |
+| --- | --- | --- |
+| First five-type UI query round | 1,194–1,226 ms | 4,774–4,818 ms |
+| Median of later rounds in each process | 1,201–1,223 ms | 4,794–4,810 ms |
+| UI registry construction | 1,217–1,257 ms | 4,784–4,872 ms |
+| Seven already-installed bundle checks | 230–237 ms | 587–596 ms |
+
+Each five-type round reads 14,535,845 bytes in 1,060 process read operations.
+Later rounds repeat the same reads. UI registry construction repeats them
+again. No guest process starts in any of these four runs. These results
+establish a host UI cost when no add-on UI contribution is present.
+
+The test records Manager construction, theme construction, raw catalogue reads,
+bundle checks, and destruction as separate phases. No cache is warmed by a
+hidden query before the first timed query. Seed copies and file hash checks do
+warm the filesystem cache. Process read counts include cached requests; they
+are not physical disk counters. These are console measurements, not app window
+or frame measurements.
+
+A separate test uses three real workers with offline French TV `no_match`
+replies. Process-to-ready time is 309–496 ms. Across 60 warm calls, the median
+round trip is 0.078 ms and the maximum is 2.55 ms. Each five-second idle window
+has zero accounted CPU increase, within Windows process accounting precision.
+Observed working sets are 11.2–14.9 MB and private bytes are 5.3–5.8 MB. The
+first worker's working set grows during idle, so this test does not establish a
+stable resident size. All workers exit normally. The test includes controller
+framing and pipe I/O, but excludes Manager dispatch, metadata fetches, and HTTP.
+
+The records are in `/tmp/hakone-addon-performance-baseline/`. The final proof
+is `before-final-proof.json`, SHA-256
+`c789735c3c19bf1c1b1a961aa68b7172172ffa17cfe049834d0850db1ba4748a`.
+Sources, recipes, profiles, and the baseline archive are retained with hash
+records. Some terminal build artifacts are stored as lossless gzip files.
+
+The comparison must record attachment, loading, time to ready, and valid row
+counts. It must include all background startup work. A faster empty or stale
+view cannot pass as a faster valid catalogue. A new host cohort needs its own
+matching headers, archive, and executable pins.
 
 ## Verified idle-session change
 
