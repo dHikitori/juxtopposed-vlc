@@ -40,6 +40,7 @@
 #include "resource.h"
 #include "file.h"
 #include "live.h"
+#include "../../../src/input/stream_observer.h"
 
 typedef struct
 {
@@ -51,7 +52,10 @@ static block_t *FileRead(stream_t *access, bool *restrict eof)
 {
     access_sys_t *sys = access->p_sys;
 
-    block_t *b = vlc_http_file_read(sys->resource);
+    enum vlc_http_file_read_outcome outcome;
+    block_t *b = vlc_http_file_read_outcome(sys->resource, &outcome);
+    if (outcome == VLC_HTTP_FILE_UNAVAILABLE)
+        vlc_stream_observer_FailObject(VLC_OBJECT(access));
     if (b == NULL)
         *eof = true;
     return b;
@@ -117,6 +121,10 @@ static int FileControl(stream_t *access, int query, va_list args)
 static block_t *LiveRead(stream_t *access, bool *restrict eof)
 {
     access_sys_t *sys = access->p_sys;
+
+    /* Reconnecting live input has no single complete lookup response. Keep
+     * its old read result, but never use it as negative metadata evidence. */
+    vlc_stream_observer_FailObject(VLC_OBJECT(access));
 
     block_t *b = vlc_http_live_read(sys->resource);
     if (b == NULL) /* TODO: loop instead of EOF, see vlc_http_live_read() */

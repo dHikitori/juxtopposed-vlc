@@ -1,7 +1,9 @@
 # Native artwork outcome contract
 
-This file defines the remaining negative artwork result. It is a design
-contract. The negative result is not active in the app.
+This file defines the negative artwork result and its remaining aggregate.
+The native receipt and input completion evidence are implemented. See
+[completion evidence](native-artwork-completion.md). The final negative
+transaction is not active in the app.
 
 The positive native helper is separate. It accepts a changed artwork field
 only after the child commits that field with a current native approval.

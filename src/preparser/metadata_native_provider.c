@@ -32,6 +32,8 @@ struct vlc_metadata_native_claim {
     struct native_snapshot snapshot;
     meta_fetcher_provider_t family;
     char *artwork;
+    meta_fetcher_outcome_t outcome;
+    struct native_reservation *reservation;
 };
 struct vlc_metadata_native_provider {
     vlc_atomic_rc_t refs;
@@ -40,7 +42,7 @@ struct vlc_metadata_native_provider {
     vlc_object_t *object;
     input_fetcher_t *fetcher;
     struct native_probe *head;
-    unsigned calls, retained;
+    unsigned calls, retained, reserved;
     bool closed, deleting;
 };
 struct native_probe {
@@ -52,7 +54,24 @@ struct native_probe {
     void *opaque;
     struct native_probe *next;
     bool listed;
+    struct native_reservation *reservation;
 };
+struct native_reservation {
+    vlc_atomic_rc_t refs;
+    vlc_metadata_native_provider_t *provider;
+    bool counted;
+};
+static struct native_reservation *reservation_hold(struct native_reservation *reservation)
+{ vlc_atomic_rc_inc(&reservation->refs); return reservation; }
+static void reservation_release(struct native_reservation *reservation)
+{
+    if (reservation == NULL || !vlc_atomic_rc_dec(&reservation->refs)) return;
+    vlc_metadata_native_provider_t *provider = reservation->provider;
+    vlc_mutex_lock(&provider->lock);
+    if (reservation->counted) { assert(provider->reserved); --provider->reserved; }
+    vlc_mutex_unlock(&provider->lock);
+    free(reservation); vlc_metadata_native_provider_Release(provider);
+}
 
 static void snapshot_clear(struct native_snapshot *snapshot)
 {
@@ -135,12 +154,15 @@ void vlc_metadata_native_claim_Release(vlc_metadata_native_claim_t *claim)
 {
     if (claim == NULL || !vlc_atomic_rc_dec(&claim->refs)) return;
     snapshot_clear(&claim->snapshot); free(claim->artwork);
+    reservation_release(claim->reservation);
     vlc_metadata_native_provider_Release(claim->provider); free(claim);
 }
 meta_fetcher_provider_t vlc_metadata_native_claim_GetFamily(const vlc_metadata_native_claim_t *claim)
 { return claim->family; }
 const char *vlc_metadata_native_claim_GetArtworkURI(const vlc_metadata_native_claim_t *claim)
 { return claim->artwork; }
+meta_fetcher_outcome_t vlc_metadata_native_claim_GetOutcome(const vlc_metadata_native_claim_t *claim)
+{ return claim != NULL ? claim->outcome : META_FETCHER_OUTCOME_UNKNOWN; }
 bool vlc_metadata_native_claim_MatchesJob(const vlc_metadata_native_claim_t *claim, vlc_metadata_job_t *job)
 {
     if (claim == NULL) return false;
@@ -154,7 +176,8 @@ vlc_metadata_native_provider_t *vlc_metadata_native_provider_Hold(vlc_metadata_n
 void vlc_metadata_native_provider_Release(vlc_metadata_native_provider_t *provider)
 {
     if (!vlc_atomic_rc_dec(&provider->refs)) return;
-    assert(provider->fetcher == NULL && provider->object == NULL && !provider->calls && !provider->retained);
+    assert(provider->fetcher == NULL && provider->object == NULL && !provider->calls
+        && !provider->retained && !provider->reserved);
     free(provider);
 }
 vlc_metadata_native_provider_t *vlc_metadata_native_provider_New(vlc_object_t *parent)
@@ -241,6 +264,7 @@ static void probe_release(struct native_probe *probe)
 {
     if (!vlc_atomic_rc_dec(&probe->refs)) return;
     vlc_metadata_native_provider_t *provider = probe->provider;
+    struct native_reservation *reservation = probe->reservation;
     const bool counted = probe->listed;
     vlc_mutex_lock(&provider->lock);
     if (counted) {
@@ -253,7 +277,21 @@ static void probe_release(struct native_probe *probe)
     vlc_mutex_lock(&provider->lock);
     if (counted) { assert(provider->retained); --provider->retained; }
     vlc_cond_broadcast(&provider->idle); vlc_mutex_unlock(&provider->lock);
+    reservation_release(reservation);
     vlc_metadata_native_provider_Release(provider);
+}
+static vlc_metadata_native_claim_t *claim_new(struct native_probe *probe,
+                                             meta_fetcher_outcome_t outcome, char *artwork)
+{
+    vlc_metadata_native_claim_t *claim = calloc(1, sizeof(*claim));
+    if (claim == NULL || !snapshot_copy(&claim->snapshot, &probe->snapshot)) {
+        free(claim); return NULL;
+    }
+    vlc_atomic_rc_init(&claim->refs); claim->family = probe->family;
+    claim->artwork = artwork; claim->outcome = outcome;
+    claim->provider = vlc_metadata_native_provider_Hold(probe->provider);
+    claim->reservation = reservation_hold(probe->reservation);
+    return claim;
 }
 static void probe_ended(input_item_t *item, int status, void *opaque)
 {
@@ -272,20 +310,47 @@ static void probe_ended(input_item_t *item, int status, void *opaque)
         else if ((artwork = strdup(raw)) == NULL) status = VLC_ENOMEM;
         vlc_mutex_unlock(&item->lock);
         if (status == VLC_SUCCESS) {
-            claim = calloc(1, sizeof(*claim));
-            if (claim == NULL || !snapshot_copy(&claim->snapshot, &probe->snapshot)) {
-                free(claim); claim = NULL; free(artwork); status = VLC_ENOMEM;
-            } else {
-                vlc_atomic_rc_init(&claim->refs); claim->family = probe->family; claim->artwork = artwork;
-                claim->provider = vlc_metadata_native_provider_Hold(probe->provider);
-            }
+            claim = claim_new(probe, META_FETCHER_OUTCOME_MATCH, artwork);
+            if (claim == NULL) { free(artwork); status = VLC_ENOMEM; }
         }
     }
     probe->callback(claim, status, probe->opaque);
     vlc_metadata_native_claim_Release(claim); probe_release(probe);
 }
-int vlc_metadata_native_provider_Probe(vlc_metadata_native_provider_t *provider,
-    vlc_metadata_job_t *job, meta_fetcher_provider_t family, vlc_metadata_native_probe_cb callback, void *opaque)
+static void probe_outcome_ended(input_item_t *item, int status,
+                               meta_fetcher_outcome_t outcome, void *opaque)
+{
+    struct native_probe *probe = opaque;
+    vlc_mutex_lock(&probe->provider->lock); const bool closed = probe->provider->closed;
+    vlc_mutex_unlock(&probe->provider->lock);
+    vlc_metadata_native_claim_t *claim = NULL;
+    char *artwork = NULL;
+    if (closed || !snapshot_current(&probe->snapshot, probe->snapshot.job)) status = -EINTR;
+    if (status != -EINTR && status != VLC_ENOMEM) {
+        if (outcome < META_FETCHER_OUTCOME_UNKNOWN || outcome > META_FETCHER_OUTCOME_ERROR)
+            outcome = META_FETCHER_OUTCOME_ERROR;
+        vlc_mutex_lock(&item->lock);
+        const char *raw = item->p_meta != NULL ? vlc_meta_Get(item->p_meta, vlc_meta_ArtworkURL) : NULL;
+        if (outcome == META_FETCHER_OUTCOME_MATCH) {
+            if (status != VLC_SUCCESS || raw == NULL || !raw[0]
+                || strnlen(raw, MAX_ARTWORK_URI + 1) > MAX_ARTWORK_URI
+                || (strncasecmp(raw, "http://", 7) && strncasecmp(raw, "https://", 8)))
+                outcome = META_FETCHER_OUTCOME_ERROR;
+            else if ((artwork = strdup(raw)) == NULL) status = VLC_ENOMEM;
+        } else if (raw != NULL && raw[0]) outcome = META_FETCHER_OUTCOME_ERROR;
+        vlc_mutex_unlock(&item->lock);
+        if (status != VLC_ENOMEM) {
+            claim = claim_new(probe, outcome, artwork);
+            if (claim != NULL) { artwork = NULL; status = VLC_SUCCESS; }
+            else status = VLC_ENOMEM;
+        }
+    }
+    free(artwork);
+    probe->callback(claim, status, probe->opaque);
+    vlc_metadata_native_claim_Release(claim); probe_release(probe);
+}
+static int probe_start(vlc_metadata_native_provider_t *provider, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t family, vlc_metadata_native_probe_cb callback, void *opaque, bool outcome)
 {
     if (provider == NULL || job == NULL || callback == NULL || family < META_FETCHER_PROVIDER_MUSICBRAINZ
         || family > META_FETCHER_PROVIDER_LASTFM) return VLC_EINVAL;
@@ -299,15 +364,29 @@ int vlc_metadata_native_provider_Probe(vlc_metadata_native_provider_t *provider,
     vlc_atomic_rc_init(&probe->refs); vlc_atomic_rc_inc(&probe->refs);
     probe->provider = vlc_metadata_native_provider_Hold(provider); probe->family = family;
     probe->callback = callback; probe->opaque = opaque;
+    probe->reservation = calloc(1, sizeof(*probe->reservation));
+    if (probe->reservation == NULL) {
+        probe_release(probe); probe_release(probe); end_call(provider, fetcher); return VLC_ENOMEM;
+    }
+    vlc_atomic_rc_init(&probe->reservation->refs);
+    probe->reservation->provider = vlc_metadata_native_provider_Hold(provider);
     vlc_mutex_lock(&provider->lock);
-    const bool admitted = !provider->closed && !provider->deleting && provider->retained < MAX_PROBES;
-    const int refusal = provider->retained >= MAX_PROBES ? VLC_ENOMEM : -EINTR;
+    const bool admitted = !provider->closed && !provider->deleting && provider->reserved < MAX_PROBES;
+    const int refusal = provider->reserved >= MAX_PROBES ? VLC_ENOMEM : -EINTR;
     if (admitted) {
+        ++provider->reserved; probe->reservation->counted = true;
         ++provider->retained; probe->next = provider->head; provider->head = probe; probe->listed = true;
     }
     vlc_mutex_unlock(&provider->lock);
     if (!admitted) { probe_release(probe); probe_release(probe); end_call(provider, fetcher); return refusal; }
-    const int status = input_fetcher_Probe(fetcher, job, family, probe_ended, probe);
+    const int status = outcome ? input_fetcher_ProbeOutcome(fetcher, job, family, probe_outcome_ended, probe)
+        : input_fetcher_Probe(fetcher, job, family, probe_ended, probe);
     if (status != VLC_SUCCESS) probe_release(probe);
     probe_release(probe); end_call(provider, fetcher); return status;
 }
+int vlc_metadata_native_provider_Probe(vlc_metadata_native_provider_t *provider,
+    vlc_metadata_job_t *job, meta_fetcher_provider_t family, vlc_metadata_native_probe_cb callback, void *opaque)
+{ return probe_start(provider, job, family, callback, opaque, false); }
+int vlc_metadata_native_provider_ProbeOutcome(vlc_metadata_native_provider_t *provider,
+    vlc_metadata_job_t *job, meta_fetcher_provider_t family, vlc_metadata_native_probe_cb callback, void *opaque)
+{ return probe_start(provider, job, family, callback, opaque, true); }

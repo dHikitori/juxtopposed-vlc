@@ -21,7 +21,10 @@
  * This controlled fetcher replaces only the native provider execution boundary.
  * The real fetcher and Lua suites prove that boundary separately.
  */
-struct pending { input_item_t *item; vlc_metadata_job_t *job; input_fetcher_probe_cb callback; void *opaque; };
+struct pending {
+    input_item_t *item; vlc_metadata_job_t *job; input_fetcher_probe_cb callback;
+    input_fetcher_probe_outcome_cb outcome_callback; meta_fetcher_outcome_t outcome; void *opaque;
+};
 struct input_fetcher_t {
     vlc_atomic_rc_t refs;
     vlc_mutex_t lock;
@@ -32,11 +35,13 @@ enum mode { INLINE, QUEUED, BEFORE_SUBMIT };
 static enum mode mode;
 static const char *artwork = "http://127.0.0.1/native-family.png";
 static int provider_status = VLC_SUCCESS;
-static atomic_uint probes, fetchers_deleted;
+static meta_fetcher_outcome_t provider_outcome = META_FETCHER_OUTCOME_MATCH;
+static atomic_uint probes, fetchers_deleted, fetchers_created;
 static vlc_sem_t before_submit, allow_submit;
 input_fetcher_t *input_fetcher_New(vlc_object_t *object, int options)
 {
     assert(object != NULL && options == VLC_PREPARSER_TYPE_FETCHMETA_NET);
+    ++fetchers_created;
     input_fetcher_t *fetcher = calloc(1, sizeof(*fetcher)); assert(fetcher);
     vlc_atomic_rc_init(&fetcher->refs); vlc_mutex_init(&fetcher->lock); return fetcher;
 }
@@ -46,18 +51,22 @@ void input_fetcher_Release(input_fetcher_t *fetcher)
 { if (vlc_atomic_rc_dec(&fetcher->refs)) { assert(fetcher->count == 0); free(fetcher); } }
 static void pending_end(struct pending pending, int status)
 {
-    pending.callback(pending.item, status, pending.opaque);
+    if (pending.outcome_callback != NULL)
+        pending.outcome_callback(pending.item, status, pending.outcome, pending.opaque);
+    else pending.callback(pending.item, status, pending.opaque);
     input_item_Release(pending.item); vlc_metadata_job_Release(pending.job);
 }
-int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
-    meta_fetcher_provider_t family, input_fetcher_probe_cb callback, void *opaque)
+static int mock_probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t family, input_fetcher_probe_cb callback,
+    input_fetcher_probe_outcome_cb outcome_callback, void *opaque)
 {
     assert(family >= META_FETCHER_PROVIDER_MUSICBRAINZ && family <= META_FETCHER_PROVIDER_LASTFM);
     ++probes;
     if (mode == BEFORE_SUBMIT) { vlc_sem_post(&before_submit); vlc_sem_wait(&allow_submit); }
     if (!vlc_metadata_job_IsPending(job)) return -EINTR;
     struct pending pending = {.item=input_item_Copy(vlc_metadata_job_GetRequest(job)->item),
-        .job=vlc_metadata_job_Hold(job), .callback=callback, .opaque=opaque};
+        .job=vlc_metadata_job_Hold(job), .callback=callback, .outcome_callback=outcome_callback,
+        .outcome=provider_outcome, .opaque=opaque};
     assert(pending.item); input_item_SetArtURL(pending.item, artwork);
     if (mode == INLINE) pending_end(pending, provider_status);
     else {
@@ -66,6 +75,12 @@ int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
     }
     return VLC_SUCCESS;
 }
+int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t family, input_fetcher_probe_cb callback, void *opaque)
+{ return mock_probe(fetcher, job, family, callback, NULL, opaque); }
+int input_fetcher_ProbeOutcome(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t family, input_fetcher_probe_outcome_cb callback, void *opaque)
+{ return mock_probe(fetcher, job, family, NULL, callback, opaque); }
 size_t input_fetcher_Cancel(input_fetcher_t *fetcher, const void *key)
 {
     struct pending canceled[32]; unsigned count = 0;
@@ -279,6 +294,92 @@ static void callback_drain(vlc_object_t *object)
     assert(atomic_load(&deletion.ended) && completion.count == 1 && job.ended == 1);
     job_clear(&job); puts("PASS: cancel callback and native reference drain");
 }
+static void closed_typed_outcomes(vlc_object_t *object)
+{
+    mode = INLINE;
+    assert(vlc_metadata_native_claim_GetOutcome(NULL) == META_FETCHER_OUTCOME_UNKNOWN);
+    for (unsigned kind = META_FETCHER_OUTCOME_UNKNOWN; kind <= META_FETCHER_OUTCOME_ERROR; ++kind) {
+        struct job job; job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+        vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+        provider_outcome = kind;
+        provider_status = kind == META_FETCHER_OUTCOME_MATCH ? VLC_SUCCESS :
+            kind == META_FETCHER_OUTCOME_DENIED ? -EACCES : VLC_EGENERIC;
+        artwork = kind == META_FETCHER_OUTCOME_MATCH ? "https://art.example/image.png" : NULL;
+        struct completion result = {0};
+        assert(vlc_metadata_native_provider_ProbeOutcome(provider, job.job,
+            META_FETCHER_PROVIDER_LASTFM, complete, &result) == VLC_SUCCESS);
+        assert(result.count == 1 && result.status == VLC_SUCCESS && result.claim != NULL);
+        assert(vlc_metadata_native_claim_GetOutcome(result.claim) == kind);
+        const char *uri = vlc_metadata_native_claim_GetArtworkURI(result.claim);
+        assert(kind == META_FETCHER_OUTCOME_MATCH ? uri != NULL : uri == NULL);
+        assert(vlc_metadata_native_claim_MatchesJob(result.claim, job.job));
+        input_item_SetArtist(vlc_metadata_job_GetRequest(job.job)->item, "Native artist");
+        assert(!vlc_metadata_native_claim_MatchesJob(result.claim, job.job));
+        vlc_metadata_native_provider_Delete(provider);
+        vlc_metadata_native_claim_Release(result.claim); job_clear(&job);
+    }
+    puts("PASS: closed native lookup outcomes and snapshot guard");
+}
+static void retained_inline_receipts_keep_the_admission_slot(vlc_object_t *object)
+{
+    mode = INLINE; provider_status = VLC_EGENERIC;
+    provider_outcome = META_FETCHER_OUTCOME_NO_MATCH; artwork = NULL;
+    vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+    struct job jobs[33]; struct completion results[33] = {0};
+    for (unsigned i = 0; i < ARRAY_SIZE(jobs); ++i) {
+        job_init(&jobs[i], "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+        const int status = vlc_metadata_native_provider_ProbeOutcome(provider, jobs[i].job,
+            META_FETCHER_PROVIDER_LASTFM, complete, &results[i]);
+        assert(status == (i < 32 ? VLC_SUCCESS : VLC_ENOMEM));
+        assert(results[i].count == (i < 32 ? 1u : 0u));
+    }
+    vlc_metadata_native_claim_t *extra = vlc_metadata_native_claim_Hold(results[0].claim);
+    vlc_metadata_native_claim_Release(results[0].claim); results[0].claim = NULL;
+    assert(vlc_metadata_native_provider_ProbeOutcome(provider, jobs[32].job,
+        META_FETCHER_PROVIDER_LASTFM, complete, &results[32]) == VLC_ENOMEM);
+    vlc_metadata_native_claim_Release(extra);
+    assert(vlc_metadata_native_provider_ProbeOutcome(provider, jobs[32].job,
+        META_FETCHER_PROVIDER_LASTFM, complete, &results[32]) == VLC_SUCCESS);
+    assert(results[32].count == 1 && results[32].claim != NULL);
+    vlc_metadata_native_provider_Delete(provider);
+    for (unsigned i = 0; i < ARRAY_SIZE(jobs); ++i) {
+        if (results[i].claim != NULL) {
+            assert(!vlc_metadata_native_claim_MatchesJob(results[i].claim, jobs[i].job));
+            vlc_metadata_native_claim_Release(results[i].claim);
+        }
+        job_clear(&jobs[i]);
+    }
+    puts("PASS: retained receipt quota, final release recovery, and closed receipt cleanup");
+}
+static void failed_and_cancelled_outcomes_release_the_slot(vlc_object_t *object)
+{
+    vlc_metadata_native_provider_t *provider = vlc_metadata_native_provider_New(object); assert(provider);
+    mode = INLINE; artwork = NULL; provider_outcome = META_FETCHER_OUTCOME_ERROR;
+    provider_status = VLC_ENOMEM;
+    for (unsigned i = 0; i < 40; ++i) {
+        struct job job; job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+        struct completion result = {0};
+        assert(vlc_metadata_native_provider_ProbeOutcome(provider, job.job,
+            META_FETCHER_PROVIDER_LASTFM, complete, &result) == VLC_SUCCESS);
+        assert(result.count == 1 && result.status == VLC_ENOMEM && result.claim == NULL);
+        job_clear(&job);
+    }
+    mode = QUEUED; provider_outcome = META_FETCHER_OUTCOME_NO_MATCH; provider_status = VLC_EGENERIC;
+    struct job job; job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK);
+    struct completion result = {0};
+    assert(vlc_metadata_native_provider_ProbeOutcome(provider, job.job,
+        META_FETCHER_PROVIDER_LASTFM, complete, &result) == VLC_SUCCESS);
+    vlc_metadata_native_provider_Cancel(provider, job.job);
+    assert(result.count == 1 && result.status == -EINTR && result.claim == NULL);
+    job_clear(&job); mode = INLINE;
+    job_init(&job, "file:///native/item.flac", VLC_METADATA_REQUEST_NETWORK); result = (struct completion){0};
+    assert(vlc_metadata_native_provider_ProbeOutcome(provider, job.job,
+        META_FETCHER_PROVIDER_LASTFM, complete, &result) == VLC_SUCCESS);
+    assert(result.claim != NULL && vlc_metadata_native_claim_GetOutcome(result.claim) == META_FETCHER_OUTCOME_NO_MATCH);
+    vlc_metadata_native_claim_Release(result.claim); job_clear(&job);
+    vlc_metadata_native_provider_Delete(provider);
+    puts("PASS: failed and cancelled outcomes recover admission slots");
+}
 int main(void)
 {
     const char *arguments[] = {"--ignore-config", "--quiet", "--no-media-library",
@@ -287,6 +388,9 @@ int main(void)
     vlc_object_t *object = VLC_OBJECT(instance->p_libvlc_int);
     ordinary_claims(object); restricted_admission(object); result_admission(object);
     close_and_quota(object); listed_before_submit(object); callback_drain(object);
-    assert(fetchers_deleted == 18); libvlc_release(instance);
+    assert(fetchers_deleted == 18);
+    closed_typed_outcomes(object); retained_inline_receipts_keep_the_admission_slot(object);
+    failed_and_cancelled_outcomes_release_the_slot(object);
+    assert(fetchers_deleted == fetchers_created); libvlc_release(instance);
     return 0;
 }

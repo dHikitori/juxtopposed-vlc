@@ -44,6 +44,7 @@ struct vlc_object_internals
     /* Object resources */
     struct vlc_res *resources;
     struct vlc_input_policy *input_policy;
+    struct vlc_stream_observer *stream_observer;
 };
 
 # define vlc_internals(o) ((o)->priv)

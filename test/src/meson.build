@@ -1099,3 +1099,17 @@ vlc_tests += {
     'link_args': ['-Wl,--gc-sections'],
     'enabled': host_system == 'linux',
 }
+
+
+if z_dep.found()
+    vlc_tests += {
+        'name': 'test_src_input_stream_observer',
+        'sources': files('input/stream_observer.c',
+                         '../modules/lua/meta_art_prefetch.c',
+                         '../modules/lua/meta_art_inflate.c'),
+        'suite': ['src', 'test_src', 'addons'],
+        'link_with': [libvlc, libvlccore],
+        'dependencies': [z_dep],
+        'timeout': 90,
+    }
+endif

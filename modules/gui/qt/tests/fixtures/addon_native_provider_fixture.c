@@ -67,6 +67,15 @@ int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
     }
     return VLC_SUCCESS;
 }
+/* This fixture supports positive probes only. The outcome API returns an
+ * explicit refusal and does not call its callback. It supplies no evidence
+ * for a negative artwork result. */
+int input_fetcher_ProbeOutcome(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t family, input_fetcher_probe_outcome_cb callback, void *opaque)
+{
+    (void)fetcher; (void)job; (void)family; (void)callback; (void)opaque;
+    return VLC_ENOTSUP;
+}
 static size_t finish(input_fetcher_t *fetcher, const void *key, int status)
 {
     struct pending values[32]; unsigned count = 0;

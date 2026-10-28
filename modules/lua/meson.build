@@ -19,6 +19,7 @@ lua_sources = files(
     'intf.c',
     'meta.c',
     'meta_selector.h',
+    'meta_outcome.h',
     'stream_filter.c',
     'services_discovery.c',
     'vlc.c',

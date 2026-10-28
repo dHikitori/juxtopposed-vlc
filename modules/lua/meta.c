@@ -35,6 +35,8 @@
 #include "vlc.h"
 #include "libs.h"
 #include "meta_selector.h"
+#include "meta_outcome.h"
+#include "../../src/input/stream_observer.h"
 #include <vlc_configuration.h>
 
 /*****************************************************************************
@@ -73,6 +75,8 @@ static lua_State *init(vlc_object_t *p_this, input_item_t *p_item, bool artwork)
     static const luaL_Reg p_reg[] = { { NULL, NULL } };
     luaL_register_namespace( L, "vlc", p_reg );
 
+    if (artwork) vlclua_metadata_io_watch(L);
+
     luaopen_msg( L );
     if (artwork) { luaopen_stream(L); luaopen_strings(L); }
     luaopen_input_item( L, p_item );
@@ -94,7 +98,7 @@ static bool selected_script(const char *filename, meta_fetcher_provider_t provid
  *****************************************************************************/
 static int run( vlc_object_t *p_this, const char * psz_filename,
                 lua_State * L, const char *luafunction,
-                const luabatch_context_t *p_context )
+                const luabatch_context_t *p_context, int results )
 {
     /* Ugly hack to delete previous versions of the fetchart()
      * functions. */
@@ -126,6 +130,7 @@ static int run( vlc_object_t *p_this, const char * psz_filename,
     if ( p_context && p_context->pf_validator && !p_context->pf_validator( p_context, e_scope ) )
     {
         msg_Dbg( p_this, "skipping script (unmatched scope) %s", psz_filename );
+        if (p_context->p_outcome != NULL) *p_context->p_outcome = META_FETCHER_OUTCOME_DENIED;
         goto error;
     }
 
@@ -138,7 +143,7 @@ static int run( vlc_object_t *p_this, const char * psz_filename,
         goto error;
     }
 
-    if( lua_pcall( L, 0, 1, 0 ) )
+    if( lua_pcall( L, 0, results, 0 ) )
     {
         msg_Warn( p_this, "Error while running script %s, "
                  "function %s(): %s", psz_filename, luafunction,
@@ -148,6 +153,9 @@ static int run( vlc_object_t *p_this, const char * psz_filename,
     return VLC_SUCCESS;
 
 error:
+    if (p_context != NULL && p_context->p_outcome != NULL
+        && *p_context->p_outcome != META_FETCHER_OUTCOME_DENIED)
+        *p_context->p_outcome = META_FETCHER_OUTCOME_ERROR;
     lua_pop( L, 1 );
     return VLC_EGENERIC;
 }
@@ -165,18 +173,28 @@ static bool validate_scope( const luabatch_context_t *p_context, meta_fetcher_sc
 static int fetch_art( vlc_object_t *p_this, const char * psz_filename,
                       const luabatch_context_t *p_context )
 {
-    if (p_context->e_scope != FETCHER_SCOPE_NETWORK && p_context->e_scope != FETCHER_SCOPE_ANY) return VLC_EGENERIC;
+    if (p_context->e_scope != FETCHER_SCOPE_NETWORK && p_context->e_scope != FETCHER_SCOPE_ANY) {
+        if (p_context->p_outcome != NULL) *p_context->p_outcome = META_FETCHER_OUTCOME_DENIED;
+        return VLC_EGENERIC;
+    }
     if (!selected_script(psz_filename, p_context->e_provider, false)) return VLC_EGENERIC;
     lua_State *L = init(p_this, p_context->p_item, true);
     if( !L )
+    {
+        if (p_context->p_outcome != NULL) *p_context->p_outcome = META_FETCHER_OUTCOME_ERROR;
         return VLC_EGENERIC;
+    }
 
-    int i_ret = run(p_this, psz_filename, L, "fetch_art", p_context);
+    int i_ret = run(p_this, psz_filename, L, "fetch_art", p_context, 2);
     if(i_ret != VLC_SUCCESS)
     {
         lua_close( L );
         return i_ret;
     }
+
+    if (p_context->p_outcome != NULL)
+        *p_context->p_outcome = vlclua_metadata_art_outcome(L, -2, -1);
+    lua_pop(L, 1);
 
     if(lua_gettop(L) == 0)
     {
@@ -223,7 +241,7 @@ static int read_meta( vlc_object_t *p_this, const char * psz_filename,
     if( !L )
         return VLC_EGENERIC;
 
-    int i_ret = run(p_this, psz_filename, L, "read_meta", NULL);
+    int i_ret = run(p_this, psz_filename, L, "read_meta", NULL, 1);
     lua_close( L );
 
     // Continue even if an error occurred: all "meta reader" are always run.
@@ -261,12 +279,36 @@ int FetchMeta( meta_fetcher_t *p_finder )
  *****************************************************************************/
 int FindArt( meta_fetcher_t *p_finder )
 {
-    if( lua_Disabled( p_finder ) || p_finder->e_provider == META_FETCHER_PROVIDER_NONE )
+    p_finder->e_outcome = META_FETCHER_OUTCOME_UNKNOWN;
+    if( lua_Disabled( p_finder ) ) {
+        p_finder->e_outcome = META_FETCHER_OUTCOME_UNAVAILABLE;
         return VLC_EGENERIC;
+    }
+    if (p_finder->e_provider == META_FETCHER_PROVIDER_NONE) {
+        p_finder->e_outcome = META_FETCHER_OUTCOME_DENIED;
+        return VLC_EGENERIC;
+    }
 
     luabatch_context_t context = {.p_item=p_finder->p_item, .e_scope=p_finder->e_scope,
-        .pf_validator=validate_scope, .e_provider=p_finder->e_provider};
+        .pf_validator=validate_scope, .e_provider=p_finder->e_provider,
+        .p_outcome=&p_finder->e_outcome};
 
-    return vlclua_scripts_batch_execute( VLC_OBJECT(p_finder), "meta"DIR_SEP"art",
-                                         &fetch_art, (void*)&context );
+    /* The scope is installed before a constructor can probe or start prefetch.
+     * Allocation failure only removes negative evidence; it does not change
+     * the first URL/nil result or prevent the legacy lookup. */
+    vlc_stream_observer_t *observer = vlc_stream_observer_New();
+    const bool watched = observer != NULL
+        && vlc_stream_observer_AttachObject(VLC_OBJECT(p_finder), observer) == VLC_SUCCESS;
+    const int result = vlclua_scripts_batch_execute(VLC_OBJECT(p_finder),
+        "meta"DIR_SEP"art", &fetch_art, (void*)&context);
+    /* Each VM has closed here. Stream destruction joins the prefetch worker.
+     * No observer lock was held across a module or Lua callback. */
+    if (p_finder->e_outcome == META_FETCHER_OUTCOME_NO_MATCH
+        || p_finder->e_outcome == META_FETCHER_OUTCOME_NOT_APPLICABLE) {
+        const bool no_io = p_finder->e_outcome == META_FETCHER_OUTCOME_NOT_APPLICABLE;
+        if (!watched || !vlc_stream_observer_Seal(observer, no_io))
+            p_finder->e_outcome = META_FETCHER_OUTCOME_UNAVAILABLE;
+    } else vlc_stream_observer_Close(observer);
+    vlc_stream_observer_Release(observer);
+    return result;
 }

@@ -88,6 +88,11 @@ if (get_option('tests').allowed())
     test('http_h2conn_test', h2conn_test, suite: 'http')
     test('http_h1conn_test', h1conn_test, suite: 'http')
     test('http_h1chunked_test', h1chunked_test, suite: 'http')
+    http_chunked_witness_test = executable('http_chunked_witness_test',
+        files('chunked_witness_test.c'),
+        link_with: vlc_http_lib,
+        include_directories: [vlc_include_dirs])
+    test('http_chunked_witness_test', http_chunked_witness_test, suite: 'http')
     test('http_msg_test', http_msg_test, suite: 'http')
     test('http_file_test', http_file_test, suite: 'http')
     test('http_tunnel_test', http_tunnel_test, suite: 'http', timeout: 90)

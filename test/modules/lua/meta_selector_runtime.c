@@ -4,6 +4,7 @@
 #endif
 #undef NDEBUG
 #include <vlc_common.h>
+#include <vlc_block.h>
 #include <vlc_configuration.h>
 #include <vlc_fs.h>
 #include <vlc_input_item.h>
@@ -16,7 +17,9 @@
 #include <vlc_modules.h>
 #include <vlc/vlc.h>
 #include "../../../lib/libvlc_internal.h"
+#include "../../../src/input/stream_observer.h"
 #include <assert.h>
+extern unsigned metadata_consume_decline_calls;
 #ifndef _WIN32
 #include <sys/stat.h>
 #include <unistd.h>
@@ -98,6 +101,95 @@ static void fetch_probe(libvlc_instance_t *instance, meta_fetcher_provider_t pro
     assert(module == NULL); no_unselected(finder->p_item);
     input_item_Release(finder->p_item); vlc_object_delete(finder);
 }
+static void native_outcome_case(libvlc_instance_t *instance, const char *path,
+    const char *value, const char *outcome, bool failure, meta_fetcher_scope_t scope,
+    meta_fetcher_outcome_t expected, bool legacy_success)
+{
+    FILE *file = vlc_fopen(path, "wb"); assert(file != NULL);
+    fputs("function descriptor() return {scope='network'} end\nfunction fetch_art()\n", file);
+    if (failure) fputs("error('Fixture execution failure')\n", file);
+    else {
+        fputs("return ", file);
+        if (value != NULL) quoted(file, value); else fputs("nil", file);
+        fputs(", ", file);
+        if (outcome != NULL) quoted(file, outcome); else fputs("nil", file);
+        fputc('\n', file);
+    }
+    fputs("end\n", file); assert(fclose(file) == 0);
+    meta_fetcher_t *finder = vlc_object_create(VLC_OBJECT(instance->p_libvlc_int), sizeof(*finder)); assert(finder);
+    finder->p_item = input_item_New("file:///fixture/song.flac", "Song"); assert(finder->p_item);
+    finder->e_provider = META_FETCHER_PROVIDER_MUSICBRAINZ; finder->e_scope = scope;
+    finder->e_outcome = META_FETCHER_OUTCOME_UNKNOWN;
+    module_t *module = module_need(finder, "art finder", "lua-metadata-provider", true);
+    assert((module != NULL) == legacy_success);
+    if (module != NULL) module_unneed(finder, module);
+    assert(finder->e_outcome == expected);
+    field(finder->p_item, vlc_meta_ArtworkURL, legacy_success ? value : NULL);
+    input_item_Release(finder->p_item); vlc_object_delete(finder);
+}
+static void native_outcome_results(libvlc_instance_t *instance, const char *path)
+{
+    native_outcome_case(instance, path, "https://art.example/image.png", "match", false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_MATCH, true);
+    native_outcome_case(instance, path, "https://art.example/image.png", NULL, false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_MATCH, true);
+    native_outcome_case(instance, path, NULL, "no_match", false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_NO_MATCH, false);
+    native_outcome_case(instance, path, NULL, "not_applicable", false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_NOT_APPLICABLE, false);
+    native_outcome_case(instance, path, NULL, "unavailable", false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_UNAVAILABLE, false);
+    native_outcome_case(instance, path, NULL, "denied", false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_DENIED, false);
+    native_outcome_case(instance, path, NULL, NULL, false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_UNKNOWN, false);
+    native_outcome_case(instance, path, NULL, "NO_MATCH", false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_ERROR, false);
+    native_outcome_case(instance, path, "https://art.example/image.png", "no_match", false,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_ERROR, true);
+    native_outcome_case(instance, path, NULL, NULL, true,
+        FETCHER_SCOPE_NETWORK, META_FETCHER_OUTCOME_ERROR, false);
+    native_outcome_case(instance, path, "https://art.example/image.png", "match", false,
+        FETCHER_SCOPE_LOCAL, META_FETCHER_OUTCOME_DENIED, false);
+    script(path, "system_musicbrainz", "file:///system-selected.png", false);
+}
+static void native_io_case(libvlc_instance_t *instance, const char *path,
+                           const char *body, meta_fetcher_outcome_t expected, bool match)
+{
+    FILE *file = vlc_fopen(path, "wb"); assert(file != NULL);
+    fputs("function descriptor() return {scope='network'} end\nfunction fetch_art()\n", file);
+    fputs(body, file); fputs("\nend\n", file); assert(fclose(file) == 0);
+    meta_fetcher_t *finder = vlc_object_create(VLC_OBJECT(instance->p_libvlc_int), sizeof(*finder)); assert(finder);
+    finder->p_item = input_item_New("file:///fixture/song.flac", "Song"); assert(finder->p_item);
+    finder->e_provider = META_FETCHER_PROVIDER_MUSICBRAINZ; finder->e_scope = FETCHER_SCOPE_NETWORK;
+    finder->e_outcome = META_FETCHER_OUTCOME_UNKNOWN;
+    module_t *module = module_need(finder, "art finder", "lua-metadata-provider", true);
+    assert((module != NULL) == match);
+    if (module != NULL) module_unneed(finder, module);
+    assert(finder->e_outcome == expected);
+    field(finder->p_item, vlc_meta_ArtworkURL, match ? "https://art.example/image.png" : NULL);
+    input_item_Release(finder->p_item); vlc_object_delete(finder);
+}
+static void native_io_outcomes(libvlc_instance_t *instance, const char *path)
+{
+    native_io_case(instance, path,
+        "local s=vlc.stream('hakone-native-io-fixture-missing://resource')\n"
+        "assert(s==nil)\nreturn nil,'no_match'", META_FETCHER_OUTCOME_UNAVAILABLE, false);
+    native_io_case(instance, path,
+        "local s=vlc.memory_stream('empty')\nassert(s:read(64)=='empty')\nreturn nil,'no_match'",
+        META_FETCHER_OUTCOME_NO_MATCH, false);
+    native_io_case(instance, path,
+        "local s=vlc.memory_stream('empty-tail')\nassert(s:read(5)=='empty')\nreturn nil,'no_match'",
+        META_FETCHER_OUTCOME_UNAVAILABLE, false);
+    native_io_case(instance, path,
+        "local s=vlc.memory_stream('empty')\nassert(s:read(64)=='empty')\nreturn nil,'not_applicable'",
+        META_FETCHER_OUTCOME_UNAVAILABLE, false);
+    native_io_case(instance, path,
+        "local s=vlc.stream('hakone-native-io-fixture-missing://resource')\n"
+        "assert(s==nil)\nreturn 'https://art.example/image.png','match'",
+        META_FETCHER_OUTCOME_MATCH, true);
+    script(path, "system_musicbrainz", "file:///system-selected.png", false);
+}
 static input_item_t *reader_probe(libvlc_instance_t *instance, const char *uri, const char *title, bool restricted)
 {
     demux_meta_t *reader = vlc_object_create(VLC_OBJECT(instance->p_libvlc_int), sizeof(*reader)); assert(reader != NULL);
@@ -166,6 +258,89 @@ static void playlist_probe(libvlc_instance_t *instance, const char *script_path,
     if (parent != ancestor) vlc_object_delete(parent);
     vlc_object_delete(ancestor); vlc_input_policy_Release(policy);
 }
+static void filter_profile_probe(libvlc_instance_t *instance, const char *name,
+                                  bool selected, bool accepted, bool consumed_decline)
+{
+    vlc_object_t *parent = vlc_object_create(VLC_OBJECT(instance->p_libvlc_int), sizeof(*parent));
+    assert(parent != NULL);
+    vlc_stream_observer_t *observer = vlc_stream_observer_New();
+    assert(observer != NULL);
+    assert(vlc_stream_observer_AttachObject(parent, observer) == VLC_SUCCESS);
+    uint8_t data[] = "xempty";
+    stream_t *source = vlc_stream_MemoryNew(parent, consumed_decline ? data : data + 1,
+                                           consumed_decline ? 6 : 5, true);
+    assert(source != NULL);
+    const unsigned probe_calls = metadata_consume_decline_calls;
+    stream_t *filter = vlc_stream_FilterNew(source, name);
+    assert((filter != NULL) == selected);
+    if (consumed_decline) assert(metadata_consume_decline_calls == probe_calls + 1);
+    stream_t *output = filter != NULL ? filter : source;
+    char bytes[64];
+    assert(vlc_stream_Read(output, bytes, sizeof(bytes)) == 5);
+    assert(!memcmp(bytes, "empty", 5));
+    vlc_stream_Delete(output);
+    assert(vlc_stream_observer_Seal(observer, false) == accepted);
+    vlc_stream_observer_Release(observer);
+    vlc_object_delete(parent);
+}
+
+struct block_profile_source { bool sent, error_sent, fail; };
+static block_t *block_profile_read(stream_t *stream, bool *eof)
+{
+    struct block_profile_source *source = stream->p_sys;
+    if (!source->sent) {
+        source->sent = true;
+        block_t *block = block_Alloc(5);
+        assert(block != NULL);
+        memcpy(block->p_buffer, "empty", 5);
+        return block;
+    }
+    if (source->fail && !source->error_sent) {
+        source->error_sent = true;
+        return NULL; /* Preserve block error: no EOF flag. */
+    }
+    *eof = true;
+    return NULL;
+}
+static int block_profile_control(stream_t *stream, int query, va_list args)
+{
+    (void)stream;
+    switch (query) {
+        case STREAM_CAN_SEEK:
+        case STREAM_CAN_FASTSEEK:
+        case STREAM_CAN_PAUSE:
+        case STREAM_CAN_CONTROL_PACE:
+            *va_arg(args, bool *) = false;
+            return VLC_SUCCESS;
+        default:
+            return VLC_EGENERIC;
+    }
+}
+static void block_profile_destroy(stream_t *stream) { (void)stream; }
+static void block_cache_profile(libvlc_instance_t *instance, bool error)
+{
+    vlc_object_t *parent = vlc_object_create(VLC_OBJECT(instance->p_libvlc_int), sizeof(*parent));
+    assert(parent != NULL);
+    vlc_stream_observer_t *observer = vlc_stream_observer_New();
+    assert(observer != NULL);
+    assert(vlc_stream_observer_AttachObject(parent, observer) == VLC_SUCCESS);
+    struct block_profile_source state = {.fail=error};
+    stream_t *source = vlc_stream_CommonNew(parent, block_profile_destroy);
+    assert(source != NULL);
+    source->p_sys = &state;
+    source->pf_block = block_profile_read;
+    source->pf_control = block_profile_control;
+    stream_t *cache = vlc_stream_FilterNew(source, "cache");
+    assert(cache != NULL);
+    char bytes[64];
+    assert(vlc_stream_Read(cache, bytes, sizeof(bytes)) == 5);
+    assert(!memcmp(bytes, "empty", 5));
+    vlc_stream_Delete(cache);
+    assert(vlc_stream_observer_Seal(observer, false) == !error);
+    vlc_stream_observer_Release(observer);
+    vlc_object_delete(parent);
+}
+
 int main(void)
 {
     char root[] = "/tmp/vlc-meta-selector-XXXXXX"; assert(mkdtemp(root) != NULL);
@@ -208,6 +383,14 @@ int main(void)
     assert(!art_probe(instance, META_FETCHER_PROVIDER_ANY, FETCHER_SCOPE_LOCAL, NULL, NULL));
     assert(!art_probe(instance, (meta_fetcher_provider_t)999, FETCHER_SCOPE_NETWORK, NULL, NULL));
     fetch_probe(instance, META_FETCHER_PROVIDER_ANY); fetch_probe(instance, META_FETCHER_PROVIDER_MUSICBRAINZ);
+    native_outcome_results(instance, files[0]);
+    native_io_outcomes(instance, files[0]);
+    filter_profile_probe(instance, "inflate", false, true, false); /* Real Peek-only decline. */
+    filter_profile_probe(instance, "cache", true, true, false); /* Prebuffer consumes source. */
+    filter_profile_probe(instance, "record", true, false, false); /* Bytes stay, proof is refused. */
+    filter_profile_probe(instance, "metadata_consume_decline_fixture,cache", true, false, true);
+    block_cache_profile(instance, false);
+    block_cache_profile(instance, true);
     input_item_t *item = reader_probe(instance, "file:///fixture/Show.Name.S01E12.avi", NULL, true); input_item_Release(item);
     copy_file(TOP_SRCDIR "/share/lua/meta/reader/filename.lua", files[6]);
     filename_probe(instance, "file:///fixture/Show.Name.S01E12-blah.avi", NULL, "Show Name S01E12", "Show Name", "01", "12");

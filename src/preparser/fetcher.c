@@ -73,6 +73,8 @@ struct task {
     vlc_metadata_pipeline_stage_t *local;
     vlc_metadata_job_t *job;
     input_fetcher_probe_cb probe;
+    input_fetcher_probe_outcome_cb probe_outcome;
+    meta_fetcher_outcome_t outcome;
     vlc_metadata_legacy_t *legacy;
     bool legacy_running, interrupt_attached, listed, retained;
     atomic_bool cancelled;
@@ -114,7 +116,7 @@ TaskNew(input_fetcher_t *fetcher, vlc_executor_t *executor, input_item_t *item,
         int options, const input_fetcher_callbacks_t *cbs, void *userdata,
         const void *key, enum fetch_mode mode, meta_fetcher_provider_t provider,
         vlc_metadata_pipeline_stage_t *local, vlc_metadata_job_t *job,
-        input_fetcher_probe_cb probe, int *status)
+        input_fetcher_probe_cb probe, input_fetcher_probe_outcome_cb probe_outcome, int *status)
 {
     struct task *task = calloc(1, sizeof(*task));
     if (!task) { *status = VLC_ENOMEM; return NULL; }
@@ -135,6 +137,7 @@ TaskNew(input_fetcher_t *fetcher, vlc_executor_t *executor, input_item_t *item,
     task->local = local != NULL ? vlc_metadata_pipeline_stage_Hold(local) : NULL;
     task->job = job != NULL ? vlc_metadata_job_Hold(job) : NULL;
     task->probe = probe;
+    task->probe_outcome = probe_outcome;
 
     vlc_interrupt_init(&task->interrupt);
 
@@ -183,11 +186,11 @@ Submit(input_fetcher_t *fetcher, vlc_executor_t *executor, input_item_t *item,
        int options, const input_fetcher_callbacks_t *cbs, void *userdata,
        const void *key, enum fetch_mode mode, meta_fetcher_provider_t provider,
        vlc_metadata_pipeline_stage_t *local, vlc_metadata_job_t *job,
-       input_fetcher_probe_cb probe, struct task *parent)
+       input_fetcher_probe_cb probe, input_fetcher_probe_outcome_cb probe_outcome, struct task *parent)
 {
     int status;
     struct task *task =
-        TaskNew(fetcher, executor, item, options, cbs, userdata, key, mode, provider, local, job, probe, &status);
+        TaskNew(fetcher, executor, item, options, cbs, userdata, key, mode, provider, local, job, probe, probe_outcome, &status);
     if (!task)
         return status;
 
@@ -293,8 +296,15 @@ static int InvokeModule(struct task *task, int scope, const char *type)
     meta_fetcher_t *mf = vlc_custom_create(task->fetcher->owner, sizeof(*mf), type);
     if (mf == NULL) return VLC_ENOMEM;
     mf->e_scope = scope; mf->e_provider = task->provider; mf->p_item = task->item;
+    mf->e_outcome = META_FETCHER_OUTCOME_UNKNOWN;
     const bool named = task->mode == FETCH_NAMED_PROVIDER;
     module_t *module = module_need(mf, type, named ? "lua-metadata-provider" : NULL, named);
+    if (named) {
+        task->outcome = mf->e_outcome >= META_FETCHER_OUTCOME_UNKNOWN
+            && mf->e_outcome <= META_FETCHER_OUTCOME_ERROR ? mf->e_outcome : META_FETCHER_OUTCOME_ERROR;
+        if (module == NULL && task->outcome == META_FETCHER_OUTCOME_UNKNOWN)
+            task->outcome = META_FETCHER_OUTCOME_UNAVAILABLE;
+    }
     if (module != NULL) module_unneed(mf, module);
     vlc_object_delete(mf);
     return module != NULL ? VLC_SUCCESS : VLC_EGENERIC;
@@ -340,8 +350,9 @@ static void TaskLeave(struct task *task)
 
 static void NotifyArtFetchEnded(struct task *task, bool fetched, int status)
 {
-    if (!TaskCurrent(task)) { fetched = false; status = -EINTR; }
-    if (task->probe != NULL) task->probe(task->item, status, task->userdata);
+    if (!TaskCurrent(task)) { fetched = false; status = -EINTR; task->outcome = META_FETCHER_OUTCOME_UNKNOWN; }
+    if (task->probe_outcome != NULL) task->probe_outcome(task->item, status, task->outcome, task->userdata);
+    else if (task->probe != NULL) task->probe(task->item, status, task->userdata);
     else if (task->mode == FETCH_OWNED_LOCAL) vlc_metadata_pipeline_stage_Done(task->local, status);
     else if (task->cbs != NULL && task->cbs->on_art_fetch_ended != NULL)
         task->cbs->on_art_fetch_ended(task->item, fetched, task->userdata);
@@ -352,7 +363,7 @@ static void TaskFinish(struct task *task, vlc_executor_t *next, bool fetched, in
     TaskLeave(task);
     if (next != NULL) {
         status = Submit(task->fetcher, next, task->item, task->options, task->cbs, task->userdata,
-            task->key, task->mode, task->provider, task->local, task->job, task->probe, task);
+            task->key, task->mode, task->provider, task->local, task->job, task->probe, task->probe_outcome, task);
         if (status == VLC_SUCCESS) {
             FetcherRemoveTask(task->fetcher, task); TaskDelete(task); return;
         }
@@ -438,7 +449,9 @@ static void RunSearchNetwork(void *userdata)
             const struct vlc_metadata_request *request = vlc_metadata_job_GetRequest(task->job);
             if (!(request->flags & VLC_METADATA_REQUEST_NETWORK)
                 || !var_InheritBool(task->fetcher->owner, "metadata-network-access")
-                || vlc_artwork_item_IsRestricted(task->item)) status = -EACCES;
+                || vlc_artwork_item_IsRestricted(task->item)) {
+                status = -EACCES; task->outcome = META_FETCHER_OUTCOME_DENIED;
+            }
             else {
                 status = InvokeModule(task, FETCHER_SCOPE_NETWORK, "art finder");
                 if (status == VLC_SUCCESS && CheckArt(task->item)) status = VLC_ENOENT;
@@ -527,7 +540,7 @@ int input_fetcher_Push(input_fetcher_t* fetcher, input_item_t* item,
                              : fetcher->executor_network;
 
     return Submit(fetcher, executor, item, options, cbs, cbs_userdata, cbs_userdata,
-        FETCH_LEGACY, META_FETCHER_PROVIDER_ANY, NULL, NULL, NULL, NULL);
+        FETCH_LEGACY, META_FETCHER_PROVIDER_ANY, NULL, NULL, NULL, NULL, NULL);
 }
 
 int input_fetcher_PushLocal(input_fetcher_t *fetcher, vlc_metadata_pipeline_stage_t *stage)
@@ -535,7 +548,7 @@ int input_fetcher_PushLocal(input_fetcher_t *fetcher, vlc_metadata_pipeline_stag
     if (fetcher == NULL || stage == NULL || fetcher->executor_local == NULL) return VLC_EINVAL;
     return Submit(fetcher, fetcher->executor_local, vlc_metadata_pipeline_stage_GetItem(stage),
         VLC_PREPARSER_TYPE_FETCHMETA_LOCAL, NULL, NULL, stage, FETCH_OWNED_LOCAL,
-        META_FETCHER_PROVIDER_NONE, stage, NULL, NULL, NULL);
+        META_FETCHER_PROVIDER_NONE, stage, NULL, NULL, NULL, NULL);
 }
 
 int input_fetcher_PushNative(input_fetcher_t *fetcher, vlc_metadata_pipeline_stage_t *stage,
@@ -551,13 +564,14 @@ int input_fetcher_PushNative(input_fetcher_t *fetcher, vlc_metadata_pipeline_sta
         legacy ? VLC_PREPARSER_TYPE_FETCHMETA_NET : VLC_PREPARSER_TYPE_FETCHMETA_LOCAL,
         NULL, userdata, stage, legacy ? FETCH_LEGACY : FETCH_OWNED_LOCAL,
         legacy ? META_FETCHER_PROVIDER_ANY : META_FETCHER_PROVIDER_NONE,
-        stage, NULL, callback, NULL);
+        stage, NULL, callback, NULL, NULL);
 }
 
-int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
-    meta_fetcher_provider_t provider, input_fetcher_probe_cb callback, void *userdata)
+static int Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t provider, input_fetcher_probe_cb callback,
+    input_fetcher_probe_outcome_cb outcome, void *userdata)
 {
-    if (fetcher == NULL || job == NULL || callback == NULL || fetcher->executor_network == NULL
+    if (fetcher == NULL || job == NULL || (callback == NULL && outcome == NULL) || fetcher->executor_network == NULL
         || provider < META_FETCHER_PROVIDER_MUSICBRAINZ || provider > META_FETCHER_PROVIDER_LASTFM) return VLC_EINVAL;
     const struct vlc_metadata_request *request = vlc_metadata_job_GetRequest(job);
     if (!vlc_metadata_job_IsPending(job)) return -EINTR;
@@ -567,9 +581,16 @@ int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
     if (copy == NULL) return VLC_ENOMEM;
     input_item_SetArtURL(copy, NULL);
     const int status = Submit(fetcher, fetcher->executor_network, copy, VLC_PREPARSER_TYPE_FETCHMETA_NET,
-        NULL, userdata, job, FETCH_NAMED_PROVIDER, provider, NULL, job, callback, NULL);
+        NULL, userdata, job, FETCH_NAMED_PROVIDER, provider, NULL, job, callback, outcome, NULL);
     input_item_Release(copy); return status;
 }
+
+int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t provider, input_fetcher_probe_cb callback, void *userdata)
+{ return Probe(fetcher, job, provider, callback, NULL, userdata); }
+int input_fetcher_ProbeOutcome(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t provider, input_fetcher_probe_outcome_cb callback, void *userdata)
+{ return Probe(fetcher, job, provider, NULL, callback, userdata); }
 
 static size_t CancelTasks(input_fetcher_t *fetcher, const void *key, bool close)
 {

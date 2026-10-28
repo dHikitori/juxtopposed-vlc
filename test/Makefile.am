@@ -259,8 +259,13 @@ test_modules_lua_meta_selector_SOURCES = modules/lua/meta_selector.c
 test_modules_lua_meta_selector_LDADD = $(LIBVLCCORE)
 if BUILD_LUA
 check_PROGRAMS += test_modules_lua_meta_selector_runtime
-test_modules_lua_meta_selector_runtime_SOURCES = modules/lua/meta_selector_runtime.c
+test_modules_lua_meta_selector_runtime_SOURCES = modules/lua/meta_selector_runtime.c modules/lua/meta_art_filter_probe.c
 test_modules_lua_meta_selector_runtime_LDADD = $(LIBVLC) $(LIBVLCCORE)
+if HAVE_DARWIN
+test_modules_lua_meta_selector_runtime_LDFLAGS = $(AM_LDFLAGS) -Wl,-export_dynamic
+else
+test_modules_lua_meta_selector_runtime_LDFLAGS = $(AM_LDFLAGS) -Wl,--export-dynamic
+endif
 test_modules_lua_meta_selector_runtime_DEPENDENCIES = $(top_builddir)/share/lua/meta/reader/filename.luac
 test_modules_lua_meta_selector_runtime_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_FILENAME_LUAC="$(abs_top_builddir)/share/lua/meta/reader/filename.luac"
 $(top_builddir)/share/lua/meta/reader/filename.luac: $(top_srcdir)/share/lua/meta/reader/filename.lua
@@ -1149,3 +1154,30 @@ endif
 check_PROGRAMS += test_modules_demux_id3_meta
 test_modules_demux_id3_meta_SOURCES = modules/demux/id3_meta.c
 test_modules_demux_id3_meta_LDADD = $(LIBVLCCORE)
+
+
+EXTRA_DIST += modules/lua/art_outcomes.lua
+if HAVE_ZLIB
+check_PROGRAMS += test_src_input_stream_observer
+test_src_input_stream_observer_SOURCES = src/input/stream_observer.c modules/lua/meta_art_prefetch.c modules/lua/meta_art_inflate.c
+test_src_input_stream_observer_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_input_stream_observer_LDADD = $(LIBVLC) $(LIBVLCCORE) -lz
+endif
+if BUILD_LUA
+check_PROGRAMS += test_modules_lua_meta_art_outcome test_modules_lua_meta_art_scripts test_modules_lua_meta_art_stream
+test_modules_lua_meta_art_outcome_SOURCES = modules/lua/meta_art_outcome.c
+test_modules_lua_meta_art_outcome_CPPFLAGS = $(AM_CPPFLAGS) $(LUA_CFLAGS)
+test_modules_lua_meta_art_outcome_LDADD = $(LUA_LIBS)
+test_modules_lua_meta_art_scripts_SOURCES = modules/lua/meta_art_scripts.c
+test_modules_lua_meta_art_scripts_CPPFLAGS = $(AM_CPPFLAGS) $(LUA_CFLAGS)
+test_modules_lua_meta_art_scripts_LDADD = $(LUA_LIBS)
+test_modules_lua_meta_art_stream_SOURCES = modules/lua/meta_art_stream.c
+test_modules_lua_meta_art_stream_CPPFLAGS = $(AM_CPPFLAGS) $(LUA_CFLAGS) -I$(top_srcdir)/src
+test_modules_lua_meta_art_stream_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_modules_lua_meta_art_stream_LDADD = $(LIBVLC) $(LIBVLCCORE) $(LUA_LIBS)
+if HAVE_DARWIN
+test_modules_lua_meta_art_stream_LDFLAGS = $(AM_LDFLAGS) -Wl,-dead_strip
+else
+test_modules_lua_meta_art_stream_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+endif
+endif

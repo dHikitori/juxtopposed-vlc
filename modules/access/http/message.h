@@ -314,6 +314,9 @@ struct vlc_http_msg *vlc_http_msg_get_final(struct vlc_http_msg *) VLC_USED;
  * @retval vlc_http_error on fatal error
  */
 block_t *vlc_http_msg_read(struct vlc_http_msg *) VLC_USED;
+/* Keep the ordinary block/error/NULL result. complete is true only at a
+ * transport-validated terminal boundary. A missing witness refuses proof. */
+block_t *vlc_http_msg_read_outcome(struct vlc_http_msg *, bool *complete) VLC_USED;
 
 /**
  * Sends HTTP data.
@@ -378,6 +381,8 @@ struct vlc_http_stream_cbs
     ssize_t (*write)(struct vlc_http_stream *, const void *, size_t, bool eos);
     block_t *(*read)(struct vlc_http_stream *);
     void (*close)(struct vlc_http_stream *, bool abort);
+    /* A native terminal witness. Do not infer completion from NULL alone. */
+    bool (*is_complete)(struct vlc_http_stream *);
 };
 
 /** HTTP stream */
@@ -440,6 +445,11 @@ static inline ssize_t vlc_http_stream_write(struct vlc_http_stream *s,
 static inline block_t *vlc_http_stream_read(struct vlc_http_stream *s)
 {
     return s->cbs->read(s);
+}
+
+static inline bool vlc_http_stream_is_complete(struct vlc_http_stream *s)
+{
+    return s->cbs->is_complete != NULL && s->cbs->is_complete(s);
 }
 
 /**

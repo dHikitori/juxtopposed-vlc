@@ -368,6 +368,7 @@ libvlccore_la_SOURCES = \
 	input/item.h \
 	input/mrl_helpers.h \
 	input/stream.h \
+	input/stream_observer.c input/stream_observer.h \
 	input/input_internal.h \
 	input/input_interface.h \
 	input/vlm_internal.h \
@@ -743,7 +744,7 @@ test_interrupt_LDADD = $(LDADD) $(LIBS_libvlccore)
 test_jaro_winkler_SOURCES = test/jaro_winkler.c config/jaro_winkler.c
 test_list_SOURCES = test/list.c
 test_md5_SOURCES = test/md5.c
-test_objects_cxx_SOURCES = misc/objects_cxx_test.cpp misc/objects.c
+test_objects_cxx_SOURCES = misc/objects_cxx_test.cpp misc/objects.c input/stream_observer.c
 test_picture_pool_SOURCES = test/picture_pool.c
 test_sort_SOURCES = test/sort.c
 test_timer_SOURCES = test/timer.c

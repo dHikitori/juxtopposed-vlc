@@ -32,6 +32,16 @@ VLC_API void vlc_metadata_native_provider_Delete(vlc_metadata_native_provider_t 
 typedef void (*vlc_metadata_native_probe_cb)(vlc_metadata_native_claim_t *, int, void *);
 VLC_API int vlc_metadata_native_provider_Probe(vlc_metadata_native_provider_t *,
     vlc_metadata_job_t *, meta_fetcher_provider_t, vlc_metadata_native_probe_cb, void *);
+/* Return a sealed native outcome through the same borrowed callback contract.
+ * A completed lookup has status VLC_SUCCESS and a receipt, including a negative
+ * lookup or a lookup failure. Read GetOutcome and check MatchesJob before use.
+ * Allocation, cancellation, Close, or a stale snapshot has no usable receipt.
+ * Only MATCH has an artwork address. The old Probe remains positive-only.
+ * One of 32 slots remains held through the final receipt reference. Delete
+ * drains active probes and callbacks; it does not wait for closed receipts.
+ */
+VLC_API int vlc_metadata_native_provider_ProbeOutcome(vlc_metadata_native_provider_t *,
+    vlc_metadata_job_t *, meta_fetcher_provider_t, vlc_metadata_native_probe_cb, void *);
 VLC_API void vlc_metadata_native_provider_Cancel(vlc_metadata_native_provider_t *, vlc_metadata_job_t *);
 
 /* Only the trusted native image adapter can consume this sealed claim. These
@@ -46,6 +56,7 @@ VLC_API vlc_metadata_native_claim_t *vlc_metadata_native_claim_Hold(vlc_metadata
 VLC_API void vlc_metadata_native_claim_Release(vlc_metadata_native_claim_t *);
 VLC_API meta_fetcher_provider_t vlc_metadata_native_claim_GetFamily(const vlc_metadata_native_claim_t *);
 VLC_API const char *vlc_metadata_native_claim_GetArtworkURI(const vlc_metadata_native_claim_t *);
+VLC_API meta_fetcher_outcome_t vlc_metadata_native_claim_GetOutcome(const vlc_metadata_native_claim_t *);
 VLC_API bool vlc_metadata_native_claim_MatchesJob(const vlc_metadata_native_claim_t *, vlc_metadata_job_t *);
 
 #ifdef __cplusplus

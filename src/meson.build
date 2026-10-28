@@ -224,6 +224,8 @@ libvlccore_sources_base = files(
     'input/item.h',
     'input/mrl_helpers.h',
     'input/stream.h',
+    'input/stream_observer.c',
+    'input/stream_observer.h',
     'input/input_internal.h',
     'input/input_interface.h',
     'input/vlm_internal.h',

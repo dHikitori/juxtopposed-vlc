@@ -80,6 +80,17 @@ int vlc_http_file_seek(struct vlc_http_resource *file, uintmax_t offset);
  */
 block_t *vlc_http_file_read(struct vlc_http_resource *);
 
+enum vlc_http_file_read_outcome {
+    VLC_HTTP_FILE_DATA,
+    VLC_HTTP_FILE_COMPLETE,
+    VLC_HTTP_FILE_UNAVAILABLE,
+};
+/* Keep the old block/NULL return and retry behavior. Evidence is conservative:
+ * any error or automatic resume refuses it, including a recovered read. Clean
+ * unknown-length bodies need the parser's explicit terminal witness. */
+block_t *vlc_http_file_read_outcome(struct vlc_http_resource *,
+                                   enum vlc_http_file_read_outcome *);
+
 #define vlc_http_file_get_status vlc_http_res_get_status
 #define vlc_http_file_get_redirect vlc_http_res_get_redirect
 #define vlc_http_file_get_type vlc_http_res_get_type

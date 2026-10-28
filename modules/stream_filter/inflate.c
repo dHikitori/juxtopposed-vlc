@@ -29,6 +29,7 @@
 #include <vlc_common.h>
 #include <vlc_plugin.h>
 #include <vlc_stream.h>
+#include "../../src/input/stream_observer.h"
 
 typedef struct
 {
@@ -65,6 +66,7 @@ static ssize_t Read(stream_t *stream, void *buf, size_t buflen)
     if (sys->zstream.avail_in == 0)
     {
         msg_Err(stream, "unexpected end of stream");
+        vlc_stream_observer_FailObject(VLC_OBJECT(stream));
         return 0;
     }
 
@@ -73,9 +75,13 @@ static ssize_t Read(stream_t *stream, void *buf, size_t buflen)
     {
         case Z_STREAM_END:
             msg_Dbg(stream, "end of stream");
+            if (sys->zstream.avail_in != 0)
+                vlc_stream_observer_FailObject(VLC_OBJECT(stream));
             sys->eof = true;
             /* fall through */
         case Z_OK:
+            if (!sys->eof && buflen == sys->zstream.avail_out)
+                vlc_stream_observer_FailObject(VLC_OBJECT(stream));
             return buflen - sys->zstream.avail_out;
         case Z_DATA_ERROR:
             msg_Err(stream, "corrupt stream");

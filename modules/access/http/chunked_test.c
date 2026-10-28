@@ -140,8 +140,10 @@ static void test_good(void)
 
     b = vlc_http_stream_read(s);
     assert(b == NULL);
+    assert(vlc_http_stream_is_complete(s));
     b = vlc_http_stream_read(s);
     assert(b == NULL);
+    assert(vlc_http_stream_is_complete(s));
 
     vlc_http_stream_close(s, false);
 }
@@ -160,8 +162,10 @@ static void test_empty(void)
 
     b = vlc_http_stream_read(s);
     assert(b == NULL);
+    assert(!vlc_http_stream_is_complete(s));
     b = vlc_http_stream_read(s);
     assert(b == NULL);
+    assert(!vlc_http_stream_is_complete(s));
     vlc_http_stream_close(s, false);
 }
 
@@ -182,6 +186,7 @@ static void test_bad(const char *payload)
         assert(b != NULL);
         block_Release(b);
     }
+    assert(!vlc_http_stream_is_complete(s));
 
     vlc_http_stream_close(s, false);
 }

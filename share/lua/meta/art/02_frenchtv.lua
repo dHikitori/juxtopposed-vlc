@@ -24,6 +24,7 @@ end
 
 -- Return the artwork
 function fetch_art()
+    if vlc.item == nil then return nil, "not_applicable" end
     local urlsForChannel = {
         ["TF1"] = "https://upload.wikimedia.org/wikipedia/fr/thumb/7/77/TF1_(2013).svg/610px-TF1_(2013).svg.png",
         ["France 2"] = "https://upload.wikimedia.org/wikipedia/fr/thumb/e/e8/France_2_logo_antenne_(2008).png/270px-France_2_logo_antenne_(2008).png",
@@ -60,6 +61,7 @@ function fetch_art()
     else
         channel = meta["filename"]
     end
+    if type(channel) ~= "string" or channel == "" then return nil, "not_applicable" end
 
     -- Replace "France 2 HD" by "France 2"
     channel = string.gsub(channel, "^(.-)%sHD%s*$", "%1")
@@ -70,5 +72,7 @@ function fetch_art()
     -- trim
     channel = string.gsub(channel, "^%s*(.-)%s*$", "%1")
 
-    return urlsForChannel[channel]
+    local artwork = urlsForChannel[channel]
+    if artwork then return artwork, "match" end
+    return nil, "no_match"
 end

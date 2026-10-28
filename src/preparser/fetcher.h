@@ -83,6 +83,8 @@ int input_fetcher_PushLocal(input_fetcher_t *, vlc_metadata_pipeline_stage_t *);
  * as its key. It must accompany native job cancellation to stop active I/O.
  */
 typedef void (*input_fetcher_probe_cb)(input_item_t *, int status, void *);
+typedef void (*input_fetcher_probe_outcome_cb)(input_item_t *, int status,
+                                             meta_fetcher_outcome_t, void *);
 /* Run the preparser's native front stage without final publication. A legacy
  * stage requires the pipeline's never-owned decision and a separate private
  * copy. An owner transition discards that copy. The callback runs once after
@@ -91,6 +93,8 @@ int input_fetcher_PushNative(input_fetcher_t *, vlc_metadata_pipeline_stage_t *,
     input_item_t *, bool legacy, input_fetcher_probe_cb, void *);
 int input_fetcher_Probe(input_fetcher_t *, vlc_metadata_job_t *,
     meta_fetcher_provider_t, input_fetcher_probe_cb, void *);
+int input_fetcher_ProbeOutcome(input_fetcher_t *, vlc_metadata_job_t *,
+    meta_fetcher_provider_t, input_fetcher_probe_outcome_cb, void *);
 
 /* Pass NULL to cancel all requests. This method first latches cancellation and
  * detaches queued tasks. It then interrupts native I/O and calls callbacks

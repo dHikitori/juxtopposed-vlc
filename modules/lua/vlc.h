@@ -161,6 +161,7 @@ struct luabatch_context_t
     meta_fetcher_scope_t e_scope;
     bool (*pf_validator)( const luabatch_context_t *, meta_fetcher_scope_t );
     meta_fetcher_provider_t e_provider;
+    meta_fetcher_outcome_t *p_outcome;
 };
 
 int vlclua_scripts_batch_execute( vlc_object_t *p_this, const char * luadirname,
