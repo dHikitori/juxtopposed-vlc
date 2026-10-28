@@ -156,6 +156,10 @@ void AddonNativeMetadataOwner::cancel(const QString& invocation)
 void AddonNativeMetadataOwner::close()
 {
     if (m_closed) return;
+    // Revoke final publication before the native context or registration
+    // lifetime changes. This scope uses no Qt callback during the barrier.
+    const auto registration = m_service ? m_service->beginNativeOwnerRetirement(this)
+        : vlc::addons::MetadataRegistryMutation{};
     m_closed = true; m_ready = false;
     const auto service = m_service;
     const auto context = m_context;

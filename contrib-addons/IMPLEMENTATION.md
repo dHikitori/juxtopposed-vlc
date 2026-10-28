@@ -78,6 +78,14 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 ## Latest verified native checkpoint
 
+- The Service now places registration and owner changes behind the native
+  publication barrier. Its private capture keeps raw unavailable rows and
+  refuses foreign or expired plan owners. The complete current host/native
+  build passes 115 targeted normal cases. The same 83 Service/native-owner
+  cases pass focused sanitizer checks. The typed artwork runner and native
+  owner activation remain open. See
+  [the registration barrier](metadata-registration-barrier.md).
+
 - The memory-only Manager catalogue factory and native registration barrier
   are in the source. Their copied checks pass 32 normal and 32 focused
   sanitizer cases. A fresh applied-source build passes all 32 normal cases.

@@ -23,11 +23,20 @@
 #include "../../../../src/preparser/metadata_local.h"
 #include "addons/addon_artwork_assets.hpp"
 #include "addons/addon_metadata_service.hpp"
+#include "addons/addon_metadata_attempt.hpp"
 #include "addons/addon_native_artwork_assets.hpp"
 #include "addon_native_artwork_test_owner.hpp"
 #include "util/media_identity_vlc.hpp"
 
 namespace {
+class RegistrationAdmission final : public vlc::addons::AddonMetadataNativeAdmission
+{
+public:
+    bool current() const noexcept override { return live.load(); }
+    void revoke() noexcept override { live.store(false); ++revokes; }
+    std::atomic_bool live{true};
+    std::atomic_uint revokes{0};
+};
 QVariantMap identity()
 { return {{"kind", "movie"}, {"title", "Example Movie"}, {"year", 2020}, {"ids", QVariantMap{{"imdb", "tt1234567"}}}}; }
 QVariantMap provider(const QString& id = QStringLiteral("example/details"))
@@ -106,6 +115,118 @@ class TestAddonMetadataService : public QObject
 {
     Q_OBJECT
 private slots:
+    void registrationCaptureRetainsEveryBuiltinAndRefusesOtherThreads()
+    {
+        Fake fake; AddonMetadataService service(fake.backend()); QObject lifetime;
+        const auto id = QStringLiteral("hakone.builtin.capture/details");
+        auto descriptor = provider(id); descriptor.insert(QStringLiteral("configured"), false);
+        QVERIFY(service.registerBuiltinProvider(QStringLiteral("video.details"), descriptor, &lifetime,
+            [](const QString&, const QString&, const QVariantMap&) {}));
+        const auto capture = service.captureArtworkRegistrations(); QVERIFY(capture); QVERIFY(capture->token.current());
+        QCOMPARE(capture->builtins.size(), 1);
+        QCOMPARE(capture->builtins.first().descriptor.value(QStringLiteral("id")).toString(), id);
+        QVERIFY(!capture->builtins.first().descriptor.value(QStringLiteral("configured")).toBool());
+        QVERIFY(capture->builtins.first().available); QVERIFY(!capture->builtins.first().binding.isEmpty());
+        bool refused = false;
+        std::thread worker([&] { refused = !service.captureArtworkRegistrations(); }); worker.join();
+        QVERIFY(refused); QVERIFY(capture->token.current());
+    }
+    void registrationBarrierPrecedesPublication_data()
+    {
+        QTest::addColumn<int>("action");
+        const char* names[]{"replace", "remove", "lifetime", "set-plan", "clear-plan", "invalidate",
+            "artwork-adapter", "network-policy", "shutdown", "destruction"};
+        for (int i = 0; i != 10; ++i) QTest::newRow(names[i]) << i;
+    }
+    void registrationBarrierPrecedesPublication()
+    {
+        QFETCH(int, action);
+        Fake fake; auto lifetime = std::make_unique<QObject>();
+        vlc::addons::AddonStreamLifetime application;
+        auto gate = std::make_shared<RegistrationAdmission>();
+        vlc::addons::MetadataRegistryToken token;
+        AddonMetadataService* owner = nullptr; bool armed = false; int callbacks = 0;
+        auto backend = fake.backend();
+        const auto published = [&] {
+            if (!armed) return;
+            ++callbacks; QVERIFY(!token.current()); QVERIFY(!gate->current());
+            QVERIFY(!owner->captureArtworkRegistrations());
+        };
+        backend.registerBuiltin = [&](const QString&, const QVariantMap&) { published(); };
+        backend.unregisterBuiltin = [&](const QString&) { published(); };
+        auto service = std::make_unique<AddonMetadataService>(std::move(backend)); owner = service.get();
+        QVERIFY(service->bindApplicationLifetime(application.handle())); QVERIFY(service->reserveNativeOwner(lifetime.get()));
+        const auto id = QStringLiteral("hakone.builtin.barrier/details");
+        QVERIFY(service->registerBuiltinProvider(QStringLiteral("video.details"), provider(id), lifetime.get(),
+            [](const QString&, const QString&, const QVariantMap&) {}));
+        if (action == 4) service->setProviderPlan(lifetime.get(),
+            [](const QString&, const QString&, const QVariantList& rows, bool) { return rows; });
+        const auto capture = service->captureArtworkRegistrations(); QVERIFY(capture);
+        token = capture->token; QVERIFY(capture->registry->arm(token, gate)); armed = true;
+        switch (action) {
+        case 0: QVERIFY(service->registerBuiltinProvider(QStringLiteral("video.details"), provider(id), lifetime.get(),
+            [](const QString&, const QString&, const QVariantMap&) {})); break;
+        case 1: service->unregisterBuiltinProvider(id); break;
+        case 2: lifetime.reset(); break;
+        case 3: service->setProviderPlan(lifetime.get(),
+            [](const QString&, const QString&, const QVariantList& rows, bool) { return rows; }); break;
+        case 4: service->clearProviderPlan(lifetime.get()); break;
+        case 5: service->invalidate(); break;
+        case 6: service->setArtworkAdapter({}, {}); break;
+        case 7: service->setAutomaticNetworkAllowed(true); break;
+        case 8: service->shutdown(); break;
+        case 9: service.reset(); break;
+        }
+        QVERIFY(!token.current()); QVERIFY(!gate->current()); QVERIFY(gate->revokes.load() > 0);
+        if (action <= 2 || action >= 8) QVERIFY(callbacks > 0);
+        if (service && action < 8) {
+            const auto fresh = service->captureArtworkRegistrations(); QVERIFY(fresh); QVERIFY(fresh->token.current());
+            QVERIFY(fresh->token.identity() != token.identity());
+        }
+        armed = false;
+    }
+    void privateCaptureRefusesForeignAndExpiredPlanOwners()
+    {
+        Fake fake; AddonMetadataService service(fake.backend());
+        vlc::addons::AddonStreamLifetime application; auto owner = std::make_unique<QObject>(); QObject foreign;
+        QVERIFY(service.bindApplicationLifetime(application.handle())); QVERIFY(service.reserveNativeOwner(owner.get()));
+        const auto plan = [](const QString&, const QString&, const QVariantList& rows, bool) { return rows; };
+        service.setProviderPlan(&foreign, plan); QVERIFY(!service.captureArtworkRegistrations());
+        service.setProviderPlan(owner.get(), plan); QVERIFY(service.captureArtworkRegistrations());
+        owner.reset(); QVERIFY(!service.captureArtworkRegistrations());
+    }
+    void unownedNativeBindingsRemainInTheRawCapture()
+    {
+        Fake fake; AddonMetadataService service(fake.backend()); QObject owner;
+        auto descriptor = provider(QStringLiteral("hakone.builtin.unowned/artwork"));
+        descriptor.insert(QStringLiteral("requiresNativeAnchor"), true);
+        QVERIFY(service.registerBuiltinProvider(QStringLiteral("artwork"), descriptor, &owner,
+            [](const QString&, const QString&, const QVariantMap&) {}));
+        const auto capture = service.captureArtworkRegistrations(); QVERIFY(capture); QCOMPARE(capture->builtins.size(), 1);
+        QVERIFY(!capture->builtins.first().available); QVERIFY(!capture->builtins.first().binding.isEmpty());
+        vlc::addons::AddonStreamLifetime application;
+        QVERIFY(service.bindApplicationLifetime(application.handle())); QVERIFY(service.reserveNativeOwner(&owner));
+        const auto owned = service.captureArtworkRegistrations(); QVERIFY(owned); QVERIFY(owned->builtins.first().available);
+        QVERIFY(!capture->token.current());
+    }
+    void nativeOwnerRetirementKeepsRegistrationCaptureClosed()
+    {
+        Fake fake; AddonMetadataService service(fake.backend()); QObject owner, other;
+        vlc::addons::AddonStreamLifetime application;
+        QVERIFY(service.bindApplicationLifetime(application.handle())); QVERIFY(service.reserveNativeOwner(&owner));
+        const auto capture = service.captureArtworkRegistrations(); QVERIFY(capture);
+        auto gate = std::make_shared<RegistrationAdmission>(); QVERIFY(capture->registry->arm(capture->token, gate));
+        QVERIFY(!service.beginNativeOwnerRetirement(&other)); QVERIFY(capture->token.current());
+        {
+            const auto retirement = service.beginNativeOwnerRetirement(&owner); QVERIFY(retirement);
+            QVERIFY(!gate->current()); QVERIFY(!capture->token.current()); QVERIFY(!service.captureArtworkRegistrations());
+            service.invalidate(); QVERIFY(!service.captureArtworkRegistrations());
+            service.releaseNativeOwnerFor(&owner); QVERIFY(!service.captureArtworkRegistrations());
+        }
+        QVERIFY(service.captureArtworkRegistrations());
+        service.shutdown(); QVERIFY(!service.captureArtworkRegistrations());
+        QVERIFY(!capture->registry->capture().current());
+    }
     void identityTargetsRequireNativeNetworkAuthority_data()
     {
         QTest::addColumn<unsigned>("flags"); QTest::addColumn<bool>("consent");

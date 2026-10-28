@@ -3,6 +3,8 @@
 
 #include "addon_metadata_coordinator.hpp"
 #include "addon_stream_lifetime.hpp"
+#include "addon_artwork_attempt_plan.hpp"
+#include "addon_metadata_registry_epoch.hpp"
 #include <QPointer>
 #include <QUrl>
 #include <memory>
@@ -55,6 +57,16 @@ public:
     void unregisterBuiltinProviderForOwner(const QString& contribution, QObject* exactOwner);
     void setProviderPlan(QObject* lifetime, ProviderPlan);
     void clearProviderPlan(QObject* exactOwner);
+    struct ArtworkRegistrations {
+        std::shared_ptr<const vlc::addons::MetadataRegistryEpoch> registry;
+        vlc::addons::MetadataRegistryToken token;
+        QList<vlc::addons::ArtworkBuiltinRegistration> builtins;
+    };
+    // Host only. Capture memory on the Service thread. Arm the exact token
+    // with the runner's native gate before any provider dispatch.
+    std::optional<ArtworkRegistrations> captureArtworkRegistrations() const;
+    // Begin before native provider teardown; retain through the last change.
+    vlc::addons::MetadataRegistryMutation beginNativeOwnerRetirement(QObject* exactOwner);
     void completeBuiltin(const QString& invocation, const QString& status,
                          const QVariantMap& data = {}, const QString& error = {});
     QUrl privateUrlForInvocation(const QString& invocation) const;
@@ -198,6 +210,8 @@ private:
     QPointer<QObject> m_planOwner;
     QPointer<QObject> m_nativeOwner;
     ProviderPlan m_providerPlan;
+    const std::shared_ptr<vlc::addons::MetadataRegistryEpoch> m_artworkRegistry
+        = std::make_shared<vlc::addons::MetadataRegistryEpoch>();
     std::shared_ptr<CoreState> m_core;
     QPointer<AddonNativeArtworkAssets> m_nativeArtwork;
     vlc_metadata_backend_t* m_coreBackend = nullptr;

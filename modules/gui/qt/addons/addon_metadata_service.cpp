@@ -288,6 +288,7 @@ AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
 }
 AddonMetadataService::~AddonMetadataService()
 {
+    m_artworkRegistry->close();
     { std::lock_guard<std::mutex> lock(m_core->lock); m_core->owner = nullptr; }
     shutdown();
     // A callback can enter destruction during invalidate(). Drain here even
@@ -327,6 +328,8 @@ bool AddonMetadataService::registerBuiltinProvider(const QString& feature, const
     QPointer<AddonMetadataService> guard(this);
     const auto existing = m_builtins.constFind(id);
     if (existing != m_builtins.cend() && existing->lifetime != lifetime) return false;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation) return false;
     const auto retired = existing == m_builtins.cend() ? Builtin{} : *existing;
     auto builtin = retired;
     if (!builtin.features.contains(feature)) builtin.features.append(feature);
@@ -351,6 +354,8 @@ void AddonMetadataService::unregisterBuiltinProvider(const QString& contribution
 {
     QPointer<AddonMetadataService> guard(this);
     if (!m_builtins.contains(contribution)) return;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation && !m_closed) return;
     const auto retired = m_builtins.take(contribution);
     if (retired.destroyed) disconnect(retired.destroyed);
     const auto unregisterBuiltin = m_backend.unregisterBuiltin;
@@ -366,6 +371,8 @@ void AddonMetadataService::unregisterBuiltinProviderForOwner(const QString& id, 
 void AddonMetadataService::setProviderPlan(QObject* lifetime, ProviderPlan plan)
 {
     if (m_closed || !lifetime || !plan) return;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation) return;
     const auto retired = std::move(m_providerPlan);
     m_planOwner = lifetime; m_providerPlan = std::move(plan);
     invalidate();
@@ -373,8 +380,33 @@ void AddonMetadataService::setProviderPlan(QObject* lifetime, ProviderPlan plan)
 void AddonMetadataService::clearProviderPlan(QObject* exactOwner)
 {
     if (m_planOwner != exactOwner) return;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation && !m_closed) return;
     const auto retired = std::move(m_providerPlan);
     m_planOwner.clear(); invalidate();
+}
+std::optional<AddonMetadataService::ArtworkRegistrations> AddonMetadataService::captureArtworkRegistrations() const
+{
+    if (QThread::currentThread() != thread() || m_closed || !applicationCurrent()) return {};
+    // Only the reserved native owner supplies an early teardown barrier for
+    // this private path. Legacy plan hooks do not establish that lifetime.
+    if (m_providerPlan && (!m_planOwner || m_planOwner != m_nativeOwner)) return {};
+    ArtworkRegistrations capture;
+    capture.registry = m_artworkRegistry;
+    capture.token = capture.registry->capture();
+    if (!capture.token.current()) return {};
+    for (auto it = m_builtins.cbegin(); it != m_builtins.cend(); ++it) {
+        const bool native = it->descriptor.value(QStringLiteral("requiresNativeAnchor")).toBool();
+        const bool available = it->lifetime && (!native || (m_nativeOwner && it->lifetime == m_nativeOwner));
+        capture.builtins.append({QJsonObject::fromVariantMap(it->descriptor), it->binding, available});
+    }
+    if (!capture.token.current()) return {};
+    return capture;
+}
+vlc::addons::MetadataRegistryMutation AddonMetadataService::beginNativeOwnerRetirement(QObject* exactOwner)
+{
+    if (QThread::currentThread() != thread() || !exactOwner || m_nativeOwner != exactOwner) return {};
+    return m_artworkRegistry->mutation();
 }
 QString AddonMetadataService::invoke(const QString& contribution, const QString& operation,
                                      const QVariantMap& context, const QString& privateScope)
@@ -667,6 +699,7 @@ void AddonMetadataService::retireConsumer(const QString& consumer)
 void AddonMetadataService::invalidate()
 {
     if (m_invalidateActive) return;
+    const auto mutation = m_artworkRegistry->mutation();
     QPointer<AddonMetadataService> guard(this);
     m_invalidateActive = true;
     const auto reset = qScopeGuard([guard] { if (guard) guard->m_invalidateActive = false; });
@@ -688,6 +721,8 @@ void AddonMetadataService::invalidate()
 }
 void AddonMetadataService::setArtworkAdapter(ArtworkResolver resolver, std::function<void(const QString&)> cancel)
 {
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation && !m_closed) return;
     QPointer<AddonMetadataService> guard(this);
     invalidate();
     if (!guard) return;
@@ -699,6 +734,8 @@ void AddonMetadataService::setArtworkAdapter(ArtworkResolver resolver, std::func
 void AddonMetadataService::setNativeArtworkAdapter(AddonNativeArtworkAssets* adapter)
 {
     if (m_closed || m_nativeArtwork == adapter) return;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation) return;
     QPointer<AddonMetadataService> guard(this);
     QList<NativeJob> jobs;
     {
@@ -717,12 +754,18 @@ bool AddonMetadataService::reserveNativeOwner(QObject* owner)
 {
     if (!owner || m_closed || m_nativeOwner || !applicationLifetime().current()
         || !m_coreBackend || vlc_metadata_backend_IsClosed(m_coreBackend)) return false;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation) return false;
     m_nativeOwner = owner; return true;
 }
 bool AddonMetadataService::nativeOwnerIs(QObject* owner) const
 { return owner && m_nativeOwner == owner; }
 void AddonMetadataService::releaseNativeOwnerFor(QObject* owner)
-{ if (owner && m_nativeOwner == owner) m_nativeOwner.clear(); }
+{
+    if (!owner || m_nativeOwner != owner) return;
+    const auto mutation = m_artworkRegistry->mutation();
+    m_nativeOwner.clear();
+}
 bool AddonMetadataService::bindApplicationLifetime(vlc::addons::AddonStreamLifetime::Handle lifetime)
 {
     if (m_closed || !lifetime.current()) return false;
@@ -744,6 +787,9 @@ int AddonMetadataService::nativeJobCount() const
 void AddonMetadataService::setAutomaticNetworkAllowed(bool allowed)
 {
     QPointer<AddonMetadataService> guard(this);
+    if (m_core->automaticAllowed.load() == allowed) return;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation && !m_closed) return;
     if (m_core->automaticAllowed.exchange(allowed) == allowed) return;
     if (!allowed && m_coreBackend) {
         const auto backend = std::shared_ptr<vlc_metadata_backend_t>(
@@ -760,6 +806,7 @@ vlc_metadata_backend_t* AddonMetadataService::holdCoreBackend() const
 { return m_coreBackend ? vlc_metadata_backend_Hold(m_coreBackend) : nullptr; }
 void AddonMetadataService::shutdown()
 {
+    m_artworkRegistry->close();
     if (m_closed) return;
     QPointer<AddonMetadataService> guard(this);
     m_closed = true;

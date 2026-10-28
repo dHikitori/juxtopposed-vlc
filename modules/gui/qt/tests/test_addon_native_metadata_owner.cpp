@@ -20,6 +20,7 @@
 #include <vlc_metadata_owner.h>
 #include "lib/libvlc_internal.h"
 #include "addons/addon_native_metadata_owner.hpp"
+#include "addons/addon_core_metadata_admission.hpp"
 #include "fixtures/addon_native_provider_fixture.h"
 
 namespace {
@@ -170,6 +171,23 @@ class TestAddonNativeMetadataOwner : public QObject
 {
     Q_OBJECT
 private slots:
+    void actualOwnerRetirementRevokesItsRegisteredCoreGate_data()
+    {
+        QTest::addColumn<bool>("destroy");
+        QTest::newRow("close") << false;
+        QTest::newRow("destruction") << true;
+    }
+    void actualOwnerRetirementRevokesItsRegisteredCoreGate()
+    {
+        QFETCH(bool, destroy); Fixture f; QVERIFY(f.owner); QVERIFY(f.owner->ready());
+        const auto capture = f.service->captureArtworkRegistrations(); QVERIFY(capture); QCOMPARE(capture->builtins.size(), 4);
+        for (const auto& row : capture->builtins) QVERIFY(row.available);
+        const auto gate = vlc::addons::CoreMetadataAdmission::create(vlc_tick_now() + VLC_TICK_FROM_SEC(10));
+        QVERIFY(gate); QVERIFY(capture->registry->arm(capture->token, gate));
+        if (destroy) f.owner.reset(); else f.owner->close();
+        QVERIFY(!gate->current()); QVERIFY(!capture->token.current());
+        const auto fresh = f.service->captureArtworkRegistrations(); QVERIFY(fresh); QVERIFY(fresh->builtins.isEmpty());
+    }
     void aFactoryRequiresTheBoundAppAndRejectsASecondOwner()
     {
         Fixture fixture; QVERIFY(fixture.owner); QVERIFY(fixture.owner->ready()); QVERIFY(!fixture.owner->active());
