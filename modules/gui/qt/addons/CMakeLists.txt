@@ -17,6 +17,7 @@ add_library(vlc_addon_host STATIC
     addon_session_ui.cpp addon_session_ui.hpp addon_session_ui_manager.cpp
     addon_source_consent_ui.cpp addon_source_consent_ui.hpp
     addon_metadata_family_plan.cpp addon_metadata_family_plan.hpp
+    addon_metadata_choices.cpp addon_metadata_choices.hpp
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
     addon_visualizer_worker_runtime.cpp addon_visualizer_render_queue.cpp
@@ -33,7 +34,7 @@ elseif(APPLE)
 endif()
 add_executable(addon_visualizer_process "../tests/fixtures/addon_visualizer_process.c")
 set_target_properties(addon_visualizer_process PROPERTIES AUTOMOC OFF)
-foreach(name packages runtime metadata broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs native_authority)
+foreach(name packages runtime metadata metadata_choices broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs native_authority)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
