@@ -4,8 +4,11 @@ This file records implementation progress and test evidence. Updated 29 October 
 
 The full scope in this directory remains the objective. SDK v1 still has open completion gates. The earlier effort estimate was about 80–85% complete, with about 15–20% left. That estimate came before the measured UI performance findings. It does not establish current readiness. The [completion backlog](completion-backlog.md) records the remaining requirements and the evidence for each gap. The open gates below determine release readiness.
 
-Performance is the current priority. The published build repeats synchronous
-package scans during basic UI work. Focused session host and session UI idle
+Performance is the current priority. The earlier published build repeated
+synchronous package scans during basic UI work. The new local Windows build
+at clean source `11adca2a52` includes the shared display path. See
+[the current build record](windows-performance-build-2026-10-29.md).
+Focused session host and session UI idle
 timer fixes pass. The mounted source owner, resolver, and consent UI also have
 verified idle timer fixes. Source TLS initialization is deferred until explicit
 joined work. MainUI now mounts the shared display view and joined startup
@@ -20,8 +23,9 @@ with no warnings or skips, including the corrected reader unlock and Session
 request cleanup. The UI passes 302 cases with two exact baseline Qt warnings.
 The related native runtime suites pass 103 cases with no warnings or skips.
 The configured MainUI object and 21 native producer objects compile against
-the matching headers. Matching sanitizers, the Windows rebuild, and the full
-app comparison remain in progress.
+the matching headers. Matching sanitizers pass all 551 checks. The Windows
+build and package checks pass, and the usual local folder is updated. The
+manual GUI checks and full app performance comparison remain open.
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 

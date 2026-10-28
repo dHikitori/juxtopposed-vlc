@@ -1,7 +1,15 @@
 # Local Windows add-on build
 
-The local Windows x86_64 test build is in `build-windows/vlc-win64`.
-The current checkpoint includes the Windows add-on loader repair, background
+The latest local build is in `build-windows/vlc-win64`, from clean source
+`11adca2a52`. It includes the shared display catalogue and cached consumers.
+See [the 29 October build record](windows-performance-build-2026-10-29.md)
+for current verification and remaining manual checks. The sections below
+retain the earlier evidence for their stated source commits.
+
+## Earlier fd3 checkpoint
+
+The previous Windows x86_64 test build was in `build-windows/vlc-win64`.
+That checkpoint includes the Windows add-on loader repair, background
 package summaries, revised General and Extensions settings screens, and the
 playback-stop ordering fix and remote-file read cancellation. The current Windows
 console check imports all seven bundled add-ons, reads the complete provider
@@ -38,7 +46,7 @@ worker into the app.
 
 ## Verification
 
-The current build, package, and console checks apply to `fd3fed4173`. GUI window and
+The earlier build, package, and console checks below apply to `fd3fed4173`. GUI window and
 startup observations below were collected from `2a689c3a11`; they are retained
 as that earlier build's evidence.
 

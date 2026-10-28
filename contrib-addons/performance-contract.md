@@ -524,7 +524,7 @@ tickets bound retained documents and forms. Store unlock notifications retry
 actual contention; permanent errors do not create a retry loop. Settings saves
 still use fresh authority and an exact revision stamp.
 
-The matching sanitizer run and new Windows package remain in progress.
+The matching sanitizer run and new Windows package now pass their checks.
 The native consumer checks are recorded below. These tests do not establish full
 app responsiveness.
 
@@ -549,7 +549,10 @@ The native records are
 `/tmp/hakone-addon-core-display-proof/successor-native-tail-retry-finish-evidence/progress.json`
 and `/tmp/hakone-subtitle-observer-fixture/normal-proof/progress.json`.
 The 551-case shared normal run and 302-case QML run cover the matching
-consumer source. Matching sanitizers and the Windows build remain in progress.
+consumer source. Matching sanitizers also pass all 18 suites and 551 cases
+with no warnings or skips. The final sanitizer report is
+`/tmp/hakone-addon-display-host-proof/san-current-terminal-report.json`,
+SHA-256 `07f0d25cb52afaa96c0c2b09e30ab614fd02d1b49829d78c9e358d12699468fe`.
 
 MainUI starts the joined distribution batch, then attaches the display View
 and summary before it constructs the consumers. The View holds its first
@@ -559,4 +562,9 @@ display path. The actual configured MainUI object compiles with the corrected
 private Snapshot header; its proof is
 `/tmp/hakone-mainui-display-successor-object/runs/1793223997174226768/proof.json`.
 The final integration audit found no source or registration drift. The local
-Windows candidate is the next app build checkpoint.
+Windows build is now published in the usual local folder. Its 416 executable
+and library checks, seven bundles, and native packaged-worker ABI check pass.
+See [the 29 October build record](windows-performance-build-2026-10-29.md).
+GUI automation could not initialize from the WSL workspace. Actual UI
+responsiveness, Extensions navigation, and the full app comparison remain
+open; the unit and package results do not establish a performance budget.
