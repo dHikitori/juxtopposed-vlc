@@ -281,6 +281,24 @@ wiring, shared catalogue integration, inactive visualizer integration, and full
 app measurements remain open. The published Windows build does not contain
 these source timer or lazy TLS fixes.
 
+## HTTP transport creation
+
+The default add-on network broker now creates its Qt network manager only
+when an allowed request reaches transport dispatch. Construction, denied
+addresses, stale requests, and cancellation before dispatch leave it absent.
+An explicitly supplied transport stays owned and is reused. The public-address,
+permission, proxy, TLS host, deadline, and response checks still apply.
+
+All 73 broker cases pass on the shared fresh host, with no warnings, failed or
+skipped cases. The three new cases check the idle path, refused and canceled
+requests, and transport reuse through an injected reply. That reply performs
+no network request. The applied three files match the tested source hashes.
+The record is `/tmp/hakone-addon-display-host-proof/normal-resume-evidence/progress.json`,
+SHA-256 `0f1ce8f95cb19fd837803edaf80b6e6fc5bd76cade6dd0589d13a87610172096`.
+It also records a later artifact-retention utility failure. This result covers
+the broker suite; the remaining integration and sanitizer checks are open.
+The published Windows build does not contain this change.
+
 ## Stream handle expiry helper
 
 The stream preparation helper no longer starts its 250 ms expiry timer at

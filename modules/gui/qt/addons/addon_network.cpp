@@ -113,11 +113,21 @@ std::unique_ptr<NetworkBroker> NetworkBroker::withTransport(std::unique_ptr<QNet
     return std::unique_ptr<NetworkBroker>(new NetworkBroker(std::move(value), parent));
 }
 NetworkBroker::NetworkBroker(std::unique_ptr<QNetworkAccessManager> value, QObject* parent)
-    : QObject(parent), m_network(this), m_injected(std::move(value))
+    : QObject(parent), m_network(std::move(value))
 {
-    if (m_injected) m_injected->setParent(this);
-    // DNS validation/pinning must not use an implicit proxy resolver.
-    transport().setProxy(QNetworkProxy::NoProxy);
+    if (m_network) {
+        m_network->setParent(this);
+        m_network->setProxy(QNetworkProxy::NoProxy);
+    }
+}
+QNetworkAccessManager& NetworkBroker::transport()
+{
+    if (!m_network) {
+        m_network = std::make_unique<QNetworkAccessManager>(this);
+        // DNS validation/pinning must not use an implicit proxy resolver.
+        m_network->setProxy(QNetworkProxy::NoProxy);
+    }
+    return *m_network;
 }
 NetworkBroker::~NetworkBroker()
 {

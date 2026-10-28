@@ -8,6 +8,10 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QBuffer>
+#include <QNetworkProxy>
+#include <QNetworkReply>
+#include <QPointer>
+#include <QTimer>
 #include <atomic>
 #include <thread>
 #include <cstring>
@@ -66,6 +70,105 @@ class TestAddonBroker : public QObject
 #endif
     }
 private slots:
+    void idleBrokerHasNoNetworkTransport()
+    {
+        NetworkBroker broker;
+        QVERIFY(broker.findChildren<QNetworkAccessManager*>().isEmpty());
+        QVERIFY(broker.findChildren<QTimer*>().isEmpty());
+        QTest::qWait(50);
+        QVERIFY(broker.findChildren<QNetworkAccessManager*>().isEmpty());
+        QVERIFY(broker.findChildren<QTimer*>().isEmpty());
+    }
+    void refusedAndCanceledRequestsHaveNoNetworkTransport()
+    {
+        NetworkBroker broker;
+        auto declaration = manifest();
+        declaration.requiredPermissions = {{"network.http", QJsonObject{
+            {"origins", QJsonArray{"https://127.0.0.1", "https://93.184.216.34"}},
+            {"methods", QJsonArray{"GET"}}}}};
+        QStringList errors;
+        const auto completed = [&](const NetworkBroker::Response& response) { errors.append(response.error); };
+        broker.fetch(declaration, declaration.requiredPermissions, {{"url", "http://127.0.0.1"}}, {}, completed);
+        broker.fetch(declaration, declaration.requiredPermissions, {{"url", "https://127.0.0.1"}}, {}, completed);
+        broker.fetch(declaration, declaration.requiredPermissions, {{"url", "https://93.184.216.34"}}, {}, completed,
+            512 * 1024, NetworkBroker::RequestKind::Document, [] { return false; });
+        const auto canceled = broker.fetch(declaration, declaration.requiredPermissions,
+            {{"url", "https://93.184.216.34"}}, {}, completed);
+        broker.cancel(canceled);
+        QTRY_COMPARE(errors.size(), 3);
+        for (const auto& error : errors) QVERIFY(!error.isEmpty());
+        QTest::qWait(20);
+        QCOMPARE(errors.size(), 3);
+        QVERIFY(broker.findChildren<QNetworkAccessManager*>().isEmpty());
+    }
+    void injectedTransportIsOwnedAndReusedWithoutAnExtraManager()
+    {
+        class Reply final : public QNetworkReply {
+        public:
+            Reply(QNetworkAccessManager::Operation operation, const QNetworkRequest& request, QObject* parent)
+                : QNetworkReply(parent)
+            {
+                setOperation(operation); setRequest(request); setUrl(request.url());
+                setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
+                setHeader(QNetworkRequest::ContentTypeHeader, QByteArray("application/json"));
+                open(QIODevice::ReadOnly | QIODevice::Unbuffered);
+                QTimer::singleShot(0, this, [this] {
+                    setFinished(true); emit readyRead(); emit finished();
+                });
+            }
+            void abort() override { setFinished(true); }
+            bool isSequential() const override { return true; }
+            qint64 bytesAvailable() const override { return 2 - m_offset + QNetworkReply::bytesAvailable(); }
+        protected:
+            qint64 readData(char* data, qint64 maximum) override
+            {
+                if (m_offset == 2) return -1;
+                const auto count = std::min(maximum, qint64(2 - m_offset));
+                std::memcpy(data, "{}" + m_offset, size_t(count)); m_offset += count;
+                return count;
+            }
+        private:
+            qint64 m_offset = 0;
+        };
+        class Transport final : public QNetworkAccessManager {
+        public:
+            int requests = 0;
+            QNetworkRequest lastRequest;
+            Operation lastOperation = UnknownOperation;
+        protected:
+            QNetworkReply* createRequest(Operation operation, const QNetworkRequest& request, QIODevice*) override
+            {
+                ++requests; lastRequest = request; lastOperation = operation;
+                return new Reply(operation, request, this);
+            }
+        };
+        auto* transport = new Transport;
+        QPointer<QNetworkAccessManager> retained(transport);
+        std::unique_ptr<QNetworkAccessManager> owned(transport);
+        auto broker = NetworkBroker::withTransport(owned);
+        QVERIFY(broker); QVERIFY(!owned);
+        QCOMPARE(transport->parent(), broker.get());
+        QCOMPARE(transport->proxy().type(), QNetworkProxy::NoProxy);
+        QCOMPARE(broker->findChildren<QNetworkAccessManager*>().size(), 1);
+        auto declaration = manifest();
+        declaration.requiredPermissions = {{"network.http", QJsonObject{
+            {"origins", QJsonArray{"https://93.184.216.34"}}, {"methods", QJsonArray{"GET"}}}}};
+        int completed = 0;
+        for (int attempt = 1; attempt <= 2; ++attempt) {
+            broker->fetch(declaration, declaration.requiredPermissions, {{"url", "https://93.184.216.34/data"}}, {},
+                [&](const NetworkBroker::Response& response) {
+                    QCOMPARE(response.status, 200); QCOMPARE(response.body, QByteArray("{}"));
+                    QVERIFY(response.error.isEmpty()); ++completed;
+                });
+            QTRY_COMPARE(completed, attempt);
+            QCOMPARE(transport->requests, attempt);
+            QCOMPARE(transport->lastOperation, QNetworkAccessManager::GetOperation);
+            QCOMPARE(transport->lastRequest.peerVerifyName(), QStringLiteral("93.184.216.34"));
+            QCOMPARE(transport->lastRequest.rawHeader("Host"), QByteArray("93.184.216.34"));
+            QCOMPARE(broker->findChildren<QNetworkAccessManager*>().size(), 1);
+        }
+        broker.reset(); QVERIFY(retained.isNull());
+    }
     void manifestLimitsPacingAndRedirectProfiles()
     {
         QFile file(QFINDTESTDATA("../../../../contrib-addons/examples/thesubtitledb/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));

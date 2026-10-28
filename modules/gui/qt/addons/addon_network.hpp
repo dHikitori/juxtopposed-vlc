@@ -69,7 +69,7 @@ private:
     friend class AddonManager;
     static bool canAdoptTransport(const QNetworkAccessManager*, const QObject*);
     NetworkBroker(std::unique_ptr<QNetworkAccessManager>, QObject*);
-    QNetworkAccessManager& transport() { return m_injected ? *m_injected : m_network; }
+    QNetworkAccessManager& transport();
     struct Job;
     bool checkCurrent(const std::shared_ptr<Job>&);
     void begin(const std::shared_ptr<Job>&);
@@ -78,8 +78,7 @@ private:
     void responseHeaders(const std::shared_ptr<Job>&);
     void finish(const std::shared_ptr<Job>&, const QString& error = {},
                 AddonMetadataHostTerminal = AddonMetadataHostTerminal::Failed);
-    QNetworkAccessManager m_network;
-    std::unique_ptr<QNetworkAccessManager> m_injected;
+    std::unique_ptr<QNetworkAccessManager> m_network;
     QHash<quint64, std::shared_ptr<Job>> m_jobs;
     quint64 m_sequence = 0;
 };
