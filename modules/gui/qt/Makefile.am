@@ -2032,7 +2032,9 @@ $(QML_RULES_DEPS): Makefile
 	  echo '$(@D)/qmlcache_loader.cpp: $(@D)/qmlcachegen.rsp'; \
 	  echo '$(@D)/qmlassets.cpp: $$(builddir)/$(@D)/qmldir.qrc $$(builddir)/$(@D)/res.qrc'; \
 	  echo '$(@D)/qmlassets.cpp: $$(libqml_module_$(@D)_a_QML) $$(libqml_module_$(@D)_a_Singleton_QML)'; \
-	  echo '$$(libqml_module_$(@D)_a_QML:.qml=.cpp) $$(libqml_module_$(@D)_a_Singleton_QML:.qml=.cpp): $$(builddir)/$(@D)/res.qrc'; \
+	  for s in $(libqml_module_$(@D)_a_QML) $(libqml_module_$(@D)_a_Singleton_QML); do \
+	    echo "$${s%.*}.cpp: "'$$(builddir)/$(@D)/res.qrc'; \
+	  done; \
 	} > $@.tmp && \
 	if cmp -s $@.tmp $@; then rm -f $@.tmp; else mv $@.tmp $@; fi
 
