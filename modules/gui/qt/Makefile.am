@@ -3424,6 +3424,7 @@ endif
 QML_LOG_COMPILER = $(builddir)/qml_test -input
 
 if HAVE_QT_QUICK_TEST
+TESTS += tests/tst_AddonSessions.qml tests/tst_AddonSourceConsent.qml
 EXTRA_DIST += tests/tst_AddonInstaller.qml
 TESTS += tests/tst_AddonInstaller.qml
 EXTRA_DIST += tests/tst_AddonDiscovery.qml
@@ -3582,7 +3583,6 @@ EXTRA_DIST += tests/test_addon_git_objects.cpp tests/fixtures/addon-git-http-fix
 EXTRA_DIST += tests/worker-lifetime/CMakeLists.txt
 
 EXTRA_DIST += tests/session-ui/CMakeLists.txt tests/test_addon_session_ui.cpp tests/tst_AddonSessions.qml
-TESTS += tests/tst_AddonSessions.qml
 
 EXTRA_DIST += tests/player-sessions/CMakeLists.txt tests/test_addon_player_sessions.cpp
 
@@ -3591,7 +3591,6 @@ EXTRA_DIST += tests/package-namespaces/CMakeLists.txt
 EXTRA_DIST += tests/invocation-guard/CMakeLists.txt tests/test_addon_invocation_guard.cpp
 
 EXTRA_DIST += tests/source-consent-ui/CMakeLists.txt tests/test_addon_source_consent_ui.cpp tests/tst_AddonSourceConsent.qml
-TESTS += tests/tst_AddonSourceConsent.qml
 
 EXTRA_DIST += tests/builtin-ids/CMakeLists.txt
 
