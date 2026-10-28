@@ -109,7 +109,7 @@ void AddonHostServices::finish(quint64 id, Result result, bool abort)
     if (job.completion) job.completion(std::move(result));
 }
 void AddonHostServices::cancel(quint64 id)
-{ finish(id, {{}, tr("VLC canceled the host operation.")}, true); }
+{ finish(id, {{}, tr("The app canceled the host operation.")}, true); }
 void AddonHostServices::cancelPackage(const QString& package)
 {
     const QPointer<AddonHostServices> alive(this);

@@ -133,10 +133,10 @@ QString AddonSessions::validate(const QString& package, const QString& id, const
     for (auto it = parameters.begin(); it != parameters.end(); ++it)
         if ((operation == QLatin1String("seek") && it.key() != QLatin1String("positionUs"))
             || (operation == QLatin1String("setRate") && it.key() != QLatin1String("rate") && it.key() != QLatin1String("durationMs"))
-            || (operation != QLatin1String("seek") && operation != QLatin1String("setRate"))) return tr("VLC cannot use these playback parameters.");
+            || (operation != QLatin1String("seek") && operation != QLatin1String("setRate"))) return tr("The app cannot use these playback parameters.");
     if (operation == QLatin1String("seek")) {
         const auto value = parameters.value("positionUs");
-        if (!snapshot.value("seekable").toBool() || !numeric(value) || !std::isfinite(value.toDouble()) || value.toDouble() != value.toLongLong()) return tr("VLC cannot go to that position in this media.");
+        if (!snapshot.value("seekable").toBool() || !numeric(value) || !std::isfinite(value.toDouble()) || value.toDouble() != value.toLongLong()) return tr("The app cannot use that playback position.");
         const auto position = value.toLongLong();
         const auto first = snapshot.value("live").toBool() ? snapshot.value("liveStartUs").toLongLong() : 0;
         const auto last = snapshot.value("live").toBool() ? snapshot.value("liveEndUs").toLongLong() : snapshot.value("durationUs").toLongLong();
@@ -149,7 +149,7 @@ QString AddonSessions::validate(const QString& package, const QString& id, const
             || rate < snapshot.value("minimumRate", 1.0).toDouble() || rate > snapshot.value("maximumRate", 1.0).toDouble()
             || !numeric(parameters.value("durationMs")) || parameters.value("durationMs").toDouble() != parameters.value("durationMs").toInt()
             || parameters.value("durationMs").toInt() < 1 || parameters.value("durationMs").toInt() > 5000)
-            return tr("VLC cannot use this speed correction.");
+            return tr("The app cannot use this speed correction.");
     }
     return {};
 }
@@ -157,7 +157,7 @@ QString AddonSessions::submit(const QString& package, const QString& id, const Q
 {
     const auto request = token(); QString error = validate(package, id, command);
     auto found = m_leases.find(id); const auto commandId = command.value("commandId").toString();
-    if (error.isEmpty() && (found->seen.contains(commandId) || found->seen.size() >= 4096 || m_pending.size() >= 64)) error = tr("VLC received this command before, or the session limit was reached.");
+    if (error.isEmpty() && (found->seen.contains(commandId) || found->seen.size() >= 4096 || m_pending.size() >= 64)) error = tr("The app received this command before, or a session limit prevents it.");
     const auto at = command.value("atUs", now()); const auto deadline = at.toLongLong();
     if (error.isEmpty() && (!numeric(at) || !std::isfinite(at.toDouble()) || at.toDouble() != deadline
         || deadline < now() - 200000 || deadline > now() + 10000000)) error = tr("The command time is outside the permitted range.");

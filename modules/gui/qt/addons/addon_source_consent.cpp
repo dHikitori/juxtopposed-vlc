@@ -275,7 +275,7 @@ std::optional<AddonSourceConsent::Binding> AddonSourceConsent::canonical(const B
         for (auto c:url.toLocalFile()) if (c.category()==QChar::Other_Control) return {};
         result.identity=QString::fromLatin1(QUrl::fromLocalFile(QDir::cleanPath(url.toLocalFile())).toEncoded(QUrl::FullyEncoded));
     } else if (input.kind==SourceKind::Distribution
-               && QRegularExpression(QStringLiteral("^vlc-distribution:[a-z][a-z0-9.-]{1,127}$")).match(input.identity).hasMatch()) {}
+               && QRegularExpression(QStringLiteral("^hakone-distribution:[a-z][a-z0-9.-]{1,127}$")).match(input.identity).hasMatch()) {}
     else return {};
     return result.identity.size()<=2048?std::optional<Binding>(result):std::nullopt;
 }

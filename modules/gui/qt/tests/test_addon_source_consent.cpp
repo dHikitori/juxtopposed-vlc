@@ -51,6 +51,26 @@ class TestAddonSourceConsent : public QObject
     static bool write(const QString& path,const QByteArray& bytes) { QFile file(path); return file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size(); }
     using Reason=AddonSourceConsent::IntentReason;
 private slots:
+    void distributionIdentityNamesUseHakone_data() {
+        QTest::addColumn<QString>("identity"); QTest::addColumn<int>("kind"); QTest::addColumn<bool>("accepted");
+        const int distribution=int(AddonSourceConsent::SourceKind::Distribution);
+        QTest::newRow("hakone") << QStringLiteral("hakone-distribution:org.example.radio") << distribution << true;
+        QTest::newRow("https") << QStringLiteral("https://example.org/addons/radio.git") << distribution << true;
+        QTest::newRow("legacy-refused") << QStringLiteral("vlc-distribution:org.example.radio") << distribution << false;
+        QTest::newRow("empty") << QStringLiteral("hakone-distribution:") << distribution << false;
+        QTest::newRow("path") << QStringLiteral("hakone-distribution:../radio") << distribution << false;
+        QTest::newRow("query") << QStringLiteral("hakone-distribution:org.example.radio?key=value") << distribution << false;
+        QTest::newRow("fragment") << QStringLiteral("hakone-distribution:org.example.radio#other") << distribution << false;
+        QTest::newRow("git-refused") << QStringLiteral("hakone-distribution:org.example.radio") << int(AddonSourceConsent::SourceKind::Git) << false;
+        QTest::newRow("developer-refused") << QStringLiteral("hakone-distribution:org.example.radio") << int(AddonSourceConsent::SourceKind::Developer) << false;
+    }
+    void distributionIdentityNamesUseHakone() {
+        QFETCH(QString,identity); QFETCH(int,kind); QFETCH(bool,accepted);
+        Fixture f; auto value=f.binding; value.identity=identity; value.kind=static_cast<AddonSourceConsent::SourceKind>(kind);
+        const auto canonical=AddonSourceConsent::canonical(value);
+        QCOMPARE(bool(canonical),accepted);
+        if(accepted) QCOMPARE(canonical->identity,identity);
+    }
     void repeatedOwnerRetirementWaitsForTheFirstNativeRevocation() {
         Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options()); QVERIFY(f.approve(store));
         const auto token=store.approvalToken(f.binding); QVERIFY(token);

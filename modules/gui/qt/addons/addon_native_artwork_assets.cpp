@@ -193,7 +193,7 @@ struct AddonNativeArtworkAssets::State {
                             if (pixels.width() > options.maximumOutputDimension || pixels.height() > options.maximumOutputDimension)
                                 pixels = pixels.scaled(options.maximumOutputDimension, options.maximumOutputDimension, Qt::KeepAspectRatio, Qt::SmoothTransformation);
                             BoundedOutput output(options.maximumEncodedBytes);
-                            if (!pixels.save(&output, "PNG")) result.error = QStringLiteral("VLC cannot encode the native artwork within the byte limit.");
+                            if (!pixels.save(&output, "PNG")) result.error = QStringLiteral("The app cannot create native artwork within the byte limit.");
                             else if (work->live()) {
                                 const QString key = QString::fromLatin1(QCryptographicHash::hash(output.bytes, QCryptographicHash::Sha256).toHex());
                                 const QString path = QDir(directory).filePath(key + QStringLiteral(".png"));
@@ -203,7 +203,7 @@ struct AddonNativeArtworkAssets::State {
                                 const QString lockPath = QDir(directory).filePath(QStringLiteral("cache.lock"));
                                 if (closed || !work->live()) {}
                                 else if (QFileInfo(directory).isSymLink() || QFileInfo(lockPath).isSymLink() || !QDir().mkpath(directory))
-                                    result.error = QStringLiteral("VLC cannot create the native artwork cache.");
+                                    result.error = QStringLiteral("The app cannot create the native artwork cache.");
                                 else {
                                     QLockFile cacheLock(lockPath);
                                     if (!cacheLock.tryLock(0)) result.error = QStringLiteral("The native artwork cache is busy.");
@@ -220,10 +220,10 @@ struct AddonNativeArtworkAssets::State {
                                             result.error = QStringLiteral("The native artwork cache limit has been reached.");
                                         else if (!closed && work->live()) {
                                             QSaveFile file(path);
-                                            if (!file.open(QIODevice::WriteOnly)) result.error = QStringLiteral("VLC cannot save the native artwork.");
+                                            if (!file.open(QIODevice::WriteOnly)) result.error = QStringLiteral("The app cannot save the native artwork.");
                                             else {
                                                 file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
-                                                if (file.write(output.bytes) != output.bytes.size() || !file.commit()) result.error = QStringLiteral("VLC cannot save the native artwork.");
+                                                if (file.write(output.bytes) != output.bytes.size() || !file.commit()) result.error = QStringLiteral("The app cannot save the native artwork.");
                                                 else result.file = QUrl::fromLocalFile(path);
                                             }
                                         }
@@ -321,7 +321,7 @@ AddonNativeArtworkAssets::Backend AddonNativeArtworkAssets::nativeBackend(vlc_ob
         if (!live()) { result.error = QStringLiteral("The native artwork request is no longer current."); return result; }
         const auto address = url.toEncoded();
         stream_t* stream = vlc_stream_NewURL(context->object, address.constData());
-        if (!stream) { result.error = QStringLiteral("VLC cannot open the native artwork address."); return result; }
+        if (!stream) { result.error = QStringLiteral("The app cannot open the native artwork address."); return result; }
         char buffer[16384]; bool complete = false;
         while (live()) {
             const auto count = vlc_stream_ReadPartial(stream, buffer, size_t(std::min<qint64>(sizeof(buffer), limit + 1 - result.bytes.size())));

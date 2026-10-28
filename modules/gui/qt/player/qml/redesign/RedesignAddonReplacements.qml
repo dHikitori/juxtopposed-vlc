@@ -13,7 +13,7 @@ Column {
     Text { text: qsTr("Add-on views"); color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16) }
     Text {
         width: parent.width
-        text: qsTr("Select a replacement for each view. VLC uses the built-in view if an add-on fails.")
+        text: qsTr("Select a replacement for each view. The app uses the built-in view if an add-on fails.")
         textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
     }
     Repeater {

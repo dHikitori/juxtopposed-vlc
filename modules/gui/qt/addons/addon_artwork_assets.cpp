@@ -134,13 +134,13 @@ void AddonArtworkAssets::complete(const QString& key, const vlc::addons::Network
     if (m_cacheEntries >= m_options.maxEntries || m_cacheBytes + response.body.size() > m_options.maxCacheBytes) {
         finish(key, {}, tr("The artwork cache limit has been reached.")); return;
     }
-    if (!QDir().mkpath(m_directory)) { finish(key, {}, tr("VLC cannot create the artwork cache.")); return; }
+    if (!QDir().mkpath(m_directory)) { finish(key, {}, tr("The app cannot create the artwork cache.")); return; }
     const auto path = QDir(m_directory).filePath(key + QLatin1Char('.') + extension);
     if (QFileInfo(path).isSymLink()) { finish(key, {}, tr("The artwork cache file is not correct.")); return; }
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) { finish(key, {}, tr("VLC cannot save the artwork image.")); return; }
+    if (!file.open(QIODevice::WriteOnly)) { finish(key, {}, tr("The app cannot save the artwork image.")); return; }
     file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
-    if (file.write(response.body) != response.body.size() || !file.commit()) { finish(key, {}, tr("VLC cannot save the artwork image.")); return; }
+    if (file.write(response.body) != response.body.size() || !file.commit()) { finish(key, {}, tr("The app cannot save the artwork image.")); return; }
     ++m_cacheEntries; m_cacheBytes += response.body.size();
     finish(key, QUrl::fromLocalFile(path), {});
 }

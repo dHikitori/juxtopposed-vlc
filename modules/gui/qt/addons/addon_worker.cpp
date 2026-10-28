@@ -154,7 +154,7 @@ void AddonWorker::read()
         if (!m_ready) {
             if (object.value(QStringLiteral("type")).toString() != QLatin1String("ready")
                 || object.value(QStringLiteral("protocol")).toString() != QLatin1String("wasm-message-v1")) {
-                fail(tr("VLC cannot use this add-on worker protocol.")); return;
+                fail(tr("The app cannot use this add-on worker protocol.")); return;
             }
             m_ready = true; m_startup.stop();
             const auto pending = std::move(m_queued); m_queued.clear();

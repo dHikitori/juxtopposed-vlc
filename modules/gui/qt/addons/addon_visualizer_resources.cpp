@@ -76,7 +76,7 @@ AddonUiAssets::Backend AddonVisualizerResources::backend(AddonManager* manager, 
             const auto current = [shared, epoch, authority] { return authority.current() && shared->epoch.load(std::memory_order_acquire) == epoch; };
             const auto reject = [&capture] {
                 capture.registration.clear(); capture.assets.clear(); capture.current = {}; capture.live = {};
-                capture.error = QStringLiteral("VLC cannot load this visualizer. VLC will show the artwork."); return capture;
+                capture.error = QStringLiteral("The app cannot load this visualizer. The app shows the artwork."); return capture;
             };
             auto prepared = std::make_shared<AddonVisualizerActivation>();
             if (!current() || !store.installed(contribution.section('/', 0, 0), &prepared->package) || !prepared->package.enabled) return reject();
@@ -224,11 +224,11 @@ void AddonVisualizerResources::refresh()
     const auto images = m_assets->sessionPixels(m_session);
     if (!prepared || !prepared->live || !prepared->live() || registration.value("captureKey").toString() != prepared->key
         || images.size() != prepared->scene.value("assets").toObject().size()) {
-        m_error = tr("VLC cannot load this visualizer. VLC will show the artwork."); m_prepared.reset(); m_images.clear(); emit changed(); return;
+        m_error = tr("The app cannot load this visualizer. The app shows the artwork."); m_prepared.reset(); m_images.clear(); emit changed(); return;
     }
     m_prepared = std::move(prepared); m_images = images;
     if (m_claim.isEmpty() && m_surface) m_claim = m_assets->claimImage(m_session, m_surface);
-    if (m_surface && m_claim.isEmpty()) m_error = tr("The image limit is in use. VLC will show the artwork."); else m_error.clear();
+    if (m_surface && m_claim.isEmpty()) m_error = tr("The image limit is in use. The app shows the artwork."); else m_error.clear();
     emit changed();
 }
 }

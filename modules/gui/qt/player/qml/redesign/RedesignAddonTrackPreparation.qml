@@ -41,7 +41,7 @@ QtObject {
             const saveRequest = root.pendingRequest
             root.pendingPreparation = -1; root.pendingRequest = -1
             if (result.success) root.prepared(result.rows || [], root.pendingSubtitles, saveRequest, result.resolved || {})
-            else root.failed(saveRequest, result.error || qsTr("VLC cannot prepare these subtitles."), result.resolved || {})
+            else root.failed(saveRequest, result.error || qsTr("The app cannot prepare these subtitles."), result.resolved || {})
         }
     }
 }

@@ -219,7 +219,7 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
     if (!checkCurrent(job)) return;
     const auto authorization = authorize(job->manifest, job->grants, job->url, job->kind, job->redirects);
     if (!authorization.permitted) {
-        finish(job, tr("VLC does not have permission to use this network address.")); return;
+        finish(job, tr("The app does not have permission to use this network address.")); return;
     }
     if (authorization.stripCredentials) job->stripCredentials = true;
     const auto method = job->request.value(QStringLiteral("method")).toString(QStringLiteral("GET"));
@@ -232,7 +232,7 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
     if (!methodAllowed(scope) || !methodAllowed(approved)
         || (method != QLatin1String("GET") && method != QLatin1String("POST"))
         || (job->kind == RequestKind::ImageAsset && method != QLatin1String("GET"))) {
-        finish(job, tr("VLC does not have permission to do this network operation.")); return;
+        finish(job, tr("The app does not have permission to do this network operation.")); return;
     }
     if (!job->paceTicket) {
         const auto ticket = ++paceSequence;
@@ -245,7 +245,7 @@ void NetworkBroker::begin(const std::shared_ptr<Job>& job)
     if (!literal.isNull()) { resolved(job, {literal}); return; }
     job->lookup = QHostInfo::lookupHost(job->url.host(), this, [this, job](const QHostInfo& info) {
         job->lookup = -1;
-        if (info.error() != QHostInfo::NoError) finish(job, tr("VLC cannot connect to the add-on service."));
+        if (info.error() != QHostInfo::NoError) finish(job, tr("The app cannot connect to the add-on service."));
         else resolved(job, info.addresses());
     });
 }
@@ -254,9 +254,9 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
 {
     if (!checkCurrent(job)) return;
     const QPointer<NetworkBroker> alive(this);
-    if (addresses.isEmpty()) { finish(job, tr("VLC cannot connect to the add-on service.")); return; }
+    if (addresses.isEmpty()) { finish(job, tr("The app cannot connect to the add-on service.")); return; }
     for (const auto& address : addresses)
-        if (!publicAddress(address)) { finish(job, tr("VLC does not have permission to use a private network address.")); return; }
+        if (!publicAddress(address)) { finish(job, tr("The app cannot use a private network address.")); return; }
     auto selected = addresses.first();
     for (const auto& address : addresses) if (address.protocol() == QAbstractSocket::IPv4Protocol) { selected = address; break; }
     auto pinned = job->url; pinned.setHost(selected.toString());
@@ -278,7 +278,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
         const auto value = it.value().toString().toUtf8();
         if ((name != QLatin1String("accept") && name != QLatin1String("content-type"))
             || value.size() > 512 || value.contains('\r') || value.contains('\n')) {
-            finish(job, tr("VLC cannot use the request header from this add-on.")); return;
+            finish(job, tr("The app cannot use the request header from this add-on.")); return;
         }
         request.setRawHeader(name.toUtf8(), value);
     }
@@ -347,7 +347,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
         }
         responseHeaders(job);
         if (job->response.status == 0 || (reply->error() != QNetworkReply::NoError && job->response.status < 400))
-            finish(job, tr("VLC cannot make a secure connection to this add-on service."));
+            finish(job, tr("The app cannot make a secure connection to this add-on service."));
         else finish(job);
     });
 }

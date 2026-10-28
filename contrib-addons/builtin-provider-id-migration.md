@@ -14,6 +14,28 @@ explicit Hakone enablement value wins over its old alias. An explicit Hakone
 order entry also wins its position. Repeated aliases become one entry.
 Other provider IDs keep their names and relative order.
 
+## App and source names
+
+Public add-on schemas and attributes use `hakone`. Proposed example repository
+addresses use `github.com/hakone-org/`. New packages use `org.hakone` IDs.
+Packages extracted from Core retain their existing package IDs.
+
+Add-on messages use "the app". The credential store's display label uses
+"Hakone add-on credential". Internal credential lookup identities retain
+their current values.
+
+A distribution source identity can use a canonical HTTPS address or
+`hakone-distribution:<identity>`. Only the distribution source kind accepts
+that prefix. The prefix form refuses an empty suffix, path, query or fragment. The older
+`vlc-distribution:` prefix is refused. Source approval still binds the exact
+installed contribution, account and media profile.
+
+The source identity suite passes 36 normal and 36 focused sanitizer cases.
+There are no failures, skipped cases or sanitizer diagnostics. The naming
+change covers nine valid, malformed and wrong-source-kind rows.
+
+## Preference migration
+
 The next explicit order or enablement change saves the converted document.
 The migration does not register a provider, enable an add-on, or create a
 permission grant. Old registration IDs are refused.

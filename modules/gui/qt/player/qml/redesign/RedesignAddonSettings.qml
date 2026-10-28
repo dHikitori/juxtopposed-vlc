@@ -90,7 +90,7 @@ ColumnLayout {
         // The backend revalidates the complete object and commits credential ops atomically.
         const success = backend.saveAddonSettings(packageId, Contract.clone(draftValues), Contract.clone(secretOperations))
         saving = false
-        if (!success) { errorMessage = qsTr("VLC cannot save these settings. VLC did not change your saved settings."); return false }
+        if (!success) { errorMessage = qsTr("The app cannot save these settings. Your saved settings did not change."); return false }
         reload(); saved(); return true
     }
     onPackageIdChanged: if (ready) reload()

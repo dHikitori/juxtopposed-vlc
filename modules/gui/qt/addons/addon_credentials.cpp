@@ -201,7 +201,7 @@ bool CredentialStore::platformWrite(const QString& package, const QString& refer
         quint32(value.size()), value.constData(), nullptr) == errSecSuccess;
 #elif defined(Q_OS_LINUX)
     bool success = false;
-    secretTool({QStringLiteral("store"), QStringLiteral("--label=VLC add-on credential"),
+    secretTool({QStringLiteral("store"), QStringLiteral("--label=Hakone add-on credential"),
         QStringLiteral("application"), QStringLiteral("vlc-addons"), QStringLiteral("package"), package,
         QStringLiteral("reference"), reference}, value, &success);
     return success;

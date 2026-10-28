@@ -44,7 +44,7 @@ double noise(unsigned seed) { seed ^= seed >> 16; seed *= 0x7feb352du; seed ^= s
 }
 bool AddonVisualScene::validate(const QJsonObject& scene, QString* error)
 {
-    const auto fail = [&] { if (error) *error = QStringLiteral("VLC cannot use this visual scene. Use a scene that follows visualizer.scene@1."); return false; };
+    const auto fail = [&] { if (error) *error = QStringLiteral("The app cannot use this visual scene. Use a scene that follows visualizer.scene@1."); return false; };
     if (!keys(scene, {"contract", "background", "nodes", "assets", "parameters"}) || scene.value("contract").toString() != QLatin1String("visualizer.scene@1")
         || !color(scene.value("background")) || !scene.value("nodes").isArray()) return fail();
     const auto assets = scene.value("assets").toObject();

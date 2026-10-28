@@ -328,7 +328,7 @@ bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input
     InstalledPackage package; QString error;
     if (!m_store.installed(id, &package, &error)) return changed(false, error);
     const auto document = schema(package), properties = document.value("properties").toObject();
-    if (document.value("type").toString() != QLatin1String("object") || properties.size() > 64) return changed(false, tr("VLC cannot use this settings schema."));
+    if (document.value("type").toString() != QLatin1String("object") || properties.size() > 64) return changed(false, tr("The app cannot use this settings schema."));
     QJsonObject saved; quint64 expectedRevision = 0;
     if (!m_store.settings(id, &saved, &expectedRevision, &error)) return changed(false, error);
     const auto originalReferences = saved.value("_credentials").toObject();
@@ -346,12 +346,12 @@ bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input
         const auto field = properties.value(it.key()).toObject(); const auto operation = it.value().toMap();
         const auto action = operation.value("operation").toString();
         if (!secretField(field) || (action != QLatin1String("keep") && action != QLatin1String("replace") && action != QLatin1String("delete")))
-            return reject(tr("VLC cannot use this credential operation."));
+            return reject(tr("The app cannot use this credential operation."));
         if (action == QLatin1String("delete")) { references.remove(it.key()); deletedFields.append(it.key()); }
         if (action == QLatin1String("replace")) {
             if (!valueValid(QJsonValue::fromVariant(operation.value("value")), field)) return reject(tr("Make sure that the credential is correct."));
             const auto result = m_secrets.create(id, it.key(), operation.value("value").toString().toUtf8(), operation.value("sessionOnly").toBool());
-            if (result.reference.isEmpty()) return reject(tr("The secure credential store is not available. Select temporary storage to keep the credential until VLC closes."));
+            if (result.reference.isEmpty()) return reject(tr("The secure credential store is not available. Select temporary storage to keep the credential until the app closes."));
             references.insert(it.key(), result.reference); created.append(result.reference);
         }
     }
@@ -659,9 +659,9 @@ bool AddonManager::setProviderOrder(const QString& feature, const QStringList& i
     if (feature.isEmpty() || feature.startsWith('_') || feature.size() > 128 || ids.size() > 128 || QSet<QString>(ids.begin(), ids.end()).size() != ids.size()) return changed(false, tr("The provider order is not correct."));
     auto order = m_providerOrder; order.insert(feature, QJsonArray::fromStringList(ids));
     QSaveFile file(QDir(m_store.storageDirectory()).filePath(QStringLiteral("provider-order.json")));
-    if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("VLC cannot save the provider settings."));
+    if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("The app cannot save the provider settings."));
     const auto bytes = QJsonDocument(order).toJson(QJsonDocument::Compact);
-    if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("VLC cannot save the provider settings."));
+    if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("The app cannot save the provider settings."));
     m_providerOrder = order; return changed(true);
 }
 
@@ -856,9 +856,9 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
         auto document = m_providerOrder, preferences = document.value("_builtinEnabled").toObject();
         preferences.insert(id, enabled); document.insert("_builtinEnabled", preferences);
         QSaveFile file(QDir(m_store.storageDirectory()).filePath(QStringLiteral("provider-order.json")));
-        if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("VLC cannot save the provider settings."));
+        if (!QDir().mkpath(m_store.storageDirectory()) || !file.open(QIODevice::WriteOnly)) return changed(false, tr("The app cannot save the provider settings."));
         const auto bytes = QJsonDocument(document).toJson(QJsonDocument::Compact);
-        if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("VLC cannot save the provider settings."));
+        if (file.write(bytes) != bytes.size() || !file.commit()) return changed(false, tr("The app cannot save the provider settings."));
         m_providerOrder = document;
         for (auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) descriptor.insert("enabled", enabled);
         return changed(true);

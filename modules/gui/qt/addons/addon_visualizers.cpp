@@ -52,7 +52,7 @@ bool AddonVisualizers::persist(const QString& id)
     QSaveFile file(QDir(m_manager->storageDirectory()).filePath(QStringLiteral("visualizers.json")));
     const auto bytes = QJsonDocument(QJsonObject{{"selected", id}}).toJson(QJsonDocument::Compact);
     if (!QDir().mkpath(m_manager->storageDirectory()) || !file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
-        m_error = tr("VLC cannot save the visualizer selection."); return false;
+        m_error = tr("The app cannot save the visualizer selection."); return false;
     }
     return true;
 }
@@ -73,7 +73,7 @@ bool AddonVisualizers::selectVisualizer(const QString& id)
         if (!persist(id)) { emit changed(); return false; }
         m_selected.clear(); m_timer.stop(); emit changed(); return true;
     }
-    if (!m_resources->load(id, m_visible ? m_surface.data() : nullptr)) { m_selectionPending = false; m_error = tr("VLC cannot load this visualizer. VLC will show the artwork."); emit changed(); return false; }
+    if (!m_resources->load(id, m_visible ? m_surface.data() : nullptr)) { m_selectionPending = false; m_error = tr("The app cannot load this visualizer. The app shows the artwork."); emit changed(); return false; }
     emit changed(); return true;
 }
 void AddonVisualizers::clearImage()
@@ -101,7 +101,7 @@ void AddonVisualizers::reload()
     QPointer<AddonVisualizers> guard(this); if (!stop()) return;
     m_scene = {}; m_assets.clear(); m_activation.reset(); m_selectionPending = false; m_requested = m_selected; m_error.clear();
     if (!m_selected.isEmpty()) {
-        if (!m_resources->load(m_selected, m_visible ? m_surface.data() : nullptr)) m_error = tr("The visualizer is not available. VLC will show the artwork.");
+        if (!m_resources->load(m_selected, m_visible ? m_surface.data() : nullptr)) m_error = tr("The visualizer is not available. The app shows the artwork.");
     } else { m_resources->close(); if (!guard) return; }
     if (m_visible) m_timer.start(); else m_timer.stop();
     emit changed();
@@ -240,7 +240,7 @@ void AddonVisualizers::rendered(const QImage& image, qint64 cost, quint64 genera
         m_quality = lower; m_slowFrames = 0; m_renderQueue->invalidate(); m_dirty = true; emit changed(); return;
     } else if (m_slowFrames >= 8 || image.isNull()) {
         if (!stop()) return; m_scene = {}; m_timer.stop();
-        m_error = tr("The visualizer exceeded its render limit. VLC will show the artwork."); emit changed(); return;
+        m_error = tr("The visualizer reached its render limit. The app shows the artwork."); emit changed(); return;
     }
     if (current.timeUs < analysisTime || current.timeUs - analysisTime > 200000
         || current.timeUs < time || current.timeUs - time > 200000) { clearImage(); return; }

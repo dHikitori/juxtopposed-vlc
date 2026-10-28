@@ -268,7 +268,7 @@ void AddonThemeService::refresh()
     }
     std::sort(available.begin(), available.end(), [](const QVariant& a, const QVariant& b) { return a.toMap().value("id").toString() < b.toMap().value("id").toString(); });
     m_available = available; m_active = active; m_tokenCache.clear();
-    m_error = !selectedError.isEmpty() ? selectedError : usingFallback() ? tr("The selected theme is not available. VLC uses the built-in theme.") : QString();
+    m_error = !selectedError.isEmpty() ? selectedError : usingFallback() ? tr("The selected theme is not available. The app uses the built-in theme.") : QString();
     ++m_revision; emit revisionChanged();
 }
 void AddonThemeService::observePlatformPreferences(QObject* source)

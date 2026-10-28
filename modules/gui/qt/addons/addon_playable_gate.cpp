@@ -54,7 +54,7 @@ QString AddonPlayableGate::authorize(const QString& contribution, const QVariant
     bool approvedOrigin = false;
     for (const auto& value : context.grants.value("network.http").toObject().value("origins").toArray())
         approvedOrigin |= !normalizedOrigin.isEmpty() && exactHttpsOrigin(value.toString()) == normalizedOrigin;
-    if (!supported()) error = tr("This VLC build cannot play media from this source.");
+    if (!supported()) error = tr("The app cannot play media from this source.");
     else if (source.isEmpty() || context.partition.isEmpty() || context.view.isEmpty() || context.view.size() > 128
         || (context.intent != QLatin1String("play") && context.intent != QLatin1String("enqueue"))) error = tr("The playback source or action is not available.");
     else if (!url.isValid() || url.scheme() != QLatin1String("https") || url.host().isEmpty() || !url.userInfo().isEmpty()
