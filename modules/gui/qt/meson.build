@@ -10,6 +10,11 @@ qt_include_dir = include_directories('.')
 addon_host_sources = files(
     'addons/addon_manifest.cpp',
     'addons/addon_manifest.hpp',
+    'addons/addon_metadata_attempt.cpp',
+    'addons/addon_metadata_attempt.hpp',
+    'addons/addon_metadata_completion_policy.cpp',
+    'addons/addon_metadata_completion_policy.hpp',
+    'addons/addon_metadata_identity.hpp',
     'addons/addon_package_store.cpp',
     'addons/addon_package_store.hpp',
     'addons/addon_store_authority.cpp',
@@ -1931,6 +1936,29 @@ if qt6_dep.found()
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
             'link_args': qt_link_args + (host_system == 'linux' ? ['-Wl,--wrap=open'] : []),
         }
+        if host_system == 'linux' and addon_worker_dependencies != [] and not meson.is_cross_build()
+            addon_metadata_attempt_process = executable('addon_metadata_attempt_process',
+                files('tests/fixtures/addon_metadata_attempt_process.c'), install: false, build_by_default: false)
+            vlc_tests += {
+                'name': 'test_qt_addon_metadata_attempt',
+                'sources': files('tests/test_addon_metadata_attempt.cpp'),
+                'moc_sources': files('tests/test_addon_metadata_attempt.cpp'),
+                'link_with': [addon_host_library, libvlccore],
+                'suite': ['qt', 'addons'],
+                'timeout': 180,
+                'include_directories': qt_include_dir,
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': [
+                    '-DHAKONE_ATTEMPT_PROCESS_FIXTURE="' + addon_metadata_attempt_process.full_path() + '"',
+                    '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
+                    '-DHAKONE_ATTEMPT_RUST_WORKER="' + addon_worker_target.full_path() + '"',
+                    '-DHAKONE_ATTEMPT_FRENCH_TV_WASM="' + meson.project_source_root() / 'contrib-addons/examples/french-tv/dist/addon.wasm' + '"',
+                ],
+                'link_args': qt_link_args,
+                'depends': [addon_worker_dependencies, addon_metadata_attempt_process],
+                'env': addon_worker_environment,
+            }
+        endif
         if host_system == 'linux'
             foreach addon_test : ['native_provider_context', 'native_metadata_owner']
                 vlc_tests += {

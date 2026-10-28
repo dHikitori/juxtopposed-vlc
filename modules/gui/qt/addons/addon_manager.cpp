@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
+#include "addon_metadata_attempt.hpp"
+#include "addon_metadata_completion_policy.hpp"
 #include "addon_storage.hpp"
 #include "addon_ui_assets.hpp"
 #include "addon_store_authority.hpp"
@@ -104,8 +106,15 @@ QString packagePart(const QString& global) { return global.section('/', 0, 0); }
 
 }
 
-AddonManager::AddonManager(const QString& directory, QObject* parent)
-    : QObject(parent), m_store(directory), m_network(this), m_hostServices(this)
+AddonManager::AddonManager(const QString& directory, QObject* parent) : AddonManager(directory, {}, parent) {}
+std::unique_ptr<AddonManager> AddonManager::withNetworkTransport(const QString& directory,
+    std::unique_ptr<QNetworkAccessManager>& value, QObject* parent)
+{
+    if (!NetworkBroker::canAdoptTransport(value.get(), parent)) return {};
+    return std::unique_ptr<AddonManager>(new AddonManager(directory, std::move(value), parent));
+}
+AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAccessManager> value, QObject* parent)
+    : QObject(parent), m_store(directory), m_network(std::move(value), this), m_hostServices(this)
 {
     m_repositoryJobs=std::make_unique<AddonRepositoryJobs>(AddonStreamLifetime::applicationHandle());
     connect(&m_hostServices, &AddonHostServices::availabilityChanged, this, &AddonManager::capabilitiesChanged);
@@ -1019,6 +1028,11 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
 QString AddonManager::invoke(const QString& contributionId, const QString& operation, const QVariantMap& context,
                             NetworkBroker::RequestGuard current)
 {
+    return invoke(contributionId, operation, context, std::move(current), {});
+}
+QString AddonManager::invoke(const QString& contributionId, const QString& operation, const QVariantMap& context,
+                            NetworkBroker::RequestGuard current, std::shared_ptr<AddonMetadataAttemptAdmission> attempt)
+{
     const QPointer<AddonManager> alive(this);
     const bool permitted = NetworkBroker::guardCurrent(current);
     if (!alive) return {};
@@ -1039,14 +1053,51 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
     QJsonObject projected = QJsonObject::fromVariantMap(context);
     auto identity = projected.value("identity").toObject(); QJsonObject permittedIdentity;
     const auto fields = package.manifest.permissionScope(QStringLiteral("metadata.context")).value("fields").toArray();
-    for (const auto& field : fields) if (identity.contains(field.toString())) permittedIdentity.insert(field.toString(), identity.value(field.toString()));
+    const auto approvedIdentity = package.grants.value(QStringLiteral("metadata.context")).toObject().value(QStringLiteral("fields")).toArray();
+    for (const auto& field : fields)
+        if (approvedIdentity.contains(field) && identity.contains(field.toString())) permittedIdentity.insert(field.toString(), identity.value(field.toString()));
     projected.insert("identity", permittedIdentity);
     // Local paths and consumer state never enter the portable provider projection.
     for (const auto& name : {QStringLiteral("url"), QStringLiteral("targets"), QStringLiteral("existingFields"), QStringLiteral("protectedFields"), QStringLiteral("fieldRevisions")}) projected.remove(name);
+    if (attempt) {
+        const auto contribution = package.manifest.contribution(localPart(contributionId));
+        const auto feature = projected.value(QStringLiteral("feature")).toString();
+        QStringList requested; bool fieldsValid = !projected.contains(QStringLiteral("fields")) || projected.value(QStringLiteral("fields")).isArray();
+        for (const auto& field : projected.value(QStringLiteral("fields")).toArray()) {
+            if (!field.isString() || field.toString().isEmpty() || field.toString().size() > 128 || requested.contains(field.toString())) fieldsValid = false;
+            requested.append(field.toString());
+        }
+        quint64 settingsRevision = 0; QJsonObject settings;
+        const bool configuration = m_store.networkConfiguration(package, &settings, &settingsRevision);
+        const auto policy = contribution ? metadataCompletionAbsentStatuses(contribution->document, feature, operation) : std::optional<QSet<int>>{};
+        const auto account = accountReference(package);
+        const QString partition = QString::fromLatin1(package.digest) + QLatin1Char(':') + QString::number(package.generation)
+            + QLatin1Char(':') + QString::number(settingsRevision);
+        const bool declared = contribution && contribution->type == QLatin1String("metadata.provider")
+            && contribution->contract == QLatin1String("metadata@1") && contribution->features.contains(feature)
+            && contribution->operations.contains(operation) && fieldsValid && requested.size() <= 64 && configuration && policy.has_value();
+        if (!declared || !attempt->bindManager({contributionId, contribution ? contribution->contract : QString{}, feature,
+                operation, account, partition, package.digest, package.generation, settingsRevision, package.grants, projected, requested,
+                policy.value_or(QSet<int>{})})) {
+            attempt->blocked(); const auto request = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            QTimer::singleShot(0, this, [this, request, contributionId] {
+                emit operationFinished(request, contributionId, QStringLiteral("denied"), {}, tr("The metadata attempt is not available."));
+            });
+            return request;
+        }
+        // Retain native authority independently of invocation.active and the Qt
+        // receipt object. No QObject/Manager/file reader enters this guard.
+        const auto original = std::move(current); const auto gate = attempt->m_capture.admission;
+        const auto lifetime = attempt->m_capture.lifetime; const auto live = attempt->m_capture.live;
+        current = [original, gate, lifetime, live] {
+            return lifetime.current() && gate && gate->current() && NetworkBroker::guardCurrent(original)
+                && NetworkBroker::guardCurrent(live);
+        };
+    }
     const QPointer<AddonWorker> instance = worker(package);
     if (!alive || !instance) return {};
     instance->setHostCapabilities(QJsonObject::fromVariantMap(capabilities()));
-    const auto request = instance->invoke(localPart(contributionId), operation, projected, std::move(current));
+    const auto request = instance->invoke(localPart(contributionId), operation, projected, std::move(current), std::move(attempt));
     if (!alive || !instance) return {};
     m_invocationPackages.insert(request, packageId); m_invocationContributions.insert(request, contributionId);
     return request;

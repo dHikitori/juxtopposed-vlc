@@ -1,0 +1,31 @@
+{
+  "id": "details",
+  "type": "metadata.provider",
+  "contract": "metadata@1",
+  "features": [
+    "video.details"
+  ],
+  "mediaKinds": [
+    "movie"
+  ],
+  "operations": [
+    "enrich"
+  ],
+  "requires": [
+    "metadata.context",
+    "network.http"
+  ],
+  "completionPolicy": {
+    "version": 1,
+    "httpAbsent": [
+      {
+        "feature": "video.details",
+        "operation": "enrich",
+        "statuses": [
+          404,
+          410
+        ]
+      }
+    ]
+  }
+}

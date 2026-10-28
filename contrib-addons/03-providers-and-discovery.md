@@ -176,3 +176,12 @@ The redesign's native parsing, file-fingerprint, subtitle matching and artwork o
 Route Qt screens, `PlayerController` background requests, preparser network stages and library enrichment into the same coordinator. Stop legacy remote Lua metadata/art traversal on the new path; retain only deliberately registered local/native readers. Do not run old and new automatic online systems concurrently. This concerns implementation ownership, not compatibility with old add-on packages, which is out of scope.
 
 Before enabling the new path, acceptance tests must demonstrate one logical lookup across simultaneous screen/background consumers, no stale writes, per-feature fallback, preserved user edits and no legacy network calls bypassing grants.
+
+## Complete NoMatch evidence
+
+Use the [metadata completion guide](sdk/metadata-completion.md) for the exact
+`no_match` result and optional HTTP 404/410 declaration. The host creates a receipt
+only for one actual current invocation with complete host observations. A pure
+provider can make zero host calls. Pending, failed, canceled, partial, or malformed
+work cannot certify NoMatch. This receipt alone does not authorize an aggregate
+result or a metadata write.

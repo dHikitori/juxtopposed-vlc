@@ -10,6 +10,7 @@ enable_testing()
 get_filename_component(VLC_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
 add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_store_authority.cpp addon_credentials.cpp
+    addon_metadata_attempt.cpp addon_metadata_attempt.hpp addon_metadata_completion_policy.cpp addon_metadata_completion_policy.hpp addon_metadata_identity.hpp
     addon_network.cpp addon_public_network_policy.cpp addon_worker.cpp addon_manager.cpp addon_native_authority.hpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
     addon_session_websocket.cpp addon_session_websocket.hpp addon_session_host.cpp addon_session_host.hpp
@@ -48,6 +49,28 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 add_test(NAME addon_metadata_catalogue COMMAND test_addon_metadata_catalogue)
 set_tests_properties(addon_metadata_catalogue PROPERTIES TIMEOUT 90)
+
+# Keep the real worker case in this suite. A missing worker omits the target.
+set(HAKONE_METADATA_ATTEMPT_WORKER "$ENV{VLC_ADDON_WORKER}" CACHE FILEPATH "Native worker for metadata completion tests")
+if(NOT HAKONE_METADATA_ATTEMPT_WORKER AND DEFINED VLC_BUILD_DIR)
+    set(HAKONE_METADATA_ATTEMPT_WORKER "${VLC_BUILD_DIR}/modules/gui/qt/vlc-addon-worker")
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND EXISTS "${HAKONE_METADATA_ATTEMPT_WORKER}")
+    add_executable(addon_metadata_attempt_process "../tests/fixtures/addon_metadata_attempt_process.c")
+    set_target_properties(addon_metadata_attempt_process PROPERTIES AUTOMOC OFF)
+    add_executable(test_addon_metadata_attempt "../tests/test_addon_metadata_attempt.cpp")
+    target_link_libraries(test_addon_metadata_attempt PRIVATE vlc_addon_host Qt6::Test)
+    target_compile_definitions(test_addon_metadata_attempt PRIVATE
+        HAKONE_ATTEMPT_PROCESS_FIXTURE="$<TARGET_FILE:addon_metadata_attempt_process>"
+        HAKONE_ATTEMPT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/metadata-attempt"
+        HAKONE_ATTEMPT_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
+        HAKONE_ATTEMPT_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm")
+    add_dependencies(test_addon_metadata_attempt addon_metadata_attempt_process)
+    add_test(NAME addon_metadata_attempt COMMAND test_addon_metadata_attempt)
+    set_tests_properties(addon_metadata_attempt PROPERTIES TIMEOUT 180)
+else()
+    message(STATUS "Metadata completion fixture needs a native Linux worker path")
+endif()
 
 foreach(name session_websocket session_host session_ui source_consent_ui metadata_family_plan git_objects)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")

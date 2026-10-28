@@ -29,6 +29,8 @@ public:
     // C++ only. The guard must own plain native state and must not read files.
     QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
                    NetworkBroker::RequestGuard);
+    QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
+                   NetworkBroker::RequestGuard, std::shared_ptr<AddonMetadataAttemptAdmission>);
     void cancel(const QString& invocation);
     void stop();
 signals:
@@ -42,6 +44,7 @@ private:
         QSet<QString> hostCalls;
         NetworkBroker::RequestGuard authority, current;
         std::shared_ptr<std::atomic_bool> active;
+        std::shared_ptr<AddonMetadataAttemptAdmission> attempt;
     };
     bool invocationCurrent(const QString&);
     void expire(const QString&);
@@ -52,7 +55,10 @@ private:
     void fail(const QString&);
     void finish(const QString&, const QString&, const QJsonObject&, const QString&);
     void rememberRetired(const QString&);
+    void revokeAttemptGates();
     InstalledPackage m_package;
+    QString m_attemptWorkerId;
+    QHash<QString, std::weak_ptr<AddonMetadataNativeAdmission>> m_attemptGates;
     NetworkBroker* m_network;
     QPointer<AddonHostServices> m_services;
     QProcess m_process;

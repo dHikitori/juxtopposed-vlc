@@ -116,6 +116,11 @@ endif
 QT_ADDON_HOST_SOURCES = \
 	addons/addon_manifest.cpp \
 	addons/addon_manifest.hpp \
+	addons/addon_metadata_attempt.cpp \
+	addons/addon_metadata_attempt.hpp \
+	addons/addon_metadata_completion_policy.cpp \
+	addons/addon_metadata_completion_policy.hpp \
+	addons/addon_metadata_identity.hpp \
 	addons/addon_package_store.cpp \
 	addons/addon_package_store.hpp \
 	addons/addon_store_authority.cpp \
@@ -2529,6 +2534,29 @@ endif
 check_PROGRAMS += test_qt_addon_metadata_catalogue
 TESTS += test_qt_addon_metadata_catalogue
 
+# This fixture includes a real worker row. Do not register a reduced suite.
+if HAVE_LINUX
+if BUILD_ADDON_RUNTIME
+addon_metadata_attempt_process_SOURCES = tests/fixtures/addon_metadata_attempt_process.c
+check_PROGRAMS += addon_metadata_attempt_process
+test_qt_addon_metadata_attempt_SOURCES = tests/test_addon_metadata_attempt.cpp
+nodist_test_qt_addon_metadata_attempt_SOURCES = tests/test_addon_metadata_attempt.moc
+BUILT_SOURCES += tests/test_addon_metadata_attempt.moc
+CLEANFILES += tests/test_addon_metadata_attempt.moc
+test_qt_addon_metadata_attempt_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) \
+    -DHAKONE_ATTEMPT_PROCESS_FIXTURE='"$(abs_builddir)/addon_metadata_attempt_process$(EXEEXT)"' \
+    -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(abs_srcdir)/tests/fixtures/metadata-attempt"' \
+    -DHAKONE_ATTEMPT_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
+    -DHAKONE_ATTEMPT_FRENCH_TV_WASM='"$(abs_top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm"'
+test_qt_addon_metadata_attempt_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_metadata_attempt_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_metadata_attempt_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+test_qt_addon_metadata_attempt$(EXEEXT): addon_metadata_attempt_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
+check_PROGRAMS += test_qt_addon_metadata_attempt
+TESTS += test_qt_addon_metadata_attempt
+endif
+endif
+
 test_qt_addon_stream_manifest_SOURCES = tests/test_addon_stream_manifest.cpp
 nodist_test_qt_addon_stream_manifest_SOURCES = tests/test_addon_stream_manifest.moc
 BUILT_SOURCES += tests/test_addon_stream_manifest.moc
@@ -3657,3 +3685,7 @@ check-radio-browser-worker: vlc-addon-worker$(EXEEXT)
 check-local: check-radio-browser-worker
 endif
 endif
+
+EXTRA_DIST += tests/test_addon_metadata_attempt.cpp tests/fixtures/addon_metadata_attempt_process.c \
+    tests/fixtures/receipt_tls_fixture.hpp tests/fixtures/metadata-attempt/receipt-tls-cert.pem \
+    tests/fixtures/metadata-attempt/receipt-tls-key.pem

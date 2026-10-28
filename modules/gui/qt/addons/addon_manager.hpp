@@ -27,6 +27,9 @@ class AddonManager : public QObject
     Q_PROPERTY(QVariantMap updateResult READ updateResult NOTIFY revisionChanged FINAL)
 public:
     explicit AddonManager(const QString& storageDirectory, QObject* parent = nullptr);
+    // Native construction only. No runtime transport setter is available.
+    static std::unique_ptr<AddonManager> withNetworkTransport(const QString& storageDirectory,
+        std::unique_ptr<QNetworkAccessManager>&, QObject* parent = nullptr);
     ~AddonManager() override;
     int revision() const { return m_revision; }
     QString errorMessage() const { return m_error; }
@@ -86,6 +89,8 @@ public:
     // C++ only. Native owners supply a memory-only request guard.
     QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context,
                    NetworkBroker::RequestGuard);
+    QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context,
+                   NetworkBroker::RequestGuard, std::shared_ptr<AddonMetadataAttemptAdmission>);
     void cancel(const QString& invocation);
     quint64 fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
     quint64 fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
@@ -103,6 +108,7 @@ signals:
     void operationFinished(const QString& invocation, const QString& contribution, const QString& status,
                            const QVariantMap& data, const QString& error);
 private:
+    AddonManager(const QString&, std::unique_ptr<QNetworkAccessManager>, QObject*);
     QJsonObject schema(const InstalledPackage&) const;
     QJsonObject savedSettings(const QString&) const;
     QString accountReference(const InstalledPackage&) const;

@@ -60,6 +60,11 @@ QStringList AddonHostServices::availableOperations() const
 }
 quint64 AddonHostServices::dispatch(const Context& context, const QString& operation, const QJsonObject& request, Completion completion, int timeoutMs)
 {
+    return dispatch(context, operation, request, std::move(completion), timeoutMs, {});
+}
+quint64 AddonHostServices::dispatch(const Context& context, const QString& operation, const QJsonObject& request,
+                                   Completion completion, int timeoutMs, TerminalObserver observer)
+{
     if (m_closing) return 0;
     const QPointer<AddonHostServices> alive(this);
     int count = 0;
@@ -67,7 +72,7 @@ quint64 AddonHostServices::dispatch(const Context& context, const QString& opera
     if (count >= 32 || m_jobs.size() >= 128) return 0;
     const auto id = ++m_next; auto* timer = new QTimer(this); timer->setSingleShot(true);
     const auto registration = m_handlers.value(operation);
-    m_jobs.insert(id, {context.package, operation, registration.lifetime, timer, std::move(completion), {}, context.current});
+    m_jobs.insert(id, {context.package, operation, registration.lifetime, timer, std::move(completion), {}, context.current, std::move(observer)});
     QString error;
     const auto cap = capability(operation); const auto scope = context.grants.value(cap);
     if (cap.isEmpty() || !scope.isObject()) error = tr("This host operation needs permission.");
@@ -80,7 +85,7 @@ quint64 AddonHostServices::dispatch(const Context& context, const QString& opera
     if (error.isEmpty() && context.current && !context.current()) error = tr("The host request configuration changed.");
     if (!alive || !m_jobs.contains(id)) return id;
     if (!error.isEmpty()) { QTimer::singleShot(0, this, [this, id, error] { finish(id, {{}, error}); }); return id; }
-    connect(timer, &QTimer::timeout, this, [this, id] { finish(id, {{}, tr("The host operation time limit was reached.")}, true); });
+    connect(timer, &QTimer::timeout, this, [this, id] { finish(id, {{}, tr("The host operation time limit was reached.")}, true, AddonMetadataHostTerminal::Timeout); });
     timer->start(qBound(1, timeoutMs, 30000));
     const auto gate = m_gate;
     auto cancel = registration.handler(context, request, [gate, id](Result result) {
@@ -95,7 +100,7 @@ quint64 AddonHostServices::dispatch(const Context& context, const QString& opera
     else if (registration.lifetime && cancel) cancel();
     return id;
 }
-void AddonHostServices::finish(quint64 id, Result result, bool abort)
+void AddonHostServices::finish(quint64 id, Result result, bool abort, AddonMetadataHostTerminal terminal)
 {
     if (!m_jobs.contains(id)) return;
     const auto job = m_jobs.take(id);
@@ -106,10 +111,12 @@ void AddonHostServices::finish(quint64 id, Result result, bool abort)
     }
     if (!bounded(result.response)) { result.response = {}; result.error = tr("The host response is too large."); }
     result.error = result.error.left(512);
+    if (!result.error.isEmpty() && terminal == AddonMetadataHostTerminal::Complete) terminal = AddonMetadataHostTerminal::Failed;
+    if (job.observer) job.observer({terminal, false, 0});
     if (job.completion) job.completion(std::move(result));
 }
 void AddonHostServices::cancel(quint64 id)
-{ finish(id, {{}, tr("The app canceled the host operation.")}, true); }
+{ finish(id, {{}, tr("The app canceled the host operation.")}, true, AddonMetadataHostTerminal::Canceled); }
 void AddonHostServices::cancelPackage(const QString& package)
 {
     const QPointer<AddonHostServices> alive(this);

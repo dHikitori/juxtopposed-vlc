@@ -6,6 +6,7 @@ Use these guides for the current host contracts. The [architecture documents](..
 
 | Guide | Current status |
 | --- | --- |
+| [Metadata completion](metadata-completion.md) | Strict NoMatch receipts, complete host observations, and optional HTTP 404/410 policy. Native aggregate admission remains separate. |
 | [Rust message SDK](message-v1/README.md) | Typed input views, owned ABI buffers, pending-call ownership, and bounded output. |
 | [UI document](ui-document.md) | The host renders bounded JSON views at declared hooks. Packages do not supply QML or JavaScript for these views. |
 | [Static UI images](static-ui-images.md) | Declared package raster images use bounded decode jobs and revocable view tickets and image-owner claims. |

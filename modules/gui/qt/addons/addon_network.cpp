@@ -8,6 +8,7 @@
 #include <QNetworkRequest>
 #include <QPointer>
 #include <QTimer>
+#include <QThread>
 #include <QRegularExpression>
 #include <atomic>
 #include <chrono>
@@ -84,6 +85,8 @@ struct NetworkBroker::Job {
     CredentialResolver credential;
     RequestGuard current;
     Callback callback;
+    TerminalObserver observer;
+    bool transportFailed = false;
     QUrl url;
     QPointer<QNetworkReply> reply;
     QPointer<QTimer> deadline;
@@ -98,10 +101,23 @@ struct NetworkBroker::Job {
     Response response;
 };
 
-NetworkBroker::NetworkBroker(QObject* parent) : QObject(parent), m_network(this)
+NetworkBroker::NetworkBroker(QObject* parent) : NetworkBroker({}, parent) {}
+bool NetworkBroker::canAdoptTransport(const QNetworkAccessManager* value, const QObject* parent)
 {
-    // DNS validation/pinning must not be bypassed by an implicit proxy resolver.
-    m_network.setProxy(QNetworkProxy::NoProxy);
+    return value && !value->parent() && value->thread() == QThread::currentThread()
+        && (!parent || parent->thread() == QThread::currentThread());
+}
+std::unique_ptr<NetworkBroker> NetworkBroker::withTransport(std::unique_ptr<QNetworkAccessManager>& value, QObject* parent)
+{
+    if (!canAdoptTransport(value.get(), parent)) return {};
+    return std::unique_ptr<NetworkBroker>(new NetworkBroker(std::move(value), parent));
+}
+NetworkBroker::NetworkBroker(std::unique_ptr<QNetworkAccessManager> value, QObject* parent)
+    : QObject(parent), m_network(this), m_injected(std::move(value))
+{
+    if (m_injected) m_injected->setParent(this);
+    // DNS validation/pinning must not use an implicit proxy resolver.
+    transport().setProxy(QNetworkProxy::NoProxy);
 }
 NetworkBroker::~NetworkBroker()
 {
@@ -176,7 +192,14 @@ quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants
 quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants, const QJsonObject& request,
                             CredentialResolver credential, Callback callback, qint64 maximumBytes, RequestKind kind, RequestGuard current)
 {
+    return fetch(manifest, grants, request, std::move(credential), std::move(callback), maximumBytes, kind, std::move(current), {});
+}
+quint64 NetworkBroker::fetch(const Manifest& manifest, const QJsonObject& grants, const QJsonObject& request,
+                            CredentialResolver credential, Callback callback, qint64 maximumBytes, RequestKind kind, RequestGuard current,
+                            TerminalObserver observer)
+{
     auto job = std::make_shared<Job>();
+    job->observer = std::move(observer);
     job->id = ++m_sequence; job->manifest = manifest; job->grants = grants;
     job->request = request; job->credential = std::move(credential); job->callback = std::move(callback);
     job->current = std::move(current);
@@ -326,11 +349,18 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
     }
     const bool post = job->request.value(QStringLiteral("method")).toString(QStringLiteral("GET")) == QLatin1String("POST");
     if (!checkCurrent(job)) return;
-    job->reply = post ? m_network.post(request, body) : m_network.get(request);
+    job->reply = post ? transport().post(request, body) : transport().get(request);
     job->reply->setReadBufferSize(qMin<qint64>(job->limit + 1, 64 * 1024));
     connect(job->reply, &QNetworkReply::readyRead, this, [this, job] {
         if (!job->reply || !m_jobs.contains(job->id)) return;
         readResponse(job);
+    });
+    connect(job->reply, &QNetworkReply::errorOccurred, this, [job](QNetworkReply::NetworkError error) {
+        if (!job->reply) return;
+        const int status = job->reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool absenceOnly = (status == 404 && error == QNetworkReply::ContentNotFoundError)
+            || (status == 410 && error == QNetworkReply::ContentGoneError);
+        if (error != QNetworkReply::NoError && !absenceOnly) job->transportFailed = true;
     });
     connect(job->reply, &QNetworkReply::finished, this, [this, job] {
         if (!job->reply || !m_jobs.contains(job->id)) return;
@@ -348,7 +378,13 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
         responseHeaders(job);
         if (job->response.status == 0 || (reply->error() != QNetworkReply::NoError && job->response.status < 400))
             finish(job, tr("The app cannot make a secure connection to this add-on service."));
-        else finish(job);
+        else {
+            const auto terminal = (!job->prefix || job->response.body.size() < job->limit)
+                && !job->response.truncated && !job->transportFailed
+                && reply->isFinished() && reply->bytesAvailable() == 0 && job->response.status != 206
+                ? AddonMetadataHostTerminal::Complete : AddonMetadataHostTerminal::Incomplete;
+            finish(job, {}, terminal);
+        }
     });
 }
 
@@ -375,7 +411,7 @@ bool NetworkBroker::readResponse(const std::shared_ptr<Job>& job)
             responseHeaders(job);
             const auto length = reply->header(QNetworkRequest::ContentLengthHeader);
             job->response.truncated = !reply->isFinished() && (!length.isValid() || length.toLongLong() > job->response.body.size());
-            finish(job); return false;
+            finish(job, {}, AddonMetadataHostTerminal::Incomplete); return false;
         }
         if (read == BodyRead::TooLarge) { finish(job, tr("The add-on response is too large.")); return false; }
         return true;
@@ -385,7 +421,7 @@ bool NetworkBroker::readResponse(const std::shared_ptr<Job>& job)
     }
     return true;
 }
-void NetworkBroker::finish(const std::shared_ptr<Job>& job, const QString& error)
+void NetworkBroker::finish(const std::shared_ptr<Job>& job, const QString& error, AddonMetadataHostTerminal terminal)
 {
     if (!m_jobs.remove(job->id)) return;
     if (job->paceTicket) { appPacer().release(job->paceTicket, monotonicMs()); job->paceTicket = 0; }
@@ -398,7 +434,11 @@ void NetworkBroker::finish(const std::shared_ptr<Job>& job, const QString& error
         job->response.body.clear();
         job->response.error = tr("The add-on release, account, or settings changed.");
     }
-    const auto callback = std::move(job->callback);
+    if (!job->response.error.isEmpty()) terminal = AddonMetadataHostTerminal::Failed;
+    auto observer = std::move(job->observer);
+    auto callback = std::move(job->callback);
+    // All owner mutations are complete. Either callback may delete this owner.
+    if (observer) observer({terminal, true, job->response.status});
     if (callback) callback(job->response);
 }
 bool NetworkBroker::checkCurrent(const std::shared_ptr<Job>& job)
@@ -413,7 +453,7 @@ bool NetworkBroker::checkCurrent(const std::shared_ptr<Job>& job)
 void NetworkBroker::cancel(quint64 id)
 {
     const auto job = m_jobs.value(id); if (!job) return;
-    job->callback = {}; finish(job);
+    job->callback = {}; finish(job, {}, AddonMetadataHostTerminal::Canceled);
 }
 void NetworkBroker::cancelPackage(const QString& package)
 { const auto jobs = m_jobs; for (const auto& job : jobs) if (job->manifest.id == package) cancel(job->id); }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manifest.hpp"
+#include "addon_metadata_completion_policy.hpp"
 #include "addon_settings_migrations.hpp"
 #include "addon_storage_data.hpp"
 #include <QCryptographicHash>
@@ -341,7 +342,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     for (const auto& value : root.value("contributions").toArray()) {
         if (!value.isObject()) return fail(error, QStringLiteral("The contribution is not correct."));
         Contribution contribution; contribution.document = value.toObject(); const auto item = contribution.document;
-        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "qualityTiers", "analysisChannels", "assets", "extensions"}, error, "contribution")
+        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "completionPolicy", "qualityTiers", "analysisChannels", "assets", "extensions"}, error, "contribution")
             || !text(item,"id",&contribution.id,error) || !text(item,"type",&contribution.type,error) || !text(item,"contract",&contribution.contract,error)) return false;
         if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9.-]{0,63}$")).match(contribution.id).hasMatch() || identifiers.contains(contribution.id)
             || !types.contains(contribution.type)) return fail(error, QStringLiteral("A contribution ID or type is not correct or occurs more than once."));
@@ -353,6 +354,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
             || !strings(item.value("operations"),&contribution.operations,error,"operations") || !strings(item.value("requires"),&contribution.requires,error,"requires")) return false;
         for (const auto& capability : contribution.requires)
             if (!result.permissionDeclared(capability)) return fail(error, QStringLiteral("The contribution needs a declared permission."));
+        if (!validateMetadataCompletionPolicy(item)) return fail(error, QStringLiteral("The metadata completion policy is not correct."));
         if (contribution.type.startsWith(QLatin1String("ui."))) {
             for (const auto& key : {QStringLiteral("parameters"), QStringLiteral("stateSchema"), QStringLiteral("resultSchema")})
                 if (item.contains(key) && (!item.value(key).isObject() || !validateUiSchema(item.value(key).toObject())

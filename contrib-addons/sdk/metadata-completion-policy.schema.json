@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.org/addons/metadata-completion-policy-v1.schema.json",
+  "title": "Hakone metadata completion policy",
+  "$comment": "This schema validates the completionPolicy value only. The native manifest validator also validates contribution type and contract, declared feature and operation membership, unique feature/operation pairs, and native string limits.",
+  "type": "object",
+  "required": [
+    "version",
+    "httpAbsent"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "httpAbsent": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "rule": {
+      "type": "object",
+      "required": [
+        "feature",
+        "operation",
+        "statuses"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "feature": {
+          "$ref": "#/$defs/name"
+        },
+        "operation": {
+          "$ref": "#/$defs/name"
+        },
+        "statuses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "enum": [
+              404,
+              410
+            ]
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": 1,
+      "httpAbsent": [
+        {
+          "feature": "video.details",
+          "operation": "enrich",
+          "statuses": [
+            404,
+            410
+          ]
+        }
+      ]
+    }
+  ]
+}

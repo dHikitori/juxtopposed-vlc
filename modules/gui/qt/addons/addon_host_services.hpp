@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include <QObject>
+#include "addon_metadata_attempt.hpp"
 #include <QJsonObject>
 #include <QHash>
 #include <QPointer>
@@ -19,12 +20,14 @@ public:
     struct Context { QString package, contribution, invocation; QJsonObject grants; std::function<bool()> current; };
     struct Result { QJsonObject response; QString error; };
     using Completion = std::function<void(Result)>;
+    using TerminalObserver = std::function<void(AddonMetadataHostObservation)>;
     using Cancel = std::function<void()>;
     using Handler = std::function<Cancel(const Context&, const QJsonObject&, Completion)>;
     explicit AddonHostServices(QObject* parent = nullptr);
     ~AddonHostServices() override;
     bool registerOperation(const QString& operation, QObject* lifetime, Handler);
     quint64 dispatch(const Context&, const QString& operation, const QJsonObject&, Completion, int timeoutMs = 10000);
+    quint64 dispatch(const Context&, const QString& operation, const QJsonObject&, Completion, int timeoutMs, TerminalObserver);
     void cancel(quint64 job);
     void cancelPackage(const QString&);
     void close();
@@ -34,9 +37,9 @@ signals:
     void availabilityChanged();
 private:
     struct Registration { QPointer<QObject> lifetime; Handler handler; };
-    struct Job { QString package, operation; QPointer<QObject> lifetime; QPointer<QTimer> deadline; Completion completion; Cancel cancel; std::function<bool()> current; };
+    struct Job { QString package, operation; QPointer<QObject> lifetime; QPointer<QTimer> deadline; Completion completion; Cancel cancel; std::function<bool()> current; TerminalObserver observer; };
     struct Gate { std::mutex mutex; AddonHostServices* owner = nullptr; };
-    void finish(quint64, Result, bool abort = false);
+    void finish(quint64, Result, bool abort = false, AddonMetadataHostTerminal = AddonMetadataHostTerminal::Complete);
     void unregisterOperation(const QString&);
     QHash<QString, Registration> m_handlers;
     QHash<quint64, Job> m_jobs;

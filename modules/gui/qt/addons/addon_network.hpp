@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "addon_manifest.hpp"
+#include "addon_metadata_attempt.hpp"
 #include <QObject>
 #include <QNetworkAccessManager>
 #include <QHash>
@@ -36,6 +37,7 @@ public:
     enum class BodyRead { More, PrefixComplete, TooLarge };
     struct Response { int status = 0; QByteArray body; QJsonObject headers; QString error; bool truncated = false; };
     using Callback = std::function<void(const Response&)>;
+    using TerminalObserver = std::function<void(AddonMetadataHostObservation)>;
     using CredentialResolver = std::function<QByteArray(const QString& field)>;
     using RequestGuard = std::function<bool()>;
     static bool guardCurrent(const RequestGuard& guard) noexcept
@@ -44,6 +46,8 @@ public:
         catch (...) { return false; }
     }
     explicit NetworkBroker(QObject* parent = nullptr);
+    // Native construction only. A refused transfer leaves the caller as owner.
+    static std::unique_ptr<NetworkBroker> withTransport(std::unique_ptr<QNetworkAccessManager>&, QObject* parent = nullptr);
     ~NetworkBroker() override;
     quint64 fetch(const Manifest&, const QJsonObject& grants, const QJsonObject& request,
                   CredentialResolver, Callback, qint64 maximumBytes = 512 * 1024);
@@ -51,6 +55,8 @@ public:
                   CredentialResolver, Callback, qint64 maximumBytes, RequestKind kind);
     quint64 fetch(const Manifest&, const QJsonObject& grants, const QJsonObject& request,
                   CredentialResolver, Callback, qint64 maximumBytes, RequestKind kind, RequestGuard);
+    quint64 fetch(const Manifest&, const QJsonObject& grants, const QJsonObject& request,
+                  CredentialResolver, Callback, qint64 maximumBytes, RequestKind kind, RequestGuard, TerminalObserver);
     void cancel(quint64 job);
     void cancelPackage(const QString& packageId);
     static bool publicAddress(const QHostAddress&);
@@ -60,14 +66,20 @@ public:
     static bool textPrefixContentType(const QString&);
     static BodyRead readBody(QIODevice*, QByteArray&, qint64 limit, bool prefix);
 private:
+    friend class AddonManager;
+    static bool canAdoptTransport(const QNetworkAccessManager*, const QObject*);
+    NetworkBroker(std::unique_ptr<QNetworkAccessManager>, QObject*);
+    QNetworkAccessManager& transport() { return m_injected ? *m_injected : m_network; }
     struct Job;
     bool checkCurrent(const std::shared_ptr<Job>&);
     void begin(const std::shared_ptr<Job>&);
     void resolved(const std::shared_ptr<Job>&, const QList<QHostAddress>&);
     bool readResponse(const std::shared_ptr<Job>&);
     void responseHeaders(const std::shared_ptr<Job>&);
-    void finish(const std::shared_ptr<Job>&, const QString& error = {});
+    void finish(const std::shared_ptr<Job>&, const QString& error = {},
+                AddonMetadataHostTerminal = AddonMetadataHostTerminal::Failed);
     QNetworkAccessManager m_network;
+    std::unique_ptr<QNetworkAccessManager> m_injected;
     QHash<quint64, std::shared_ptr<Job>> m_jobs;
     quint64 m_sequence = 0;
 };

@@ -11,6 +11,7 @@ namespace vlc::addons {
 AddonWorker::AddonWorker(const InstalledPackage& package, NetworkBroker* network, QObject* parent)
     : QObject(parent), m_package(package), m_network(network)
 {
+    m_attemptWorkerId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_startup.setSingleShot(true);
     connect(&m_startup, &QTimer::timeout, this, [this] { fail(tr("The add-on did not start before the time limit.")); });
     connect(&m_process, &QProcess::readyReadStandardOutput, this, &AddonWorker::read);
@@ -63,6 +64,11 @@ bool AddonWorker::configurationCurrent() const
 QString AddonWorker::invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
                            NetworkBroker::RequestGuard nativeCurrent)
 {
+    return invoke(contribution, operation, context, std::move(nativeCurrent), {});
+}
+QString AddonWorker::invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
+                           NetworkBroker::RequestGuard nativeCurrent, std::shared_ptr<AddonMetadataAttemptAdmission> attempt)
+{
     const QPointer<AddonWorker> alive(this);
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     if (m_failed) {
@@ -88,6 +94,18 @@ QString AddonWorker::invoke(const QString& contribution, const QString& operatio
         QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("denied"), {}, tr("This add-on operation needs permission.")); });
         return id;
     }
+    if (attempt) {
+        for (auto it = m_attemptGates.begin(); it != m_attemptGates.end();) {
+            const auto gate = it->lock();
+            if (!gate || !gate->current()) it = m_attemptGates.erase(it); else ++it;
+        }
+        if (m_attemptGates.size() >= 1024 || !attempt->bindWorker(m_attemptWorkerId, id, contribution, operation, context)) {
+            attempt->blocked();
+            QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("denied"), {}, tr("The metadata attempt is not available.")); });
+            return id;
+        }
+        m_attemptGates.insert(id, attempt->m_capture.admission);
+    }
     auto* deadline = new QTimer(this); deadline->setSingleShot(true);
     auto active = std::make_shared<std::atomic_bool>(true);
     NetworkBroker::RequestGuard current = [authority, active] {
@@ -95,7 +113,7 @@ QString AddonWorker::invoke(const QString& contribution, const QString& operatio
         if (!NetworkBroker::guardCurrent(authority)) { active->store(false); return false; }
         return active->load();
     };
-    m_invocations.insert(id, {contribution, deadline, {}, {}, {}, authority, std::move(current), std::move(active)});
+    m_invocations.insert(id, {contribution, deadline, {}, {}, {}, authority, std::move(current), std::move(active), std::move(attempt)});
     connect(deadline, &QTimer::timeout, this, [this] { fail(tr("The add-on used more time than the execution limit.")); });
     deadline->start(30000);
     send({{QStringLiteral("type"), QStringLiteral("invoke")}, {QStringLiteral("id"), id},
@@ -136,7 +154,12 @@ void AddonWorker::send(const QJsonObject& message)
     if (bytes.size() > 1024 * 1024) { fail(tr("The add-on message is too large.")); return; }
     if (!m_ready) { m_queued.enqueue(message); start(); return; }
     if (m_process.bytesToWrite() > 2 * 1024 * 1024) { fail(tr("The add-on cannot process requests in time.")); return; }
-    m_process.write(bytes + '\n');
+    const auto written = m_process.write(bytes + '\n');
+    if (type == QLatin1String("invoke")) {
+        const auto id = message.value(QStringLiteral("id")).toString();
+        const auto attempt = m_invocations.value(id).attempt;
+        if (attempt && (written != bytes.size() + 1 || !attempt->dispatched(id))) attempt->blocked();
+    }
 }
 
 void AddonWorker::read()
@@ -184,20 +207,34 @@ void AddonWorker::message(const QJsonObject& object)
     const auto type = object.value(QStringLiteral("type")).toString();
     const auto id = object.value(QStringLiteral("id")).toString();
     if (type == QLatin1String("result")) {
-        if (!m_invocations.contains(id)) return; // Cancelled/stale terminal result.
+        if (!m_invocations.contains(id)) {
+            // Keep ordinary stale-result handling, but retire a retained proof.
+            if (const auto gate = m_attemptGates.value(id).lock()) gate->revoke();
+            return;
+        }
         if (!invocationCurrent(id)) return;
         static const QSet<QString> statuses = {QStringLiteral("match"), QStringLiteral("partial"), QStringLiteral("no_match"),
             QStringLiteral("auth_required"), QStringLiteral("rate_limited"), QStringLiteral("offline"), QStringLiteral("ambiguous"),
             QStringLiteral("unsupported"), QStringLiteral("error")};
         const auto status = object.value(QStringLiteral("status")).toString();
         if (!statuses.contains(status) || !object.value(QStringLiteral("data")).isObject()) { fail(tr("The add-on sent a result that is not correct.")); return; }
+        if (const auto attempt = m_invocations.value(id).attempt) {
+            static const QSet<QString> resultKeys{QStringLiteral("type"), QStringLiteral("id"), QStringLiteral("status"), QStringLiteral("data"), QStringLiteral("error")};
+            bool clean = object.value(QStringLiteral("error")).isUndefined() || object.value(QStringLiteral("error")).isString();
+            for (auto it = object.begin(); it != object.end(); ++it) if (!resultKeys.contains(it.key())) clean = false;
+            if (!clean) attempt->blocked();
+            else attempt->terminal(id, status, object.value(QStringLiteral("data")).toObject(), object.value(QStringLiteral("error")).toString());
+        }
         // Guest errors are untrusted strings: only a bounded plain-text value is exposed.
         finish(id, status, object.value(QStringLiteral("data")).toObject(), object.value(QStringLiteral("error")).toString().left(512));
         return;
     }
     const auto invocation = object.value(QStringLiteral("invocation")).toString();
     // A request can arrive after its invocation ended or was canceled.
-    if (type == QLatin1String("host-call") && m_retired.contains(invocation)) return;
+    if (type == QLatin1String("host-call") && m_retired.contains(invocation)) {
+        if (const auto gate = m_attemptGates.value(invocation).lock()) gate->revoke();
+        return;
+    }
     if (type != QLatin1String("host-call") || id.isEmpty() || id.size() > 128
         || !m_invocations.contains(invocation)) { fail(tr("The add-on used a request ID that is not correct.")); return; }
     if (!invocationCurrent(invocation)) return;
@@ -206,6 +243,11 @@ void AddonWorker::message(const QJsonObject& object)
     if (m_hostCallCount >= 4096) { fail(tr("The add-on sent too many requests.")); return; }
     active.hostCalls.insert(id); ++m_hostCallCount;
     const auto operation = object.value(QStringLiteral("operation")).toString();
+    const auto attempt = active.attempt;
+    if (attempt) attempt->hostStarted(invocation, id, operation);
+    const auto observer = [selected = std::weak_ptr<AddonMetadataAttemptAdmission>(attempt), invocation, id](AddonMetadataHostObservation result) {
+        if (const auto owned = selected.lock()) owned->hostFinished(invocation, id, result);
+    };
     if (operation != QLatin1String("network.http") && m_services) {
         if (!object.value(QStringLiteral("request")).isObject()) { fail(tr("The add-on sent a host request that is not correct.")); return; }
         const auto contribution = QString(m_package.manifest.id + '/' + m_invocations.value(invocation).contribution);
@@ -218,17 +260,21 @@ void AddonWorker::message(const QJsonObject& object)
                 if (!weak->invocationCurrent(invocation)) return;
                 weak->send({{"type", "host-result"}, {"id", id}, {"invocation", invocation},
                     {"status", result.error.isEmpty() ? QStringLiteral("ok") : QStringLiteral("error")}, {"response", result.response}, {"error", result.error}});
-            });
+            }, 10000, observer);
         // A native handler can cancel this invocation during dispatch.
         if (!weak || weak->m_stopping || !weak->invocationCurrent(invocation)) {
             if (job && services) services->cancel(job);
             return;
         }
         if (job) m_invocations[invocation].serviceJobs.insert(job);
-        else send({{"type", "host-result"}, {"id", id}, {"invocation", invocation}, {"status", "error"}, {"error", tr("The add-on sent too many host requests.")}});
+        else {
+            if (attempt) attempt->hostFinished(invocation, id, {AddonMetadataHostTerminal::Unavailable, false, 0});
+            send({{"type", "host-result"}, {"id", id}, {"invocation", invocation}, {"status", "error"}, {"error", tr("The add-on sent too many host requests.")}});
+        }
         return;
     }
     if (operation != QLatin1String("network.http") || !m_package.grants.contains(operation)) {
+        if (attempt) attempt->hostFinished(invocation, id, {AddonMetadataHostTerminal::Denied, false, 0});
         send({{QStringLiteral("type"), QStringLiteral("host-result")}, {QStringLiteral("id"), id},
             {QStringLiteral("invocation"), invocation}, {QStringLiteral("status"), QStringLiteral("error")},
             {QStringLiteral("error"), tr("This host capability is not available or needs permission.")}});
@@ -247,7 +293,7 @@ void AddonWorker::message(const QJsonObject& object)
                     {QStringLiteral("body"), QString::fromUtf8(response.body)}, {QStringLiteral("headers"), response.headers},
                     {QStringLiteral("truncated"), response.truncated}}},
                 {QStringLiteral("error"), response.error}});
-        }, 512 * 1024, NetworkBroker::RequestKind::Document, current);
+        }, 512 * 1024, NetworkBroker::RequestKind::Document, current, observer);
     if (!weak || weak->m_stopping || !weak->invocationCurrent(invocation)) {
         if (network) network->cancel(job);
         return;
@@ -280,6 +326,7 @@ void AddonWorker::cancel(const QString& id)
     if (!m_invocations.contains(id)) return;
     const auto invocation = m_invocations.take(id);
     invocation.active->store(false);
+    if (invocation.attempt) { invocation.attempt->blocked(); invocation.attempt->revoke(); }
     Q_ASSERT(m_hostCallCount>=invocation.hostCalls.size()); m_hostCallCount-=invocation.hostCalls.size(); rememberRetired(id);
     if (invocation.deadline) { invocation.deadline->stop(); invocation.deadline->deleteLater(); }
     for (auto job : invocation.jobs) { m_network->cancel(job); if (!alive) return; }
@@ -290,6 +337,11 @@ void AddonWorker::cancel(const QString& id)
     if (m_ready && !m_stopping && m_process.state() == QProcess::Running)
         send({{QStringLiteral("type"), QStringLiteral("cancel")}, {QStringLiteral("id"), id}});
 }
+void AddonWorker::revokeAttemptGates()
+{
+    const auto gates = std::exchange(m_attemptGates, {});
+    for (const auto& weak : gates) if (const auto gate = weak.lock()) gate->revoke();
+}
 void AddonWorker::rememberRetired(const QString& id)
 {
     if (m_retired.contains(id)) return;
@@ -299,6 +351,7 @@ void AddonWorker::rememberRetired(const QString& id)
 void AddonWorker::fail(const QString& error)
 {
     if (m_stopping) return;
+    revokeAttemptGates();
     m_failed = true; m_stopping = true; m_ready = false; m_startup.stop(); m_queued.clear();
     if (m_process.state() != QProcess::NotRunning) m_process.kill();
     const auto ids = m_invocations.keys();
@@ -317,6 +370,7 @@ void AddonWorker::fail(const QString& error)
 void AddonWorker::stop()
 {
     const QPointer<AddonWorker> alive(this);
+    revokeAttemptGates();
     m_stopping = true; m_startup.stop(); m_ready = false; m_queued.clear();
     const auto ids = m_invocations.keys(); for (const auto& id : ids) { cancel(id); if (!alive) return; }
     if (m_process.state() != QProcess::NotRunning) { m_process.kill(); m_process.waitForFinished(1000); }

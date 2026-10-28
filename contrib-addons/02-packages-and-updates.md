@@ -117,6 +117,7 @@ The optional checksum permission improves matching; denying it leaves title/ID l
 | `runtime` | Omitted for data-only packages; otherwise one supported runtime kind and package-local entry |
 | `files` | Required exact portable paths including manifest, resources, locales and license; no globs or runtime remote code |
 | `contributions` | Required nonempty list; local IDs unique, exported as `packageId/localId` |
+| `contributions[].completionPolicy` | Optional `metadata@1` HTTP status policy. See [metadata completion](sdk/metadata-completion.md). The host validates the exact feature and operation. |
 | `permissions` | Empty if unused; explicit required/optional scopes, network origins and credential bindings |
 | `settings` | Optional schema/form paths and integer settings version; migration chain required for incompatible saved-data changes |
 | `locales`, `icon` | Optional validated resource paths, with a fallback language and host icon fallback |
