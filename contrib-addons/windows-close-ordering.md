@@ -1,6 +1,6 @@
 # Playback stop before user-quit cleanup
 
-The user reported that a responsive Windows app kept playing a network file
+The user reported that a responsive Windows app kept playing an audio-only network file
 after Close, then exited after about one minute. The process had exited before
 inspection. No thread capture identifies the operation that caused that wait.
 
@@ -49,3 +49,9 @@ and collected no user-app dump. A later repeat needs a fresh capture. Recorder
 files are in `/tmp/hakone-close-capture`; no user process was stopped by it.
 A second five-minute window after publication also saw no matching process.
 The actual Close test with the user's network file remains open.
+
+The user later confirmed audio-only playback. This fits the missing early Stop
+path; it does not identify the operation behind the one-minute wait. A separate
+[Windows remote-file read repair](windows-network-file-close.md) now passes its
+actual Windows cancellation checks. It still needs the full app rebuild and
+the user's Close retest.

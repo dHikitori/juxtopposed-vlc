@@ -1121,3 +1121,17 @@ vlc_tests += {
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlccore],
 }
+
+if host_system == 'windows' and not have_win_store
+    vlc_tests += {
+        'name': 'test_src_input_win_file_interrupt',
+        'sources': files('input/win_file_interrupt.c', 'input/win_file_interrupt_file.c',
+                         'input/win_file_interrupt_unc.c', '../../modules/access/directory.c'),
+        'suite': ['src', 'test_src'],
+        'link_with': [libvlccore],
+        'dependencies': [cc.find_library('mpr'), cc.find_library('netapi32')],
+        'c_args': ['-D__PLUGIN__', '-DMODULE_NAME=fixture', '-DMODULE_STRING="fixture"',
+                   '-ffunction-sections', '-fdata-sections'],
+        'link_args': ['-Wl,--gc-sections'],
+    }
+endif

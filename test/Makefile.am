@@ -1186,3 +1186,14 @@ check_PROGRAMS += test_src_misc_metadata_artwork_admission
 test_src_misc_metadata_artwork_admission_SOURCES = src/misc/metadata_artwork_admission.c ../src/preparser/metadata_artwork_outcome.c
 test_src_misc_metadata_artwork_admission_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_misc_metadata_artwork_admission_LDADD = $(LIBVLCCORE)
+
+# Private Windows synchronous remote-file cancellation. The adapters include
+# the real access sources; directory.c supplies their real support closure.
+if HAVE_WIN32_DESKTOP
+check_PROGRAMS += test_src_input_win_file_interrupt
+test_src_input_win_file_interrupt_SOURCES = src/input/win_file_interrupt.c src/input/win_file_interrupt_file.c src/input/win_file_interrupt_unc.c ../modules/access/directory.c
+test_src_input_win_file_interrupt_CPPFLAGS = $(AM_CPPFLAGS) -D__PLUGIN__ -DMODULE_NAME=fixture -DMODULE_STRING=\"fixture\"
+test_src_input_win_file_interrupt_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_input_win_file_interrupt_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_input_win_file_interrupt_LDADD = $(LIBVLCCORE) ../compat/libcompat.la -lmpr -lnetapi32
+endif

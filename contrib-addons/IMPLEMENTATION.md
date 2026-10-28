@@ -78,6 +78,13 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 ## Latest verified native checkpoint
 
+- Desktop Windows remote-file reads now have a native cancellation handshake
+  with one sequence per read. Actual Windows checks pass 15 groups and 298
+  assertions twice, including the real filesystem and UNC Read functions.
+  Three deliberate race defects fail their expected assertions. Full app
+  rebuild and the user's Close retest remain open. See
+  [Windows network-file Close](windows-network-file-close.md).
+
 - The Service now places registration and owner changes behind the native
   publication barrier. Its private capture keeps raw unavailable rows and
   refuses foreign or expired plan owners. The complete current host/native

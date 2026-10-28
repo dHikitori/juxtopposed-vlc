@@ -40,9 +40,13 @@ vlc_modules += {
 endif
 
 # Filesystem access module
+filesystem_sources = files('file.c', 'directory.c', 'fs.c')
+if host_system == 'windows' and not have_win_store
+    filesystem_sources += files('win_file_interrupt.c', 'win_file_interrupt.h')
+endif
 vlc_modules += {
     'name' : 'filesystem',
-    'sources' : files('file.c', 'directory.c', 'fs.c'),
+    'sources' : filesystem_sources,
     'plugin_dir' : 'access',
 }
 
@@ -608,7 +612,7 @@ if host_system == 'windows' and not have_win_store
 
     vlc_modules += {
         'name' : 'unc',
-        'sources' : files('unc.c'),
+        'sources' : files('unc.c', 'win_file_interrupt.c', 'win_file_interrupt.h'),
         'dependencies' : [mpr_lib, netapi32_lib],
         'plugin_dir' : 'access',
     }

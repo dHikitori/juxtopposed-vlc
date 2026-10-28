@@ -57,6 +57,9 @@
 #include <vlc_interrupt.h>
 #ifdef _WIN32
 # include <vlc_charset.h>
+# if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+#  include "win_file_interrupt.h"
+# endif
 #endif
 #include <vlc_fs.h>
 #include <vlc_url.h>
@@ -64,6 +67,9 @@
 typedef struct
 {
     int fd;
+#ifdef VLC_WIN_FILE_INTERRUPT
+    vlc_win_file_interrupt_t *interrupt;
+#endif
 
     bool b_pace_control;
 } access_sys_t;
@@ -252,6 +258,24 @@ int FileOpen( vlc_object_t *p_this )
     p_access->pf_control = FileControl;
     p_access->p_sys = p_sys;
     p_sys->fd = fd;
+#ifdef VLC_WIN_FILE_INTERRUPT
+    p_sys->interrupt = NULL;
+    /* Only owned regular remote files use the cancellation waiter. Preserve
+     * fd://, stream://, devices, and local file descriptors as before. */
+    if (S_ISREG(st.st_mode) && strcasecmp(p_access->psz_name, "fd")
+        && strcasecmp(p_access->psz_name, "stream")
+        && GetFileType((HANDLE)_get_osfhandle(fd)) == FILE_TYPE_DISK) {
+        wchar_t *path = ToWide(p_access->psz_filepath);
+        if (!path) goto error;
+        int remote = vlc_win_file_remote_path(path);
+        free(path);
+        if (remote < 0) goto error;
+        if (remote) {
+            p_sys->interrupt = vlc_win_file_interrupt_new();
+            if (!p_sys->interrupt) goto error;
+        }
+    }
+#endif
 
     if (S_ISREG (st.st_mode) || S_ISBLK (st.st_mode))
     {
@@ -300,16 +324,36 @@ void FileClose (vlc_object_t * p_this)
 
     access_sys_t *p_sys = p_access->p_sys;
 
+#ifdef VLC_WIN_FILE_INTERRUPT
+    vlc_win_file_interrupt_delete(p_sys->interrupt);
+#endif
     vlc_close (p_sys->fd);
 }
 
+
+#ifdef VLC_WIN_FILE_INTERRUPT
+static ssize_t ReadRemote(void *opaque, void *buffer, size_t length)
+{
+    access_sys_t *sys = opaque;
+    /* _read returns an int and rejects counts above INT_MAX. A bounded short
+     * read preserves the stream contract without changing local/fd reads. */
+    return _read(sys->fd, buffer, length > INT_MAX ? INT_MAX : (unsigned)length);
+}
+#endif
 
 static ssize_t Read (stream_t *p_access, void *p_buffer, size_t i_len)
 {
     access_sys_t *p_sys = p_access->p_sys;
     int fd = p_sys->fd;
 
-    ssize_t val = vlc_read_i11e (fd, p_buffer, i_len);
+    ssize_t val;
+#ifdef VLC_WIN_FILE_INTERRUPT
+    if (p_sys->interrupt)
+        val = vlc_win_file_interrupt_read(p_sys->interrupt, ReadRemote, p_sys,
+                                          p_buffer, i_len);
+    else
+#endif
+        val = vlc_read_i11e(fd, p_buffer, i_len);
     if (val < 0)
     {
         switch (errno)

@@ -30,6 +30,9 @@ endif
 
 libfilesystem_plugin_la_SOURCES = access/fs.h access/file.c access/directory.c access/fs.c
 libfilesystem_plugin_la_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_WIN32_DESKTOP
+libfilesystem_plugin_la_SOURCES += access/win_file_interrupt.c access/win_file_interrupt.h
+endif
 access_PLUGINS += libfilesystem_plugin.la
 
 if HAVE_EMSCRIPTEN
@@ -440,7 +443,7 @@ libamt_plugin_la_SOURCES = access/amt.c
 libamt_plugin_la_LIBADD = $(SOCKET_LIBS)
 access_PLUGINS += libamt_plugin.la
 
-libunc_plugin_la_SOURCES = access/unc.c access/smb_common.h
+libunc_plugin_la_SOURCES = access/unc.c access/smb_common.h access/win_file_interrupt.c access/win_file_interrupt.h
 libunc_plugin_la_LIBADD = -lmpr -lnetapi32
 if HAVE_WIN32
 if !HAVE_WINSTORE
