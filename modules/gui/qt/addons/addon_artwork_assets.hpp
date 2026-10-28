@@ -49,6 +49,7 @@ private:
     Options m_options;
     QHash<QString, Waiter> m_waiters;
     QHash<QString, Transfer> m_transfers;
-    int m_cacheEntries = 0;
+    // Account for existing files only on the first valid cache miss.
+    int m_cacheEntries = -1;
     qint64 m_cacheBytes = 0;
 };

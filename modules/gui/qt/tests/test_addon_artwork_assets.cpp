@@ -44,6 +44,64 @@ class TestAddonArtworkAssets : public QObject
 {
     Q_OBJECT
 private slots:
+    void firstMissCountsFilesCreatedAfterConstructionBeforeAnyFetch()
+    {
+        QTemporaryDir directory; Fake fake; AddonArtworkAssets::Options options; options.maxEntries = 1;
+        AddonArtworkAssets assets(fake.backend(), directory.path(), options);
+        QFile seed(directory.filePath(QStringLiteral("existing.png"))); QVERIFY(seed.open(QIODevice::WriteOnly));
+        const auto bytes = image(); QCOMPARE(seed.write(bytes), qint64(bytes.size())); seed.close();
+        int completed = 0; QUrl selected; QString error;
+        assets.resolve("example/art", QStringLiteral("https://images.example.org/miss.png"), [&](const QUrl& value, const QString& failure) { selected = value; error = failure; ++completed; });
+        QTRY_COMPARE(completed, 1); QVERIFY(selected.isEmpty()); QVERIFY(!error.isEmpty()); QVERIFY(fake.calls.isEmpty());
+        QVERIFY(QFileInfo::exists(seed.fileName()));
+    }
+    void cachedHitDoesNotMeasureTheDirectoryBeforeTheFirstMiss()
+    {
+        QTemporaryDir directory; Fake fake; const QString url = QStringLiteral("https://images.example.org/selected.png"); QUrl selected;
+        {
+            AddonArtworkAssets seed(fake.backend(), directory.path(), {});
+            seed.resolve("example/art", url, [&](const QUrl& value, const QString& error) { QVERIFY(error.isEmpty()); selected = value; });
+            QTRY_COMPARE(fake.calls.size(), 1); fake.complete(0); QVERIFY(!selected.isEmpty());
+        }
+        AddonArtworkAssets::Options options; options.maxEntries = 2;
+        AddonArtworkAssets assets(fake.backend(), directory.path(), options); int completed = 0;
+        assets.resolve("example/art", url, [&](const QUrl& value, const QString& error) { QCOMPARE(value, selected); QVERIFY(error.isEmpty()); ++completed; });
+        QTRY_COMPARE(completed, 1); QCOMPARE(fake.calls.size(), 1);
+        // A scan in either the constructor or the hit path would miss this
+        // second file and incorrectly permit another download at the limit.
+        QFile later(directory.filePath(QStringLiteral("later.png"))); QVERIFY(later.open(QIODevice::WriteOnly));
+        const auto bytes = image(); QCOMPARE(later.write(bytes), qint64(bytes.size())); later.close();
+        QString failure;
+        assets.resolve("example/art", QStringLiteral("https://images.example.org/miss.png"), [&](const QUrl& value, const QString& error) { QVERIFY(value.isEmpty()); failure = error; ++completed; });
+        QTRY_COMPARE(completed, 2); QCOMPARE(fake.calls.size(), 1); QVERIFY(!failure.isEmpty());
+        QVERIFY(QFileInfo::exists(selected.toLocalFile())); QVERIFY(QFileInfo::exists(later.fileName()));
+        assets.resolve("example/art", url, [&](const QUrl& value, const QString& error) { QCOMPARE(value, selected); QVERIFY(error.isEmpty()); ++completed; });
+        QTRY_COMPARE(completed, 3); QCOMPARE(fake.calls.size(), 1);
+    }
+    void firstMissEnforcesPreexistingByteLimit()
+    {
+        QTemporaryDir directory; Fake fake; const auto bytes = image();
+        AddonArtworkAssets::Options options; options.maxCacheBytes = bytes.size();
+        AddonArtworkAssets assets(fake.backend(), directory.path(), options);
+        QFile seed(directory.filePath(QStringLiteral("full.webp"))); QVERIFY(seed.open(QIODevice::WriteOnly));
+        QCOMPARE(seed.write(bytes), qint64(bytes.size())); seed.close();
+        int completed = 0;
+        assets.resolve("example/art", QStringLiteral("https://images.example.org/miss.png"), [&](const QUrl& value, const QString& error) { QVERIFY(value.isEmpty()); QVERIFY(!error.isEmpty()); ++completed; });
+        QTRY_COMPARE(completed, 1); QVERIFY(fake.calls.isEmpty()); QVERIFY(QFileInfo::exists(seed.fileName()));
+    }
+    void invalidAndCanceledRequestsDoNotStartCacheAccounting()
+    {
+        QTemporaryDir directory; Fake fake; AddonArtworkAssets::Options options; options.maxEntries = 1;
+        AddonArtworkAssets assets(fake.backend(), directory.path(), options); int completed = 0;
+        assets.resolve("example/art", QStringLiteral("file:///invalid.png"), [&](const QUrl& value, const QString& error) { QVERIFY(value.isEmpty()); QVERIFY(!error.isEmpty()); ++completed; });
+        QTRY_COMPARE(completed, 1); QVERIFY(fake.calls.isEmpty());
+        const auto canceled = assets.resolve("example/art", QStringLiteral("https://images.example.org/canceled.png"), [&](const QUrl&, const QString&) { ++completed; });
+        QVERIFY(!canceled.isEmpty()); assets.cancel(canceled); QTest::qWait(0); QCOMPARE(completed, 1); QVERIFY(fake.calls.isEmpty());
+        QFile seed(directory.filePath(QStringLiteral("later.jpg"))); QVERIFY(seed.open(QIODevice::WriteOnly));
+        const auto bytes = image(); QCOMPARE(seed.write(bytes), qint64(bytes.size())); seed.close();
+        assets.resolve("example/art", QStringLiteral("https://images.example.org/miss.png"), [&](const QUrl& value, const QString& error) { QVERIFY(value.isEmpty()); QVERIFY(!error.isEmpty()); ++completed; });
+        QTRY_COMPARE(completed, 2); QVERIFY(fake.calls.isEmpty());
+    }
     void decodeAllowsOnlyBoundedImages()
     {
         AddonArtworkAssets::Options options; QString extension;

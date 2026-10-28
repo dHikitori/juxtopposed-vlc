@@ -38,7 +38,6 @@ AddonArtworkAssets::AddonArtworkAssets(Backend backend, const QString& directory
     m_options.maxCacheBytes = std::clamp<qint64>(options.maxCacheBytes, 1, 512 * 1024 * 1024);
     m_options.maxImageBytes = std::clamp<qint64>(options.maxImageBytes, 1, 1024 * 1024);
     m_options.maxDimension = std::clamp(options.maxDimension, 1, 1024);
-    measureCache();
 }
 AddonArtworkAssets::~AddonArtworkAssets() { invalidate(); }
 bool AddonArtworkAssets::imageFormat(const QByteArray& bytes, const Options& options, QString* extension)
@@ -103,6 +102,7 @@ QString AddonArtworkAssets::resolve(const QString& contribution, const QVariant&
         }
         const auto local = cached(key);
         if (!local.isEmpty()) { finish(key, local, {}); return; }
+        if (m_cacheEntries < 0) measureCache();
         if (m_cacheEntries >= m_options.maxEntries || m_cacheBytes >= m_options.maxCacheBytes || !m_backend.fetch) {
             finish(key, {}, tr("The artwork cache limit has been reached.")); return;
         }

@@ -299,6 +299,22 @@ It also records a later artifact-retention utility failure. This result covers
 the broker suite; the remaining integration and sanitizer checks are open.
 The published Windows build does not contain this change.
 
+## Artwork cache accounting
+
+Creating the artwork adapter no longer lists its cache directory. Accounting
+starts at the first valid cache miss, before the download quota check. A cached
+hit can use its selected file without a directory scan. Invalid requests and
+cancellation before the queued action leave accounting inactive.
+
+All 13 artwork adapter cases pass on the same fresh shared host, with no
+warnings, failed or skipped cases. Four new cases cover files added before
+first use, cached hits before a miss, byte limits, and invalid or canceled
+requests. The three applied files match those tested copies. The immutable
+suite record is `/tmp/hakone-artwork-assets-lazy-cache/normal-shared-proof.json`.
+The first real miss still scans the directory on the owner thread; active
+artwork work and full app performance remain open checks. The published
+Windows build does not contain this change.
+
 ## Stream handle expiry helper
 
 The stream preparation helper no longer starts its 250 ms expiry timer at
