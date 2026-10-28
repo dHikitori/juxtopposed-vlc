@@ -443,7 +443,10 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
     Manifest manifest;
     if (!parse(manifestFile.readAll(),&manifest,error)) return false;
     QMap<QString,QByteArray> data; qint64 total = 0;
-    const QString rootPath = root.canonicalFilePath() + QDir::separator();
+    QString rootPath = root.canonicalFilePath();
+    if (rootPath.isEmpty()) return fail(error, QStringLiteral("The package directory is not available."));
+    // Qt canonical paths use '/', including on Windows.
+    if (!rootPath.endsWith(QLatin1Char('/'))) rootPath += QLatin1Char('/');
     for (const auto& path : manifest.files) {
         QString checked = directory;
         for (const auto& component : path.split(QLatin1Char('/'))) {

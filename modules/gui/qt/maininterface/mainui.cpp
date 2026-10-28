@@ -401,6 +401,11 @@ void MainUI::registerQMLTypes()
             const auto buildRadio = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("radio-browser"));
             addonManager->ensureDistributionPackage(!installedRadio.isEmpty() && QFileInfo::exists(installedRadio)
                 ? installedRadio : buildRadio, QStringLiteral("org.hakone.radio-browser"));
+            const auto installedSubtitles = installedRoot.isEmpty() ? QString()
+                : QDir(installedRoot).filePath(QStringLiteral("thesubtitledb"));
+            const auto buildSubtitles = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("thesubtitledb"));
+            addonManager->ensureDistributionPackage(!installedSubtitles.isEmpty() && QFileInfo::exists(installedSubtitles)
+                ? installedSubtitles : buildSubtitles, QStringLiteral("org.hakone.thesubtitledb"));
             metadataService = new AddonMetadataService(addonManager, this);
             if (!metadataService->bindApplicationLifetime(m_mainCtx->addonStreamLifetime()))
                 metadataService->shutdown();

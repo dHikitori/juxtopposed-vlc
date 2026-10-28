@@ -1,7 +1,10 @@
 # Local Windows add-on build
 
 The local Windows x86_64 test build is in `build-windows/vlc-win64`.
-Run `vlc.exe` from that folder. Keep the complete folder together.
+The first checkpoint has a Windows add-on loader defect. The repair passes an
+actual Windows import check and is being rebuilt into the app. See
+[the loader repair](windows-addon-loader-repair.md). Keep the complete folder
+together when the new build is ready.
 
 `BUILD-INFO.json` records app and Core source
 `c1cbc65816e73fe9d21abe4e82d6e385ae4c70d7`, with a clean source snapshot.
