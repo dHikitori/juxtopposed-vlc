@@ -204,6 +204,27 @@ this helper. This change hardens the alternate host path. It does not establish
 a performance gain in the published app. Mounted session UI, source consent,
 source resolver, catalogue, and visualizer idle costs are still under repair.
 
+## Extensions settings display adapter
+
+Extensions settings can now use the shared summary's memory-only safe-mode
+value and retained rows. A refresh keeps the package rows visible while package
+actions wait for a current summary. Recovery uses the same supplied values.
+Standalone screens retain their earlier backend path after construction.
+The global disable control remains available during other work.
+
+All 62 Qt Quick cases pass: 47 installer/settings cases and 15 recovery cases.
+There are no failed or skipped cases, warnings, or runtime diagnostics. Two new
+cases check repeated display reads without synchronous package or safe-mode
+reads, and retained rows with stale actions refused. These checks use injected
+backends and the existing Qt Quick test executable. The applied source hashes
+match those tested copies. The records are in
+`/tmp/hakone-display-settings-ui/`; the normal proof SHA-256 is
+`50e86782986e22deae54a2c41b91182481daf30d3bdf1e4e2411a613338a9ee8`.
+
+The current MainUI still uses the earlier summary backend. The shared-view
+mount, combined host checks, and full app measurements remain open. This
+adapter alone does not remove the published app's synchronous reads.
+
 ## Native change notification foundation
 
 The host now has a native wake with a Windows event or a nonblocking POSIX

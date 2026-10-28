@@ -28,12 +28,20 @@ ColumnLayout {
     readonly property bool listReady: !summaryBackend || summaryBackend.available === true
     readonly property bool listLoading: !!summaryBackend && summaryBackend.loading === true
     readonly property string listError: summaryBackend ? summaryBackend.error || "" : ""
-    readonly property bool safeMode: { backend.revision; return backend.safeMode === true }
+    readonly property bool displayBacked: !!summaryBackend && summaryBackend.displayBacked === true
+    readonly property bool safeModeKnown: !displayBacked || summaryBackend.safeModeKnown === true
+    readonly property bool safeMode: {
+        if (displayBacked) return safeModeKnown && summaryBackend.safeMode === true
+        if (!ready) return false
+        backend.revision
+        return backend.safeMode === true
+    }
     readonly property var pendingPackage: backend.pendingPackage || ({})
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     // Read one package snapshot per revision. Delegates use this value only.
     readonly property var packages: {
-        if (summaryBackend) return listReady ? summaryBackend.rows || [] : []
+        if (summaryBackend) return (displayBacked || listReady) ? summaryBackend.rows || [] : []
+        if (!ready) return []
         backend.revision
         return backend.packages || []
     }
@@ -430,7 +438,7 @@ ColumnLayout {
             }
             Flow {
                 Layout.fillWidth: true; spacing: root.theme.dp(6)
-                ActionButton { caption: qsTr("Use extensions"); visible: root.safeMode; onClicked: root.setPaused(false) }
+                ActionButton { caption: qsTr("Use extensions"); visible: root.safeMode; enabled: typeof root.backend.setSafeMode === "function"; onClicked: root.setPaused(false) }
                 ActionButton { objectName: "addonOpenRecovery"; caption: qsTr("Recovery and saved data…"); visible: root.recoveryCount > 0; onClicked: root.openRecovery() }
             }
         }
@@ -473,7 +481,7 @@ ColumnLayout {
         Text { Layout.fillWidth: true; text: qsTr("Use these controls if an extension causes a problem."); textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13) }
         Flow {
             Layout.fillWidth: true; spacing: root.theme.dp(8)
-            ActionButton { objectName: "addonSafeMode"; caption: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"); onClicked: root.setPaused(!root.safeMode) }
+            ActionButton { objectName: "addonSafeMode"; caption: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"); enabled: typeof root.backend.setSafeMode === "function"; onClicked: root.setPaused(!root.safeMode) }
             ActionButton { caption: qsTr("Recovery and saved data…"); onClicked: root.openRecovery() }
         }
     }
@@ -666,7 +674,7 @@ ColumnLayout {
                                         objectName: "addonInstallEnable"
                                         Layout.fillWidth: true
                                         label: root.updatingInstalledPackage ? qsTr("Enable if disabled") : qsTr("Enable after installation"); checked: root.enableAfterInstall
-                                        enabled: !root.busy && root.candidateCanRun && root.backend.safeMode !== true && root.hostCapabilities.safeMode !== true
+                                        enabled: root.listReady && root.safeModeKnown && !root.busy && root.candidateCanRun && !root.safeMode && root.hostCapabilities.safeMode !== true
                                         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                                         onToggled: checked => root.enableAfterInstall = checked
                                     }
@@ -676,7 +684,7 @@ ColumnLayout {
                                             objectName: "addonInstallApprove"
                                             caption: qsTr("Give approval and install"); primaryAction: true
                                             enabled: !root.busy && root.permissionsKnown && (!root.enableAfterInstall || root.candidateCanRun)
-                                            onClicked: root.backend.approvePendingPackage(root.enableAfterInstall && root.backend.safeMode !== true)
+                                            onClicked: root.backend.approvePendingPackage(root.enableAfterInstall && !root.safeMode)
                                         }
                                         ActionButton {
                                             objectName: "addonInstallCancel"
@@ -739,6 +747,8 @@ ColumnLayout {
                         objectName: "addonManagementRecovery"
                         width: recoveryScroll.availableWidth
                         backend: root.backend; packageSnapshot: root.packages
+                        safeModeSnapshot: root.displayBacked ? root.safeMode : null
+                        actionsAvailable: root.listReady && root.safeModeKnown
                         actionGuard: root.currentList
                         onPendingActionChanged: if (pendingAction === "remove" || pendingAction === "removeData") root.removalRequested = true
                         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme

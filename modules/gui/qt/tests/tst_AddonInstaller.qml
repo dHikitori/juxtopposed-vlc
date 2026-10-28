@@ -89,6 +89,9 @@ TestCase {
         property bool available: false
         property bool current: false
         property bool autoStart: false
+        property bool displayBacked: false
+        property bool safeModeKnown: false
+        property bool safeMode: false
         property int refreshes: 0
         property int currentCalls: 0
         function isCurrent() { currentCalls++; return current }
@@ -112,6 +115,7 @@ TestCase {
         page.summaryBackend = null
         summary.rows = []; summary.loading = false; summary.error = ""; summary.available = false; summary.current = false
         summary.autoStart = false; summary.refreshes = 0; summary.currentCalls = 0
+        summary.displayBacked = false; summary.safeModeKnown = false; summary.safeMode = false
         manager.enableRequests = 0; manager.settingsSaves = 0
         manager.invalidateSummaryDuringSave = false; manager.asyncRemoval = false
         page.actionError = ""; page.removalRequested = false
@@ -634,6 +638,58 @@ TestCase {
         page.closeDialogs(); wait(20)
         verify(page.removalInProgress); verify(!item("addonRepositoryCancel").visible)
         manager.busy = false; verify(!page.removalInProgress)
+    }
+
+
+    function test_displaySummaryKeepsBasicReadsInMemory() {
+        summary.displayBacked = true
+        summary.loading = true
+        const counts = {packages: 0, safeMode: 0}
+        const proxy = {
+            get revision() { return manager.revision },
+            get packages() { ++counts.packages; return manager.packages },
+            get safeMode() { ++counts.safeMode; return manager.safeMode },
+            get busy() { return manager.busy },
+            get pendingPackage() { return manager.pendingPackage },
+            get updateResult() { return manager.updateResult },
+            get errorMessage() { return manager.errorMessage },
+            setSafeMode: value => manager.setSafeMode(value)
+        }
+        const probe = createTemporaryObject(managementFactory, testCase,
+            {backend: manager, summaryBackend: summary, width: 600})
+        verify(probe !== null)
+        probe.backend = proxy
+        verify(!probe.safeModeKnown); verify(!probe.safeMode)
+        for (let i = 0; i < 20; ++i) {
+            manager.revision++
+            probe.active = false; probe.active = true
+            compare(probe.packages.length, 0); verify(!probe.safeMode)
+        }
+        summary.safeModeKnown = true; summary.safeMode = true
+        summary.rows = [{id: "org.example.one", name: "One", enabled: true}]
+        summary.available = true; summary.current = true; summary.loading = false
+        tryCompare(probe, "safeMode", true)
+        compare(probe.packages.length, 1)
+        probe.openRecovery()
+        const recovery = findChild(probe, "addonManagementRecovery")
+        tryVerify(() => recovery !== null && recovery.visible)
+        compare(recovery.safeMode, true)
+        manager.revision++
+        compare(counts.packages, 0)
+        compare(counts.safeMode, 0)
+        probe.closeDialogs()
+    }
+    function test_displaySummaryRetainsRowsWhileActionsWait() {
+        summary.displayBacked = true; summary.safeModeKnown = true
+        const row = {id: "org.example.one", name: "One", version: "1.0.0", enabled: true, configured: true}
+        summaryRows([row]); selectPackage(row.id)
+        summary.available = false; summary.current = false; summary.loading = true
+        wait(20)
+        compare(page.packages.length, 1); compare(page.selectedPackage.id, row.id)
+        verify(!page.setPackageEnabled(row.id, false)); compare(manager.enableRequests, 0)
+        verify(!item("addonPackageConfigure_" + row.id).enabled)
+        summary.available = true; summary.current = true; summary.loading = false
+        verify(page.setPackageEnabled(row.id, false)); compare(manager.enableRequests, 1)
     }
 
 }

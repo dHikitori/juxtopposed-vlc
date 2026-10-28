@@ -11,16 +11,25 @@ ColumnLayout {
     property bool lightTheme: false
     property Component videoBackdropContent
     property var packageSnapshot: null
+    property var safeModeSnapshot: null
     property var actionGuard: null
+    property bool actionsAvailable: true
+    property bool ready: false
+    Component.onCompleted: ready = true
     property string actionError: ""
     property string actionStatus: ""
     property string pendingAction: ""
     readonly property bool supported: !!backend && typeof backend.setSafeMode === "function"
     readonly property bool busy: !!backend && backend.busy === true
-    readonly property bool safeMode: { if (!backend) return false; backend.revision; return backend.safeMode === true }
+    readonly property bool safeMode: {
+        if (safeModeSnapshot !== null) return safeModeSnapshot === true
+        if (!ready || !backend) return false
+        backend.revision
+        return backend.safeMode === true
+    }
     readonly property var packageRows: {
         if (packageSnapshot !== null) return packageSnapshot
-        if (!backend) return []
+        if (!ready || !backend) return []
         backend.revision
         return backend.packages || []
     }
@@ -54,6 +63,10 @@ ColumnLayout {
         } else completedAction(operation)
     }
     function currentAction() {
+        if (!actionsAvailable) {
+            actionError = qsTr("The extension list changed. Try this action again.")
+            return false
+        }
         if (!actionGuard || actionGuard()) return true
         actionError = qsTr("The extension list changed. Try this action again.")
         return false
@@ -78,6 +91,7 @@ ColumnLayout {
         objectName: "addonSafeMode"
         caption: root.safeMode ? qsTr("Use add-ons") : qsTr("Temporarily disable add-ons")
         text: caption; tooltipTextFormat: Text.PlainText
+        enabled: root.supported
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         onClicked: {
             const success = root.backend.setSafeMode(!root.safeMode)
@@ -127,7 +141,7 @@ ColumnLayout {
             RedesignButton {
                 objectName: "addonRecover_" + row.modelData.id
                 visible: row.modelData.recoveryRequired === true
-                enabled: !root.busy && typeof root.backend.recoverPackage === "function"
+                enabled: root.actionsAvailable && !root.busy && typeof root.backend.recoverPackage === "function"
                 caption: qsTr("Recover add-on"); text: caption; tooltipTextFormat: Text.PlainText
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.request(row.modelData.id, "recover")
@@ -135,7 +149,7 @@ ColumnLayout {
             RedesignButton {
                 objectName: "addonRestore_" + row.modelData.id
                 visible: row.modelData.suppressed === true && row.modelData.distributionSource === true
-                enabled: !root.busy && typeof root.backend.stageDistributionPackage === "function"
+                enabled: root.actionsAvailable && !root.busy && typeof root.backend.stageDistributionPackage === "function"
                 caption: qsTr("Review app package"); text: caption; tooltipTextFormat: Text.PlainText
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.request(row.modelData.id, "restore")
@@ -146,14 +160,14 @@ ColumnLayout {
                 RedesignButton {
                     objectName: "addonRecoveryRemove_" + row.modelData.id
                     visible: row.modelData.recoveryRequired === true
-                    enabled: !root.busy && typeof root.backend.uninstall === "function"
+                    enabled: root.actionsAvailable && !root.busy && typeof root.backend.uninstall === "function"
                     caption: qsTr("Remove add-on"); text: caption; tooltipTextFormat: Text.PlainText
                     scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                     onClicked: root.request(row.modelData.id, "remove")
                 }
                 RedesignButton {
                     objectName: "addonRecoveryRemoveData_" + row.modelData.id
-                    enabled: !root.busy && typeof root.backend.uninstall === "function"
+                    enabled: root.actionsAvailable && !root.busy && typeof root.backend.uninstall === "function"
                     caption: row.modelData.installed === false ? qsTr("Delete saved data") : qsTr("Delete add-on and saved data"); text: caption; tooltipTextFormat: Text.PlainText
                     scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                     onClicked: root.request(row.modelData.id, "removeData")
