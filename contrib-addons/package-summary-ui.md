@@ -25,7 +25,33 @@ Manager retirement and app retirement close the service. Its worker keeps
 owned data through the joined app drain. Service destruction does not wait
 on a blocked file read and cannot publish a late result.
 
-At this implementation checkpoint, the source peer review is complete.
-The focused normal and sanitizer tests and the full Windows rebuild are
-pending. The UI hook is a separate change. Actual Windows Extensions-click
-responsiveness is not yet verified.
+The focused current-source run passes 19 normal and 19 ASAN/UBSAN cases,
+without failures or skips. Leak detection and stack-use-after-return checks
+are enabled; runtime diagnostics are empty. Coverage includes exact
+synchronous/asynchronous row parity for valid, disabled, unconfigured,
+configured-secret, suppressed, saved-data and corrupt-state packages;
+coalescing; peer revocation; deletion and callback reentry; quota refusal and
+retry; and a real blocked state-file read while the GUI heartbeat continues.
+That reader remains in the joined app drain after its view is closed.
+
+The focused build compiles the actual Manager, PackageStore, StoreAuthority,
+summary service, RepositoryJobs and app lifetime sources with instrumentation,
+along with the test and fresh summary metadata. Other host dependencies and
+Qt use pinned normal libraries. The unchanged Manager metadata is reused
+from that archive; newly generated metadata matches after include-path
+normalization. Both completed executables have verified compressed copies.
+The source, recipe, log, metadata and archive pins are recorded in
+`/tmp/hakone-package-summaries/final-validation.json`.
+
+The first isolated link exposed an older archive's preference methods and
+aggregate metadata/TLS definitions. Compiling the current Store and reusing
+unchanged Manager metadata repaired the test closure. Its failed logs remain
+separate. The controlled FIFO test's poll was made idempotent before its
+first execution. A test-only failure-cleanup write emits an unused-result
+build warning; it is not a sanitizer diagnostic.
+
+The Windows rebuild and actual Windows Extensions-click responsiveness
+remain separate gates. A private startup driver checks the actual app's
+settings/store/module paths, seven installs and owned-window responsiveness;
+it does not exercise clicking Extensions. No production source changed
+during the focused proof.
