@@ -11,6 +11,7 @@ ColumnLayout {
     property bool lightTheme: false
     property Component videoBackdropContent
     property var packageSnapshot: null
+    property var actionGuard: null
     property string actionError: ""
     property string actionStatus: ""
     property string pendingAction: ""
@@ -52,7 +53,13 @@ ColumnLayout {
             actionStatus = operation === "restore" ? qsTr("The app prepares the package for review.") : qsTr("The app removes the add-on.")
         } else completedAction(operation)
     }
+    function currentAction() {
+        if (!actionGuard || actionGuard()) return true
+        actionError = qsTr("The extension list changed. Try this action again.")
+        return false
+    }
     function request(id, operation) {
+        if (!currentAction()) return false
         const row = currentRow(id)
         if (busy || !permitted(row, operation)) return false
         actionError = ""; actionStatus = ""
@@ -186,6 +193,7 @@ ColumnLayout {
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         videoBackdropContent: root.videoBackdropContent
         onAccepted: {
+            if (!root.currentAction()) return
             const row = root.currentRow(packageId)
             if (root.busy || !root.permitted(row, operation) || root.backend.revision !== revision || root.signature(row) !== packageState) {
                 root.actionError = qsTr("The add-on changed. Open this action again."); return

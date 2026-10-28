@@ -305,6 +305,7 @@ RedesignSettingsDialog {
                     visible: root.category === "extensions" && !root.search.length
                     sourceComponent: RedesignAddonManagement {
                         externalAdvanced: true
+                        summaryBackend: typeof AddonPackageSummaries !== "undefined" ? AddonPackageSummaries : null
                         active: root.visible && root.category === "extensions" && !root.search.length
                         backend: typeof AddonManager !== "undefined" ? AddonManager : null
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor

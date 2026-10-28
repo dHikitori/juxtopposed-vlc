@@ -23,6 +23,10 @@ TestCase {
         property int updateRequests: 0
         property string lastRange: ""
         property bool lastPrerelease: true
+        property int settingsSaves: 0
+        property bool invalidateSummaryDuringSave: false
+        property bool asyncRemoval: false
+        property int enableRequests: 0
         property int settingsReads: 0
         property int stages: 0
         property int approvals: 0
@@ -52,7 +56,7 @@ TestCase {
                 permissions: {}, hostCapabilities: capabilities, workerRequired: true}
             revision++
         }
-        function setEnabled(id, enabled) { return true }
+        function setEnabled(id, enabled) { enableRequests++; return true }
         function setSafeMode(enabled) { safeMode = enabled; revision++; return true }
         function recoverPackage(id) { recoveries++; lastPackage = id; return true }
         function stageDistributionPackage(id) {
@@ -62,10 +66,36 @@ TestCase {
         }
         function retainedGenerations(id) { return [{version: "1.0.0"}] }
         function rollback(id) { rollbacks++; lastPackage = id; return true }
-        function uninstall(id, removeData) { removals++; lastPackage = id; removedData = removeData; return true }
+        function uninstall(id, removeData) {
+            removals++; lastPackage = id; removedData = removeData
+            if (asyncRemoval) { busy = true; summary.available = false; summary.loading = true; summary.rows = [] }
+            return true
+        }
+        function saveAddonSettings(id, values, secrets) {
+            settingsSaves++
+            if (invalidateSummaryDuringSave) { summary.available = false; summary.loading = true }
+            revision++
+            return true
+        }
         function settingsSchema(id) { settingsReads++; return {type: "object", properties: {}, additionalProperties: false} }
         function settingsValues(id) { settingsReads++; return {} }
         function settingsSecretStatus(id) { settingsReads++; return {} }
+    }
+    QtObject {
+        id: summary
+        property var rows: []
+        property bool loading: false
+        property string error: ""
+        property bool available: false
+        property bool current: false
+        property bool autoStart: false
+        property int refreshes: 0
+        property int currentCalls: 0
+        function isCurrent() { currentCalls++; return current }
+        function refresh() {
+            refreshes++
+            if (autoStart) { rows = []; available = false; loading = true; error = "" }
+        }
     }
     RedesignAddonManagement { id: page; width: 600; backend: manager }
     function item(name) {
@@ -79,6 +109,12 @@ TestCase {
     }
     function init() {
         page.closeDialogs(); wait(30)
+        page.summaryBackend = null
+        summary.rows = []; summary.loading = false; summary.error = ""; summary.available = false; summary.current = false
+        summary.autoStart = false; summary.refreshes = 0; summary.currentCalls = 0
+        manager.enableRequests = 0; manager.settingsSaves = 0
+        manager.invalidateSummaryDuringSave = false; manager.asyncRemoval = false
+        page.actionError = ""; page.removalRequested = false
         page.selectedId = ""; page.advanced = false; page.active = true
         item("addonSearch").clear()
         manager.busy = false; manager.pendingPackage = ({}); manager.packages = []
@@ -474,6 +510,130 @@ TestCase {
         manager.pendingPackage = Object.assign({}, manager.pendingPackage, {version: "2.0.0", digest: "new-digest"})
         wait(20); verify(!page.enableAfterInstall)
         verify(item("addonInstallDialog").visible)
+    }
+
+    function summaryRows(rows) {
+        summary.rows = rows; summary.available = true; summary.current = true
+        page.summaryBackend = summary; wait(20)
+    }
+    function test_summaryLoadingAndErrorNeverReadSynchronousPackages() {
+        const counts = {packages: 0}
+        const proxy = {
+            get revision() { return manager.revision },
+            get packages() { ++counts.packages; return manager.packages },
+            get busy() { return manager.busy },
+            get safeMode() { return manager.safeMode },
+            get pendingPackage() { return manager.pendingPackage },
+            get updateResult() { return manager.updateResult },
+            get errorMessage() { return manager.errorMessage },
+            setSafeMode: value => manager.setSafeMode(value)
+        }
+        const probe = createTemporaryObject(managementFactory, testCase, {backend: manager, summaryBackend: summary, width: 600})
+        verify(probe !== null); probe.backend = proxy; wait(20)
+        compare(counts.packages, 0)
+        summary.loading = true; wait(20)
+        verify(findChild(probe, "addonListState").text.includes("reads"))
+        verify(!findChild(probe, "addonListRetry").visible)
+        summary.loading = false; summary.error = "<b>Store unavailable</b>"; wait(20)
+        compare(findChild(probe, "addonListState").text, summary.error)
+        compare(findChild(probe, "addonListState").textFormat, Text.PlainText)
+        verify(findChild(probe, "addonListRetry").visible)
+        const before = summary.refreshes
+        findChild(probe, "addonListRetry").clicked(); compare(summary.refreshes, before + 1)
+        summary.error = ""; summary.available = true; summary.current = true
+        summary.rows = [{id: "org.example.one", name: "One", enabled: true}]; wait(20)
+        compare(probe.packages.length, 1)
+        findChild(probe, "addonSearch").text = "one"; probe.selectPackage("org.example.one"); manager.revision++; wait(20)
+        compare(counts.packages, 0)
+        const activated = summary.refreshes
+        probe.active = false; probe.active = true; compare(summary.refreshes, activated + 1)
+        probe.closeDialogs()
+    }
+    function test_summaryGuardRefusesStaleRowActionsBeforeNativeCalls() {
+        const row = {id: "org.example.radio", name: "Radio", version: "1.0.0", enabled: true,
+            source: "https://git.example.org/radio.git", appUpdateAvailable: true, hasPrevious: true}
+        summaryRows([row]); selectPackage(row.id)
+        summary.current = false
+        verify(!page.setPackageEnabled(row.id, false)); compare(manager.enableRequests, 0)
+        verify(!page.findUpdates(row.id)); compare(manager.updateRequests, 0)
+        verify(!page.reviewAppUpdate(row.id)); compare(manager.restores, 0)
+        const settingsReads = manager.settingsReads
+        page.configure(row.id); compare(item("addonManagementSettingsDialog"), null); compare(manager.settingsReads, settingsReads)
+        verify(!page.requestPackageChange(row.id, "remove")); compare(manager.removals, 0)
+        verify(page.actionError.includes("list changed")); verify(summary.currentCalls >= 5)
+        page.setPaused(true); verify(manager.safeMode)
+        item("addonAddExtension").clicked(); wait(20); verify(item("addonInstallDialog").visible)
+    }
+    function test_summaryGuardRunsAgainAtRemovalConfirmation() {
+        summaryRows([{id: "org.example.one", name: "One", version: "1.0.0", enabled: true}])
+        verify(page.requestPackageChange("org.example.one", "remove"))
+        const dialog = item("addonPackageChangeDialog")
+        summary.current = false
+        dialog.accept(); compare(manager.removals, 0)
+        verify(page.actionError.includes("list changed"))
+        verify(summary.refreshes >= 2)
+    }
+    function test_recoverySnapshotUsesTheSameRequestAndConfirmationGuard() {
+        summaryRows([{id: "org.example.one", name: "One", recoveryRequired: true, installed: false, savedData: true}])
+        page.openRecovery(); wait(20)
+        const recovery = item("addonManagementRecovery")
+        summary.current = false
+        verify(!recovery.request("org.example.one", "recover")); compare(manager.recoveries, 0)
+        verify(recovery.actionError.includes("list changed"))
+        summary.current = true
+        verify(recovery.request("org.example.one", "removeData"))
+        const confirmation = item("addonRecoveryConfirmation")
+        summary.current = false
+        confirmation.accept(); compare(manager.removals, 0)
+        verify(recovery.actionError.includes("list changed"))
+        findChild(recovery, "addonSafeMode").clicked(); verify(manager.safeMode)
+    }
+    function test_summaryRefreshClosesSettingsWithoutChangingThePreparedCandidate() {
+        summaryRows([{id: "org.example.one", name: "One", configured: true, enabled: true}])
+        page.configure("org.example.one"); wait(20); verify(item("addonManagementSettingsDialog").visible)
+        summary.available = false; summary.loading = true; wait(20)
+        compare(item("addonManagementSettingsDialog"), null)
+        verify(page.actionError.includes("Open settings again"))
+        manager.pendingPackage = {id: "org.example.new", name: "New", version: "1.0.0", permissions: {}}
+        wait(20); verify(item("addonInstallDialog").visible)
+        verify(item("addonInstallApprove").enabled)
+        item("addonInstallApprove").clicked(); compare(manager.approvals, 1)
+    }
+
+    function test_settingsSaveCanSynchronouslyInvalidateSummaryWithoutDestroyingItsForm() {
+        summaryRows([{id: "org.example.one", name: "One", configured: true, enabled: true}])
+        page.configure("org.example.one"); wait(20)
+        const form = findChild(item("addonManagementSettingsDialog"), "addonSettingsDialogForm")
+        verify(form !== null)
+        manager.invalidateSummaryDuringSave = true
+        verify(form.save())
+        wait(30)
+        compare(manager.settingsSaves, 1)
+        compare(item("addonManagementSettingsDialog"), null)
+        compare(page.actionError, "")
+        verify(summary.loading)
+    }
+    function test_asyncRemovalKeepsItsOperationStateWhenSummaryRowsClear() {
+        summaryRows([{id: "org.example.one", name: "One", configured: true, enabled: true}])
+        manager.asyncRemoval = true
+        verify(page.requestPackageChange("org.example.one", "remove"))
+        item("addonPackageChangeDialog").accept(); wait(20)
+        compare(manager.removals, 1); verify(manager.busy); compare(page.packages.length, 0)
+        verify(page.removalInProgress); verify(!item("addonRepositoryCancel").visible)
+        page.setPaused(true); verify(manager.safeMode)
+        manager.busy = false; verify(!page.removalInProgress)
+        manager.busy = true; verify(item("addonRepositoryCancel").visible)
+    }
+    function test_recoveryRemovalStateSurvivesClosingItsDialog() {
+        summaryRows([{id: "org.example.one", name: "One", installed: false, savedData: true}])
+        manager.asyncRemoval = true
+        page.openRecovery(); wait(20)
+        verify(item("addonManagementRecovery").request("org.example.one", "removeData"))
+        item("addonRecoveryConfirmation").accept(); wait(20)
+        verify(page.removalInProgress)
+        page.closeDialogs(); wait(20)
+        verify(page.removalInProgress); verify(!item("addonRepositoryCancel").visible)
+        manager.busy = false; verify(!page.removalInProgress)
     }
 
 }

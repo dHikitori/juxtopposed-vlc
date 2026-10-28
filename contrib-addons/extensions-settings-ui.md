@@ -12,8 +12,9 @@ prepared candidate. A new candidate resets the enable decision. Capability
 changes refresh the review without an automatic open.
 
 The page creates settings, install, and recovery dialogs only when requested.
-The page reads one package snapshot per revision. Recovery uses this same
-snapshot. Search and selection do not read package files. Names, source data,
+The app supplies an asynchronous package summary. The page requests this summary
+on activation. Recovery uses the same rows. Search and selection do not read
+package files. A fixture without this service can use one snapshot per revision. Names, source data,
 errors, and permission details use plain text.
 
 The Advanced section contains the legacy Lua startup option. This option does
@@ -32,8 +33,9 @@ frame as the General fixture. It covers dark and light themes, a narrow frame,
 keyboard focus, setup details, and install review. This fixture does not execute
 the native Preferences window or the Windows app.
 
-The final local proof and image hashes are in
-`/tmp/hakone-extensions-ui/final-proof.json`. The existing Installer, Recovery,
+The first layout proof and image hashes are in
+`/tmp/hakone-extensions-ui/final-proof.json`. The asynchronous UI hook proof is
+in `/tmp/hakone-extensions-ui/async-proof.json`. The existing Installer, Recovery,
 and Preferences suites cover permission approval, explicit enablement, update
 review, stale confirmations, dialog lifecycle, keyboard focus, and backend reads.
 
@@ -46,8 +48,13 @@ seven-package read at 421 ms on a local temporary store and 1598 ms on a WSL
 UNC store. Repeated synchronous reads can cause a visible interface stall.
 These measurements do not prove a deadlock.
 
-The QML change reduces repeated reads. It does not move the remaining read off
-the interface thread. A separate joined summary service must supply the list
-before this path can be declared responsive. Its load and error states must not
-appear as an empty installed list. Cached rows cannot authorize a package action.
-The native action handler remains the authority.
+The asynchronous UI hook shows distinct load, error, and empty states. An error
+has a retry action. The page does not call the synchronous package getter when
+a summary service exists. Row actions require a current summary at the request
+and final confirmation. Recovery has the same guard. A refresh closes an open
+settings form. Add, prepared-candidate review, request cancel, and the global
+pause control remain available.
+
+Cached rows cannot authorize a package action. The native action handler remains
+the authority. Native summary lifecycle tests and a fresh Windows runtime test
+remain separate validation requirements. The QML fixture does not prove them.
