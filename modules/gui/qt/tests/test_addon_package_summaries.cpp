@@ -245,7 +245,7 @@ private slots:
             if (writer >= 0) { ::write(writer, bytes.constData(), size_t(bytes.size())); ::close(writer); }
         });
         AddonPackageSummaries service(&manager, scope.owner.handle()); service.refresh();
-        QTRY_VERIFY((writer = ::open(encoded.constData(), O_WRONLY | O_NONBLOCK)) >= 0);
+        QTRY_VERIFY(writer >= 0 || (writer = ::open(encoded.constData(), O_WRONLY | O_NONBLOCK)) >= 0);
         unsigned beats = 0; QTimer heartbeat; heartbeat.setInterval(5); connect(&heartbeat, &QTimer::timeout, this, [&] { ++beats; }); heartbeat.start();
         QTRY_VERIFY(beats >= 5); QVERIFY(service.loading()); service.close(); scope.owner.close();
         QVERIFY(!scope.owner.handle().waitQt(std::chrono::milliseconds(20)));
