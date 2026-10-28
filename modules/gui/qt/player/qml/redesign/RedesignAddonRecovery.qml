@@ -10,17 +10,20 @@ ColumnLayout {
     property color accentColor: "#d37918"
     property bool lightTheme: false
     property Component videoBackdropContent
+    property var packageSnapshot: null
     property string actionError: ""
     property string actionStatus: ""
     property string pendingAction: ""
     readonly property bool supported: !!backend && typeof backend.setSafeMode === "function"
     readonly property bool busy: !!backend && backend.busy === true
     readonly property bool safeMode: { if (!backend) return false; backend.revision; return backend.safeMode === true }
-    readonly property var recoverable: {
+    readonly property var packageRows: {
+        if (packageSnapshot !== null) return packageSnapshot
         if (!backend) return []
         backend.revision
-        return (backend.packages || []).filter(row => row.recoveryRequired === true || row.savedData === true || (row.suppressed === true && row.distributionSource === true))
+        return backend.packages || []
     }
+    readonly property var recoverable: packageRows.filter(row => row.recoveryRequired === true || row.savedData === true || (row.suppressed === true && row.distributionSource === true))
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     visible: supported
     spacing: theme.dp(8)
@@ -28,7 +31,7 @@ ColumnLayout {
         return JSON.stringify([row.id, row.version || "", row.digest || "", row.source || "", row.enabled === true,
             row.recoveryRequired === true, row.suppressed === true, row.distributionSource === true, row.savedData === true])
     }
-    function currentRow(id) { return backend ? (backend.packages || []).find(row => row.id === id) : null }
+    function currentRow(id) { return packageRows.find(row => row.id === id) || null }
     function permitted(row, operation) {
         if (!row || row.builtin === true) return false
         if (operation === "restore") return row.suppressed === true && row.distributionSource === true && typeof backend.stageDistributionPackage === "function"

@@ -11,22 +11,73 @@ ColumnLayout {
     property color accentColor: "#d37918"
     property bool lightTheme: false
     property Component videoBackdropContent
+    property bool active: true
     property bool developerSource: false
     property bool enableAfterInstall: false
     property bool showTechnicalDetails: false
+    property bool advanced: false
+    property bool externalAdvanced: false
     property string actionError: ""
+    property string selectedId: ""
+    property bool ready: false
+    property string candidateKey: ""
     readonly property bool removalInProgress: packages.some(row => row.removing === true)
     readonly property bool busy: backend.busy === true
+    readonly property bool safeMode: { backend.revision; return backend.safeMode === true }
     readonly property var pendingPackage: backend.pendingPackage || ({})
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
+    // Read one package snapshot per revision. Delegates use this value only.
     readonly property var packages: { backend.revision; return backend.packages || [] }
     readonly property var managedPackages: packages.filter(row => row.builtin !== true && row.installed !== false && row.recoveryRequired !== true)
+    readonly property var filteredPackages: {
+        const query = search.text.trim().toLocaleLowerCase()
+        return managedPackages.filter(row => !query || [row.name || "", row.id || ""].join(" ").toLocaleLowerCase().includes(query))
+    }
+    readonly property var selectedPackage: packages.find(row => row.id === selectedId && row.builtin !== true && row.installed !== false && row.recoveryRequired !== true) || ({})
+    readonly property int recoveryCount: packages.filter(row => row.recoveryRequired === true || row.savedData === true || (row.suppressed === true && row.distributionSource === true)).length
     readonly property var updateResult: backend.updateResult || ({})
-    readonly property var hostCapabilities: Object.assign({}, pendingPackage.hostCapabilities || backend.capabilities || ({}), {safeMode: backend.safeMode === true})
+    readonly property var hostCapabilities: pendingPackage.id ? Object.assign({}, pendingPackage.hostCapabilities || backend.capabilities || ({}), {safeMode: safeMode}) : ({})
     readonly property bool updatingInstalledPackage: !!pendingPackage.id && packages.some(entry => entry.id === pendingPackage.id && entry.installed !== false)
     readonly property bool candidateCanRun: pendingPackage.workerRequired !== true || hostCapabilities.workerAvailable !== false
-    spacing: theme.dp(10)
-    onPendingPackageChanged: { enableAfterInstall = false; showTechnicalDetails = false }
+    spacing: theme.dp(12)
+    onPendingPackageChanged: {
+        const key = pendingPackage.id ? JSON.stringify([pendingPackage.id, pendingPackage.version || "", pendingPackage.digest || "", pendingPackage.source || "", pendingPackage.tag || ""]) : ""
+        if (key === candidateKey) return
+        candidateKey = key
+        enableAfterInstall = false; showTechnicalDetails = false
+        if (ready && active && pendingPackage.id) { openInstaller(); if (installerLoader.item) installerLoader.item.hadCandidate = true }
+        else if (!pendingPackage.id && installerLoader.item && installerLoader.item.hadCandidate) installerLoader.item.close()
+    }
+    onActiveChanged: if (!active) closeDialogs()
+    Component.onCompleted: { ready = true; if (active && pendingPackage.id) openInstaller() }
+    function closeDialogs() {
+        if (installerLoader.item) installerLoader.item.close()
+        if (configurationLoader.item) configurationLoader.item.close()
+        if (recoveryLoader.item) recoveryLoader.item.close()
+        packageMenu.close(); changePackage.close()
+    }
+    function openInstaller() {
+        if (recoveryLoader.item) recoveryLoader.item.close()
+        installerLoader.active = true
+        if (installerLoader.item) installerLoader.item.open()
+    }
+    function openRecovery() {
+        recoveryLoader.active = true
+        if (recoveryLoader.item) recoveryLoader.item.open()
+    }
+    function selectPackage(id) {
+        selectedId = id
+        packageList.currentIndex = filteredPackages.findIndex(row => row.id === id)
+        if (packageList.currentIndex >= 0) packageList.positionViewAtIndex(packageList.currentIndex, ListView.Contain)
+    }
+    function stateText(row) {
+        return row.removing === true ? qsTr("Removal in progress") : safeMode ? qsTr("Temporarily disabled")
+            : row.configured === false ? row.enabled === true ? qsTr("Setup required") : qsTr("Disabled · Setup required") : row.enabled === true ? qsTr("Enabled") : qsTr("Disabled")
+    }
+    function setPaused(paused) {
+        if (typeof backend.setSafeMode !== "function") return
+        actionError = backend.setSafeMode(paused) ? "" : backend.errorMessage || qsTr("The app cannot change the extension state.")
+    }
     readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "media.stream", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background"]
     readonly property bool permissionsKnown: {
         const permissions = pendingPackage.permissions || {}
@@ -109,8 +160,16 @@ ColumnLayout {
     function configure(id) {
         const entry = packages.find(item => item.id === id)
         if (!entry) return
-        configuration.packageId = id; configuration.packageName = entry.name
-        configuration.open()
+        configurationLoader.returnFocus = root.Window.window ? root.Window.window.activeFocusItem : null
+        configurationLoader.packageId = id; configurationLoader.packageName = entry.name
+        configurationLoader.active = true
+        if (configurationLoader.item) configurationLoader.item.open()
+    }
+    function restoreConfigurationFocus() {
+        if (configurationLoader.active) return
+        const target = configurationLoader.returnFocus
+        configurationLoader.returnFocus = null
+        if (active && visible && target && target.visible && target.enabled) target.forceActiveFocus(Qt.PopupFocusReason)
     }
     function capabilityLimits(capabilities, permissions, workerRequired) {
         const limits = []
@@ -128,276 +187,506 @@ ColumnLayout {
         if (capabilities.safeMode === true) limits.push(qsTr("Add-ons are temporarily disabled."))
         return limits.join("\n")
     }
-    RedesignAddonRecovery {
-        id: recovery
-        objectName: "addonManagementRecovery"
-        Layout.fillWidth: true
-        backend: root.backend
-        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-        videoBackdropContent: root.videoBackdropContent
-    }
+
     Text {
         Layout.fillWidth: true
-        text: qsTr("Install an add-on"); textFormat: Text.PlainText; wrapMode: Text.Wrap
-        color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16)
-    }
-    Text {
-        Layout.fillWidth: true
-        text: qsTr("Enter a Git repository and an exact release tag. Before installation, do a check of the package permissions.")
-        textFormat: Text.PlainText; wrapMode: Text.Wrap
-        color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
-    }
-    PackageInput {
-        id: source
-        objectName: "addonRepositorySource"
-        placeholderText: qsTr("Repository URL (HTTPS)"); Accessible.name: placeholderText
-        maximumLength: 2048
-        readOnly: root.busy || !!root.pendingPackage.id
-        visible: !root.developerSource
-    }
-    PackageInput {
-        id: tag
-        objectName: "addonRepositoryTag"
-        placeholderText: qsTr("Release tag (for example, v1.0.0)"); Accessible.name: placeholderText
-        maximumLength: 128
-        readOnly: root.busy || !!root.pendingPackage.id
-        visible: !root.developerSource
-    }
-    RedesignSwitchRow {
-        objectName: "addonDeveloperSource"
-        Layout.fillWidth: true
-        label: qsTr("Use a local development package")
-        checked: root.developerSource; enabled: !root.busy && !root.pendingPackage.id
-        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-        onToggled: checked => root.developerSource = checked
-    }
-    PackageInput {
-        id: directory
-        objectName: "addonLocalDirectory"
-        placeholderText: qsTr("Package folder"); Accessible.name: placeholderText
-        maximumLength: 4096
-        visible: root.developerSource; readOnly: root.busy || !!root.pendingPackage.id
-    }
-    ActionButton {
-        objectName: "addonStagePackage"
-        caption: root.busy ? root.removalInProgress ? qsTr("Package removal") : qsTr("Package preparation") : qsTr("Prepare package")
-        enabled: !root.busy && !root.pendingPackage.id && (root.developerSource
-            ? directory.text.trim().length > 0 && typeof root.backend.stageLocalPackage === "function"
-            : /^https:\/\/[^\s/]+\/[^\s]+$/i.test(source.text.trim()) && tag.text.trim().length > 0 && typeof root.backend.stageRepository === "function")
-        onClicked: root.developerSource ? root.backend.stageLocalPackage(directory.text.trim()) : root.backend.stageRepository(source.text.trim(), tag.text.trim())
-    }
-    ActionButton {
-        objectName: "addonRepositoryCancel"
-        caption: qsTr("Cancel request"); visible: root.busy && !root.removalInProgress
-        onClicked: root.backend.discardPendingPackage()
-    }
-    Text {
-        objectName: "addonUpdateStatus"
-        Layout.fillWidth: true; visible: !!root.updateResult.packageId
-        text: root.updateResult.checking ? qsTr("Update search in progress.")
-            : root.updateResult.canceled ? qsTr("The app canceled the update search.")
-            : root.backend.errorMessage ? root.backend.errorMessage
-            : root.updateResult.available ? qsTr("An update is ready for approval. The app keeps the installed release until you give approval.")
-            : qsTr("No compatible stable update is available.")
-        textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+        text: qsTr("Add-ons"); textFormat: Text.PlainText
+        color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(14)
     }
     Rectangle {
-        objectName: "addonInstallReview"
-        Layout.fillWidth: true; visible: !!root.pendingPackage.id
-        implicitHeight: review.implicitHeight + root.theme.dp(24)
+        objectName: "addonInstalledList"
+        Layout.fillWidth: true; Layout.preferredHeight: root.theme.dp(252)
         color: root.theme.field; radius: root.theme.dp(6)
-        ColumnLayout {
-            id: review
-            anchors.fill: parent; anchors.margins: root.theme.dp(12)
-            spacing: root.theme.dp(8)
-            Text {
-                Layout.fillWidth: true
-                text: (root.updatingInstalledPackage ? qsTr("Update approval: %1") : qsTr("Installation approval: %1")).arg(root.pendingPackage.name || root.pendingPackage.id || "")
-                textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.bright; font.pixelSize: root.theme.dp(16)
+        border.width: 1; border.color: root.theme.border
+        ListView {
+            id: packageList
+            objectName: "addonPackageList"
+            anchors.fill: parent; anchors.margins: 1; clip: true
+            model: root.filteredPackages
+            currentIndex: -1; boundsBehavior: Flickable.StopAtBounds
+            keyNavigationEnabled: true; keyNavigationWraps: false
+            C.ScrollBar.vertical: C.ScrollBar { policy: C.ScrollBar.AsNeeded }
+            onCurrentItemChanged: if (currentItem) root.selectedId = currentItem.modelData.id
+            Keys.onReturnPressed: if (root.selectedPackage.id) root.configure(root.selectedPackage.id)
+            Keys.onEnterPressed: if (root.selectedPackage.id) root.configure(root.selectedPackage.id)
+            delegate: C.ItemDelegate {
+                id: packageRow
+                required property var modelData
+                required property int index
+                objectName: "addonPackage_" + modelData.id
+                width: ListView.view.width; height: root.theme.dp(62)
+                highlighted: root.selectedId === modelData.id
+                hoverEnabled: true; focusPolicy: Qt.StrongFocus
+                leftPadding: root.theme.dp(16); rightPadding: root.theme.dp(16)
+                Accessible.name: (modelData.name || modelData.id) + ", " + root.stateText(modelData)
+                onClicked: root.selectPackage(modelData.id)
+                background: Rectangle {
+                    color: packageRow.highlighted ? root.theme.selected : packageRow.hovered ? root.theme.hover : "transparent"
+                    Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: root.theme.dp(3); color: root.theme.accent; visible: packageRow.activeFocus }
+                    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: root.theme.border; visible: packageRow.index < packageList.count - 1 }
+                }
+                contentItem: RowLayout {
+                    spacing: root.theme.dp(12)
+                    RedesignIcon {
+                        name: "nav-plugins"; color: packageRow.highlighted ? root.theme.bright : root.theme.foreground
+                        Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24)
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true; spacing: root.theme.dp(3)
+                        Text {
+                            Layout.fillWidth: true
+                            text: packageRow.modelData.name || packageRow.modelData.id; textFormat: Text.PlainText
+                            color: root.theme.bright; font.pixelSize: root.theme.dp(14); elide: Text.ElideRight
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: [packageRow.modelData.version || "", root.stateText(packageRow.modelData)].filter(value => value.length > 0).join(" · ")
+                            textFormat: Text.PlainText; color: root.theme.foreground; font.pixelSize: root.theme.dp(12); elide: Text.ElideRight
+                        }
+                    }
+                    RedesignSwitchRow {
+                        objectName: "addonPackageEnabled_" + packageRow.modelData.id
+                        label: ""; accessibleName: qsTr("Enable %1").arg(packageRow.modelData.name || packageRow.modelData.id)
+                        checked: packageRow.modelData.enabled === true && !root.safeMode
+                        enabled: !root.busy && !root.safeMode && packageRow.modelData.removing !== true
+                        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                        onToggled: checked => root.backend.setEnabled(packageRow.modelData.id, checked)
+                    }
+                }
             }
             Text {
-                objectName: "addonInstallOverview"
-                Layout.fillWidth: true
-                text: [qsTr("Version: %1").arg(root.pendingPackage.version || ""),
-                    qsTr("Repository: %1").arg(root.pendingPackage.source || ""), qsTr("Release tag: %1").arg(root.pendingPackage.tag || ""),
-                    root.pendingPackage.developerSource ? qsTr("Local development package") : "",
-                    root.pendingPackage.distributionSource ? qsTr("Package from the app distribution") : "",
-                    root.pendingPackage.publisherVerified === true ? qsTr("Publisher verified") : qsTr("Publisher not verified")].filter(value => value.length > 0).join("\n")
-                textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+                anchors.centerIn: parent; width: parent.width - root.theme.dp(32)
+                visible: packageList.count === 0
+                text: search.text.trim() ? qsTr("No extensions match your search.") : qsTr("No extensions are installed. Select Add extension to start.")
+                textFormat: Text.PlainText; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter
+                color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
             }
-            Text {
-                Layout.fillWidth: true
-                text: qsTr("This add-on needs permission to:"); textFormat: Text.PlainText; wrapMode: Text.Wrap
-                color: root.theme.bright; font.pixelSize: root.theme.dp(14)
-            }
-            Text {
-                objectName: "addonInstallPermissionSummary"
-                Layout.fillWidth: true
-                text: root.permissionSummaries(root.pendingPackage.permissions || {})
-                textFormat: Text.PlainText; wrapMode: Text.Wrap
-                color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
-            }
-            Text {
-                objectName: "addonInstallCapabilityLimits"
-                Layout.fillWidth: true; visible: text.length > 0
-                text: root.capabilityLimits(root.hostCapabilities, root.pendingPackage.permissions || {}, root.pendingPackage.workerRequired === true)
-                textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+        }
+    }
+    GridLayout {
+        Layout.fillWidth: true
+        columns: root.width < root.theme.dp(510) ? 1 : 2
+        columnSpacing: root.theme.dp(12); rowSpacing: root.theme.dp(8)
+        PackageInput {
+            id: search
+            objectName: "addonSearch"
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            placeholderText: qsTr("Search extensions"); Accessible.name: placeholderText
+            maximumLength: 256
+            onTextChanged: packageList.currentIndex = -1
+            Keys.onDownPressed: { packageList.forceActiveFocus(); if (packageList.count > 0) packageList.currentIndex = 0 }
+            Shortcut { sequence: StandardKey.Find; enabled: root.active && root.visible; onActivated: search.forceActiveFocus() }
+        }
+        RowLayout {
+            Layout.alignment: Qt.AlignRight
+            spacing: root.theme.dp(6)
+            ActionButton {
+                objectName: "addonAddExtension"
+                caption: root.pendingPackage.id ? qsTr("Review extension") : qsTr("Add extension")
+                primaryAction: true; enabled: !root.removalInProgress
+                onClicked: root.openInstaller()
             }
             ActionButton {
-                objectName: "addonInstallTechnicalDetails"
-                caption: root.showTechnicalDetails ? qsTr("Hide technical details") : qsTr("Technical details")
-                onClicked: root.showTechnicalDetails = !root.showTechnicalDetails
+                objectName: "addonSelectedSettings"
+                caption: qsTr("Settings"); visible: root.width >= root.theme.dp(360); enabled: !!root.selectedPackage.id && !root.busy
+                onClicked: root.configure(root.selectedPackage.id)
+            }
+            ActionButton {
+                id: moreButton
+                objectName: "addonMoreActions"
+                caption: root.width < root.theme.dp(360) ? "" : qsTr("More"); text: qsTr("More extension actions"); iconName: "more"
+                onClicked: packageMenu.toggleFrom(moreButton)
+            }
+        }
+    }
+    Text {
+        Layout.fillWidth: true; visible: !root.selectedPackage.id && !!root.managedPackages.length
+        text: qsTr("Select an extension for settings and version details."); textFormat: Text.PlainText
+        color: root.theme.playerLabel; font.pixelSize: root.theme.dp(12); wrapMode: Text.Wrap
+    }
+    Rectangle {
+        objectName: "addonSelectedDetails"
+        Layout.fillWidth: true; visible: !!root.selectedPackage.id
+        implicitHeight: details.implicitHeight + root.theme.dp(24)
+        color: root.theme.panel; radius: root.theme.dp(6); border.width: 1; border.color: root.theme.border
+        ColumnLayout {
+            id: details
+            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: root.theme.dp(12)
+            spacing: root.theme.dp(8)
+            RowLayout {
+                Layout.fillWidth: true
+                Text { Layout.fillWidth: true; text: root.selectedPackage.name || ""; textFormat: Text.PlainText; elide: Text.ElideRight; color: root.theme.bright; font.pixelSize: root.theme.dp(14) }
+                Text { text: root.stateText(root.selectedPackage); textFormat: Text.PlainText; color: root.theme.foreground; font.pixelSize: root.theme.dp(12) }
             }
             Text {
-                objectName: "addonInstallIdentity"
-                Layout.fillWidth: true; visible: root.showTechnicalDetails
-                text: [root.pendingPackage.id || "", qsTr("Package digest: %1").arg(root.pendingPackage.digest || "")].join("\n")
-                textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere
-                color: root.theme.foreground; font.pixelSize: root.theme.dp(12)
-            }
-            C.ScrollView {
-                id: permissionsScroll
-                visible: root.showTechnicalDetails
-                Layout.fillWidth: true; Layout.preferredHeight: Math.min(permissions.contentHeight + root.theme.dp(8), root.theme.dp(180))
-                contentWidth: availableWidth; clip: true
-                C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
-                TextEdit {
-                    id: permissions
-                    objectName: "addonInstallPermissions"
-                    width: permissionsScroll.availableWidth
-                    text: JSON.stringify(root.pendingPackage.permissions || {}, null, 2)
-                    textFormat: TextEdit.PlainText; wrapMode: TextEdit.WrapAnywhere
-                    readOnly: true; selectByMouse: true
-                    color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
-                    Accessible.name: qsTr("Requested add-on permissions")
-                }
-            }
-            RedesignSwitchRow {
-                objectName: "addonInstallEnable"
                 Layout.fillWidth: true
-                label: root.updatingInstalledPackage ? qsTr("Enable if disabled") : qsTr("Enable after installation"); checked: root.enableAfterInstall
-                enabled: !root.busy && root.candidateCanRun && root.backend.safeMode !== true && root.hostCapabilities.safeMode !== true
-                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                onToggled: checked => root.enableAfterInstall = checked
+                text: [root.selectedPackage.version ? qsTr("Version %1").arg(root.selectedPackage.version) : "",
+                    root.selectedPackage.distributionSource ? qsTr("Included with the app") : root.selectedPackage.developerSource ? qsTr("Local development package") : qsTr("Installed from a repository")].filter(value => value.length > 0).join(" · ")
+                textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(12)
             }
             Flow {
-                Layout.fillWidth: true; spacing: root.theme.dp(8)
+                Layout.fillWidth: true; spacing: root.theme.dp(6)
                 ActionButton {
-                    objectName: "addonInstallApprove"
-                    caption: qsTr("Give approval and install")
-                    enabled: !root.busy && root.permissionsKnown && (!root.enableAfterInstall || root.candidateCanRun)
-                    onClicked: root.backend.approvePendingPackage(root.enableAfterInstall && root.backend.safeMode !== true)
-                }
-                ActionButton {
-                    objectName: "addonInstallCancel"
-                    caption: qsTr("Cancel")
+                    objectName: "addonPackageConfigure_" + (root.selectedPackage.id || "")
+                    caption: root.selectedPackage.configured === false ? qsTr("Set up…") : qsTr("Settings…")
                     enabled: !root.busy
-                    onClicked: root.backend.discardPendingPackage()
+                    onClicked: root.configure(root.selectedPackage.id)
+                }
+                ActionButton {
+                    objectName: "addonPackageFindUpdates_" + (root.selectedPackage.id || "")
+                    caption: qsTr("Find updates")
+                    visible: root.selectedPackage.developerSource !== true && root.selectedPackage.distributionSource !== true
+                        && /^https:\/\//i.test(root.selectedPackage.source || "") && typeof root.backend.checkRepositoryUpdates === "function"
+                    enabled: !root.busy && !root.pendingPackage.id
+                    onClicked: root.backend.checkRepositoryUpdates(root.selectedPackage.id, "^" + root.selectedPackage.version, false)
+                }
+                ActionButton {
+                    objectName: "addonPackageAppUpdate_" + (root.selectedPackage.id || "")
+                    caption: qsTr("Review app version %1").arg(root.selectedPackage.appUpdateVersion || "")
+                    visible: root.selectedPackage.appUpdateAvailable === true && typeof root.backend.stageDistributionPackage === "function"
+                    enabled: !root.busy && !root.pendingPackage.id
+                    onClicked: root.backend.stageDistributionPackage(root.selectedPackage.id)
                 }
             }
         }
     }
-    Text {
-        Layout.fillWidth: true; Layout.topMargin: root.theme.dp(8)
-        text: qsTr("Installed add-ons"); textFormat: Text.PlainText; wrapMode: Text.Wrap
-        color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16)
+    Rectangle {
+        Layout.fillWidth: true
+        visible: root.safeMode || root.recoveryCount > 0
+        implicitHeight: notice.implicitHeight + root.theme.dp(20)
+        color: root.theme.field; radius: root.theme.dp(6)
+        ColumnLayout {
+            id: notice
+            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: root.theme.dp(10)
+            spacing: root.theme.dp(6)
+            Text {
+                Layout.fillWidth: true
+                text: root.safeMode ? qsTr("Extensions are temporarily disabled.") : qsTr("Some extensions or saved data need attention.")
+                textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+            }
+            Flow {
+                Layout.fillWidth: true; spacing: root.theme.dp(6)
+                ActionButton { caption: qsTr("Use extensions"); visible: root.safeMode; onClicked: root.setPaused(false) }
+                ActionButton { objectName: "addonOpenRecovery"; caption: qsTr("Recovery and saved data…"); visible: root.recoveryCount > 0; onClicked: root.openRecovery() }
+            }
+        }
     }
-    Repeater {
-        model: root.managedPackages
-        Rectangle {
-            id: row
-            required property var modelData
-            objectName: "addonPackage_" + modelData.id
+    RowLayout {
+        Layout.fillWidth: true; visible: root.busy || !!root.updateResult.packageId || !!root.pendingPackage.id
+        C.BusyIndicator { running: root.busy; visible: running; Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20) }
+        Text {
+            objectName: "addonUpdateStatus"
             Layout.fillWidth: true
-            implicitHeight: content.implicitHeight + root.theme.dp(20)
-            color: root.theme.field; radius: root.theme.dp(6)
-            ColumnLayout {
-                id: content
-                anchors.fill: parent; anchors.margins: root.theme.dp(10)
-                spacing: root.theme.dp(6)
-                Text { Layout.fillWidth: true; text: row.modelData.name; textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.bright; font.pixelSize: root.theme.dp(15) }
-                Text {
-                    Layout.fillWidth: true
-                    text: qsTr("Version %1 · %2").arg(row.modelData.version).arg(row.modelData.configured === false ? qsTr("Setup required")
-                        : row.modelData.enabled && root.backend.safeMode === true ? qsTr("Temporarily disabled") : row.modelData.enabled ? qsTr("Enabled") : qsTr("Disabled"))
-                    textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
-                }
-                RedesignSwitchRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Enabled"); accessibleName: qsTr("Enable %1").arg(row.modelData.name)
-                    checked: row.modelData.enabled === true; enabled: !root.busy
-                    scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                    onToggled: checked => root.backend.setEnabled(row.modelData.id, checked)
-                }
-                Flow {
-                    Layout.fillWidth: true; spacing: root.theme.dp(6)
-                    ActionButton {
-                        objectName: "addonPackageConfigure_" + row.modelData.id
-                        caption: qsTr("Configure…"); text: qsTr("Configure %1").arg(row.modelData.name)
-                        enabled: !root.busy
-                        onClicked: root.configure(row.modelData.id)
-                    }
-                    ActionButton {
-                        objectName: "addonPackageFindUpdates_" + row.modelData.id
-                        caption: qsTr("Find updates")
-                        visible: row.modelData.installed !== false && row.modelData.developerSource !== true && row.modelData.distributionSource !== true
-                            && /^https:\/\//i.test(row.modelData.source || "") && typeof root.backend.checkRepositoryUpdates === "function"
-                        enabled: !root.busy && !root.pendingPackage.id
-                        onClicked: root.backend.checkRepositoryUpdates(row.modelData.id, "^" + row.modelData.version, false)
-                    }
-                    ActionButton {
-                        objectName: "addonPackageAppUpdate_" + row.modelData.id
-                        caption: qsTr("Review app version %1").arg(row.modelData.appUpdateVersion || "")
-                        visible: row.modelData.appUpdateAvailable === true && typeof root.backend.stageDistributionPackage === "function"
-                        enabled: !root.busy && !root.pendingPackage.id
-                        onClicked: root.backend.stageDistributionPackage(row.modelData.id)
-                    }
-                    ActionButton {
-                        objectName: "addonPackageRollback_" + row.modelData.id
-                        caption: qsTr("Use previous version")
-                        visible: row.modelData.hasPrevious === true; enabled: !root.busy
-                        onClicked: root.requestPackageChange(row.modelData.id, "rollback")
-                    }
-                    ActionButton {
-                        objectName: "addonPackageRemove_" + row.modelData.id
-                        caption: qsTr("Remove")
-                        enabled: !root.busy
-                        onClicked: root.requestPackageChange(row.modelData.id, "remove")
-                    }
-                    ActionButton {
-                        objectName: "addonPackageRemoveData_" + row.modelData.id
-                        caption: qsTr("Delete add-on and saved data")
-                        enabled: !root.busy
-                        onClicked: root.requestPackageChange(row.modelData.id, "removeData")
-                    }
-                }
-            }
+            text: root.removalInProgress ? qsTr("The app removes the extension…") : root.updateResult.checking ? qsTr("Update search in progress.")
+                : root.updateResult.canceled ? qsTr("The app canceled the update search.")
+                : root.pendingPackage.id ? qsTr("An extension is ready for approval. The installed version stays available.")
+                : root.busy ? qsTr("The app prepares the extension…") : root.backend.errorMessage ? root.backend.errorMessage
+                : root.updateResult.available ? qsTr("An update is ready for approval.") : qsTr("No compatible stable update is available.")
+            textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
         }
-    }
-    Text {
-        Layout.fillWidth: true; visible: !root.managedPackages.length
-        text: qsTr("No add-ons are installed."); textFormat: Text.PlainText; wrapMode: Text.Wrap
-        color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
+        ActionButton {
+            objectName: "addonRepositoryCancel"; caption: qsTr("Cancel request")
+            visible: root.busy && !root.removalInProgress
+            onClicked: root.backend.discardPendingPackage()
+        }
     }
     Text {
         objectName: "addonManagementError"
-        Layout.fillWidth: true; visible: text.length > 0 && text !== recovery.actionError
+        Layout.fillWidth: true; visible: text.length > 0
         text: root.actionError || root.backend.errorMessage || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap
         color: root.theme.danger; font.pixelSize: root.theme.dp(13)
         Accessible.role: Accessible.AlertMessage
     }
-    RedesignAddonSettingsDialog {
-        id: configuration
-        objectName: "addonManagementSettingsDialog"
-        parent: root.Window.contentItem
-        backend: root.backend
+    ActionButton {
+        objectName: "addonAdvancedOptions"
+        Layout.fillWidth: true; visible: !root.externalAdvanced; leftAligned: true
+        caption: qsTr("Advanced Options"); iconName: root.advanced ? "chevron-up" : "chevron-down"
+        onClicked: root.advanced = !root.advanced
+        background: Rectangle { color: parent.hovered ? root.theme.hover : root.theme.panel; radius: root.theme.dp(6) }
+    }
+    ColumnLayout {
+        Layout.fillWidth: true; visible: root.advanced && !root.externalAdvanced; spacing: root.theme.dp(8)
+        Text { Layout.fillWidth: true; text: qsTr("Use these controls if an extension causes a problem."); textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13) }
+        Flow {
+            Layout.fillWidth: true; spacing: root.theme.dp(8)
+            ActionButton { objectName: "addonSafeMode"; caption: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"); onClicked: root.setPaused(!root.safeMode) }
+            ActionButton { caption: qsTr("Recovery and saved data…"); onClicked: root.openRecovery() }
+        }
+    }
+    RedesignActionMenu {
+        id: packageMenu
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         videoBackdropContent: root.videoBackdropContent
+        entries: [
+            {action: "rollback", label: qsTr("Use previous version"), enabled: !!root.selectedPackage.id && root.selectedPackage.hasPrevious === true && !root.busy},
+            {action: "remove", label: qsTr("Remove extension…"), enabled: !!root.selectedPackage.id && !root.busy},
+            {action: "removeData", label: qsTr("Delete extension and saved data…"), enabled: !!root.selectedPackage.id && !root.busy},
+            {action: "pause", label: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"), enabled: typeof root.backend.setSafeMode === "function"},
+            {action: "recovery", label: qsTr("Recovery and saved data…"), enabled: true}]
+        onActionRequested: action => action === "recovery" ? root.openRecovery() : action === "pause" ? root.setPaused(!root.safeMode) : root.requestPackageChange(root.selectedPackage.id, action)
+    }
+    Loader {
+        id: configurationLoader
+        property Item returnFocus: null
+        property string packageId: ""
+        property string packageName: ""
+        active: false
+        sourceComponent: RedesignAddonSettingsDialog {
+            objectName: "addonManagementSettingsDialog"
+            parent: root.Window.contentItem || root
+            backend: root.backend; packageId: configurationLoader.packageId; packageName: configurationLoader.packageName
+            scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+            videoBackdropContent: root.videoBackdropContent
+            onClosed: { configurationLoader.active = false; Qt.callLater(root.restoreConfigurationFocus) }
+        }
+        onLoaded: item.open()
+    }
+    Loader {
+        id: installerLoader
+        active: false
+        onLoaded: item.open()
+        sourceComponent: C.Dialog {
+            id: installer
+            property bool hadCandidate: !!root.pendingPackage.id
+            objectName: "addonInstallDialog"
+            title: root.pendingPackage.id ? qsTr("Review extension") : qsTr("Add extension")
+            parent: root.Window.contentItem || root
+            popupType: C.Popup.Item
+            x: Math.max(0, (parent.width - width) / 2); y: Math.max(0, (parent.height - height) / 2)
+            width: Math.max(0, Math.min(root.theme.dp(600), parent.width - root.theme.dp(32)))
+            height: Math.min(implicitHeight, Math.max(0, parent.height - root.theme.dp(32)))
+            padding: root.theme.dp(24); modal: true; dim: true; focus: true
+            header: null; footer: null; closePolicy: C.Popup.CloseOnEscape
+            onClosed: installerLoader.active = false
+            background: RedesignDialogSurface { theme: root.theme; videoBackdropContent: root.videoBackdropContent }
+            C.Overlay.modal: Rectangle { color: "#80000000" }
+            contentItem: ColumnLayout {
+                Accessible.role: Accessible.Dialog
+                Accessible.name: installer.title
+                spacing: root.theme.dp(12)
+                C.ScrollView {
+                    id: installScroll
+                    Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
+                    implicitHeight: installContent.implicitHeight
+                    contentWidth: availableWidth; clip: true
+                    C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
+                    ColumnLayout {
+                        id: installContent
+                        width: installScroll.availableWidth; spacing: root.theme.dp(12)
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.pendingPackage.id ? qsTr("Review extension") : qsTr("Add extension"); textFormat: Text.PlainText; wrapMode: Text.Wrap
+                                color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(20)
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("Enter the extension repository and release tag. The app will show its permissions before installation.")
+                                visible: !root.pendingPackage.id
+                                textFormat: Text.PlainText; wrapMode: Text.Wrap
+                                color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+                            }
+                            PackageInput {
+                                id: source
+                                objectName: "addonRepositorySource"
+                                placeholderText: qsTr("Repository URL (HTTPS)"); Accessible.name: placeholderText
+                                maximumLength: 2048
+                                readOnly: root.busy || !!root.pendingPackage.id
+                                visible: !root.developerSource && !root.pendingPackage.id
+                            }
+                            PackageInput {
+                                id: tag
+                                objectName: "addonRepositoryTag"
+                                placeholderText: qsTr("Release tag (for example, v1.0.0)"); Accessible.name: placeholderText
+                                maximumLength: 128
+                                readOnly: root.busy || !!root.pendingPackage.id
+                                visible: !root.developerSource && !root.pendingPackage.id
+                            }
+                            RedesignSwitchRow {
+                                objectName: "addonDeveloperSource"
+                                Layout.fillWidth: true
+                                label: qsTr("Use a local development package")
+                                visible: !root.pendingPackage.id
+                                checked: root.developerSource; enabled: !root.busy && !root.pendingPackage.id
+                                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                                onToggled: checked => root.developerSource = checked
+                            }
+                            PackageInput {
+                                id: directory
+                                objectName: "addonLocalDirectory"
+                                placeholderText: qsTr("Package folder"); Accessible.name: placeholderText
+                                maximumLength: 4096
+                                visible: root.developerSource && !root.pendingPackage.id; readOnly: root.busy || !!root.pendingPackage.id
+                            }
+                            ActionButton {
+                                objectName: "addonStagePackage"
+                                caption: root.busy ? qsTr("Prepare extension…") : qsTr("Continue")
+                                primaryAction: true
+                                visible: !root.pendingPackage.id
+                                enabled: !root.busy && !root.pendingPackage.id && (root.developerSource
+                                    ? directory.text.trim().length > 0 && typeof root.backend.stageLocalPackage === "function"
+                                    : /^https:\/\/[^\s/]+\/[^\s]+$/i.test(source.text.trim()) && tag.text.trim().length > 0 && typeof root.backend.stageRepository === "function")
+                                onClicked: root.developerSource ? root.backend.stageLocalPackage(directory.text.trim()) : root.backend.stageRepository(source.text.trim(), tag.text.trim())
+                            }
+                            Rectangle {
+                                objectName: "addonInstallReview"
+                                Layout.fillWidth: true; visible: !!root.pendingPackage.id
+                                implicitHeight: review.implicitHeight + root.theme.dp(24)
+                                color: root.theme.field; radius: root.theme.dp(6)
+                                ColumnLayout {
+                                    id: review
+                                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: root.theme.dp(12)
+                                    spacing: root.theme.dp(8)
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: (root.updatingInstalledPackage ? qsTr("Update approval: %1") : qsTr("Installation approval: %1")).arg(root.pendingPackage.name || root.pendingPackage.id || "")
+                                        textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.bright; font.pixelSize: root.theme.dp(16)
+                                    }
+                                    Text {
+                                        objectName: "addonInstallOverview"
+                                        Layout.fillWidth: true
+                                        text: [qsTr("Version: %1").arg(root.pendingPackage.version || ""),
+                                            qsTr("Repository: %1").arg(root.pendingPackage.source || ""), qsTr("Release tag: %1").arg(root.pendingPackage.tag || ""),
+                                            root.pendingPackage.developerSource ? qsTr("Local development package") : "",
+                                            root.pendingPackage.distributionSource ? qsTr("Package from the app distribution") : "",
+                                            root.pendingPackage.publisherVerified === true ? qsTr("Publisher verified") : qsTr("Publisher not verified")].filter(value => value.length > 0).join("\n")
+                                        textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: qsTr("This add-on needs permission to:"); textFormat: Text.PlainText; wrapMode: Text.Wrap
+                                        color: root.theme.bright; font.pixelSize: root.theme.dp(14)
+                                    }
+                                    Text {
+                                        objectName: "addonInstallPermissionSummary"
+                                        Layout.fillWidth: true
+                                        text: root.permissionSummaries(root.pendingPackage.permissions || {})
+                                        textFormat: Text.PlainText; wrapMode: Text.Wrap
+                                        color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+                                    }
+                                    Text {
+                                        objectName: "addonInstallCapabilityLimits"
+                                        Layout.fillWidth: true; visible: text.length > 0
+                                        text: root.capabilityLimits(root.hostCapabilities, root.pendingPackage.permissions || {}, root.pendingPackage.workerRequired === true)
+                                        textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+                                    }
+                                    ActionButton {
+                                        objectName: "addonInstallTechnicalDetails"
+                                        caption: root.showTechnicalDetails ? qsTr("Hide technical details") : qsTr("Technical details")
+                                        onClicked: root.showTechnicalDetails = !root.showTechnicalDetails
+                                    }
+                                    Text {
+                                        objectName: "addonInstallIdentity"
+                                        Layout.fillWidth: true; visible: root.showTechnicalDetails
+                                        text: [root.pendingPackage.id || "", qsTr("Package digest: %1").arg(root.pendingPackage.digest || "")].join("\n")
+                                        textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere
+                                        color: root.theme.foreground; font.pixelSize: root.theme.dp(12)
+                                    }
+                                    C.ScrollView {
+                                        id: permissionsScroll
+                                        visible: root.showTechnicalDetails
+                                        Layout.fillWidth: true; Layout.preferredHeight: Math.min(permissions.contentHeight + root.theme.dp(8), root.theme.dp(180))
+                                        contentWidth: availableWidth; clip: true
+                                        C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
+                                        TextEdit {
+                                            id: permissions
+                                            objectName: "addonInstallPermissions"
+                                            width: permissionsScroll.availableWidth
+                                            text: JSON.stringify(root.pendingPackage.permissions || {}, null, 2)
+                                            textFormat: TextEdit.PlainText; wrapMode: TextEdit.WrapAnywhere
+                                            readOnly: true; selectByMouse: true
+                                            color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+                                            Accessible.name: qsTr("Requested add-on permissions")
+                                        }
+                                    }
+                                    RedesignSwitchRow {
+                                        objectName: "addonInstallEnable"
+                                        Layout.fillWidth: true
+                                        label: root.updatingInstalledPackage ? qsTr("Enable if disabled") : qsTr("Enable after installation"); checked: root.enableAfterInstall
+                                        enabled: !root.busy && root.candidateCanRun && root.backend.safeMode !== true && root.hostCapabilities.safeMode !== true
+                                        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                                        onToggled: checked => root.enableAfterInstall = checked
+                                    }
+                                    Flow {
+                                        Layout.fillWidth: true; spacing: root.theme.dp(8)
+                                        ActionButton {
+                                            objectName: "addonInstallApprove"
+                                            caption: qsTr("Give approval and install"); primaryAction: true
+                                            enabled: !root.busy && root.permissionsKnown && (!root.enableAfterInstall || root.candidateCanRun)
+                                            onClicked: root.backend.approvePendingPackage(root.enableAfterInstall && root.backend.safeMode !== true)
+                                        }
+                                        ActionButton {
+                                            objectName: "addonInstallCancel"
+                                            caption: qsTr("Cancel")
+                                            enabled: !root.busy
+                                            onClicked: root.backend.discardPendingPackage()
+                                        }
+                                    }
+                                }
+                            }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true; visible: !!root.backend.errorMessage
+                    text: root.backend.errorMessage || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap
+                    color: root.theme.danger; font.pixelSize: root.theme.dp(13); Accessible.role: Accessible.AlertMessage
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    C.BusyIndicator { running: root.busy; visible: running; Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20) }
+                    Text { Layout.fillWidth: true; visible: root.busy; text: qsTr("The app prepares the extension…"); textFormat: Text.PlainText; color: root.theme.foreground; font.pixelSize: root.theme.dp(13); wrapMode: Text.Wrap }
+                    Item { Layout.fillWidth: true; visible: !root.busy }
+                    ActionButton { objectName: "addonInstallRequestCancel"; caption: qsTr("Cancel request"); visible: root.busy && !root.removalInProgress; onClicked: root.backend.discardPendingPackage() }
+                    ActionButton { caption: qsTr("Close"); onClicked: installer.close() }
+                }
+            }
+        }
+    }
+    Loader {
+        id: recoveryLoader
+        active: false
+        onLoaded: item.open()
+        sourceComponent: C.Dialog {
+            id: recoveryDialog
+            objectName: "addonRecoveryDialog"
+            title: qsTr("Recovery and saved data")
+            parent: root.Window.contentItem || root
+            popupType: C.Popup.Item
+            x: Math.max(0, (parent.width - width) / 2); y: Math.max(0, (parent.height - height) / 2)
+            width: Math.max(0, Math.min(root.theme.dp(620), parent.width - root.theme.dp(32)))
+            height: Math.min(implicitHeight, Math.max(0, parent.height - root.theme.dp(32)))
+            padding: root.theme.dp(24); modal: true; dim: true; focus: true
+            header: null; footer: null; closePolicy: C.Popup.CloseOnEscape
+            onClosed: recoveryLoader.active = false
+            background: RedesignDialogSurface { theme: root.theme; videoBackdropContent: root.videoBackdropContent }
+            C.Overlay.modal: Rectangle { color: "#80000000" }
+            contentItem: ColumnLayout {
+                Accessible.role: Accessible.Dialog
+                Accessible.name: recoveryDialog.title
+                spacing: root.theme.dp(12)
+                Text { Layout.fillWidth: true; text: qsTr("Recovery and saved data"); textFormat: Text.PlainText; color: root.theme.bright; font.pixelSize: root.theme.dp(20) }
+                C.ScrollView {
+                    id: recoveryScroll
+                    Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
+                    implicitHeight: recoveryContent.implicitHeight
+                    contentWidth: availableWidth; clip: true
+                    C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
+                    RedesignAddonRecovery {
+                        id: recoveryContent
+                        objectName: "addonManagementRecovery"
+                        width: recoveryScroll.availableWidth
+                        backend: root.backend; packageSnapshot: root.packages
+                        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                        videoBackdropContent: root.videoBackdropContent
+                    }
+                }
+                ActionButton { Layout.alignment: Qt.AlignRight; caption: qsTr("Close"); onClicked: recoveryDialog.close() }
+            }
+        }
     }
     RedesignConfirmationDialog {
         id: changePackage
         objectName: "addonPackageChangeDialog"
-        parent: root.Window.contentItem
+        parent: root.Window.contentItem || root
         property string packageId: ""
         property string operation: ""
         property string packageState: ""
@@ -421,7 +710,7 @@ ColumnLayout {
     }
     component ActionButton: RedesignButton {
         captionMaximumWidth: Math.max(0, root.width - root.theme.dp(48))
-        text: caption; tooltipTextFormat: Text.PlainText
+        text: caption; captionTextFormat: Text.PlainText; tooltipTextFormat: Text.PlainText
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
     }
     component PackageInput: C.TextField {

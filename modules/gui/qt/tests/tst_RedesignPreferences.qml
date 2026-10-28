@@ -1434,4 +1434,15 @@ TestCase {
         compare(cancelSpy.count, 0)
     }
 
+    function test_legacyExtensionStartupIsAdvancedAndHasExplicitScope() {
+        compare(catalog.sections.extensions.length, 0)
+        const section = catalog.advancedSections.extensions[0]
+        compare(section.title, "Legacy extensions")
+        compare(section.rows[0][0], "qt-autoload-extensions")
+        verify(section.rows[0][1].includes("legacy Lua extensions"))
+        verify(section.rows[0][2].help.includes("does not change enabled add-ons"))
+        const matches = catalog.find("legacy Lua extensions")
+        compare(matches.length, 1); compare(matches[0].name, "qt-autoload-extensions")
+    }
+
 }

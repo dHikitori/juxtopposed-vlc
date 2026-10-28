@@ -23,6 +23,7 @@ TestCase {
         property int updateRequests: 0
         property string lastRange: ""
         property bool lastPrerelease: true
+        property int settingsReads: 0
         property int stages: 0
         property int approvals: 0
         property int discards: 0
@@ -62,35 +63,55 @@ TestCase {
         function retainedGenerations(id) { return [{version: "1.0.0"}] }
         function rollback(id) { rollbacks++; lastPackage = id; return true }
         function uninstall(id, removeData) { removals++; lastPackage = id; removedData = removeData; return true }
-        function settingsSchema(id) { return {type: "object", properties: {}, additionalProperties: false} }
-        function settingsValues(id) { return {} }
-        function settingsSecretStatus(id) { return {} }
+        function settingsSchema(id) { settingsReads++; return {type: "object", properties: {}, additionalProperties: false} }
+        function settingsValues(id) { settingsReads++; return {} }
+        function settingsSecretStatus(id) { settingsReads++; return {} }
     }
     RedesignAddonManagement { id: page; width: 600; backend: manager }
-    function item(name) { return findChild(page, name) }
+    function item(name) {
+        let found = findChild(page, name)
+        if (found) return found
+        for (const popupName of ["addonManagementRecovery", "addonInstallDialog", "addonManagementSettingsDialog"]) {
+            const popup = findChild(page, popupName)
+            if (popup) { found = findChild(popup, name); if (found) return found }
+        }
+        return null
+    }
     function init() {
+        page.closeDialogs(); wait(30)
+        page.selectedId = ""; page.advanced = false; page.active = true
+        item("addonSearch").clear()
         manager.busy = false; manager.pendingPackage = ({}); manager.packages = []
         manager.safeMode = false; manager.recoveries = 0; manager.restores = 0
         manager.updateResult = ({}); manager.updateRequests = 0; manager.lastRange = ""; manager.lastPrerelease = true; manager.errorMessage = ""
         manager.stages = 0; manager.approvals = 0; manager.discards = 0; manager.rollbacks = 0; manager.removals = 0
         manager.lastSource = ""; manager.lastTag = ""; manager.lastDirectory = ""; manager.lastEnable = false
         page.developerSource = false; page.enableAfterInstall = false
-        item("addonRepositorySource").clear(); item("addonRepositoryTag").clear(); item("addonLocalDirectory").clear()
         manager.revision++; wait(20)
     }
     function cleanup() {
         const dialog = item("addonPackageChangeDialog")
-        if (dialog.visible) dialog.close()
+        page.closeDialogs()
+        wait(20)
+    }
+    function openInstaller() { page.openInstaller(); wait(30) }
+    function selectPackage(id) { page.selectPackage(id); wait(20) }
+    function packageAction(action) {
+        item("addonMoreActions").clicked(); wait(20)
+        const entry = item("libraryAction_" + action)
+        verify(entry && entry.enabled); mouseClick(entry)
         wait(20)
     }
     function stageRepository() {
+        openInstaller()
         item("addonRepositorySource").text = "https://git.example.org/community/radio.git"
         item("addonRepositoryTag").text = "v1.0.0"
         mouseClick(item("addonStagePackage"))
     }
     function test_coreRecoveryControlsAreMounted() {
+        page.openRecovery(); wait(30)
         const recovery = item("addonManagementRecovery")
-        verify(recovery.supported); item("addonSafeMode").clicked(); compare(manager.safeMode, true)
+        verify(recovery.supported); findChild(recovery, "addonSafeMode").clicked(); compare(manager.safeMode, true)
         manager.packages = [{id: "org.example.radio", name: "<b>Radio</b>", recoveryRequired: true, installed: false}]; manager.revision++
         tryVerify(() => item("addonRecover_org.example.radio") !== null)
         verify(item("addonPackage_org.example.radio") === null)
@@ -105,25 +126,28 @@ TestCase {
         compare(page.managedPackages.length, 0)
         verify(item("addonPackage_hakone.builtin.opensubtitles") === null)
         verify(item("addonPackage_org.example.app") === null)
+        page.openRecovery(); wait(30)
         tryVerify(() => item("addonRestore_org.example.app") !== null)
     }
     function test_appUpdateAndRestoreUseTheExistingPermissionReview() {
         manager.packages = [{id: "org.example.app", name: "App", version: "1.0.0", distributionSource: true,
             appUpdateAvailable: true, appUpdateVersion: "2.0.0", enabled: true, configured: true}]; manager.revision++
+        selectPackage("org.example.app")
         tryVerify(() => item("addonPackageAppUpdate_org.example.app") !== null)
         item("addonPackageAppUpdate_org.example.app").clicked()
         compare(manager.restores, 1); compare(manager.approvals, 0)
         verify(item("addonInstallReview").visible); verify(item("addonInstallOverview").text.includes("app distribution"))
         item("addonInstallCancel").clicked(); compare(manager.approvals, 0)
         manager.packages = [{id: "org.example.app", name: "App", distributionSource: true, installed: false, suppressed: true}]; manager.revision++
+        page.openRecovery(); wait(30)
         tryVerify(() => item("addonRestore_org.example.app") !== null)
         item("addonRestore_org.example.app").clicked(); compare(manager.restores, 2); compare(manager.approvals, 0)
         item("addonInstallApprove").clicked(); compare(manager.approvals, 1)
     }
     function test_fullDeletionAndStaleConfirmationHaveDifferentOutcomes() {
         manager.packages = [{id: "org.example.radio", name: "Radio", version: "2.0.0", enabled: true, configured: true}]; manager.revision++
-        tryVerify(() => item("addonPackageRemoveData_org.example.radio") !== null)
-        item("addonPackageRemoveData_org.example.radio").clicked()
+        selectPackage("org.example.radio")
+        packageAction("removeData")
         const dialog = item("addonPackageChangeDialog")
         tryCompare(dialog, "opened", true); verify(dialog.message.includes("saved keys"))
         dialog.reject(); compare(manager.removals, 0)
@@ -136,19 +160,22 @@ TestCase {
         manager.packages = [{id: "org.example.radio", name: "Radio", installed: true, removing: true}]; manager.revision++
         manager.busy = true
         verify(!item("addonRepositoryCancel").visible)
+        page.advanced = true
         verify(item("addonSafeMode").enabled); item("addonSafeMode").clicked(); verify(manager.safeMode)
     }
     function test_reviewUsesLiveSafeModeInsteadOfItsOldCapabilitySnapshot() {
+        page.advanced = true
         manager.safeMode = true
         manager.pendingPackage = {id: "org.example.app", name: "App", permissions: {}, hostCapabilities: {safeMode: true, workerAvailable: true}}
         verify(!item("addonInstallEnable").enabled)
-        item("addonSafeMode").clicked(); compare(manager.safeMode, false)
+        page.setPaused(false); compare(manager.safeMode, false)
         verify(item("addonInstallEnable").enabled)
         page.enableAfterInstall = true
-        item("addonSafeMode").clicked(); compare(manager.safeMode, true)
+        page.setPaused(true); compare(manager.safeMode, true)
         item("addonInstallApprove").clicked(); compare(manager.approvals, 1); verify(!manager.lastEnable)
     }
     function test_repositoryStagingNeverInstallsOrGrants() {
+        openInstaller()
         verify(!item("addonStagePackage").enabled)
         stageRepository()
         compare(manager.stages, 1); compare(manager.lastSource, "https://git.example.org/community/radio.git"); compare(manager.lastTag, "v1.0.0")
@@ -180,9 +207,10 @@ TestCase {
         stageRepository(); manager.complete(false); wait(30)
         mouseClick(item("addonInstallCancel"))
         compare(manager.discards, 1); compare(manager.approvals, 0)
-        verify(!item("addonInstallReview").visible)
+        tryVerify(() => item("addonInstallReview") === null)
     }
     function test_localDevelopmentPathHasSameReviewGate() {
+        openInstaller()
         page.developerSource = true
         item("addonLocalDirectory").text = "/tmp/example-addon"
         mouseClick(item("addonStagePackage"))
@@ -195,13 +223,14 @@ TestCase {
     function test_removeAndRollbackWaitForCoreConfirmation() {
         manager.packages = [{id: "org.example.radio", name: "Radio", version: "2.0.0", configured: true, enabled: true, hasPrevious: true}]
         manager.revision++; wait(30)
-        mouseClick(item("addonPackageRollback_org.example.radio"))
+        selectPackage("org.example.radio")
+        packageAction("rollback")
         const dialog = item("addonPackageChangeDialog")
         tryCompare(dialog, "opened", true); compare(manager.rollbacks, 0)
         mouseClick(findChild(dialog, "confirmationAccept"))
         compare(manager.rollbacks, 1); compare(manager.lastPackage, "org.example.radio")
         tryCompare(dialog, "visible", false)
-        mouseClick(item("addonPackageRemove_org.example.radio")); tryCompare(dialog, "opened", true)
+        packageAction("remove"); tryCompare(dialog, "opened", true)
         compare(manager.removals, 0)
         mouseClick(findChild(dialog, "confirmationAccept"))
         compare(manager.removals, 1); verify(!manager.removedData)
@@ -219,6 +248,7 @@ TestCase {
         verify(!item("addonInstallApprove").enabled)
     }
     function test_busyAndNonHttpsInputsCannotStage() {
+        openInstaller()
         item("addonRepositorySource").text = "file:///tmp/repository"; item("addonRepositoryTag").text = "v1.0.0"
         verify(!item("addonStagePackage").enabled)
         item("addonRepositorySource").text = "https://git.example.org/radio.git"
@@ -274,6 +304,7 @@ TestCase {
     function test_updateUsesInstalledSourceAndStableCompatibleRange() {
         manager.packages = [{id: "org.example.radio", name: "Radio", source: "https://git.example.org/radio.git", version: "1.0.0", enabled: true, configured: true}]
         manager.revision++; wait(20)
+        selectPackage("org.example.radio")
         mouseClick(item("addonPackageFindUpdates_org.example.radio"))
         compare(manager.updateRequests, 1); compare(manager.lastPackage, "org.example.radio")
         compare(manager.lastRange, "^1.0.0"); verify(!manager.lastPrerelease)
@@ -288,6 +319,7 @@ TestCase {
     function test_updateCancelKeepsInstalledRelease() {
         manager.packages = [{id: "org.example.radio", name: "Radio", source: "https://git.example.org/radio.git", version: "1.0.0", enabled: true}]
         manager.revision++; wait(20)
+        selectPackage("org.example.radio")
         mouseClick(item("addonPackageFindUpdates_org.example.radio"))
         mouseClick(item("addonRepositoryCancel"))
         compare(manager.discards, 1); compare(manager.approvals, 0)
@@ -311,7 +343,137 @@ TestCase {
         manager.packages = [{id: "org.example.local", name: "Local", source: "https://git.example.org/local.git", version: "1.0.0", developerSource: true},
             {id: "org.example.bundled", name: "App", source: "https://git.example.org/app.git", version: "1.0.0", distributionSource: true}]
         manager.revision++; wait(20)
+        selectPackage("org.example.local")
         verify(!item("addonPackageFindUpdates_org.example.local").visible)
+        selectPackage("org.example.bundled")
         verify(!item("addonPackageFindUpdates_org.example.bundled").visible)
     }
+    Component { id: managementFactory; RedesignAddonManagement {} }
+    function test_initialPageDefersInstallSettingsAndRecovery() {
+        compare(item("addonRepositorySource"), null)
+        compare(item("addonManagementSettingsDialog"), null)
+        compare(item("addonManagementRecovery"), null)
+        compare(item("addonInstalledList").height, 252)
+        const addButton = item("addonAddExtension")
+        addButton.forceActiveFocus(); keyClick(Qt.Key_Space); wait(20)
+        verify(item("addonInstallDialog").visible)
+        compare(item("addonInstallDialog").contentItem.Accessible.name, "Add extension")
+        verify(item("addonRepositorySource").visible)
+        compare(item("addonManagementSettingsDialog"), null)
+        keyClick(Qt.Key_Escape); wait(20)
+        verify(addButton.activeFocus)
+    }
+    function test_searchAndKeyboardKeepActionsBoundToTheSelectedPackage() {
+        manager.packages = [{id: "org.example.one", name: "Alpha", version: "1.0", enabled: true},
+            {id: "org.example.two", name: "Beta", version: "2.0", enabled: false, configured: false}]; manager.revision++
+        const search = item("addonSearch")
+        search.text = "beta"; compare(page.filteredPackages.length, 1)
+        search.forceActiveFocus(); keyClick(Qt.Key_Down)
+        compare(page.selectedId, "org.example.two")
+        verify(item("addonSelectedDetails").visible)
+        compare(item("addonPackageConfigure_org.example.two").caption, "Set up…")
+        verify(page.stateText(page.selectedPackage).includes("Disabled"))
+        keyClick(Qt.Key_Return); wait(20)
+        const dialog = item("addonManagementSettingsDialog")
+        verify(dialog.visible); compare(dialog.packageId, "org.example.two")
+        keyClick(Qt.Key_Escape); wait(20)
+        compare(item("addonManagementSettingsDialog"), null)
+        verify(item("addonPackageList").currentItem.activeFocus)
+        search.text = "missing"; compare(page.filteredPackages.length, 0)
+        // Search does not change the subject of an already selected action.
+        compare(page.selectedId, "org.example.two")
+    }
+    function test_selectionRemovalClearsContextualActions() {
+        manager.packages = [{id: "org.example.one", name: "One", enabled: true}]; manager.revision++
+        selectPackage("org.example.one"); verify(item("addonSelectedDetails").visible)
+        manager.packages = []; manager.revision++
+        verify(!item("addonSelectedDetails").visible)
+        verify(!item("addonSelectedSettings").enabled)
+        verify(!page.requestPackageChange("org.example.one", "remove"))
+    }
+    function test_closedAndInactivePagesKeepThePreparedCandidate() {
+        stageRepository(); manager.complete(false); wait(20)
+        compare(manager.approvals, 0)
+        page.active = false; wait(20)
+        compare(item("addonInstallDialog"), null)
+        verify(!!manager.pendingPackage.id); compare(manager.discards, 0)
+        page.active = true; item("addonAddExtension").clicked(); wait(20)
+        verify(item("addonInstallReview").visible); compare(manager.approvals, 0)
+    }
+    function test_pauseAndRemovingRowsRefuseIndividualEnableChanges() {
+        manager.packages = [{id: "org.example.one", name: "One", enabled: true, removing: true}]; manager.revision++
+        tryVerify(() => item("addonPackageEnabled_org.example.one") !== null)
+        verify(!item("addonPackageEnabled_org.example.one").enabled)
+        manager.packages = [{id: "org.example.one", name: "One", enabled: true}]; manager.safeMode = true; manager.revision++
+        verify(!item("addonPackageEnabled_org.example.one").enabled)
+        compare(item("addonPackageEnabled_org.example.one").checked, false)
+        compare(page.stateText(manager.packages[0]), "Temporarily disabled")
+        page.setPaused(false); verify(item("addonPackageEnabled_org.example.one").enabled)
+    }
+    function test_narrowListAndInstallDialogStayWithinTheWindow() {
+        const oldWidth = page.width
+        page.width = 280
+        openInstaller()
+        const dialog = item("addonInstallDialog")
+        verify(dialog.width <= testCase.width - 32)
+        verify(dialog.height <= testCase.height - 32)
+        verify(item("addonMoreActions").width + item("addonAddExtension").width <= page.width)
+        verify(item("addonInstalledList").width <= page.width)
+        page.width = oldWidth
+    }
+    function test_packageSnapshotIsSharedAndFormsReadOnlyOnDemand() {
+        const counts = {packages: 0, settings: 0, capabilities: 0}
+        const proxy = {
+            get revision() { return manager.revision },
+            get packages() { ++counts.packages; return manager.packages },
+            get busy() { return manager.busy },
+            get safeMode() { return manager.safeMode },
+            get pendingPackage() { return manager.pendingPackage },
+            get updateResult() { return manager.updateResult },
+            get errorMessage() { return manager.errorMessage },
+            get capabilities() { ++counts.capabilities; return manager.capabilities },
+            credentialPersistenceAvailable: true,
+            setSafeMode: value => manager.setSafeMode(value),
+            retainedGenerations: id => [],
+            settingsSchema: id => { ++counts.settings; return manager.settingsSchema(id) },
+            settingsValues: id => { ++counts.settings; return {} },
+            settingsSecretStatus: id => { ++counts.settings; return {} }
+        }
+        manager.packages = [{id: "org.example.one", name: "One", enabled: true, savedData: true}]
+        const probe = createTemporaryObject(managementFactory, testCase, {backend: manager, width: 600})
+        verify(probe !== null)
+        // Assign the JS object after creation. QVariant initial properties copy getters.
+        probe.backend = proxy; wait(20)
+        compare(counts.packages, 1); compare(counts.settings, 0); compare(counts.capabilities, 0)
+        findChild(probe, "addonSearch").text = "one"; probe.selectPackage("org.example.one"); wait(20)
+        compare(counts.packages, 1); compare(counts.settings, 0)
+        manager.revision++; wait(20); compare(counts.packages, 2)
+        probe.openRecovery(); wait(20)
+        compare(counts.packages, 2); compare(counts.settings, 0)
+        probe.closeDialogs(); wait(20)
+        const oldReads = manager.settingsReads
+        probe.backend = manager
+        probe.configure("org.example.one"); wait(20)
+        verify(manager.settingsReads > oldReads); compare(counts.packages, 2)
+        probe.closeDialogs(); wait(20)
+    }
+
+    function test_sameCandidateRevisionDoesNotReopenReviewOrResetChoice() {
+        stageRepository(); manager.complete(false); wait(20)
+        page.enableAfterInstall = true
+        page.closeDialogs(); wait(20)
+        compare(item("addonInstallDialog"), null)
+        manager.safeMode = true
+        manager.pendingPackage = Object.assign({}, manager.pendingPackage, {hostCapabilities: {safeMode: true, workerAvailable: true}})
+        manager.revision++; wait(20)
+        compare(item("addonInstallDialog"), null)
+        verify(page.enableAfterInstall)
+        item("addonAddExtension").clicked(); wait(20)
+        compare(item("addonInstallDialog").title, "Review extension")
+        verify(!item("addonInstallEnable").enabled)
+        manager.pendingPackage = Object.assign({}, manager.pendingPackage, {version: "2.0.0", digest: "new-digest"})
+        wait(20); verify(!page.enableAfterInstall)
+        verify(item("addonInstallDialog").visible)
+    }
+
 }

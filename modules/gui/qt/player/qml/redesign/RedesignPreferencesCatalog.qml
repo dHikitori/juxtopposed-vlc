@@ -189,9 +189,11 @@ QtObject {
                     faster: qsTr("Faster"), fast: qsTr("Fast"), medium: qsTr("Medium"), slow: qsTr("Slow"),
                     slower: qsTr("Slower"), veryslow: qsTr("Very slow"), placebo: qsTr("Placebo")}}],
                 ["sout-x264-tune", qsTr("Tuning")] ] } ],
-        extensions: [ { title: "", rows: [ ["qt-autoload-extensions", qsTr("Load add-ons on startup"), {hideHelp: true}] ] } ]
+        extensions: []
     })
     readonly property var advancedSections: ({
+        extensions: [{title: qsTr("Legacy extensions"), rows: [["qt-autoload-extensions", qsTr("Load legacy Lua extensions on startup"),
+            {help: qsTr("This setting controls legacy Lua extensions. It does not change enabled add-ons.")}]]}],
         general: [ {title: "", rows: [ ["qt-minor-warnings", qsTr("Show minor warnings")], ["startup-options", qsTr("Additional command line options"), {rowHeight: 46}], ["logmode", qsTr("Log format"), {choiceLabels: {text: qsTr("Plain text"), html: "HTML"}}], ["stats", qsTr("Collect playback statistics")], ["redesign-config-folder", qsTr("Open configurations folder"), {rowHeight: 42}], ["redesign-reset-all", qsTr("Reset all settings"), {rowHeight: 42}] ] },
             {title: qsTr("Developer Options"), rows: [ ["syslog", qsTr("Write to the system log")], ["syslog-debug", qsTr("Include debug messages in the system log")],
                 ["syslog-ident", qsTr("System log identity"), {rowHeight: 42}], ["syslog-facility", qsTr("System log facility"), {choiceLabels: {user: qsTr("User")}}] ] } ],
