@@ -22,14 +22,17 @@ ColumnLayout {
     property bool removalRequested: false
     property string selectedId: ""
     property bool ready: false
+    property bool displayMode: false
     property string candidateKey: ""
     readonly property bool removalInProgress: removalRequested || packages.some(row => row.removing === true)
     readonly property bool busy: backend.busy === true
-    readonly property bool listReady: !summaryBackend || summaryBackend.available === true
+    readonly property bool listReady: displayBacked ? !!summaryBackend && summaryBackend.available === true
+        : !summaryBackend || summaryBackend.available === true
     readonly property bool listLoading: !!summaryBackend && summaryBackend.loading === true
-    readonly property string listError: summaryBackend ? summaryBackend.error || "" : ""
-    readonly property bool displayBacked: !!summaryBackend && summaryBackend.displayBacked === true
-    readonly property bool safeModeKnown: !displayBacked || summaryBackend.safeModeKnown === true
+    readonly property string listError: summaryBackend ? summaryBackend.error || ""
+        : displayBacked ? qsTr("The extension list is not available.") : ""
+    readonly property bool displayBacked: displayMode || (!!summaryBackend && summaryBackend.displayBacked === true)
+    readonly property bool safeModeKnown: !displayBacked || (!!summaryBackend && summaryBackend.safeModeKnown === true)
     readonly property bool safeMode: {
         if (displayBacked) return safeModeKnown && summaryBackend.safeMode === true
         if (!ready) return false
@@ -40,7 +43,8 @@ ColumnLayout {
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     // Read one package snapshot per revision. Delegates use this value only.
     readonly property var packages: {
-        if (summaryBackend) return (displayBacked || listReady) ? summaryBackend.rows || [] : []
+        if (displayBacked) return summaryBackend ? summaryBackend.rows || [] : []
+        if (summaryBackend) return listReady ? summaryBackend.rows || [] : []
         if (!ready) return []
         backend.revision
         return backend.packages || []
@@ -69,21 +73,30 @@ ColumnLayout {
         if (!active) closeDialogs()
         else if (ready) refreshSummary()
     }
-    onSummaryBackendChanged: if (ready && active) refreshSummary()
+    onDisplayBackedChanged: if (displayBacked) displayMode = true
+    onSummaryBackendChanged: {
+        if (summaryBackend && summaryBackend.displayBacked === true) displayMode = true
+        if (ready && active) refreshSummary()
+    }
     onListReadyChanged: if (ready && !listReady) Qt.callLater(root.closeStaleConfiguration)
     onBusyChanged: if (!busy) removalRequested = false
     function closeStaleConfiguration() {
-        if (listReady || !configurationLoader.item) return
+        // The attached form owns its exact package/settings stamp. A global
+        // refresh must not discard a draft for an unrelated package change.
+        if (displayBacked || listReady || !configurationLoader.item) return
         actionError = qsTr("The extension list changed. Open settings again.")
         configurationLoader.item.close()
     }
-    Component.onCompleted: { ready = true; if (active) refreshSummary(); if (active && pendingPackage.id) openInstaller() }
+    Component.onCompleted: {
+        if (summaryBackend && summaryBackend.displayBacked === true) displayMode = true
+        ready = true; if (active) refreshSummary(); if (active && pendingPackage.id) openInstaller()
+    }
     function refreshSummary() {
         if (summaryBackend && typeof summaryBackend.refresh === "function") summaryBackend.refresh()
     }
     function currentList() {
-        if (!summaryBackend) return true
-        if (typeof summaryBackend.isCurrent === "function" && summaryBackend.isCurrent()) return true
+        if (!summaryBackend && !displayBacked) return true
+        if (summaryBackend && typeof summaryBackend.isCurrent === "function" && summaryBackend.isCurrent()) return true
         actionError = qsTr("The extension list changed. Try this action again.")
         refreshSummary()
         return false

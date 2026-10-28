@@ -28,6 +28,7 @@ TestCase {
         property bool asyncRemoval: false
         property int enableRequests: 0
         property int settingsReads: 0
+        property bool draftSchema: false
         property int stages: 0
         property int approvals: 0
         property int discards: 0
@@ -77,7 +78,10 @@ TestCase {
             revision++
             return true
         }
-        function settingsSchema(id) { settingsReads++; return {type: "object", properties: {}, additionalProperties: false} }
+        function settingsSchema(id) {
+            settingsReads++
+            return {type: "object", properties: draftSchema ? {nickname: {type: "string", title: "Name"}} : {}, additionalProperties: false}
+        }
         function settingsValues(id) { settingsReads++; return {} }
         function settingsSecretStatus(id) { settingsReads++; return {} }
     }
@@ -116,7 +120,7 @@ TestCase {
         summary.rows = []; summary.loading = false; summary.error = ""; summary.available = false; summary.current = false
         summary.autoStart = false; summary.refreshes = 0; summary.currentCalls = 0
         summary.displayBacked = false; summary.safeModeKnown = false; summary.safeMode = false
-        manager.enableRequests = 0; manager.settingsSaves = 0
+        manager.enableRequests = 0; manager.settingsSaves = 0; manager.draftSchema = false
         manager.invalidateSummaryDuringSave = false; manager.asyncRemoval = false
         page.actionError = ""; page.removalRequested = false
         page.selectedId = ""; page.advanced = false; page.active = true
@@ -675,21 +679,53 @@ TestCase {
         tryVerify(() => recovery !== null && recovery.visible)
         compare(recovery.safeMode, true)
         manager.revision++
+        probe.closeDialogs()
+        probe.summaryBackend = null
+        manager.revision++
+        verify(probe.displayBacked); verify(!probe.listReady); verify(!probe.safeModeKnown)
+        verify(probe.listError.length > 0)
+        compare(probe.packages.length, 0)
+        verify(!probe.setPackageEnabled("org.example.one", false))
         compare(counts.packages, 0)
         compare(counts.safeMode, 0)
-        probe.closeDialogs()
     }
     function test_displaySummaryRetainsRowsWhileActionsWait() {
         summary.displayBacked = true; summary.safeModeKnown = true
         const row = {id: "org.example.one", name: "One", version: "1.0.0", enabled: true, configured: true}
-        summaryRows([row]); selectPackage(row.id)
+        summary.rows = [row]; summary.available = true; summary.current = true
+        const probe = createTemporaryObject(managementFactory, testCase,
+            {backend: manager, summaryBackend: summary, width: 600})
+        verify(probe !== null); probe.selectPackage(row.id)
         summary.available = false; summary.current = false; summary.loading = true
         wait(20)
-        compare(page.packages.length, 1); compare(page.selectedPackage.id, row.id)
-        verify(!page.setPackageEnabled(row.id, false)); compare(manager.enableRequests, 0)
-        verify(!item("addonPackageConfigure_" + row.id).enabled)
+        compare(probe.packages.length, 1); compare(probe.selectedPackage.id, row.id)
+        verify(!probe.setPackageEnabled(row.id, false)); compare(manager.enableRequests, 0)
+        verify(!findChild(probe, "addonPackageConfigure_" + row.id).enabled)
         summary.available = true; summary.current = true; summary.loading = false
-        verify(page.setPackageEnabled(row.id, false)); compare(manager.enableRequests, 1)
+        verify(probe.setPackageEnabled(row.id, false)); compare(manager.enableRequests, 1)
+    }
+
+
+    function test_attachedRefreshKeepsTheOpenConfigurationDraft() {
+        summary.displayBacked = true; summary.safeModeKnown = true
+        summary.rows = [{id: "org.example.one", name: "One", configured: true, enabled: true}]
+        summary.available = true; summary.current = true; manager.draftSchema = true
+        const probe = createTemporaryObject(managementFactory, testCase,
+            {backend: manager, summaryBackend: summary, width: 600})
+        verify(probe !== null); probe.configure("org.example.one")
+        const dialog = findChild(probe, "addonManagementSettingsDialog")
+        tryVerify(() => dialog !== null && dialog.visible)
+        dialog.form.setValue("nickname", "Keep this draft")
+        summary.available = false; summary.current = false; summary.loading = true
+        summary.rows = summary.rows.concat([{id: "org.example.other", name: "Other", configured: true, enabled: true}])
+        manager.revision++; wait(30)
+        verify(dialog.visible); compare(dialog.form.draftValues.nickname, "Keep this draft")
+        compare(manager.settingsSaves, 0)
+        summary.available = true; summary.current = true; summary.loading = false
+        wait(20)
+        verify(dialog.visible); compare(dialog.form.draftValues.nickname, "Keep this draft")
+        compare(manager.settingsSaves, 0)
+        probe.closeDialogs()
     }
 
 }

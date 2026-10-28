@@ -323,6 +323,21 @@ The current MainUI still uses the earlier summary backend. The shared-view
 mount, combined host checks, and full app measurements remain open. This
 adapter alone does not remove the published app's synchronous reads.
 
+A follow-up keeps the screen in display mode after its summary is removed.
+It shows an unavailable list and refuses package actions instead of reading
+the legacy backend. An unrelated summary refresh also keeps an open settings
+draft. The form will check the selected package and settings before Save.
+All 63 copied Qt Quick cases pass (48 installer and 15 recovery), with no
+warnings, skipped cases, or runtime diagnostics. The test uses the existing
+form; that form still makes legacy settings reads on a Manager revision.
+The new attached form and its separate checks remain part of shared-view
+integration. This result does not prove zero reads for the full app.
+
+The record is `/tmp/hakone-management-display-lifetime/normal/proof.json`,
+SHA-256 `fc96c0c66ef8032acc8ae04e14e0632149f26a2f915ec75de4969ab95e80bce4`.
+The failed draft-property assertion and the old form's read-count failure are
+kept in the same packet. The latter established the form boundary above.
+
 ## Native change notification foundation
 
 The host now has a native wake with a Windows event or a nonblocking POSIX
