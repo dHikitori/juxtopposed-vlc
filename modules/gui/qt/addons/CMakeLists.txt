@@ -16,7 +16,7 @@ add_library(vlc_addon_host STATIC
     addon_metadata_registry_epoch.cpp addon_metadata_registry_epoch.hpp
     addon_artwork_attempt_plan.cpp addon_artwork_attempt_plan.hpp addon_package_configuration.hpp
     addon_network.cpp addon_public_network_policy.cpp addon_worker.cpp addon_manager.cpp addon_native_authority.hpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
-    addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
+    addon_discovery_coordinator.cpp addon_theme_service.cpp addon_theme_document.cpp addon_theme_document.hpp addon_sessions.cpp addon_audio_analysis.cpp
     addon_session_websocket.cpp addon_session_websocket.hpp addon_session_host.cpp addon_session_host.hpp
     addon_session_controller.cpp addon_session_controller.hpp addon_session_player.hpp
     addon_session_ui.cpp addon_session_ui.hpp addon_session_ui_manager.cpp

@@ -230,6 +230,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_native_library_targets.hpp \
 	addons/addon_theme_service.cpp \
 	addons/addon_theme_service.hpp \
+	addons/addon_theme_document.cpp \
+	addons/addon_theme_document.hpp \
 	addons/addon_sessions.cpp \
 	addons/addon_sessions.hpp \
 	addons/addon_session_player.hpp \

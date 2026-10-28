@@ -244,3 +244,29 @@ build were unchanged. The recovery record is
 The replacement manifest writer checks fixed output names and resolved paths,
 writes only inside its temporary packet, and treats native libraries as
 read-only inputs.
+
+## Shared theme document checks
+
+Theme validation and token resolution now use one QtCore helper. The theme
+service keeps its static API and translation context. The background display
+reader can use the same rules without a theme service or Manager.
+
+Peer comparison verifies 11 functions after the namespace and color-check
+name changes. Bounds, defaults, contrast adjustment, and resolved tokens are
+unchanged. The exact helper also passes the copied reader's 98 normal and
+98 sanitizer cases. Its separate theme service prototype passes all 15 normal
+cases, including the existing theme checks and four attached-view cases.
+Those four cases cover loading without a file fallback, repeated reads and
+core preference changes without a new package capture, retained palette with
+stale action refusal, and disable/restore behavior. The theme prototype's
+sanitizer check is still pending.
+
+The live change in this step extracts the shared helper only. The attached
+theme service, shared display reader, and other consumers remain separate
+copied work. The prototype record is
+`/tmp/hakone-display-theme-ui/normal/proof.json`, SHA-256
+`7a7123a2202fedc35b0f64bdf6aba4039d643c7a26e4f0250565de59fd1ab249`.
+The reader checkpoint is
+`/tmp/hakone-addon-catalogue-view/reader-view-validation-v2.json`, SHA-256
+`e01d7d6c544132b9dcde48e32c63bcffc69eeccf2ef43db0f7637c6ee7c83cde`.
+Row parity, quota retry, startup work, and full app performance remain open.
