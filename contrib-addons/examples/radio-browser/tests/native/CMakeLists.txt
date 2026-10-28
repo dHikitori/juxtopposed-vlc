@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.20)
+project(hakone_radio_browser_live_probe LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Network)
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
+get_filename_component(SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../.." ABSOLUTE)
+set(NATIVE_ROOT "${SOURCE_ROOT}/build-redesign" CACHE PATH "The configured native build.")
+set(HOST_ARCHIVE "" CACHE FILEPATH "The fully current host archive, with all current MOCs.")
+if(NOT UNIX OR NOT EXISTS "${HOST_ARCHIVE}")
+    message(FATAL_ERROR "Use the fully current Linux host archive.")
+endif()
+set(ADDONS "${SOURCE_ROOT}/modules/gui/qt/addons")
+add_library(radio_source_native OBJECT
+    "${ADDONS}/addon_discovery_source_owner.cpp" "${ADDONS}/addon_discovery_source_owner.hpp"
+    "${ADDONS}/addon_native_source_resolver.cpp" "${ADDONS}/addon_native_source_resolver.hpp"
+    "${ADDONS}/addon_native_queue_store.cpp" "${ADDONS}/addon_native_queue_store.hpp"
+    "${ADDONS}/addon_stream_proxy_native.cpp" "${ADDONS}/addon_stream_proxy_native.hpp")
+add_executable(radio_browser_live_probe live_probe.cpp $<TARGET_OBJECTS:radio_source_native>)
+foreach(target radio_source_native radio_browser_live_probe)
+    target_include_directories(${target} PRIVATE "${SOURCE_ROOT}" "${SOURCE_ROOT}/include" "${SOURCE_ROOT}/modules/gui/qt" "${NATIVE_ROOT}" "${NATIVE_ROOT}/include")
+    target_compile_definitions(${target} PRIVATE HAVE_CONFIG_H QT_USE_QSTRINGBUILDER QT_NO_CAST_TO_ASCII QT_NO_CAST_FROM_BYTEARRAY QT_STRICT_ITERATORS)
+endforeach()
+target_link_libraries(radio_source_native PRIVATE Qt6::Core Qt6::Gui Qt6::Network)
+target_link_libraries(radio_browser_live_probe PRIVATE "${HOST_ARCHIVE}" ZLIB::ZLIB Threads::Threads "${NATIVE_ROOT}/lib/libvlc.so" "${NATIVE_ROOT}/src/libvlccore.so" Qt6::Core Qt6::Gui Qt6::Network)

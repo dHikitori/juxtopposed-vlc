@@ -206,6 +206,17 @@ if(VLC_BUILD_DIR)
     target_compile_definitions(test_addon_discovery_source_owner PRIVATE VLC_ADDON_DISCOVERY_PROCESS_FIXTURE="$<TARGET_FILE:addon_discovery_source_process>")
     add_dependencies(test_addon_discovery_source_owner addon_discovery_source_process)
 
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    set(radio_worker "${VLC_BUILD_DIR}/modules/gui/qt/vlc-addon-worker")
+    if(WIN32)
+        string(APPEND radio_worker ".exe")
+    endif()
+    if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING AND EXISTS "${radio_worker}")
+        add_test(NAME addon_radio_browser_worker COMMAND "${Python3_EXECUTABLE}" -B
+            "${VLC_SOURCE_ROOT}/contrib-addons/examples/radio-browser/tests/test_worker.py" --worker "${radio_worker}")
+        set_tests_properties(addon_radio_browser_worker PROPERTIES TIMEOUT 90)
+    endif()
+
     find_package(SQLite3 QUIET)
     if(TARGET SQLite::SQLite3)
         add_executable(test_addon_native_library_store "../tests/test_addon_native_library_store.cpp")

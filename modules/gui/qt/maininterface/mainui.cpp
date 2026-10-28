@@ -396,6 +396,11 @@ void MainUI::registerQMLTypes()
                 addonManager->ensureDistributionPackage(!installedReference.isEmpty() && QFileInfo::exists(installedReference)
                     ? installedReference : buildReference, QStringLiteral("org.videolan.") + name);
             }
+            const auto installedRadio = installedRoot.isEmpty() ? QString()
+                : QDir(installedRoot).filePath(QStringLiteral("radio-browser"));
+            const auto buildRadio = QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(QStringLiteral("radio-browser"));
+            addonManager->ensureDistributionPackage(!installedRadio.isEmpty() && QFileInfo::exists(installedRadio)
+                ? installedRadio : buildRadio, QStringLiteral("org.hakone.radio-browser"));
             metadataService = new AddonMetadataService(addonManager, this);
             if (!metadataService->bindApplicationLifetime(m_mainCtx->addonStreamLifetime()))
                 metadataService->shutdown();

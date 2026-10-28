@@ -1524,6 +1524,15 @@ if qt6_dep.found()
                 install_dir: get_option('datadir') / 'vlc/addons/reference' / artwork_provider / fs.parent(addon_resource))
         endforeach
     endforeach
+    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'THIRD_PARTY_NOTICES.md', 'dist/addon.wasm']
+        install_data(meson.project_source_root() / 'contrib-addons/examples/radio-browser' / addon_resource,
+            install_dir: get_option('datadir') / 'vlc/addons/reference/radio-browser' / fs.parent(addon_resource))
+    endforeach
+    if addon_worker_dependencies != [] and not meson.is_cross_build()
+        test('addon_radio_browser_worker', prog_python,
+            args: ['-B', meson.project_source_root() / 'contrib-addons/examples/radio-browser/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
+            depends: addon_worker_dependencies, suite: ['qt', 'addons'], timeout: 90)
+    endif
     modules_qrc = []
     foreach module : qml_modules
         #generates 'res.qrc', 'qmldir.qrc', 'qmldir',

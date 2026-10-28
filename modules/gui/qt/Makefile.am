@@ -3508,6 +3508,10 @@ addon_reference_settingsdir = $(datadir)/vlc/addons/reference/thesubtitledb/sett
 addon_reference_settings_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/settings/schema.json $(top_srcdir)/contrib-addons/examples/thesubtitledb/settings/ui.json
 addon_reference_localesdir = $(datadir)/vlc/addons/reference/thesubtitledb/locales
 addon_reference_locales_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/locales/en.json
+addon_radio_browserdir = $(datadir)/vlc/addons/reference/radio-browser
+addon_radio_browser_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/radio-browser/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
+addon_radio_browser_distdir = $(datadir)/vlc/addons/reference/radio-browser/dist
+addon_radio_browser_dist_DATA = $(top_srcdir)/contrib-addons/examples/radio-browser/dist/addon.wasm
 addon_tvmazedir = $(datadir)/vlc/addons/reference/tvmaze
 addon_tvmaze_DATA = $(top_srcdir)/contrib-addons/examples/tvmaze/addon.json $(top_srcdir)/contrib-addons/examples/tvmaze/LICENSE $(top_srcdir)/contrib-addons/examples/tvmaze/NOTICE.md
 addon_tvmaze_distdir = $(datadir)/vlc/addons/reference/tvmaze/dist
@@ -3584,3 +3588,14 @@ EXTRA_DIST += tests/test_addon_metadata_family_plan.cpp tests/test_addon_native_
 
 EXTRA_DIST += tests/discovery-source/CMakeLists.txt tests/discovery-source/native_module_baseline.cpp \
 	tests/fixtures/addon_source_tls_fixture.hpp
+
+EXTRA_DIST += $(addon_radio_browser_DATA) $(addon_radio_browser_dist_DATA) \
+    $(addprefix $(top_srcdir)/contrib-addons/examples/radio-browser/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/native/CMakeLists.txt tests/native/live_probe.cpp)
+if ENABLE_QT
+if BUILD_ADDON_RUNTIME
+.PHONY: check-radio-browser-worker
+check-radio-browser-worker: vlc-addon-worker$(EXEEXT)
+	$(AM_V_at)$(PYTHON3) -B $(top_srcdir)/contrib-addons/examples/radio-browser/tests/test_worker.py --worker "$(abs_builddir)/vlc-addon-worker$(EXEEXT)"
+check-local: check-radio-browser-worker
+endif
+endif
