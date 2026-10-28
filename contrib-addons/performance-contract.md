@@ -256,10 +256,30 @@ Qt and Core remain ordinary shared dependencies. An arbitrary external Core
 close has no empty-owner notification; supported app retirement closes the
 owner directly, and fresh actions still check Core state.
 
-The TLS support probe now runs on joined work. Deferring that startup probe
-until an explicit source action remains open. Shared catalogue integration,
-inactive visualizer checks, and full app performance measurements also remain
-open. The published Windows build does not contain these source timer fixes.
+TLS support now has a separate idle boundary. Binding an empty source owner
+does not initialize the TLS backend. Only an explicit review, source capture,
+or primary playback request can run that probe, on joined work. Its memory-only
+Unknown/Ready/Unavailable hint cannot grant or revoke source consent. A failed
+probe keeps reviews, saved approvals, and stable queue references usable;
+primary playback requires a successful fresh probe before an intent or provider
+call. A later explicit attempt can retry without another consent review.
+
+All 33 normal and 33 focused sanitizer cases pass, including the existing 19
+owner and ten real owner/UI cases. Four new owner cases check zero startup
+probes, review and approval while TLS is unavailable, primary refusal and retry,
+and owner deletion during a blocked joined probe. The old startup control fails
+its designated probe-count check. Positive probes use real Qt TLS support.
+The changed owner, complete matching meta-objects, and fixtures are fresh;
+unchanged dependencies use the recorded normal147 archive. This component
+boundary uses its matching earlier repository-work declarations and does not
+replace the full current host/app check.
+
+The record is `/tmp/hakone-source-lazy-tls/san-proof/proof.json`, SHA-256
+`a242b0ea25768eebde56c74be169f7f9562089723f3b3995ccf01e2c86e1aa43`.
+All three applied files match the tested copies. Manager/MainUI transport-hint
+wiring, shared catalogue integration, inactive visualizer integration, and full
+app measurements remain open. The published Windows build does not contain
+these source timer or lazy TLS fixes.
 
 ## Stream handle expiry helper
 

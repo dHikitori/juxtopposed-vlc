@@ -26,6 +26,10 @@ public:
     ~AddonDiscoverySourceOwner() override;
     bool activate();
     bool active() const;
+    // These are memory-only platform hints. Unknown does not prevent review,
+    // configuration capture, or stable-reference queue admission.
+    bool transportKnown() const;
+    bool transportAvailable() const;
     QString errorMessage() const { return m_error; }
     Q_INVOKABLE QString refreshSource(const QString& contribution);
     Q_INVOKABLE bool canUseSource(const QString& contribution) const;

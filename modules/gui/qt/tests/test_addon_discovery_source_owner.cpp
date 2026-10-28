@@ -11,11 +11,13 @@
 #include <QTemporaryDir>
 #include <QProcess>
 #include <QElapsedTimer>
+#include <QScopeGuard>
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <condition_variable>
 #include <thread>
 #include <vector>
 #include <vlc_source_owner.h>
@@ -34,8 +36,32 @@
 #include "addons/addon_player_discovery.hpp"
 #include "addons/addon_discovery_service.hpp"
 #include "addons/addon_stream_proxy_native.hpp"
+#include "addons/addon_source_consent_ui.hpp"
 #include "fixtures/addon_source_tls_fixture.hpp"
 using namespace vlc::addons;
+#ifdef HAKONE_SOURCE_TLS_PROBE_WRAP
+namespace {
+std::atomic_int tlsOverride{-1};
+std::atomic_uint tlsCalls{0},tlsOwnerThreadCalls{0};
+std::atomic_bool tlsEntered{false},tlsReleased{false};
+std::mutex tlsMutex;
+std::condition_variable tlsCondition;
+const auto tlsOwnerThread=std::this_thread::get_id();
+}
+extern "C" bool __real__ZN10QSslSocket11supportsSslEv();
+extern "C" bool __wrap__ZN10QSslSocket11supportsSslEv() {
+    ++tlsCalls;
+    if(std::this_thread::get_id()==tlsOwnerThread) ++tlsOwnerThreadCalls;
+    const auto mode=tlsOverride.load(std::memory_order_acquire);
+    if(mode==2) {
+        tlsEntered.store(true,std::memory_order_release);
+        std::unique_lock<std::mutex> lock(tlsMutex);
+        tlsCondition.wait(lock,[] { return tlsReleased.load(std::memory_order_acquire); });
+    }
+    if(mode==0) return false;
+    return __real__ZN10QSslSocket11supportsSslEv();
+}
+#endif
 namespace vlc::addons {
 struct DiscoverySourceTestAccess {
     static void prepare(AddonDiscoverySourceOwner& owner,AddonDiscoverySourceOwner::PrepareTransport value) { owner.m_prepareTransport=std::move(value); }
@@ -169,6 +195,60 @@ struct Fixture {
 class TestAddonDiscoverySourceOwner final:public QObject {
     Q_OBJECT
 private slots:
+#ifdef HAKONE_SOURCE_TLS_PROBE_WRAP
+    void anEmptyBoundOwnerDoesNotInitializeTheTlsBackend() {
+        Fixture f; QVERIFY(f.valid); tlsOverride=0; tlsCalls=0; tlsOwnerThreadCalls=0;
+        const auto reset=qScopeGuard([] { tlsOverride=-1; });
+        QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active() || !f.owner->errorMessage().isEmpty());
+        QCOMPARE(tlsCalls.load(),0u); QVERIFY(f.owner->active());
+        QVERIFY(!f.owner->transportKnown()); QVERIFY(!f.owner->transportAvailable());
+        QTest::qWait(80); QCOMPARE(tlsCalls.load(),0u); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
+        QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner)); QCOMPARE(f.resolves(),0);
+    }
+    void anUnavailableTlsHintStillAllowsReviewApprovalAndStableReferences() {
+        Fixture f; QVERIFY(f.valid); tlsOverride=0; tlsCalls=0; tlsOwnerThreadCalls=0;
+        const auto reset=qScopeGuard([] { tlsOverride=-1; });
+        QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
+        AddonSourceConsentUi panel(f.owner.get()); QVERIFY(panel.available());
+        QVERIFY(!f.owner->transportKnown()); QVERIFY(panel.prepare(source));
+        QTRY_VERIFY(!panel.review().isEmpty()); QVERIFY(f.owner->transportKnown());
+        QVERIFY(!f.owner->transportAvailable()); QVERIFY(panel.available());
+        QCOMPARE(tlsCalls.load(),1u); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
+        QVERIFY(panel.approve()); QTRY_VERIFY(f.owner->canUseSource(source));
+        const auto guard=f.owner->referenceGuard({f.reference()}); QVERIFY(guard); QVERIFY(guard());
+        QCOMPARE(f.resolves(),0); QCOMPARE(f.starts->load(),0u);
+        panel.viewClosed(); tlsOverride=-1; QVERIFY(panel.prepare(source));
+        QTRY_VERIFY(!panel.review().isEmpty()); QVERIFY(panel.review().value("approved").toBool());
+        QVERIFY(f.owner->transportAvailable()); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
+    }
+    void actualPrimaryAdmissionRequiresAJoinedTlsProbeBeforeTheProvider() {
+        Fixture f; QVERIFY(f.valid); tlsOverride=-1;
+        const auto reset=qScopeGuard([] { tlsOverride=-1; });
+        QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
+        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
+        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1);
+        QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source)); f.owner->discardApproval(id);
+        const auto uri=f.uri(); QVERIFY(!uri.isEmpty()); tlsOverride=0; tlsCalls=0; tlsOwnerThreadCalls=0;
+        { NativeJob denied(VLC_OBJECT(f.instance),uri,1); QCOMPARE(denied.start(),VLC_SUCCESS); QTRY_COMPARE(denied.ended.load(),1);
+          QCOMPARE(denied.status.load(),VLC_EACCES); }
+        QCOMPARE(f.resolves(),0); QCOMPARE(f.starts->load(),0u); QCOMPARE(tlsCalls.load(),1u); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
+        QVERIFY(f.owner->active()); QVERIFY(f.owner->canUseSource(source)); QVERIFY(!f.owner->transportAvailable());
+        tlsOverride=-1;
+        { NativeJob retry(VLC_OBJECT(f.instance),uri,2); QCOMPARE(retry.start(),VLC_SUCCESS); QTRY_COMPARE(retry.ended.load(),1);
+          QCOMPARE(retry.status.load(),VLC_SUCCESS); }
+        QCOMPARE(f.resolves(),1); QCOMPARE(f.starts->load(),1u); QVERIFY(f.owner->transportAvailable());
+    }
+    void retirementWaitsForTheExplicitProbeWithoutKeepingTheOwnerAlive() {
+        Fixture f; QVERIFY(f.valid); tlsOverride=2; tlsEntered=false; tlsReleased=false;
+        const auto release=qScopeGuard([] { tlsOverride=-1; tlsReleased.store(true,std::memory_order_release); tlsCondition.notify_all(); });
+        QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
+        QVERIFY(!f.owner->requestApproval(source).isEmpty()); QTRY_VERIFY(tlsEntered.load(std::memory_order_acquire));
+        f.owner->close(); f.owner.reset(); f.lifetime.close();
+        QVERIFY(!f.lifetime.handle().waitQt(std::chrono::milliseconds(20)));
+        tlsReleased.store(true,std::memory_order_release); tlsCondition.notify_all();
+        QVERIFY(f.lifetime.handle().waitQt(std::chrono::seconds(3))); QCOMPARE(f.resolves(),0);
+    }
+#endif
     void subscriptionFailureEndsActivationAndCannotRetryAClosedInitializer() {
         Fixture f; QVERIFY(f.valid); StoreAuthority authority(f.profile.path());
         std::vector<StoreAuthorityChanges> occupied;

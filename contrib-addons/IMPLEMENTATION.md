@@ -7,8 +7,9 @@ The full scope in this directory remains the objective. SDK v1 still has open co
 Performance is the current priority. The published build repeats synchronous
 package scans during basic UI work. Focused session host and session UI idle
 timer fixes pass. The mounted source owner, resolver, and consent UI also have
-verified idle timer fixes. The shared display view, startup work, lazy source
-TLS checks, visualizer inactivity, and full app measurements remain open. See
+verified idle timer fixes. Source TLS initialization is deferred until explicit
+joined work. The shared display view, startup work, transport-hint UI wiring,
+visualizer inactivity, and full app measurements remain open. See
 [the performance requirements and evidence](performance-contract.md).
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.

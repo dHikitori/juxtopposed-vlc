@@ -53,11 +53,16 @@ bool sourceId(const QString& value) {
 }
 }
 struct AddonDiscoverySourceOwner::NativeStop {
+    enum class Transport { Unknown, Ready, Unavailable };
     std::atomic_bool open{true};
+    std::atomic<Transport> transport{Transport::Unknown};
     std::mutex mutex;
     std::condition_variable ended;
     std::shared_ptr<const std::function<void()>> retire;
     std::function<void()> wake;
+    bool transportReady() const noexcept {
+        return open.load(std::memory_order_acquire) && transport.load(std::memory_order_acquire)==Transport::Ready;
+    }
     void close() noexcept {
         open.store(false,std::memory_order_release);
         std::shared_ptr<const std::function<void()>> cancel;
@@ -83,6 +88,18 @@ struct AddonDiscoverySourceOwner::Shared {
     std::function<void()> reset;
     std::mutex mutex;
     QHash<QString,Entry> entries;
+    // Call only from explicit joined review/capture or primary-open admission.
+    // No Store or native backend lock is held during the platform probe.
+    bool probeTransport() {
+        if(!stop->open.load(std::memory_order_acquire)) return false;
+        bool ready=false;
+        try { ready=QSslSocket::supportsSsl(); } catch(...) {}
+        if(!stop->open.load(std::memory_order_acquire)) return false;
+        const auto next=ready?NativeStop::Transport::Ready:NativeStop::Transport::Unavailable;
+        const auto previous=stop->transport.exchange(next,std::memory_order_acq_rel);
+        if(previous!=next && stop->wake) stop->wake();
+        return ready;
+    }
     bool put(const AddonSourceConsent::Binding& binding,const AddonNativeAuthority& authority) {
         std::optional<Entry> previous;
         {
@@ -205,6 +222,12 @@ AddonDiscoverySourceOwner::~AddonDiscoverySourceOwner() { close(); }
 bool AddonDiscoverySourceOwner::active() const {
     return !m_closing && m_lifetime.current() && m_stop->open.load(std::memory_order_acquire) && m_resolver && m_resolver->bound();
 }
+bool AddonDiscoverySourceOwner::transportKnown() const {
+    return active() && m_stop->transport.load(std::memory_order_acquire)!=NativeStop::Transport::Unknown;
+}
+bool AddonDiscoverySourceOwner::transportAvailable() const {
+    return active() && m_stop->transportReady();
+}
 void AddonDiscoverySourceOwner::notify() {
     scheduleMaintenance();
     if(m_noticeQueued) return; m_noticeQueued=true;
@@ -218,11 +241,6 @@ bool AddonDiscoverySourceOwner::activate() {
     const bool accepted=m_lifetime.startQtWork([shared,gate,stop] {
         std::shared_ptr<AddonSourceConsent> consent;
         try {
-            // The platform TLS probe can load a backend. Keep it on joined work.
-            if(!QSslSocket::supportsSsl()) {
-                post(gate,[](auto* owner) { owner->initialized(false,tr("The app cannot use secure media connections.")); });
-                stop->close(); return;
-            }
             const std::weak_ptr<Shared> weak=shared;
             AddonSourceConsent::Options options; options.ticketLifetimeMs=30000;
             consent=std::make_shared<AddonSourceConsent>(shared->directory,AddonSourceConsent::Checks{
@@ -298,7 +316,11 @@ QString AddonDiscoverySourceOwner::captureSource(const QString& contribution,boo
             if(shared->stop->open.load(std::memory_order_acquire)) {
                 const auto authority=reader(); const auto consent=shared->approvals();
                 const auto key=authority?binding(*authority):std::nullopt;
-                if(authority && consent && key && current(authority->current) && shared->put(*key,*authority)) {
+                if(authority && consent && key && current(authority->current)) shared->probeTransport();
+                // A transport hint does not grant or revoke consent. Review
+                // and stable-reference capture remain possible if TLS fails.
+                if(authority && consent && key && current(authority->current) && shared->stop->open.load(std::memory_order_acquire)
+                    && shared->put(*key,*authority)) {
                     capture=std::make_shared<SourceCapture>(); capture->authority=*authority; capture->binding=*key;
                     capture->revoke=consent->nativeBindingRevoker(*key); capture->approved=consent->approvalToken(*key);
                     if(review) capture->ticket=consent->capture(*key,&error);
@@ -358,7 +380,9 @@ void AddonDiscoverySourceOwner::captured(const QString& id,const QString& source
         }
         m_cache.insert(source,std::move(cache));
     }
-    m_error.clear(); notify();
+    m_error=m_stop->transport.load(std::memory_order_acquire)==NativeStop::Transport::Unavailable
+        ?tr("The app cannot use secure media connections."):QString{};
+    notify();
     if(review) emit approvalReady(id);
 }
 bool AddonDiscoverySourceOwner::canUseSource(const QString& contribution) const {
@@ -468,6 +492,7 @@ AddonNativeSourceResolver::AdmissionReader AddonDiscoverySourceOwner::captureAdm
         const auto consent=shared->approvals();
         if(!authority || !key || !consent || !current(authority->current) || !admitted(shared->records,*key,uri)
             || !shared->put(*key,*authority)) return {};
+        if(!shared->probeTransport() || !current(authority->current) || !shared->stop->transportReady()) return {};
         const auto intent=consent->mintIntent(*key,uri,generation,AddonSourceConsent::IntentReason::PrimaryPlayback);
         if(intent.isEmpty()) return {};
         const auto authorization=consent->consumeIntent(intent,*key,uri,generation,AddonSourceConsent::IntentReason::PrimaryPlayback);
@@ -476,15 +501,15 @@ AddonNativeSourceResolver::AdmissionReader AddonDiscoverySourceOwner::captureAdm
         const auto saved=authority->current,live=authority->live;
         Admission result{consent,*authorization,
             [stop,records,key=*key,uri,saved,live] {
-                return stop->open.load(std::memory_order_acquire) && current(live) && current(saved)
-                    && admitted(records,key,uri) && current(live);
-            },[stop,live] { return stop->open.load(std::memory_order_acquire) && current(live); },lifetime};
+                return stop->transportReady() && current(live) && current(saved)
+                    && admitted(records,key,uri) && current(live) && stop->transportReady();
+            },[stop,live] { return stop->transportReady() && current(live) && stop->transportReady(); },lifetime};
         return result.current(uri,generation)?std::optional<Admission>(std::move(result)):std::nullopt;
     };
 }
 AddonDiscoverySourceOwner::Cancel AddonDiscoverySourceOwner::resolve(const Admission& admission,Current check,Prepared done) {
     Q_ASSERT(QThread::currentThread()==thread());
-    if(!active() || !m_manager || !done || !current(check) || m_resolves.size()>=16) { if(done) done({}); return {}; }
+    if(!active() || !m_stop->transportReady() || !m_manager || !done || !current(check) || m_resolves.size()>=16) { if(done) done({}); return {}; }
     const auto uri=admission.authorization.uri(); const auto generation=admission.authorization.generation();
     const auto reference=AddonSourceAdmissions::decodeUntrusted(uri); const auto& binding=admission.authorization.binding();
     if(reference.value("source").toString()!=binding.contribution || reference.value("accountReference").toString()!=binding.accountReference
@@ -508,7 +533,7 @@ void AddonDiscoverySourceOwner::resolved(const QString& invocation,const QString
     m_invocations.remove(invocation); job->invocation.clear();
     QString failure;
     AddonStreamProxy::Spec spec;
-    if(!active() || !current(job->current)) failure=tr("The playback request is no longer available.");
+    if(!active() || !m_stop->transportReady() || !current(job->current)) failure=tr("The playback request is no longer available.");
     else if(status!=QLatin1String("match")) failure=tr("The source did not return a media stream.");
     else {
         for(auto it=data.cbegin();it!=data.cend();++it)
