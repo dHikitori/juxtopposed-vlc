@@ -75,6 +75,29 @@ class TestMetadataCatalogue final : public QObject
         identity.tagObjectId = QString(40, QLatin1Char('a')); identity.commitId = identity.tagObjectId;
         return PackageStore::inspectDirectory(directory, identity, output);
     }
+    static bool protectedCandidate(const QString& directory, const QString& id, PackageCandidate* output)
+    {
+        PackageCandidate ordinary;
+        if (!candidate(directory, id, &ordinary)) return false;
+        auto manifest = read(QDir(directory).filePath(QStringLiteral("addon.json")));
+        const QJsonObject binding{{QStringLiteral("field"), QStringLiteral("apiKey")},
+            {QStringLiteral("origin"), QStringLiteral("https://api.example.org")}, {QStringLiteral("header"), QStringLiteral("X-Api-Key")}};
+        const QJsonObject network{{QStringLiteral("origins"), QJsonArray{QStringLiteral("https://api.example.org")}},
+            {QStringLiteral("methods"), QJsonArray{QStringLiteral("GET")}}};
+        const QJsonObject required{{QStringLiteral("network.http"), network},
+            {QStringLiteral("credentials.use"), QJsonObject{{QStringLiteral("bindings"), QJsonArray{binding}}}}};
+        manifest.insert(QStringLiteral("permissions"), QJsonObject{{QStringLiteral("required"), required}});
+        const QJsonObject schema{{QStringLiteral("type"), QStringLiteral("object")}, {QStringLiteral("properties"), QJsonObject{
+            {QStringLiteral("apiKey"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}, {QStringLiteral("x-hakone-secret"), true}}},
+            {QStringLiteral("password"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}, {QStringLiteral("format"), QStringLiteral("password")}}},
+            {QStringLiteral("token"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}, {QStringLiteral("writeOnly"), true}}},
+            {QStringLiteral("account"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}}},
+            {QStringLiteral("blob"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}}}}},
+            {QStringLiteral("additionalProperties"), false}};
+        if (!document(QDir(directory).filePath(QStringLiteral("settings.json")), schema)) return false;
+        if (!document(QDir(directory).filePath(QStringLiteral("addon.json")), manifest)) return false;
+        return PackageStore::inspectDirectory(directory, ordinary.identity, output);
+    }
     static bool install(PackageStore& store, const QString& id, unsigned count = 1)
     {
         QTemporaryDir source; PackageCandidate value;
@@ -326,6 +349,58 @@ private slots:
         QFETCH(QString, path); QFETCH(QByteArray, bytes); QTemporaryDir dir; PackageStore store(dir.path());
         QVERIFY(install(store, QStringLiteral("org.hakone.first"))); QVERIFY(write(dir.filePath(path), bytes));
         MetadataCatalogueSnapshot value; QVERIFY(!store.metadataCatalogueReader()(&value, nullptr)); empty(value);
+    }
+    void savedCredentialSettingsHaveTheSameSaveAndCaptureRules_data()
+    {
+        QTest::addColumn<QJsonObject>("settings"); QTest::addColumn<bool>("accepted");
+        const auto reference = QStringLiteral("12345678-1234-1234-1234-123456789abc");
+        const auto secret = QStringLiteral("fixture-protected-value");
+        QTest::newRow("direct-secret") << QJsonObject{{QStringLiteral("apiKey"), secret}} << false;
+        QTest::newRow("nested-secret") << QJsonObject{{QStringLiteral("group"), QJsonObject{{QStringLiteral("apiKey"), secret}}}} << false;
+        QTest::newRow("array-secret") << QJsonObject{{QStringLiteral("items"), QJsonArray{QJsonObject{{QStringLiteral("apiKey"), secret}}}}} << false;
+        QTest::newRow("deep-array-secret") << QJsonObject{{QStringLiteral("items"), QJsonArray{QJsonArray{QJsonObject{{QStringLiteral("apiKey"), secret}}}}}} << false;
+        QTest::newRow("password-format") << QJsonObject{{QStringLiteral("password"), secret}} << false;
+        QTest::newRow("write-only") << QJsonObject{{QStringLiteral("token"), secret}} << false;
+        QTest::newRow("reference-string") << QJsonObject{{QStringLiteral("_credentials"), reference}} << false;
+        QTest::newRow("reference-array") << QJsonObject{{QStringLiteral("_credentials"), QJsonArray{reference}}} << false;
+        QTest::newRow("reference-null") << QJsonObject{{QStringLiteral("_credentials"), QJsonValue(QJsonValue::Null)}} << false;
+        QTest::newRow("bad-reference") << QJsonObject{{QStringLiteral("_credentials"), QJsonObject{{QStringLiteral("apiKey"), secret}}}} << false;
+        QTest::newRow("uppercase-reference") << QJsonObject{{QStringLiteral("_credentials"), QJsonObject{{QStringLiteral("apiKey"), reference.toUpper()}}}} << false;
+        QTest::newRow("reference-number") << QJsonObject{{QStringLiteral("_credentials"), QJsonObject{{QStringLiteral("apiKey"), 1}}}} << false;
+        QTest::newRow("unknown-reference-field") << QJsonObject{{QStringLiteral("_credentials"), QJsonObject{{QStringLiteral("other"), reference}}}} << false;
+        QTest::newRow("nested-reference-key") << QJsonObject{{QStringLiteral("group"), QJsonObject{{QStringLiteral("_credentials"), QJsonObject{{QStringLiteral("apiKey"), reference}}}}}} << false;
+        QTest::newRow("empty-settings") << QJsonObject{} << true;
+        QTest::newRow("empty-reference-object") << QJsonObject{{QStringLiteral("_credentials"), QJsonObject{}}} << true;
+        QTest::newRow("valid-reference") << QJsonObject{{QStringLiteral("_credentials"), QJsonObject{{QStringLiteral("apiKey"), reference}}}} << true;
+        QTest::newRow("valid-schema-reference") << QJsonObject{{QStringLiteral("_credentials"), QJsonObject{{QStringLiteral("password"), reference}, {QStringLiteral("token"), reference}}}} << true;
+        QTest::newRow("ordinary-opaque-string") << QJsonObject{{QStringLiteral("blob"), secret}} << true;
+        QTest::newRow("unknown-ordinary-string") << QJsonObject{{QStringLiteral("other"), secret}} << true;
+    }
+    void savedCredentialSettingsHaveTheSameSaveAndCaptureRules()
+    {
+        QFETCH(QJsonObject, settings); QFETCH(bool, accepted);
+        QTemporaryDir dir, source; PackageStore store(dir.path()); const auto id = QStringLiteral("org.hakone.zprotected");
+        // A valid earlier row must never survive a later refusal as a partial catalogue.
+        QVERIFY(install(store, QStringLiteral("org.hakone.first")));
+        PackageCandidate package; QVERIFY(protectedCandidate(source.path(), id, &package));
+        QString error; QVERIFY2(store.install(package, package.manifest.requiredPermissions, &error), qPrintable(error));
+        const auto path = statePath(dir.path(), id); const auto before = read(path); const auto token = store.authorityToken();
+        QCOMPARE(store.saveSettings(id, settings, 0, &error), accepted);
+        QJsonObject saved; quint64 revision = 0; QVERIFY(store.settings(id, &saved, &revision));
+        if (accepted) { QCOMPARE(saved, settings); QCOMPARE(revision, quint64(1)); QVERIFY(!token.current()); }
+        else { QCOMPARE(read(path), before); QCOMPARE(revision, quint64(0)); QVERIFY(token.current()); }
+        // Keep release bytes and identity exact. Change only the installed settings.
+        auto state = read(path); auto current = state.value(QStringLiteral("current")).toObject();
+        current.insert(QStringLiteral("settings"), settings); state.insert(QStringLiteral("current"), current);
+        QVERIFY(document(path, state));
+        InstalledPackage verified; QVERIFY2(store.installed(id, &verified, &error), qPrintable(error));
+        QCOMPARE(verified.digest, package.digest);
+        MetadataCatalogueSnapshot value;
+        QCOMPARE(store.metadataCatalogueReader()(&value, &error), accepted);
+        if (accepted) {
+            QCOMPARE(value.packages.size(), 2); QVERIFY(value.current());
+            QCOMPARE(value.packages.last().settings, settings);
+        } else { QVERIFY(!error.isEmpty()); empty(value); }
     }
     void malformedIdentityCannotBecomeAValidDefault()
     {

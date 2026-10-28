@@ -11,6 +11,7 @@ get_filename_component(VLC_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.."
 add_library(vlc_addon_host STATIC
     addon_manifest.cpp addon_package_store.cpp addon_store_authority.cpp addon_credentials.cpp
     addon_metadata_attempt.cpp addon_metadata_attempt.hpp addon_metadata_completion_policy.cpp addon_metadata_completion_policy.hpp addon_metadata_identity.hpp
+    addon_artwork_attempt_plan.cpp addon_artwork_attempt_plan.hpp addon_package_configuration.hpp
     addon_network.cpp addon_public_network_policy.cpp addon_worker.cpp addon_manager.cpp addon_native_authority.hpp addon_metadata_coordinator.cpp addon_ui_registry.cpp addon_ui_assets.cpp
     addon_discovery_coordinator.cpp addon_theme_service.cpp addon_sessions.cpp addon_audio_analysis.cpp
     addon_session_websocket.cpp addon_session_websocket.hpp addon_session_host.cpp addon_session_host.hpp
@@ -72,7 +73,7 @@ else()
     message(STATUS "Metadata completion fixture needs a native Linux worker path")
 endif()
 
-foreach(name session_websocket session_host session_ui source_consent_ui metadata_family_plan git_objects)
+foreach(name session_websocket session_host session_ui source_consent_ui metadata_family_plan artwork_attempt_plan git_objects)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     add_test(NAME addon_${name} COMMAND test_addon_${name})

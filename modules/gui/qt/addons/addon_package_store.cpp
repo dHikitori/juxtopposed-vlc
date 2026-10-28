@@ -524,6 +524,47 @@ private:
     int m_timeout;
 };
 
+// Validate saved references and declared protected keys without file access.
+// The same check applies to a new save and a complete catalogue capture.
+bool credentialSettingsValid(const Manifest& manifest, const QJsonObject& schema,
+                             const QJsonObject& settings, QString* error)
+{
+    QSet<QString> secretFields;
+    for (const auto& binding : manifest.permissionScope(QStringLiteral("credentials.use")).value("bindings").toArray())
+        secretFields.insert(binding.toObject().value("field").toString());
+    const auto properties = schema.value("properties").toObject();
+    for (auto it = properties.begin(); it != properties.end(); ++it) {
+        const auto field = it.value().toObject();
+        if (field.value("x-hakone-secret").toBool() || field.value("writeOnly").toBool()
+            || field.value("format").toString() == QLatin1String("password")) secretFields.insert(it.key());
+    }
+    if (settings.contains("_credentials")) {
+        if (!settings.value("_credentials").isObject())
+            return fail(error, QStringLiteral("The host credential reference object is not correct."));
+        const auto references = settings.value("_credentials").toObject();
+        static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
+        for (auto it = references.begin(); it != references.end(); ++it)
+            if (!secretFields.contains(it.key()) || !it.value().isString()
+                || !uuid.match(it.value().toString()).hasMatch())
+                return fail(error, QStringLiteral("The protected credential reference is not correct."));
+    }
+    std::function<bool(const QJsonValue&)> containsSecret = [&](const QJsonValue& value) {
+        if (value.isObject()) {
+            const auto object = value.toObject();
+            for (auto it = object.begin(); it != object.end(); ++it)
+                if (secretFields.contains(it.key()) || containsSecret(it.value())) return true;
+        } else if (value.isArray()) {
+            for (const auto& item : value.toArray()) if (containsSecret(item)) return true;
+        }
+        return false;
+    };
+    auto ordinary = settings;
+    ordinary.remove("_credentials");
+    if (containsSecret(ordinary))
+        return fail(error, QStringLiteral("Do not save credentials in ordinary add-on settings."));
+    return true;
+}
+
 bool validateCandidate(const PackageCandidate& candidate, QString* error)
 {
     Manifest parsed;
@@ -1285,43 +1326,13 @@ bool PackageStore::saveSettings(const QString& id, const QJsonObject& settings, 
         return fail(error, QStringLiteral("The settings changed. Read the settings again before a save."));
     InstalledPackage package;
     if (!installed(id, &package, error)) return false;
-    QSet<QString> secretFields;
-    for (const auto& binding : package.manifest.permissionScope(QStringLiteral("credentials.use")).value("bindings").toArray())
-        secretFields.insert(binding.toObject().value("field").toString());
+    QJsonObject settingsSchema;
     if (!package.manifest.settingsSchema.isEmpty()) {
         QFile schema(QDir(package.directory).filePath(package.manifest.settingsSchema));
         if (!schema.open(QIODevice::ReadOnly)) return fail(error, QStringLiteral("The app cannot examine the protected settings fields."));
-        const auto properties = QJsonDocument::fromJson(schema.readAll()).object().value("properties").toObject();
-        for (auto it = properties.begin(); it != properties.end(); ++it) {
-            const auto field = it.value().toObject();
-            if (field.value("x-hakone-secret").toBool() || field.value("writeOnly").toBool()
-                || field.value("format").toString() == QLatin1String("password")) secretFields.insert(it.key());
-        }
+        settingsSchema = QJsonDocument::fromJson(schema.readAll()).object();
     }
-    if (settings.contains("_credentials")) {
-        if (!settings.value("_credentials").isObject())
-            return fail(error, QStringLiteral("The host credential reference object is not correct."));
-        const auto references = settings.value("_credentials").toObject();
-        static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
-        for (auto it = references.begin(); it != references.end(); ++it)
-            if (!secretFields.contains(it.key()) || !it.value().isString()
-                || !uuid.match(it.value().toString()).hasMatch())
-                return fail(error, QStringLiteral("The protected credential reference is not correct."));
-    }
-    std::function<bool(const QJsonValue&)> containsSecret = [&](const QJsonValue& value) {
-        if (value.isObject()) {
-            const auto object = value.toObject();
-            for (auto it = object.begin(); it != object.end(); ++it)
-                if (secretFields.contains(it.key()) || containsSecret(it.value())) return true;
-        } else if (value.isArray()) {
-            for (const auto& item : value.toArray()) if (containsSecret(item)) return true;
-        }
-        return false;
-    };
-    auto ordinary = settings;
-    ordinary.remove("_credentials");
-    if (containsSecret(ordinary))
-        return fail(error, QStringLiteral("Do not save credentials in ordinary add-on settings."));
+    if (!credentialSettingsValid(package.manifest, settingsSchema, settings, error)) return false;
     current.insert("settings", settings);
     current.insert("settingsRevision", double(revision) + 1);
     state.insert("current", current);
@@ -1508,6 +1519,7 @@ bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
             {QStringLiteral("properties"), QJsonObject{}}, {QStringLiteral("additionalProperties"), false}};
         if (!row.package.manifest.settingsSchema.isEmpty())
             row.schema = QJsonDocument::fromJson(candidate.contents.value(row.package.manifest.settingsSchema)).object();
+        if (!credentialSettingsValid(row.package.manifest, row.schema, row.settings, error)) return false;
         for (const auto& contribution : row.package.manifest.contributions) {
             if (++contributions > MetadataCatalogueSnapshot::MaximumContributions)
                 return fail(error, QStringLiteral("The metadata catalogue has too many contributions."));

@@ -57,6 +57,11 @@ results are in `/tmp/hakone-metadata-catalogue`. The reviewed patch hash is
 `b296c755c0dae4212ade3647fa34595b9cd0957abb2ed284ed66a1ee4b57f691`.
 The Windows file-reader branch still needs its platform build and runtime check.
 
+The later saved-settings check rejects declared protected keys and malformed
+credential references before it publishes a row. Its catalogue suite passes
+54 normal and 54 sanitizer cases. The combined 359-case host build also passes
+all 90 package cases. See [the private artwork plan](artwork-attempt-plan.md).
+
 Automake, Meson, and the standalone CMake build register the test. Linux test
 targets enable the file-open interception checks; other platforms do not claim
 that coverage.

@@ -78,6 +78,8 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 ## Latest verified native checkpoint
 
+- The [private artwork plan](artwork-attempt-plan.md) retains all raw providers, fixes the restored-provider preference case, and shares exact configuration and identity projection with the Manager. The combined current-source host build passes 359 cases, including all 90 package cases. Separate plan and catalogue sanitizer groups pass 49 and 77 cases. Native runner and owner activation remain open.
+
 - The [native artwork keeper](native-artwork-attempt-keeper.md) connects completion admission to the Core gate and retains native authority through final Apply. It passes 11 copied normal and 11 sanitizer cases, then 11 fresh working-tree normal cases. The typed aggregate, registration gate, and owner activation remain open.
 
 - Host [metadata completion records](metadata-attempt-records.md) now bind one fresh provider invocation and its complete host calls. The combined catalogue, receipt, identity, and authority build passes 200 normal cases. Separate receipt and identity sanitizer checks pass 153 cases; the SDK policy schema passes 43. The native aggregate and owner activation remain open.

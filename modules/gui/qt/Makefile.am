@@ -118,6 +118,9 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_manifest.hpp \
 	addons/addon_metadata_attempt.cpp \
 	addons/addon_metadata_attempt.hpp \
+	addons/addon_artwork_attempt_plan.cpp \
+	addons/addon_artwork_attempt_plan.hpp \
+	addons/addon_package_configuration.hpp \
 	addons/addon_metadata_completion_policy.cpp \
 	addons/addon_metadata_completion_policy.hpp \
 	addons/addon_metadata_identity.hpp \
@@ -2537,6 +2540,17 @@ tests/test_addon_metadata_catalogue.moc: $(srcdir)/tests/test_addon_metadata_cat
 endif
 check_PROGRAMS += test_qt_addon_metadata_catalogue
 TESTS += test_qt_addon_metadata_catalogue
+
+test_qt_addon_artwork_attempt_plan_SOURCES = tests/test_addon_artwork_attempt_plan.cpp
+nodist_test_qt_addon_artwork_attempt_plan_SOURCES = tests/test_addon_artwork_attempt_plan.moc
+BUILT_SOURCES += tests/test_addon_artwork_attempt_plan.moc
+CLEANFILES += tests/test_addon_artwork_attempt_plan.moc
+test_qt_addon_artwork_attempt_plan_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_artwork_attempt_plan_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_artwork_attempt_plan_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_artwork_attempt_plan_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_artwork_attempt_plan
+TESTS += test_qt_addon_artwork_attempt_plan
 
 # This fixture includes a real worker row. Do not register a reduced suite.
 if HAVE_LINUX

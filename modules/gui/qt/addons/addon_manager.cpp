@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
+#include "addon_package_configuration.hpp"
 #include "addon_metadata_attempt.hpp"
 #include "addon_metadata_completion_policy.hpp"
 #include "addon_storage.hpp"
@@ -26,81 +27,14 @@
 
 namespace vlc::addons {
 namespace {
-bool secretField(const QJsonObject& field)
-{ return field.value("x-hakone-secret").toBool() || field.value("writeOnly").toBool() || field.value("format").toString() == QLatin1String("password"); }
 QJsonObject readObject(const QString& path)
 {
     QFile file(path); if (!file.open(QIODevice::ReadOnly) || file.size() > 256 * 1024) return {};
     return QJsonDocument::fromJson(file.readAll()).object();
 }
-bool valueValid(const QJsonValue& value, const QJsonObject& field)
-{
-    const auto type = field.value("type").toString();
-    if (field.contains("enum") && !field.value("enum").toArray().contains(value)) return false;
-    if (type == QLatin1String("boolean")) return value.isBool();
-    if (type == QLatin1String("number") || type == QLatin1String("integer")) {
-        if (!value.isDouble()) return false;
-        const auto n = value.toDouble();
-        if (type == QLatin1String("integer") && (n < -0x1p63 || n >= 0x1p63 || std::trunc(n) != n)) return false;
-        return n >= field.value("minimum").toDouble(-1e12) && n <= field.value("maximum").toDouble(1e12);
-    }
-    if (type == QLatin1String("array")) {
-        if (!value.isArray() || value.toArray().size() > qMin(64, field.value("maxItems").toInt(64))
-            || value.toArray().size() < field.value("minItems").toInt(0)) return false;
-        QSet<QByteArray> seen;
-        for (const auto& entry : value.toArray()) {
-            if (!valueValid(entry, field.value("items").toObject())) return false;
-            const auto key = QJsonDocument(QJsonArray{entry}).toJson(QJsonDocument::Compact);
-            if (field.value("uniqueItems").toBool() && seen.contains(key)) return false;
-            seen.insert(key);
-        }
-        return true;
-    }
-    if (type != QLatin1String("string") || !value.isString()) return false;
-    const auto text = value.toString();
-    if (text.size() < field.value("minLength").toInt(0) || text.size() > qMin(4096, field.value("maxLength").toInt(4096))) return false;
-    const auto pattern = field.value("pattern").toString();
-    if (!pattern.isEmpty()) {
-        // The first SDK supports this bounded language-code grammar. Never
-        // compile arbitrary package-supplied PCRE into a UI-thread validator.
-        if (pattern != QLatin1String("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")) return false;
-        static const QRegularExpression language(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"));
-        if (text.size() > 64 || !language.match(text).hasMatch()) return false;
-    }
-    return true;
-}
-QString packageAccountReference(const InstalledPackage& package, const QJsonObject& saved,
-                                const QJsonObject& document,
-                                const std::function<bool(const QString&)>& present)
-{
-    const auto storedReferences = saved.value(QStringLiteral("_credentials")).toObject();
-    const auto properties = document.value(QStringLiteral("properties")).toObject();
-    QJsonObject references, account;
-    bool connected = true, protectedAccount = false;
-    const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
-    for (const auto& binding : package.manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray()) {
-        if (!approved.contains(binding)) continue;
-        protectedAccount = true;
-        const auto name = binding.toObject().value(QStringLiteral("field")).toString();
-        const auto reference = storedReferences.value(name).toString();
-        references.insert(name, reference);
-        connected &= present(reference);
-    }
-    for (const auto& name : package.manifest.accountFields) {
-        const auto field = properties.value(name).toObject();
-        if (!field.isEmpty() && !secretField(field)) {
-            const auto value = saved.contains(name) ? saved.value(name) : field.value(QStringLiteral("default"));
-            account.insert(name, value.isUndefined() ? QJsonValue(QJsonValue::Null) : value);
-        }
-    }
-    const QJsonObject identity{{"package", package.manifest.id}, {"source", package.identity.source},
-        {"references", references}, {"account", account}};
-    const QByteArray canonical = QByteArray("vlc-addon-account-v1\n") + QJsonDocument(identity).toJson(QJsonDocument::Compact);
-    const QString digest = QString::fromLatin1(QCryptographicHash::hash(canonical, QCryptographicHash::Sha256).toHex());
-    const QString prefix = !connected && protectedAccount ? QStringLiteral("disconnected:")
-        : !protectedAccount && account.isEmpty() ? QStringLiteral("public:") : QStringLiteral("account:");
-    return prefix + digest;
-}
+using packageConfiguration::secretField;
+using packageConfiguration::valueValid;
+using packageConfiguration::packageAccountReference;
 QString localPart(const QString& global) { return global.section('/', 1); }
 QString packagePart(const QString& global) { return global.section('/', 0, 0); }
 
@@ -286,15 +220,8 @@ QVariantMap AddonManager::settingsSecretStatus(const QString& id) const
 bool AddonManager::configured(const InstalledPackage& package) const
 {
     if (m_retiring || m_withdrawingPackages.contains(package.manifest.id) || m_removingPackages.contains(package.manifest.id) || m_store.packageRetiring(package.manifest.id)) return false;
-    const auto document = schema(package); if (document.value("type").toString() != QLatin1String("object")) return false;
-    const auto values = QJsonObject::fromVariantMap(settingsValues(package.manifest.id));
-    const auto properties = document.value("properties").toObject();
-    for (const auto& required : document.value("required").toArray()) {
-        const auto name = required.toString();
-        if (secretField(properties.value(name).toObject())) { if (credential(package.manifest.id, name).isEmpty()) return false; }
-        else if (!values.contains(name) || !valueValid(values.value(name), properties.value(name).toObject())) return false;
-    }
-    return true;
+    return packageConfiguration::configured(savedSettings(package.manifest.id), schema(package),
+        [this, id = package.manifest.id](const QString& reference) { return m_secrets.present(id, reference); });
 }
 
 bool AddonManager::saveAddonSettings(const QString& id, const QVariantMap& input, const QVariantMap& secretOperations)
@@ -1050,15 +977,8 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
         QTimer::singleShot(0, this, [this, request, contributionId] { emit operationFinished(request, contributionId, QStringLiteral("auth_required"), {}, tr("Enable this add-on. Then enter its settings.")); });
         return request;
     }
-    QJsonObject projected = QJsonObject::fromVariantMap(context);
-    auto identity = projected.value("identity").toObject(); QJsonObject permittedIdentity;
-    const auto fields = package.manifest.permissionScope(QStringLiteral("metadata.context")).value("fields").toArray();
-    const auto approvedIdentity = package.grants.value(QStringLiteral("metadata.context")).toObject().value(QStringLiteral("fields")).toArray();
-    for (const auto& field : fields)
-        if (approvedIdentity.contains(field) && identity.contains(field.toString())) permittedIdentity.insert(field.toString(), identity.value(field.toString()));
-    projected.insert("identity", permittedIdentity);
-    // Local paths and consumer state never enter the portable provider projection.
-    for (const auto& name : {QStringLiteral("url"), QStringLiteral("targets"), QStringLiteral("existingFields"), QStringLiteral("protectedFields"), QStringLiteral("fieldRevisions")}) projected.remove(name);
+    const auto projected = packageConfiguration::projectMetadataContext(package.manifest, package.grants,
+        QJsonObject::fromVariantMap(context));
     if (attempt) {
         const auto contribution = package.manifest.contribution(localPart(contributionId));
         const auto feature = projected.value(QStringLiteral("feature")).toString();
