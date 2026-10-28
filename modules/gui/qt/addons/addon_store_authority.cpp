@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_store_authority.hpp"
+#include "addon_native_notifications.hpp"
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -13,6 +14,7 @@
 #include <string_view>
 
 namespace vlc::addons {
+static_assert(StoreAuthority::ChangeLimit==NativeNotifications::Limit);
 struct StoreAuthorityState {
     std::atomic<quint64> revision{0};
     std::atomic_uint writers{0};
@@ -28,9 +30,7 @@ struct StoreAuthorityState {
     mutable std::array<std::weak_ptr<StoreAuthorityCallback>, StoreAuthorityToken::WatchLimit> callbacks;
     mutable std::atomic_uint callbackCount{0};
     mutable unsigned callbackBatches = 0;
-    mutable std::mutex changeMutex;
-    mutable std::array<std::weak_ptr<StoreAuthorityChangeCallback>, StoreAuthority::ChangeLimit> changes;
-    mutable std::atomic_uint changeCount{0};
+    NativeNotifications changes;
 };
 struct StoreAuthorityCallback {
     struct Quota {
@@ -52,32 +52,14 @@ struct StoreAuthorityCallback {
     std::atomic_bool fired{false};
 };
 struct StoreAuthorityChangeCallback {
-    struct Quota {
-        std::shared_ptr<const StoreAuthorityState> owner;
-        bool counted = false;
-        ~Quota() { if(counted) owner->changeCount.fetch_sub(1,std::memory_order_release); }
-    };
-    StoreAuthorityChangeCallback(std::shared_ptr<const StoreAuthorityState> owner,std::function<void()> call)
-        : quota{std::move(owner),false},wake(std::move(call)) {}
-    // Last native capture is released before its bound/quota.
-    Quota quota;
-    const std::function<void()> wake;
+    // The wrapper preserves the public opaque one-handle Store token. Release
+    // the subscription/native capture before its final Store owner reference.
+    std::shared_ptr<const StoreAuthorityState> owner;
+    NativeNotification subscription;
 };
 namespace {
 void notifyChanged(const std::shared_ptr<StoreAuthorityState>& state) noexcept
-{
-    std::array<std::shared_ptr<StoreAuthorityChangeCallback>,StoreAuthority::ChangeLimit> pending;
-    unsigned count=0;
-    {
-        std::lock_guard<std::mutex> guard(state->changeMutex);
-        for(auto& weak:state->changes) {
-            if(auto current=weak.lock()) pending[count++]=std::move(current);
-            else weak.reset();
-        }
-    }
-    for(unsigned i=0;i<count;++i) try { pending[i]->wake(); } catch(...) {}
-    // Callback captures and their final references die outside every lock.
-}
+{ state->changes.notify(); }
 void cancelNative(const std::function<void()>& cancel) noexcept
 { if (cancel) try { cancel(); } catch (...) {} }
 void endCallbackBatch(const std::shared_ptr<const StoreAuthorityState>& state) noexcept
@@ -206,26 +188,18 @@ void StoreAuthority::invalidate() const noexcept
 }
 void StoreAuthority::displayUnlocked() const noexcept { notifyChanged(m_state); }
 StoreAuthorityChanges::operator bool() const noexcept
-{ return m_callback && !m_callback->quota.owner->retired.load(std::memory_order_acquire); }
+{ return m_callback && !m_callback->owner->retired.load(std::memory_order_acquire); }
 StoreAuthorityChanges StoreAuthority::onChanged(std::function<void()> nativeWake) const noexcept
 {
-    if(!nativeWake || m_state->retired.load(std::memory_order_acquire)) return {};
-    std::shared_ptr<StoreAuthorityChangeCallback> callback;
-    try { callback=std::make_shared<StoreAuthorityChangeCallback>(m_state,std::move(nativeWake)); }
-    catch(...) { return {}; }
-    bool admitted=false;
-    {
-        std::lock_guard<std::mutex> guard(m_state->changeMutex);
-        if(!m_state->retired.load(std::memory_order_acquire)
-            && m_state->changeCount.load(std::memory_order_acquire)<ChangeLimit)
-            for(auto& weak:m_state->changes) if(weak.expired()) {
-                callback->quota.counted=true;
-                m_state->changeCount.fetch_add(1,std::memory_order_release);
-                weak=callback;admitted=true;break;
-            }
-    }
     StoreAuthorityChanges result;
-    if(admitted) result.m_callback=std::move(callback);
+    try {
+        if(!nativeWake || m_state->retired.load(std::memory_order_acquire))return result;
+        auto subscription=m_state->changes.subscribe(std::move(nativeWake));
+        if(!subscription)return result;
+        auto callback=std::make_shared<StoreAuthorityChangeCallback>();
+        callback->owner=m_state;callback->subscription=std::move(subscription);
+        result.m_callback=std::move(callback);
+    }catch(...){}
     return result;
 }
 StoreAuthorityToken captureStoreAuthority(const QString& directory)

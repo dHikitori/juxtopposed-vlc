@@ -9,15 +9,20 @@ namespace vlc::addons {
 thread_local std::shared_ptr<const std::atomic_bool> RepositoryCancellation::s_current;
 namespace {
 std::atomic_uint processJobs{0};
-struct Permit { ~Permit() { processJobs.fetch_sub(1,std::memory_order_acq_rel); } };
-std::shared_ptr<Permit> acquire()
+NativeNotifications& processAvailability()
+{static NativeNotifications notices;return notices;}
+void releaseProcess() noexcept
+{processJobs.fetch_sub(1,std::memory_order_acq_rel);processAvailability().notify();}
+struct Permit { ~Permit() { releaseProcess(); } };
+std::shared_ptr<Permit> acquire(AddonRepositoryJobs::Refusal* refusal)
 {
     auto count=processJobs.load(std::memory_order_acquire);
     while (count<AddonRepositoryJobs::ProcessLimit) {
         if (!processJobs.compare_exchange_weak(count,count+1,std::memory_order_acq_rel)) continue;
         try { return std::make_shared<Permit>(); }
-        catch (...) { --processJobs; return {}; }
+        catch (...) { releaseProcess();if(refusal)*refusal=AddonRepositoryJobs::Refusal::ResourceFailure;return {}; }
     }
+    if(refusal)*refusal=AddonRepositoryJobs::Refusal::ProcessQuota;
     return {};
 }
 }
@@ -33,6 +38,8 @@ AddonRepositoryJobs::AddonRepositoryJobs(AddonStreamLifetime::Handle lifetime,QO
     :QObject(parent),m_lifetime(std::move(lifetime)),m_gate(std::make_shared<Gate>()) { m_gate->owner=this; }
 AddonRepositoryJobs::~AddonRepositoryJobs() { close(); }
 unsigned AddonRepositoryJobs::processCount() noexcept { return processJobs.load(std::memory_order_acquire); }
+NativeNotification AddonRepositoryJobs::onProcessAvailable(std::function<void()> nativeWake) noexcept
+{return processAvailability().subscribe(std::move(nativeWake));}
 void AddonRepositoryJobs::cancel() noexcept
 { if (m_job) m_job->canceled->store(true,std::memory_order_release); }
 void AddonRepositoryJobs::close()
@@ -42,13 +49,21 @@ void AddonRepositoryJobs::close()
     cancel(); m_job.reset(); Complete empty; m_complete.swap(empty);
 }
 bool AddonRepositoryJobs::submit(Work work,Complete complete)
+{return submit(std::move(work),std::move(complete),nullptr);}
+bool AddonRepositoryJobs::submit(Work work,Complete complete,Refusal* refusal)
 {
     Q_ASSERT(QThread::currentThread()==thread());
-    if (m_job || !work || !complete || !m_lifetime.current()) return false;
+    const auto refuse=[&](Refusal reason){if(refusal)*refusal=reason;return false;};
+    if(refusal)*refusal=Refusal::None;
+    if(!work || !complete)return refuse(Refusal::Invalid);
+    if(m_job)return refuse(Refusal::Busy);
+    if(!m_lifetime.current())return refuse(Refusal::Closed);
     const auto gate=m_gate;
-    { std::lock_guard<std::mutex> lock(gate->mutex); if (gate->closed) return false; }
-    const auto permit=acquire(); if (!permit) return false;
-    const auto job=std::make_shared<Job>(); const auto lifetime=m_lifetime;
+    {std::lock_guard<std::mutex> lock(gate->mutex);if(gate->closed)return refuse(Refusal::Closed);}
+    const auto permit=acquire(refusal);if(!permit)return false;
+    std::shared_ptr<Job> job;
+    try {job=std::make_shared<Job>();}catch(...){return refuse(Refusal::ResourceFailure);}
+    const auto lifetime=m_lifetime;
     m_job=job; m_complete.swap(complete);
     bool started=false;
     try { started=lifetime.startQtWork([gate,job,lifetime,work=std::move(work)]() mutable {
@@ -69,7 +84,7 @@ bool AddonRepositoryJobs::submit(Work work,Complete complete)
     catch (...) {}
     if (started) return true;
     job->canceled->store(true,std::memory_order_release); m_job.reset();
-    Complete empty; m_complete.swap(empty); return false;
+    Complete empty;m_complete.swap(empty);return refuse(Refusal::QtAdmissionFailure);
 }
 void AddonRepositoryJobs::completed(const std::shared_ptr<Job>& job,bool failed)
 {

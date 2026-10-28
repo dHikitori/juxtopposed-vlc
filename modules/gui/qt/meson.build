@@ -26,6 +26,8 @@ addon_host_sources = files(
     'addons/addon_store_authority.hpp',
     'addons/addon_native_wake.cpp',
     'addons/addon_native_wake.hpp',
+    'addons/addon_native_notifications.cpp',
+    'addons/addon_native_notifications.hpp',
     'addons/addon_catalogue_store_lock.hpp',
     'addons/addon_credentials.cpp',
     'addons/addon_credentials.hpp',
@@ -1919,7 +1921,7 @@ if qt6_dep.found()
         addon_visualizer_process = executable('addon_visualizer_process', files('tests/fixtures/addon_visualizer_process.c'), install: false, build_by_default: false)
         addon_discovery_source_process = executable('addon_discovery_source_process', files('tests/fixtures/addon_discovery_source_process.c'), install: false, build_by_default: false)
         addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
-        foreach addon_test : ['packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
+        foreach addon_test : ['packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
             native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,

@@ -28,6 +28,29 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(AddonRepositoryJobs::processCount(),0u,5000);
         QTRY_COMPARE_WITH_TIMEOUT(AddonStreamLifetime::processQtWorkCount(),0u,5000);
     }
+    void typedRefusalSeparatesProcessQuotaFromBusyAndClosed() {
+        using Refusal=AddonRepositoryJobs::Refusal;Refusal why=Refusal::None;
+        AddonStreamLifetime owner;AddonRepositoryJobs first(owner.handle()),second(owner.handle()),third(owner.handle());
+        const auto one=std::make_shared<Wait>(),two=std::make_shared<Wait>();
+        const auto release=qScopeGuard([&]{one->release();two->release();owner.close();});
+        QVERIFY(!third.submit({},[](auto){},&why));QCOMPARE(why,Refusal::Invalid);
+        QVERIFY(first.submit([one]{one->wait();},[](auto){},&why));QCOMPARE(why,Refusal::None);QTRY_VERIFY(one->entered.load());
+        QVERIFY(!first.submit([]{},[](auto){},&why));QCOMPARE(why,Refusal::Busy);
+        QVERIFY(second.submit([two]{two->wait();},[](auto){},&why));QTRY_VERIFY(two->entered.load());
+        QVERIFY(!third.submit([]{},[](auto){},&why));QCOMPARE(why,Refusal::ProcessQuota);
+        third.close();QVERIFY(!third.submit([]{},[](auto){},&why));QCOMPARE(why,Refusal::Closed);
+    }
+    void nativeAvailabilityFollowsActualTlsCleanupAndUpdatedCount() {
+        AddonStreamLifetime owner;AddonRepositoryJobs jobs(owner.handle());
+        const auto wait=std::make_shared<Wait>();const auto storage=std::make_shared<QThreadStorage<Tail*>>();
+        const auto release=qScopeGuard([&]{wait->release();owner.close();});
+        std::atomic_uint notices{0},observed{99};unsigned calls=0;
+        auto token=AddonRepositoryJobs::onProcessAvailable([&]{observed=AddonRepositoryJobs::processCount();++notices;});QVERIFY(token);
+        QVERIFY(jobs.submit([storage,wait]{storage->setLocalData(new Tail{wait});},[&](auto result){QCOMPARE(result,AddonRepositoryJobs::Result::Finished);++calls;}));
+        QTRY_VERIFY(wait->entered.load());QTRY_COMPARE(calls,1u);QCOMPARE(AddonRepositoryJobs::processCount(),1u);QCOMPARE(notices.load(),0u);
+        wait->release();QTRY_COMPARE(notices.load(),1u);QCOMPARE(observed.load(),0u);
+        QVERIFY(owner.handle().waitQt(std::chrono::seconds(5)));
+    }
     void missingAndClosedAppHandlesRefuseWork() {
         AddonRepositoryJobs absent({}); QVERIFY(!absent.submit([] {},[](auto) {}));
         AddonStreamLifetime owner; AddonRepositoryJobs closed(owner.handle()); owner.close();

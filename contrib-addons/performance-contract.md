@@ -327,11 +327,33 @@ SHA-256 `98ebb9414a2ba22d2f69171ba4b3f4bfb5c8ea5d532c31b09d9c75a518f65331`.
 A separate fresh 44-source host build includes the exact Store wrapper changes
 and all matching meta-objects. Its six suites pass 147 cases, including all 13
 existing Store authority cases. Three old-source controls each fail their
-intended idle-timer assertion. That larger copied cohort also contains source
-timer changes which are not yet applied. Its normal record is
-`/tmp/hakone-source-idle-timers/normal-build-result.json`; its sanitizer run is
-still pending. The Windows wake branch and full app integration also remain
-open. No shared display view or consumer is enabled by this foundation alone.
+intended idle-timer assertion. Those source timer changes are now applied; the
+final 148-case sanitizer result is recorded above. The initial normal record is
+`/tmp/hakone-source-idle-timers/normal-build-result.json`. The Windows wake
+branch and full app integration remain open. No shared display view or consumer
+is enabled by this foundation alone.
+
+The bounded native notification registry is now shared with repository work.
+The existing submission API stays available; a new overload reports process
+capacity, owner closure, busy state, and other refusal causes separately. The
+actual process permit publishes capacity only after its retained work ends.
+Clients can wait for that event without a polling timer. The Store subscription
+keeps its opaque handle and owner lifetime. Sixteen native authority and helper
+bodies remain unchanged.
+
+The foundation passes 47 normal and 47 sanitizer cases: native notifications
+seven, Store authority 13, native wake 14, and repository work 13. Its broader
+copied view group passes 77 cases in each mode. Two old-behavior controls fail
+at their designated readiness check. Those view cases cover real process-slot
+release after GUI completion and an unlock notice received before a failed
+reader completes. The view retry adapter is still copied work. The global
+40-item Qt work limit has no capacity event in this slice; other refusal causes
+must not trigger an automatic retry loop.
+
+The record is `/tmp/hakone-addon-job-availability/final-validation.json`,
+SHA-256 `9379efcdd60a683392d794ce86e338780e258f7dd7cb6a6b21258addf21e0eee`.
+All ten applied foundation files match the reviewed packet. This does not
+establish whole-app responsiveness.
 
 An earlier test manifest write damaged a Linux LibVLC build output. The pin
 check stopped that run before configuration or compilation. The library was
@@ -357,8 +379,10 @@ unchanged. The exact helper also passes the copied reader's 98 normal and
 cases, including the existing theme checks and four attached-view cases.
 Those four cases cover loading without a file fallback, repeated reads and
 core preference changes without a new package capture, retained palette with
-stale action refusal, and disable/restore behavior. The theme prototype's
-sanitizer check is still pending.
+stale action refusal, and disable/restore behavior. All 15 focused sanitizer
+cases also pass with no failed or skipped cases or runtime diagnostics. That
+record is `/tmp/hakone-display-theme-ui/san/proof.json`, SHA-256
+`f4de45f6ac743db19a86cf394d790598a3a0548e8a4aa42ecac54600cb85bb6f`.
 
 The live change in this step extracts the shared helper only. The attached
 theme service, shared display reader, and other consumers remain separate
@@ -368,4 +392,5 @@ copied work. The prototype record is
 The reader checkpoint is
 `/tmp/hakone-addon-catalogue-view/reader-view-validation-v2.json`, SHA-256
 `e01d7d6c544132b9dcde48e32c63bcffc69eeccf2ef43db0f7637c6ee7c83cde`.
-Row parity, quota retry, startup work, and full app performance remain open.
+Row parity, shared-view integration, startup work, and full app performance
+remain open.
