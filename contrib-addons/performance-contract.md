@@ -129,6 +129,41 @@ counts. It must include all background startup work. A faster empty or stale
 view cannot pass as a faster valid catalogue. A new host cohort needs its own
 matching headers, archive, and executable pins.
 
+## Full app baseline and comparison
+
+The retained pre-add-on app is `build-windows/hakone-win64`, from clean source
+`619b57dd8597605500aed1845d182bd37742dc4e`. It includes the redesign and
+precedes the new worker, host, and MainUI mount. A read-only audit records all
+822 public files, with a total size of 281,421,367 bytes. It did not launch the
+app or read a user profile. The manifest is
+`/tmp/hakone-pre-addon-performance-baseline-audit/candidate-manifest.json`,
+SHA-256 `9f0a47c5f519498b121fd362e7006668f9162bbf6733c71e8ca41f68c0a4da77`.
+
+Preserve that complete build. The Windows build script defaults to that output
+directory. Future local builds must explicitly select `build-windows/vlc-win64`
+or an owned staging directory. Use independent copies of complete builds for
+the comparison; do not mix an earlier Qt DLL with a later Core.
+
+Compare the earlier app with the improved app. Also compare the same improved
+binary with seven packages removed and suppressed, and with seven packages
+enabled but unused. The latter comparison measures package-related cost; it
+does not measure the host's fixed cost. Other Core and UI changes limit what
+the earlier-app comparison can attribute to add-ons.
+
+Use isolated, matching disposable profiles, normal rendering, the same cache
+policy, and identical local media. Measure repeated earlier-app runs first to
+record machine variation. Then use balanced run orders. Include startup to a
+usable window, catalogue readiness, shared navigation, and at least 60 seconds
+of idle Home, settings, and paused media. Record CPU, memory, file I/O, thread
+and handle counts, and child processes. Keep WSL storage and network-file Close
+tests separate; the older build lacks the later network-read cancellation fix.
+
+Message-loop probes can show responsiveness but do not measure painting or
+frame time. Define the equivalence budget before judging results, and report
+counter precision and run variation. The detailed plan is
+`/tmp/hakone-pre-addon-performance-baseline-audit/PLAN.md`. These are prepared
+comparisons, not passing full app measurements.
+
 ## Verified idle-session change
 
 The first regression test fails against the previous host: one idle tick
