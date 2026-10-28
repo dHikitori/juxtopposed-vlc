@@ -1091,6 +1091,7 @@ static void *Thread( void *obj )
     char *cConfigDir = config_GetUserDir( VLC_CONFIG_DIR );
     if (likely(cConfigDir != nullptr))
     {
+        msg_Dbg(p_intf, "Qt configuration directory: %s", cConfigDir);
         QString configDir = cConfigDir;
         free( cConfigDir );
         if( configDir.endsWith( "\\vlc" ) )
@@ -1106,6 +1107,20 @@ static void *Thread( void *obj )
             QSettings::NativeFormat,
 #endif
             QSettings::UserScope, "vlc", "vlc-qt-interface" );
+    msg_Dbg(p_intf, "Qt settings file: %s", qtu(p_intf->mainSettings->fileName()));
+#ifdef _WIN32
+    static const WCHAR moduleMarker = 0;
+    HMODULE qtModule = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          &moduleMarker, &qtModule))
+    {
+        WCHAR modulePath[32768];
+        const DWORD length = GetModuleFileNameW(qtModule, modulePath, ARRAY_SIZE(modulePath));
+        if (length > 0 && length < ARRAY_SIZE(modulePath))
+            msg_Dbg(p_intf, "Qt interface module: %s", qtu(QString::fromWCharArray(modulePath, length)));
+    }
+#endif
 
     // It is guaranteed that the returned format is supported, if a format is returned.
     static const auto createCompatibleOpenGLFormat = []() -> std::optional<QSurfaceFormat> {

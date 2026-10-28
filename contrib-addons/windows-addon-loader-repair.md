@@ -20,6 +20,10 @@ installed packages and no error output.
 
 Both runs used a temporary store. They did not read or change the user's
 portable profile. Exact commands, inputs and before/after records are in
-`/tmp/hakone-win-addons-repro`. These checks prove the loader repair. A new
-local app build and its startup check are still required before the repaired
-Windows folder is ready for another test.
+`/tmp/hakone-win-addons-repro`. These checks prove the loader repair.
+
+The complete local build at `600d3158b0` includes this change. Its first full
+app check displayed a window but failed to create the expected temporary
+package states. The user also reported an Extensions-tab hang. The complete
+startup and responsiveness repair remains open; a passing import probe alone
+does not prove that the app works. See [the current build record](windows-local-build.md).
