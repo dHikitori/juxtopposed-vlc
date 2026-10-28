@@ -147,6 +147,10 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_metadata_choices.hpp \
 	addons/addon_native_provider_context.cpp \
 	addons/addon_native_provider_context.hpp \
+	addons/addon_core_metadata_admission.cpp \
+	addons/addon_core_metadata_admission.hpp \
+	addons/addon_artwork_attempt_keeper.cpp \
+	addons/addon_artwork_attempt_keeper.hpp \
 	addons/addon_native_provider_artwork_assets.cpp \
 	addons/addon_native_provider_artwork_assets.hpp \
 	addons/addon_native_metadata_owner.cpp \
@@ -2848,6 +2852,17 @@ check_PROGRAMS += test_qt_addon_source_consent_ui_owner
 TESTS += test_qt_addon_source_consent_ui_owner
 
 if HAVE_LINUX
+test_qt_addon_artwork_attempt_keeper_SOURCES = tests/test_addon_artwork_attempt_keeper.cpp tests/fixtures/addon_artwork_attempt_keeper.c
+nodist_test_qt_addon_artwork_attempt_keeper_SOURCES = tests/test_addon_artwork_attempt_keeper.moc
+BUILT_SOURCES += tests/test_addon_artwork_attempt_keeper.moc
+CLEANFILES += tests/test_addon_artwork_attempt_keeper.moc
+test_qt_addon_artwork_attempt_keeper_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src
+test_qt_addon_artwork_attempt_keeper_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_artwork_attempt_keeper_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_artwork_attempt_keeper_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_artwork_attempt_keeper
+TESTS += test_qt_addon_artwork_attempt_keeper
+
 test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider_context.cpp tests/fixtures/addon_native_provider_fixture.c $(top_srcdir)/src/preparser/metadata_native_provider.c
 nodist_test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider_context.moc
 BUILT_SOURCES += tests/test_addon_native_provider_context.moc
@@ -3689,3 +3704,5 @@ endif
 EXTRA_DIST += tests/test_addon_metadata_attempt.cpp tests/fixtures/addon_metadata_attempt_process.c \
     tests/fixtures/receipt_tls_fixture.hpp tests/fixtures/metadata-attempt/receipt-tls-cert.pem \
     tests/fixtures/metadata-attempt/receipt-tls-key.pem
+
+EXTRA_DIST += tests/test_addon_artwork_attempt_keeper.cpp tests/fixtures/addon_artwork_attempt_keeper.c tests/fixtures/addon_artwork_attempt_keeper.h

@@ -41,6 +41,10 @@ addon_host_sources = files(
     'addons/addon_metadata_choices.hpp',
     'addons/addon_native_provider_context.cpp',
     'addons/addon_native_provider_context.hpp',
+    'addons/addon_core_metadata_admission.cpp',
+    'addons/addon_core_metadata_admission.hpp',
+    'addons/addon_artwork_attempt_keeper.cpp',
+    'addons/addon_artwork_attempt_keeper.hpp',
     'addons/addon_native_provider_artwork_assets.cpp',
     'addons/addon_native_provider_artwork_assets.hpp',
     'addons/addon_native_metadata_owner.cpp',
@@ -1960,6 +1964,17 @@ if qt6_dep.found()
             }
         endif
         if host_system == 'linux'
+            vlc_tests += {
+                'name': 'test_qt_addon_artwork_attempt_keeper',
+                'sources': files('tests/test_addon_artwork_attempt_keeper.cpp', 'tests/fixtures/addon_artwork_attempt_keeper.c'),
+                'moc_sources': files('tests/test_addon_artwork_attempt_keeper.cpp'),
+                'link_with': [addon_host_library, libvlccore, libvlc],
+                'suite': ['qt', 'addons'],
+                'timeout': 90,
+                'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'link_args': qt_link_args,
+            }
             foreach addon_test : ['native_provider_context', 'native_metadata_owner']
                 vlc_tests += {
                     'name': 'test_qt_addon_' + addon_test,

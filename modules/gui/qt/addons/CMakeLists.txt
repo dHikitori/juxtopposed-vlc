@@ -137,10 +137,21 @@ if(VLC_BUILD_DIR)
         addon_native_provider_artwork_assets.cpp addon_native_provider_artwork_assets.hpp)
     target_sources(vlc_addon_native_metadata PRIVATE
         addon_native_metadata_owner.cpp addon_native_metadata_owner.hpp)
+    target_sources(vlc_addon_native_metadata PRIVATE
+        addon_core_metadata_admission.cpp addon_core_metadata_admission.hpp
+        addon_artwork_attempt_keeper.cpp addon_artwork_attempt_keeper.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
     target_compile_definitions(vlc_addon_native_metadata PUBLIC HAVE_CONFIG_H)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(test_addon_artwork_attempt_keeper "../tests/test_addon_artwork_attempt_keeper.cpp"
+            "../tests/fixtures/addon_artwork_attempt_keeper.c")
+        target_include_directories(test_addon_artwork_attempt_keeper PRIVATE "${VLC_SOURCE_ROOT}" "${VLC_SOURCE_ROOT}/src")
+        target_link_libraries(test_addon_artwork_attempt_keeper PRIVATE vlc_addon_native_metadata Qt6::Test)
+        add_test(NAME addon_artwork_attempt_keeper COMMAND test_addon_artwork_attempt_keeper)
+        set_tests_properties(addon_artwork_attempt_keeper PROPERTIES TIMEOUT 90)
+    endif()
     add_executable(addon-provider-probe "../tests/addon_provider_probe.cpp")
     target_sources(addon-provider-probe PRIVATE "../util/subtitle_source_service.cpp" "../util/subtitle_source_service.hpp")
     target_link_libraries(addon-provider-probe PRIVATE vlc_addon_native_metadata)
