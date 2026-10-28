@@ -53,5 +53,9 @@ The actual Close test with the user's network file remains open.
 The user later confirmed audio-only playback. This fits the missing early Stop
 path; it does not identify the operation behind the one-minute wait. A separate
 [Windows remote-file read repair](windows-network-file-close.md) now passes its
-actual Windows cancellation checks. It still needs the full app rebuild and
-the user's Close retest.
+actual Windows cancellation checks. These checks do not identify the operation
+behind the original wait.
+
+The clean `fd3fed4173` full Windows build now includes both repairs and is
+published in `build-windows/vlc-win64`. Its package, current-Core read tests,
+and seven-add-on console checks pass. The user's Close retest remains open.

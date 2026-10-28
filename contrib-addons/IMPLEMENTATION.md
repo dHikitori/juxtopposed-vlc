@@ -81,8 +81,10 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 - Desktop Windows remote-file reads now have a native cancellation handshake
   with one sequence per read. Actual Windows checks pass 15 groups and 298
   assertions twice, including the real filesystem and UNC Read functions.
-  Three deliberate race defects fail their expected assertions. Full app
-  rebuild and the user's Close retest remain open. See
+  Three deliberate race defects fail their expected assertions. The full
+  Windows app builds and is published at `fd3fed4173`. The same read fixture
+  also passes against its exact published Core and LibVLC. The user's Close
+  retest remains open. See
   [Windows network-file Close](windows-network-file-close.md).
 
 - The Service now places registration and owner changes behind the native
@@ -100,7 +102,7 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
   [registration barriers](metadata-registration-barrier.md) and
   [provider snapshots](metadata-catalogue.md).
 
-- The local Windows build now uses clean source `a51d1c9fc3` and includes playback Stop before user-quit cleanup. Its full build, 868 managed file hashes, and 416 PE checks pass. A fresh Windows console probe imports seven packages and captures all seven raw contributions. The user's network-file Close and full GUI checks remain open. See [the Windows record](windows-local-build.md).
+- The local Windows build now uses clean source `fd3fed4173` and includes playback Stop before user-quit cleanup plus remote-file read cancellation. Its full build, 868 managed file hashes, and 416 PE checks pass. A fresh Windows console probe imports seven packages, captures all seven raw contributions, and checks the owned-reader factory. The user's network-file Close and full GUI checks remain open. See [the Windows record](windows-local-build.md).
 
 - The [private artwork plan](artwork-attempt-plan.md) retains all raw providers, fixes the restored-provider preference case, and shares exact configuration and identity projection with the Manager. The combined current-source host build passes 359 cases, including all 90 package cases. Separate plan and catalogue sanitizer groups pass 49 and 77 cases. Native runner and owner activation remain open.
 

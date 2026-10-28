@@ -56,5 +56,17 @@ Automake and Meson register the desktop module sources and fixture.
 The final proof is `/tmp/hakone-win-file-interrupt/final-proof.json`, hash
 `3a8f8f63169993a104d88d01e55be94505d5d6bcceeacd36d9539e228917a69d`.
 The earlier `adbef0ed` packet is defective and superseded. All eleven applied
-source and registration files match the final proof. A full local Windows app
-rebuild and the user's audio-only network-file Close retest remain required.
+source and registration files match the final proof.
+
+The full Windows app now builds from clean source `fd3fed4173`. All 868 managed
+files and 416 PE checks pass. A fresh Windows console check imports all seven
+add-ons and exercises the Manager snapshot factory. The package is published
+in `build-windows/vlc-win64`; the extra staging copy has been removed after a
+complete hash comparison. See [the build record](windows-local-build.md).
+
+The unchanged fixture binaries also pass all 15 groups twice with this exact
+published Core and LibVLC. All three race controls fail as expected. The proof
+is `/tmp/hakone-win-network-file-current-core/final-proof.json`, hash
+`7e5f8f71d3297073af7d9aa32aac96d07af7c0667ac16ae55c376753b551886a`.
+The user's audio-only network-file Close retest remains required. No captured
+stack establishes the cause of the original wait.
