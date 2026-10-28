@@ -60,6 +60,9 @@ struct Manifest
     static bool parse(const QByteArray&, Manifest*, QString* error = nullptr);
     static bool loadDirectory(const QString&, Manifest*, QMap<QString, QByteArray>* contents = nullptr,
                               QString* error = nullptr);
+    // Validate a complete bounded file map already captured by the host.
+    // This performs no filesystem read and does not change the supplied data.
+    static bool validateContents(const Manifest&, const QMap<QString, QByteArray>&, QString* error = nullptr);
     bool permissionDeclared(const QString& capability) const;
     QJsonObject permissionScope(const QString& capability) const;
     const Contribution* contribution(const QString& localId) const;

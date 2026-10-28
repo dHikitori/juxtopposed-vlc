@@ -46,6 +46,36 @@ struct ProviderPreferences
     StoreAuthorityToken authority;
 };
 
+// This raw catalogue retains each package and contribution before the caller
+// selects eligible providers. The caller derives configuration, secret presence,
+// and account scope from these settings and schema plus its captured presence.
+struct MetadataCataloguePackage
+{
+    InstalledPackage package;
+    QJsonObject settings, schema;
+    quint64 settingsRevision = 0;
+    QList<Contribution> contributions;
+    bool savedEnabled = false;
+};
+struct MetadataCatalogueSnapshot
+{
+    static constexpr qsizetype MaximumCandidates = 256;
+    static constexpr qsizetype MaximumContributions = 256;
+    // This is the canonical retained descriptor limit. Verification reads each
+    // complete package under the separate Manifest file and package limits.
+    static constexpr qsizetype MaximumBytes = 1024 * 1024;
+    QList<MetadataCataloguePackage> packages;
+    QJsonObject providerPreferences, distributionPolicy;
+    StoreAuthorityToken queuedAuthority, authority;
+    QByteArray digest;
+    qsizetype retainedBytes = 0;
+    qsizetype candidateCount = 0;
+    qsizetype rawContributionCount = 0;
+    bool safeMode = false;
+    bool current() const noexcept { return queuedAuthority.current() && authority.current(); }
+};
+using MetadataCatalogueReader = std::function<bool(MetadataCatalogueSnapshot*, QString*)>;
+
 class PackageStore
 {
 public:
@@ -73,6 +103,10 @@ public:
     // These operations use store.lock. Capture on joined background work for
     // native metadata plans. Retain authority watches through final Apply.
     bool providerPreferences(ProviderPreferences*, QString* error = nullptr) const;
+    // Call this memory-only factory on the owner thread. Run its callable on
+    // joined background work. One store.lock covers preferences and all package
+    // reads. The snapshot retains both queued and locked authority tokens.
+    MetadataCatalogueReader metadataCatalogueReader() const;
     bool saveProviderOrder(const QString& feature, const QStringList& ids,
                            QJsonObject* saved = nullptr, QString* error = nullptr);
     bool saveBuiltinProviderEnabled(const QString& id, bool enabled,
@@ -99,6 +133,7 @@ public:
 private:
     QString m_root;
     StoreAuthority m_authority;
+    bool readMetadataCatalogue(const StoreAuthorityToken&, MetadataCatalogueSnapshot*, QString*) const;
     bool loadState(const QString& id, QJsonObject*, QString* error) const;
     bool saveState(const QString& id, const QJsonObject&, QString* error, bool authority = true) const;
     QString releaseDirectory(const QString& id, const QString& digest) const;

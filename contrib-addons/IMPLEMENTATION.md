@@ -78,6 +78,8 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 ## Latest verified native checkpoint
 
+- The complete [metadata provider snapshot](metadata-catalogue.md) retains all packages and declarations before provider selection. It passes 34 catalogue and 13 authority cases in both normal and sanitizer builds on WSL Linux. Native owner activation and the Windows reader check remain open.
+
 - The public add-on contracts use Hakone names. All nine Wasm modules have the new ABI. SDK/provider tests pass 49 cases; the worker passes seven; worker fixtures pass 18; the fresh-helper runtime suite passes 16 with no skips.
 - Renamed schema, UI, package, theme, discovery, and source-reference checks pass 117 host cases and 32 source QML cases.
 - The normal Core build passes 14 source, policy, artwork, metadata, and private player-state groups. The actual native player fixture passes 12 scenarios. Full shared-session transport and host consent integration remain open.

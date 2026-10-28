@@ -1918,6 +1918,19 @@ if qt6_dep.found()
                 'env': addon_worker_environment,
             }
         endforeach
+        vlc_tests += {
+            'name': 'test_qt_addon_metadata_catalogue',
+            'sources': files('tests/test_addon_metadata_catalogue.cpp'),
+            'moc_sources': files('tests/test_addon_metadata_catalogue.cpp'),
+            'moc_args': host_system == 'linux' ? ['-DHAKONE_CATALOGUE_OPEN_PROBE'] : [],
+            'cpp_args': host_system == 'linux' ? ['-DHAKONE_CATALOGUE_OPEN_PROBE'] : [],
+            'link_with': [addon_host_library, libvlccore],
+            'suite': ['qt', 'addons'],
+            'timeout': 90,
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'link_args': qt_link_args + (host_system == 'linux' ? ['-Wl,--wrap=open'] : []),
+        }
         if host_system == 'linux'
             foreach addon_test : ['native_provider_context', 'native_metadata_owner']
                 vlc_tests += {

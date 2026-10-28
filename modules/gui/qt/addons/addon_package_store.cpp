@@ -24,10 +24,20 @@
 #include <QUuid>
 #include <algorithm>
 #include <functional>
+#include <filesystem>
 #include <optional>
 #ifdef Q_OS_UNIX
 #include <signal.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#elif defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
 #endif
 
 namespace vlc::addons {
@@ -157,17 +167,14 @@ bool providerPreferencesValid(const QJsonObject& values, QString* error)
     }
     return true;
 }
+bool catalogueFile(const QString&, qint64, QByteArray*, QString*);
 bool readProviderPreferences(const QString& root, QJsonObject* values, QString* error)
 {
     const auto path = QDir(root).filePath(QStringLiteral("provider-order.json"));
     const QFileInfo info(path);
     if (!info.exists() && !info.isSymLink()) { *values = {}; return true; }
-    QFile file(path);
-    if (info.isSymLink() || !info.isFile() || !file.open(QIODevice::ReadOnly) || file.size() > 256 * 1024)
-        return fail(error, QStringLiteral("The app cannot read the provider settings."));
-    const auto bytes = file.read(256 * 1024 + 1);
-    if (file.error() != QFileDevice::NoError || bytes.size() > 256 * 1024)
-        return fail(error, QStringLiteral("The app cannot read the provider settings."));
+    QByteArray bytes;
+    if (!catalogueFile(path, 256 * 1024, &bytes, error)) return false;
     QJsonParseError parseError;
     const auto document = QJsonDocument::fromJson(bytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
@@ -183,6 +190,139 @@ bool readProviderPreferences(const QString& root, QJsonObject* values, QString* 
     auto current = currentBuiltinPreferences(raw);
     if (!providerPreferencesValid(current, error)) return false;
     *values = std::move(current); return true;
+}
+bool catalogueFile(const QString& path, qint64 limit, QByteArray* output, QString* error)
+{
+    const QFileInfo info(path);
+    if (info.isSymLink() || !info.isFile() || info.size() < 0 || info.size() > limit)
+        return fail(error, QStringLiteral("The metadata catalogue file is missing or too large."));
+    QFile file(path);
+#ifdef Q_OS_UNIX
+    const auto descriptor = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    if (descriptor < 0)
+        return fail(error, QStringLiteral("The app cannot open the metadata catalogue file."));
+    struct stat status;
+    if (::fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode) || status.st_size < 0 || status.st_size > limit) {
+        ::close(descriptor);
+        return fail(error, QStringLiteral("The metadata catalogue file is not a bounded regular file."));
+    }
+    if (!file.open(descriptor, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        ::close(descriptor);
+        return fail(error, QStringLiteral("The app cannot read the metadata catalogue file."));
+    }
+#elif defined(Q_OS_WIN)
+    const auto handle = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    BY_HANDLE_FILE_INFORMATION status;
+    if (handle == INVALID_HANDLE_VALUE)
+        return fail(error, QStringLiteral("The app cannot open the metadata catalogue file."));
+    if (GetFileType(handle) != FILE_TYPE_DISK || !GetFileInformationByHandle(handle, &status)
+        || (status.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
+        || status.nFileSizeHigh != 0 || status.nFileSizeLow > quint64(limit)) {
+        CloseHandle(handle);
+        return fail(error, QStringLiteral("The metadata catalogue file is not a bounded regular file."));
+    }
+    const auto descriptor = _open_osfhandle(reinterpret_cast<intptr_t>(handle), _O_RDONLY | _O_BINARY);
+    if (descriptor < 0) {
+        CloseHandle(handle);
+        return fail(error, QStringLiteral("The app cannot read the metadata catalogue file."));
+    }
+    if (!file.open(descriptor, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        _close(descriptor);
+        return fail(error, QStringLiteral("The app cannot read the metadata catalogue file."));
+    }
+#else
+    if (!file.open(QIODevice::ReadOnly))
+        return fail(error, QStringLiteral("The app cannot read the metadata catalogue file."));
+#endif
+    auto bytes = file.read(limit + 1);
+    if (file.error() != QFileDevice::NoError || bytes.size() > limit
+        || bytes.size() != file.size() || !file.atEnd())
+        return fail(error, QStringLiteral("The metadata catalogue file changed or cannot be read."));
+    *output = std::move(bytes); return true;
+}
+bool catalogueObject(const QString& path, qint64 limit, QJsonObject* output, QString* error)
+{
+    QByteArray bytes;
+    if (!catalogueFile(path, limit, &bytes, error)) return false;
+    QJsonParseError parse;
+    const auto document = QJsonDocument::fromJson(bytes, &parse);
+    if (parse.error != QJsonParseError::NoError || !document.isObject())
+        return fail(error, QStringLiteral("The metadata catalogue document is not correct."));
+    *output = document.object(); return true;
+}
+bool catalogueInteger(const QJsonValue& value, quint64* output, bool positive = false)
+{
+    const auto number = value.toDouble(-1);
+    if (!value.isDouble() || !std::isfinite(number) || number < (positive ? 1 : 0)
+        || number > 9007199254740991. || std::floor(number) != number) return false;
+    *output = quint64(number); return true;
+}
+bool catalogueDirectory(const QString& path, bool missing, QString* error)
+{
+    const QFileInfo info(path);
+    if (missing && !info.exists() && !info.isSymLink()) return true;
+    return (!info.isSymLink() && info.isDir() && info.isReadable())
+        || fail(error, QStringLiteral("The metadata catalogue directory is not correct."));
+}
+bool catalogueCandidates(const QString& root, QStringList* output, QString* error)
+{
+    if (!catalogueDirectory(root, true, error)) return false;
+    if (!QFileInfo::exists(root)) return true;
+    namespace fs = std::filesystem;
+#ifdef Q_OS_WIN
+    const fs::path path(root.toStdWString());
+#else
+    const fs::path path(QFile::encodeName(root).constData());
+#endif
+    std::error_code code;
+    fs::directory_iterator entry(path, code), end;
+    if (code) return fail(error, QStringLiteral("The app cannot read the metadata catalogue directory."));
+    while (entry != end) {
+        if (output->size() >= MetadataCatalogueSnapshot::MaximumCandidates)
+            return fail(error, QStringLiteral("The metadata catalogue has too many packages."));
+        const auto status = entry->symlink_status(code);
+        if (code || !fs::is_directory(status) || fs::is_symlink(status))
+            return fail(error, QStringLiteral("A metadata catalogue entry is not correct."));
+#ifdef Q_OS_WIN
+        const auto id = QString::fromStdWString(entry->path().filename().native());
+#else
+        const auto id = QFile::decodeName(entry->path().filename().native().c_str());
+#endif
+        if (!packageId(id)) return fail(error, QStringLiteral("A metadata catalogue package ID is not correct."));
+        output->append(id);
+        entry.increment(code);
+        if (code) return fail(error, QStringLiteral("The app cannot read the complete metadata catalogue."));
+    }
+    output->sort(); return true;
+}
+bool catalogueContents(const QString& directory, Manifest* manifest,
+                       QMap<QString,QByteArray>* contents, QString* error)
+{
+    if (!catalogueDirectory(directory, false, error)) return false;
+    QByteArray bytes;
+    if (!catalogueFile(QDir(directory).filePath(QStringLiteral("addon.json")), Manifest::MaximumManifestBytes, &bytes, error)
+        || !Manifest::parse(bytes, manifest, error)) return false;
+    auto prefix = QFileInfo(directory).canonicalFilePath();
+    if (prefix.isEmpty()) return fail(error, QStringLiteral("The package directory is not available."));
+    // Qt uses '/' in canonical paths on each platform.
+    if (!prefix.endsWith(QLatin1Char('/'))) prefix += QLatin1Char('/');
+    qint64 total = 0;
+    for (const auto& path : manifest->files) {
+        auto checked = directory;
+        for (const auto& part : path.split(QLatin1Char('/'))) {
+            checked = QDir(checked).filePath(part);
+            if (QFileInfo(checked).isSymLink())
+                return fail(error, QStringLiteral("A metadata package resource is a symbolic link."));
+        }
+        if (!QFileInfo(checked).canonicalFilePath().startsWith(prefix)
+            || !catalogueFile(checked, Manifest::MaximumFileBytes, &bytes, error)
+            || (total += bytes.size()) > Manifest::MaximumPackageBytes)
+            return fail(error, QStringLiteral("A metadata package resource is missing or too large."));
+        contents->insert(path, bytes);
+    }
+    return Manifest::validateContents(*manifest, *contents, error);
 }
 bool subset(const QJsonValue& requested, const QJsonValue& declared)
 {
@@ -1264,6 +1404,137 @@ bool PackageStore::safeMode() const
     if (!QFileInfo::exists(path)) return false;
     QJsonObject recovery;
     return !readJson(path, &recovery, nullptr) || recovery.value("safeMode").toBool(true);
+}
+
+MetadataCatalogueReader PackageStore::metadataCatalogueReader() const
+{
+    // Copying this retained Store and capturing its epoch are memory-only.
+    // Never replace queued with a newly captured token on the worker.
+    return [store = *this, queued = m_authority.capture()](MetadataCatalogueSnapshot* output, QString* error) {
+        return store.readMetadataCatalogue(queued, output, error);
+    };
+}
+bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
+                                         MetadataCatalogueSnapshot* output, QString* error) const
+{
+    if (!output) return fail(error, QStringLiteral("The metadata catalogue output is not available."));
+    *output = {};
+    if (!queued.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
+    if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
+    QLockFile lock(QDir(m_root).filePath(QStringLiteral("store.lock")));
+    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    MetadataCatalogueSnapshot captured;
+    captured.queuedAuthority = queued;
+    captured.authority = m_authority.capture();
+    if (!captured.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
+    if (!readProviderPreferences(m_root, &captured.providerPreferences, error)) return false;
+    const auto recoveryPath = QDir(m_root).filePath(QStringLiteral("recovery.json"));
+    QJsonObject recovery;
+    if (QFileInfo::exists(recoveryPath) || QFileInfo(recoveryPath).isSymLink()) {
+        if (!catalogueObject(recoveryPath, 256 * 1024, &recovery, error)
+            || !recovery.value(QStringLiteral("safeMode")).isBool())
+            return fail(error, QStringLiteral("The saved safe-mode state is not correct."));
+    }
+    captured.safeMode = qEnvironmentVariable("VLC_ADDON_SAFE_MODE") == QStringLiteral("1")
+        || recovery.value(QStringLiteral("safeMode")).toBool();
+    const auto distributionPath = QDir(m_root).filePath(QStringLiteral("distribution-policy.json"));
+    if (QFileInfo::exists(distributionPath) || QFileInfo(distributionPath).isSymLink()) {
+        if (!catalogueObject(distributionPath, MetadataCatalogueSnapshot::MaximumBytes, &captured.distributionPolicy, error)
+            || captured.distributionPolicy.value(QStringLiteral("formatVersion")) != 1
+            || !captured.distributionPolicy.value(QStringLiteral("removed")).isObject())
+            return fail(error, QStringLiteral("The distribution policy is not correct."));
+        const auto removed = captured.distributionPolicy.value(QStringLiteral("removed")).toObject();
+        for (auto it = removed.begin(); it != removed.end(); ++it)
+            if (!packageId(it.key()) || !it.value().isBool())
+                return fail(error, QStringLiteral("The distribution policy entry is not correct."));
+    }
+    QStringList ids;
+    if (!catalogueCandidates(QDir(m_root).filePath(QStringLiteral("packages")), &ids, error)) return false;
+    captured.candidateCount = ids.size();
+    QJsonArray rows;
+    const auto encoded = [&] {
+        return QJsonDocument(QJsonObject{{QStringLiteral("preferences"), captured.providerPreferences},
+            {QStringLiteral("distributionPolicy"), captured.distributionPolicy},
+            {QStringLiteral("safeMode"), captured.safeMode}, {QStringLiteral("candidates"), double(captured.candidateCount)},
+            {QStringLiteral("packages"), rows}}).toJson(QJsonDocument::Compact);
+    };
+    if (encoded().size() > MetadataCatalogueSnapshot::MaximumBytes)
+        return fail(error, QStringLiteral("The metadata catalogue exceeds the byte limit."));
+    qsizetype contributions = 0;
+    for (const auto& id : ids) {
+        if (!captured.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
+        QJsonObject state;
+        const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
+        if (!catalogueObject(QDir(folder).filePath(QStringLiteral("state.json")), 4 * 1024 * 1024, &state, error)
+            || state.value(QStringLiteral("formatVersion")) != 1 || state.value(QStringLiteral("id")) != id
+            || !state.value(QStringLiteral("enabled")).isBool() || !state.value(QStringLiteral("current")).isObject())
+            return fail(error, QStringLiteral("The current package state is not correct."));
+        const auto current = state.value(QStringLiteral("current")).toObject();
+        MetadataCataloguePackage row;
+        row.savedEnabled = state.value(QStringLiteral("enabled")).toBool();
+        row.package.recoveryRequired = state.value(QStringLiteral("recoveryRequired")).toBool();
+        if (!catalogueInteger(state.value(QStringLiteral("generation")), &row.package.generation, true)
+            || !catalogueInteger(current.value(QStringLiteral("settingsRevision")), &row.settingsRevision)
+            || !current.value(QStringLiteral("settings")).isObject()
+            || !current.value(QStringLiteral("identity")).isObject() || !current.value(QStringLiteral("grants")).isObject()
+            || (state.contains(QStringLiteral("recoveryRequired")) && !state.value(QStringLiteral("recoveryRequired")).isBool()))
+            return fail(error, QStringLiteral("The current package generation or settings are not correct."));
+        const auto digest = current.value(QStringLiteral("digest")).toString();
+        if (!digestId(digest) || !catalogueDirectory(QDir(folder).filePath(QStringLiteral("releases")), false, error))
+            return fail(error, QStringLiteral("The current package release is not correct."));
+        row.package.directory = releaseDirectory(id, digest);
+        PackageCandidate candidate;
+        if (!catalogueContents(row.package.directory, &candidate.manifest, &candidate.contents, error)) return false;
+        candidate.digest = digest.toLatin1();
+        const auto identity = current.value(QStringLiteral("identity")).toObject();
+        candidate.identity = readIdentity(identity);
+        if (identity != identityJson(candidate.identity) || candidate.manifest.id != id
+            || current.value(QStringLiteral("version")) != candidate.manifest.version
+            || current.value(QStringLiteral("settingsVersion")) != candidate.manifest.settingsVersion
+            || !validateCandidate(candidate, error)
+            || !validateGrants(candidate.manifest, current.value(QStringLiteral("grants")).toObject(), error))
+            return fail(error, QStringLiteral("The installed package failed its complete catalogue check."));
+        row.package.manifest = std::move(candidate.manifest);
+        row.package.identity = std::move(candidate.identity);
+        row.package.digest = candidate.digest;
+        row.package.grants = current.value(QStringLiteral("grants")).toObject();
+        row.package.previousDigest = state.value(QStringLiteral("previous")).toObject().value(QStringLiteral("digest")).toString();
+        row.package.enabled = row.savedEnabled && !row.package.recoveryRequired && !captured.safeMode && !packageRetiring(id);
+        if (row.package.identity.distributionSource
+            && captured.distributionPolicy.value(QStringLiteral("removed")).toObject().value(id).toBool()
+            && state.value(QStringLiteral("distributionApproval")).toString() != digest) row.package.enabled = false;
+        row.settings = current.value(QStringLiteral("settings")).toObject();
+        row.schema = {{QStringLiteral("type"), QStringLiteral("object")},
+            {QStringLiteral("properties"), QJsonObject{}}, {QStringLiteral("additionalProperties"), false}};
+        if (!row.package.manifest.settingsSchema.isEmpty())
+            row.schema = QJsonDocument::fromJson(candidate.contents.value(row.package.manifest.settingsSchema)).object();
+        for (const auto& contribution : row.package.manifest.contributions) {
+            if (++contributions > MetadataCatalogueSnapshot::MaximumContributions)
+                return fail(error, QStringLiteral("The metadata catalogue has too many contributions."));
+            row.contributions.append(contribution);
+        }
+        QJsonArray declarations;
+        for (const auto& contribution : row.contributions) declarations.append(contribution.document);
+        rows.append(QJsonObject{{QStringLiteral("manifest"), row.package.manifest.document},
+            {QStringLiteral("identity"), identityJson(row.package.identity)}, {QStringLiteral("digest"), digest},
+            {QStringLiteral("generation"), double(row.package.generation)}, {QStringLiteral("directory"), row.package.directory},
+            {QStringLiteral("previousDigest"), row.package.previousDigest}, {QStringLiteral("grants"), row.package.grants},
+            {QStringLiteral("savedEnabled"), row.savedEnabled}, {QStringLiteral("enabled"), row.package.enabled},
+            {QStringLiteral("recoveryRequired"), row.package.recoveryRequired}, {QStringLiteral("settings"), row.settings},
+            {QStringLiteral("schema"), row.schema}, {QStringLiteral("settingsRevision"), double(row.settingsRevision)},
+            {QStringLiteral("contributions"), declarations}});
+        if (encoded().size() > MetadataCatalogueSnapshot::MaximumBytes)
+            return fail(error, QStringLiteral("The metadata catalogue exceeds the byte limit."));
+        captured.packages.append(std::move(row));
+    }
+    const auto bytes = encoded();
+    if (!captured.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
+    captured.rawContributionCount = contributions;
+    captured.retainedBytes = bytes.size();
+    captured.digest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
+    *output = std::move(captured);
+    if (error) error->clear();
+    return true;
 }
 
 bool PackageStore::providerPreferences(ProviderPreferences* output, QString* error) const

@@ -462,6 +462,23 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
             return fail(error,QStringLiteral("A package resource changed or is too large."));
         data.insert(path,bytes);
     }
+    if (!validateContents(manifest, data, error)) return false;
+    if (output) *output = manifest;
+    if (contents) *contents = data;
+    if (error) error->clear();
+    return true;
+}
+bool Manifest::validateContents(const Manifest& manifest,
+                                const QMap<QString,QByteArray>& data, QString* error)
+{
+    if (data.size() != manifest.files.size())
+        return fail(error, QStringLiteral("The package file list is not complete."));
+    qint64 total = 0;
+    for (const auto& path : manifest.files) {
+        if (!data.contains(path) || data.value(path).size() > MaximumFileBytes
+            || (total += data.value(path).size()) > MaximumPackageBytes)
+            return fail(error, QStringLiteral("The package files are missing or too large."));
+    }
     // Validate secret-binding declarations against the protected input schema.
     for (const auto& contribution : manifest.contributions) {
         qint64 images = 0;
@@ -496,8 +513,6 @@ bool Manifest::loadDirectory(const QString& directory, Manifest* output, QMap<QS
     }
     if (!validateSettingsMigrations(manifest, data, error)) return false;
     if (!validatePrivateStorageDeclaration(manifest, data, true, error)) return false;
-    if (output) *output = manifest;
-    if (contents) *contents = data;
     if (error) error->clear();
     return true;
 }

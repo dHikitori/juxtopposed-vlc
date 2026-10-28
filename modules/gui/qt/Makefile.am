@@ -2512,6 +2512,23 @@ test_qt_addon_store_authority_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATF
 check_PROGRAMS += test_qt_addon_store_authority
 TESTS += test_qt_addon_store_authority
 
+test_qt_addon_metadata_catalogue_SOURCES = tests/test_addon_metadata_catalogue.cpp
+nodist_test_qt_addon_metadata_catalogue_SOURCES = tests/test_addon_metadata_catalogue.moc
+BUILT_SOURCES += tests/test_addon_metadata_catalogue.moc
+CLEANFILES += tests/test_addon_metadata_catalogue.moc
+test_qt_addon_metadata_catalogue_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_metadata_catalogue_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_metadata_catalogue_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_metadata_catalogue_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+if HAVE_LINUX
+test_qt_addon_metadata_catalogue_CPPFLAGS += -DHAKONE_CATALOGUE_OPEN_PROBE
+test_qt_addon_metadata_catalogue_LDFLAGS += -Wl,--wrap=open
+tests/test_addon_metadata_catalogue.moc: $(srcdir)/tests/test_addon_metadata_catalogue.cpp
+	$(moc_verbose)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_CATALOGUE_OPEN_PROBE -o $@ $<
+endif
+check_PROGRAMS += test_qt_addon_metadata_catalogue
+TESTS += test_qt_addon_metadata_catalogue
+
 test_qt_addon_stream_manifest_SOURCES = tests/test_addon_stream_manifest.cpp
 nodist_test_qt_addon_stream_manifest_SOURCES = tests/test_addon_stream_manifest.moc
 BUILT_SOURCES += tests/test_addon_stream_manifest.moc
