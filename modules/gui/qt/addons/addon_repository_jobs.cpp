@@ -6,6 +6,7 @@
 #include <mutex>
 
 namespace vlc::addons {
+thread_local std::shared_ptr<const std::atomic_bool> RepositoryCancellation::s_current;
 namespace {
 std::atomic_uint processJobs{0};
 struct Permit { ~Permit() { processJobs.fetch_sub(1,std::memory_order_acq_rel); } };

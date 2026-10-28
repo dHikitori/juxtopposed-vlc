@@ -296,6 +296,7 @@ CLEANFILES += $(QT_ADDON_HOST_MOC)
 endif
 libqt_addon_host_la_CPPFLAGS = $(libqt_plugin_la_CPPFLAGS)
 libqt_addon_host_la_CXXFLAGS = $(libqt_plugin_la_CXXFLAGS)
+libqt_addon_host_la_LDFLAGS = $(ADDON_PLATFORM_LDFLAGS)
 
 ADDON_PLATFORM_LIBS =
 ADDON_PLATFORM_LDFLAGS =

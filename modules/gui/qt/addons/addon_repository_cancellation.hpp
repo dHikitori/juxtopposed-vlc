@@ -14,7 +14,7 @@ public:
     RepositoryCancellation& operator=(const RepositoryCancellation&)=delete;
     static bool requested() noexcept { return s_current && s_current->load(std::memory_order_acquire); }
 private:
-    inline static thread_local std::shared_ptr<const std::atomic_bool> s_current;
+    static thread_local std::shared_ptr<const std::atomic_bool> s_current;
     std::shared_ptr<const std::atomic_bool> m_previous;
 };
 }
