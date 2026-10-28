@@ -4,6 +4,7 @@
 #endif
 #include "addon_native_provider_context.hpp"
 #include "../../../../src/preparser/metadata_native_provider.h"
+#include "../../../../src/preparser/metadata_artwork_outcome.h"
 #include <QPointer>
 #include <QUuid>
 #include <array>
@@ -23,7 +24,7 @@ struct AddonNativeProviderContext::State : std::enable_shared_from_this<State> {
         Claim claim;
         meta_fetcher_provider_t family = META_FETCHER_PROVIDER_NONE;
         int status = VLC_EGENERIC;
-        bool ready = false, delivered = false, canceled = false;
+        bool ready = false, delivered = false, canceled = false, outcome = false;
     };
     struct Callback { std::shared_ptr<State> state; std::shared_ptr<Pending> pending; };
     struct Located { std::shared_ptr<Pending> pending; Claim claim; };
@@ -51,7 +52,7 @@ struct AddonNativeProviderContext::State : std::enable_shared_from_this<State> {
     vlc::addons::AddonStreamLifetime::Handle lifetime;
     vlc_metadata_native_provider_t* provider = nullptr;
     std::unordered_map<quint64, std::shared_ptr<Pending>> pending;
-    unsigned calls = 0;
+    unsigned calls = 0, retireCalls = 0;
     bool initialized = false, closed = false, retirePrepared = false;
 
     Call begin()
@@ -106,17 +107,21 @@ struct AddonNativeProviderContext::State : std::enable_shared_from_this<State> {
         vlc_metadata_native_provider_t* context = nullptr;
         std::array<std::shared_ptr<Pending>, 32> values;
         unsigned count = 0;
+        bool first;
         {
             std::lock_guard<std::mutex> lock(mutex);
-            if (closed) return;
-            closed = true;
+            first = !closed; closed = true; ++retireCalls;
             if (provider) context = vlc_metadata_native_provider_Hold(provider);
-            for (const auto& row : pending) { row.second->canceled = true; values[count++] = row.second; }
+            if (first) for (const auto& row : pending) { row.second->canceled = true; values[count++] = row.second; }
         }
         for (unsigned i = 0; i < count; ++i) vlc_metadata_job_Cancel(values[i]->job.get());
         if (context) { vlc_metadata_native_provider_Close(context); vlc_metadata_native_provider_Release(context); }
         for (auto& value : values) value.reset();
-        { std::lock_guard<std::mutex> lock(mutex); retirePrepared = true; }
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (first) retirePrepared = true;
+            --retireCalls;
+        }
         changed.notify_all();
     }
     void join()
@@ -124,7 +129,7 @@ struct AddonNativeProviderContext::State : std::enable_shared_from_this<State> {
         vlc_metadata_native_provider_t* context;
         {
             std::unique_lock<std::mutex> lock(mutex);
-            changed.wait(lock, [this] { return initialized && retirePrepared && !calls; });
+            changed.wait(lock, [this] { return initialized && retirePrepared && !calls && !retireCalls; });
             context = std::exchange(provider, nullptr);
         }
         if (context) vlc_metadata_native_provider_Delete(context);
@@ -165,12 +170,19 @@ AddonNativeProviderContext::~AddonNativeProviderContext() { close(); }
 
 AddonNativeProviderContext::Cancel AddonNativeProviderContext::probe(
     vlc_metadata_job_t* job, meta_fetcher_provider_t family, Completion completion)
+{ return probe(job, family, std::move(completion), false); }
+AddonNativeProviderContext::Cancel AddonNativeProviderContext::probeOutcome(
+    vlc_metadata_job_t* job, meta_fetcher_provider_t family, Completion completion)
+{ return probe(job, family, std::move(completion), true); }
+AddonNativeProviderContext::Cancel AddonNativeProviderContext::probe(
+    vlc_metadata_job_t* job, meta_fetcher_provider_t family, Completion completion, bool outcome)
 {
     if (!job || !completion || !available() || m_sequence == UINT64_MAX) return {};
     const auto state = m_state; auto call = state->begin();
     if (!call) return {};
     const auto value = std::make_shared<State::Pending>(); value->id = ++m_sequence;
     value->job = {vlc_metadata_job_Hold(job), vlc_metadata_job_Release}; value->family = family;
+    value->outcome = outcome;
     value->reference = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     {
         std::lock_guard<std::mutex> lock(state->mutex);
@@ -179,7 +191,9 @@ AddonNativeProviderContext::Cancel AddonNativeProviderContext::probe(
     }
     m_completions.insert(value->id, std::move(completion)); m_poll.start();
     auto* callback = new State::Callback{state, value};
-    const auto status = vlc_metadata_native_provider_Probe(call.provider, job, family, State::completed, callback);
+    const auto status = outcome
+        ? vlc_metadata_native_provider_ProbeOutcome(call.provider, job, family, State::completed, callback)
+        : vlc_metadata_native_provider_Probe(call.provider, job, family, State::completed, callback);
     if (status != VLC_SUCCESS) { delete callback; state->finish(value, nullptr, status); }
     const std::weak_ptr<State> weak(state); const auto id = value->id;
     return [weak, id] { if (const auto state = weak.lock()) state->cancel(id); };
@@ -194,10 +208,12 @@ bool AddonNativeProviderContext::validates(const QString& reference, vlc_metadat
 {
     if (reference.isEmpty() || reference.size() > 128 || !job) return false;
     const auto state = m_state; auto call = state->begin();
-    return call && bool(state->findClaim(reference.toStdString(), job, family).claim);
+    const auto claim = call ? state->findClaim(reference.toStdString(), job, family).claim : Claim{};
+    const auto uri = claim ? vlc_metadata_native_claim_GetArtworkURI(claim.get()) : nullptr;
+    return claim && vlc_metadata_native_claim_GetOutcome(claim.get()) == META_FETCHER_OUTCOME_MATCH && uri && uri[0];
 }
 AddonNativeProviderContext::Claim AddonNativeProviderContext::takeClaim(
-    const QString& reference, vlc_metadata_job_t* job, meta_fetcher_provider_t family)
+    const QString& reference, vlc_metadata_job_t* job, meta_fetcher_provider_t family, bool outcome)
 {
     if (reference.isEmpty() || reference.size() > 128 || !job) return {};
     const auto state = m_state;
@@ -205,6 +221,10 @@ AddonNativeProviderContext::Claim AddonNativeProviderContext::takeClaim(
     const auto found = state->findClaim(reference.toStdString(), job, family);
     const auto value = found.pending;
     if (!value) return {};
+    const auto kind = vlc_metadata_native_claim_GetOutcome(found.claim.get());
+    const auto uri = vlc_metadata_native_claim_GetArtworkURI(found.claim.get());
+    if (outcome ? !value->outcome || (kind != META_FETCHER_OUTCOME_NO_MATCH && kind != META_FETCHER_OUTCOME_NOT_APPLICABLE)
+                : kind != META_FETCHER_OUTCOME_MATCH || !uri || !uri[0]) return {};
     Claim claim;
     {
         std::lock_guard<std::mutex> lock(state->mutex);
@@ -214,6 +234,30 @@ AddonNativeProviderContext::Claim AddonNativeProviderContext::takeClaim(
         claim = std::move(value->claim); state->pending.erase(row);
     }
     return claim;
+}
+AddonNativeProviderContext::NegativeOutcome AddonNativeProviderContext::takeOutcome(
+    const QString& reference, vlc_metadata_job_t* job, meta_fetcher_provider_t family,
+    vlc_metadata_artwork_admission_t* admission)
+{
+    // The claim is off-map after takeClaim. Keep the entire conversion counted
+    // until that claim (and its child/backend holds) has been released.
+    const auto state = m_state; auto call = state->begin();
+    if (!call || !vlc_metadata_artwork_admission_IsCurrent(admission)) {
+        vlc_metadata_artwork_admission_Revoke(admission); return {};
+    }
+    const auto claim = takeClaim(reference, job, family, true);
+    if (!claim) { vlc_metadata_artwork_admission_Revoke(admission); return {}; }
+    const auto value = vlc_metadata_native_claim_GetOutcome(claim.get());
+    const auto authority = std::shared_ptr<vlc_metadata_native_outcome_authority_t>(
+        vlc_metadata_native_claim_AdmitOutcome(claim.get(), job, family, admission),
+        vlc_metadata_native_outcome_authority_Release);
+    bool current;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        current = !state->closed && state->lifetime.current();
+    }
+    if (!authority || !current) { vlc_metadata_artwork_admission_Revoke(admission); return {}; }
+    return {value, authority};
 }
 void AddonNativeProviderContext::poll()
 {
@@ -234,7 +278,9 @@ void AddonNativeProviderContext::poll()
     for (const auto& resultReady : ready) {
         const auto& value = resultReady.pending;
         auto completion = m_completions.take(value->id);
-        const bool valid = validates(QString::fromStdString(value->reference), value->job.get(), value->family);
+        const bool valid = value->outcome
+            ? bool(state->findClaim(value->reference, value->job.get(), value->family).claim)
+            : validates(QString::fromStdString(value->reference), value->job.get(), value->family);
         Result result{valid ? QString::fromStdString(value->reference) : QString{},
             valid ? VLC_SUCCESS : resultReady.status == VLC_SUCCESS ? -EINTR : resultReady.status};
         if (completion && !resultReady.canceled) completion(result);

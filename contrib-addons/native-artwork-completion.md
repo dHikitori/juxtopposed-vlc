@@ -90,8 +90,10 @@ These checks make no native Windows or macOS execution claim.
 
 ## Remaining activation work
 
-The Qt context still needs to consume the typed native outcome and retain
-its receipt through aggregation. The host needs a typed portable attempt
+The Qt context can now consume a typed negative outcome into a native-only
+authority. Its 31 normal and 31 focused sanitizer cases pass. The Service and
+owner still need to use that authority through the complete aggregate. The
+host needs a typed portable attempt
 record and the exact captured provider plan. A generic guest status cannot
 set a native status bit.
 

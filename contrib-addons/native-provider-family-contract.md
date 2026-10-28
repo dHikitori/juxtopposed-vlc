@@ -155,3 +155,33 @@ use the sanitizers; Qt, the shared Core, and unchanged image/lifetime dependency
 objects use their normal builds. These cases do not prove a live remote
 service, the Service/factory mount, or final app integration. Exact source
 hashes, commands, and logs remain in `/tmp/hakone-native-materializer/`.
+
+## Sealed Qt outcome bridge
+
+The Qt context now has a separate host-only `probeOutcome` route. A closed
+negative receipt cannot enter the image adapter. Image validation and claim
+consumption require `MATCH` and a nonempty native artwork address.
+
+`takeOutcome` consumes one exact pending child, family and negative receipt.
+It converts `NO_MATCH` or `NOT_APPLICABLE` into a native outcome authority.
+That authority retains the provider reservation and admission gate, with no
+child, backend, claim or Qt capture. The complete aggregate must retain it
+through final native Apply. Wrong bindings, stale facts, failure outcomes and
+duplicate consumption refuse the result and revoke admission.
+
+The counted native call spans the complete conversion and the consumed
+claim's destruction. Repeated retirement reaches native Close even while an
+earlier cancellation callback is blocked. The app join waits for every native
+call and retirement stack before it releases the context and parent.
+
+The current context passes 31 normal and 31 focused sanitizer cases. Two
+controlled pauses verify conversion during retirement and repeated Close
+during a blocked native callback. The tests also release all caller job and
+backend references while they retain an outcome authority. They verify that
+the backend can then end. Positive image materialization still passes through
+both probe routes, including consent withdrawal.
+
+These tests compile current context, image, lifetime and native provider bridge
+sources together. They control the finder result. Shared Core, LibVLC and Qt
+remain normal dependencies. They do not prove a live remote lookup or the
+complete ranked Qt aggregate. App owner activation remains off.

@@ -2786,12 +2786,15 @@ test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider
 nodist_test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider_context.moc
 BUILT_SOURCES += tests/test_addon_native_provider_context.moc
 CLEANFILES += tests/test_addon_native_provider_context.moc
-test_qt_addon_native_provider_context_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src
+test_qt_addon_native_provider_context_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src -DHAKONE_NATIVE_OUTCOME_WRAP
 test_qt_addon_native_provider_context_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_native_provider_context_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
-test_qt_addon_native_provider_context_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+test_qt_addon_native_provider_context_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS) -Wl,--wrap=vlc_metadata_native_claim_AdmitOutcome
 check_PROGRAMS += test_qt_addon_native_provider_context
 TESTS += test_qt_addon_native_provider_context
+
+tests/test_addon_native_provider_context.moc: $(srcdir)/tests/test_addon_native_provider_context.cpp
+	$(moc_verbose)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_NATIVE_OUTCOME_WRAP -o $@ $<
 
 test_qt_addon_native_metadata_owner_SOURCES = tests/test_addon_native_metadata_owner.cpp tests/fixtures/addon_native_provider_fixture.c $(top_srcdir)/src/preparser/metadata_native_provider.c
 nodist_test_qt_addon_native_metadata_owner_SOURCES = tests/test_addon_native_metadata_owner.moc

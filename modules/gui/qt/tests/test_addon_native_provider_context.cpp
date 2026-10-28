@@ -11,6 +11,8 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -22,15 +24,38 @@
 #include "addons/addon_native_provider_context.hpp"
 #include "addons/addon_native_provider_artwork_assets.hpp"
 #include "fixtures/addon_native_provider_fixture.h"
+#include "../../../../src/preparser/metadata_artwork_outcome.h"
 
 namespace {
+struct NativePause {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool entered = false, released = false, timedOut = false;
+    void wait() {
+        std::unique_lock<std::mutex> lock(mutex);
+        entered = true; changed.notify_all();
+        if (!changed.wait_for(lock, std::chrono::seconds(5), [this] { return released; })) timedOut = true;
+    }
+    bool waitEntered() {
+        std::unique_lock<std::mutex> lock(mutex);
+        return changed.wait_for(lock, std::chrono::seconds(3), [this] { return entered; });
+    }
+    void release() { std::lock_guard<std::mutex> lock(mutex); released = true; changed.notify_all(); }
+};
+#ifdef HAKONE_NATIVE_OUTCOME_WRAP
+std::atomic<NativePause*> admissionPause{nullptr};
+#endif
 struct Job {
     vlc_metadata_backend_t* backend = nullptr;
     input_item_t* item = nullptr;
     vlc_metadata_job_t* job = nullptr;
     std::atomic_int ended{0};
+    std::function<void()> onEnded;
     static int dispatch(void*, vlc_metadata_job_t*) { return VLC_SUCCESS; }
-    static void finished(vlc_metadata_job_t*, int, void* opaque) { ++static_cast<Job*>(opaque)->ended; }
+    static void finished(vlc_metadata_job_t*, int, void* opaque) {
+        auto* self = static_cast<Job*>(opaque); ++self->ended;
+        const auto callback = self->onEnded; if (callback) callback();
+    }
     static void destroy(void* opaque) { if (opaque) ++*static_cast<std::atomic_int*>(opaque); }
     explicit Job(std::atomic_int* destroyed = nullptr, const char* uri = "file:///native/song.flac", const char* art = nullptr) {
         const vlc_metadata_backend_operations operations{dispatch, nullptr, destroy};
@@ -59,6 +84,7 @@ struct Parent {
         instance = libvlc_new(3, args);
         if (!instance) qFatal("The test cannot create its native parent.");
         addon_test_native_provider_queued(false); addon_test_native_provider_block_delete(false);
+        addon_test_native_provider_outcome(false, META_FETCHER_OUTCOME_UNKNOWN);
     }
     ~Parent() {
         addon_test_native_provider_block_delete(false); lifetime.close();
@@ -68,10 +94,172 @@ struct Parent {
     vlc_object_t* object() const { return VLC_OBJECT(instance->p_libvlc_int); }
 };
 }
+#ifdef HAKONE_NATIVE_OUTCOME_WRAP
+extern "C" vlc_metadata_native_outcome_authority_t* __real_vlc_metadata_native_claim_AdmitOutcome(
+    vlc_metadata_native_claim_t*, vlc_metadata_job_t*, meta_fetcher_provider_t, vlc_metadata_artwork_admission_t*);
+extern "C" vlc_metadata_native_outcome_authority_t* __wrap_vlc_metadata_native_claim_AdmitOutcome(
+    vlc_metadata_native_claim_t* claim, vlc_metadata_job_t* job, meta_fetcher_provider_t family,
+    vlc_metadata_artwork_admission_t* admission)
+{
+    if (auto* pause = admissionPause.load()) pause->wait();
+    return __real_vlc_metadata_native_claim_AdmitOutcome(claim, job, family, admission);
+}
+#endif
 class TestAddonNativeProviderContext : public QObject
 {
     Q_OBJECT
 private slots:
+    void negativeOutcomeHasSeparateOneUseNativeAuthority_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::newRow("no-match") << int(META_FETCHER_OUTCOME_NO_MATCH);
+        QTest::newRow("not-applicable") << int(META_FETCHER_OUTCOME_NOT_APPLICABLE);
+    }
+    void negativeOutcomeHasSeparateOneUseNativeAuthority()
+    {
+        QFETCH(int, kind);
+        Parent parent; AddonNativeProviderContext owner(parent.lifetime.handle(), parent.object());
+        addon_test_native_provider_outcome(true, meta_fetcher_outcome_t(kind));
+        std::atomic_int destroyed{0}; Job job(&destroyed); int completed = 0; AddonNativeProviderContext::Result result;
+        QVERIFY(owner.probeOutcome(job.job, META_FETCHER_PROVIDER_LASTFM, [&](const auto& value) { result = value; ++completed; }));
+        QTRY_COMPARE(completed, 1); QCOMPARE(result.status, VLC_SUCCESS); QVERIFY(!result.claim.isEmpty());
+        QVERIFY(!owner.validates(result.claim, job.job, META_FETCHER_PROVIDER_LASTFM));
+        QTemporaryDir cache; std::atomic_int reads{0};
+        AddonNativeArtworkAssets images(parent.lifetime.handle(), {{[&reads](const QUrl&, qint64, const auto&) {
+            ++reads; return AddonNativeArtworkAssets::ReadResult{{}, "No image request is expected."};
+        }}}, cache.path(), {});
+        images.setNetworkAllowed(true); AddonNativeProviderArtworkAssets materializer(&images, &owner);
+        QVERIFY(materializer.available());
+        QVERIFY(!materializer.resolve(result.claim, job.job, META_FETCHER_PROVIDER_LASTFM, [](const auto&) {}));
+        QCOMPARE(reads.load(), 0);
+        const auto gate = std::shared_ptr<vlc_metadata_artwork_admission_t>(
+            vlc_metadata_artwork_admission_New(vlc_tick_now() + VLC_TICK_FROM_SEC(10)), vlc_metadata_artwork_admission_Release);
+        QVERIFY(gate); auto accepted = owner.takeOutcome(result.claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate.get());
+        QVERIFY(accepted); QCOMPARE(int(accepted.value), kind); QVERIFY(vlc_metadata_artwork_admission_IsCurrent(gate.get()));
+        QVERIFY(vlc_metadata_job_IsPending(job.job));
+        job.clear(); QCOMPARE(destroyed.load(), 1); QVERIFY(accepted.authority);
+        owner.close(); QVERIFY(!vlc_metadata_artwork_admission_IsCurrent(gate.get()));
+        // A retained authority has no child reference and cannot hold up Delete.
+        images.close();
+        QVERIFY(parent.lifetime.handle().waitQt(std::chrono::seconds(3))); QVERIFY(accepted.authority);
+        QVERIFY(!owner.takeOutcome(result.claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate.get()));
+    }
+    void outcomeAuthorityRejectsWrongBindingsAndStaleSnapshots_data()
+    {
+        QTest::addColumn<int>("mutation");
+        for (int i = 0; i != 6; ++i) QTest::newRow(qPrintable(QString::number(i))) << i;
+    }
+    void outcomeAuthorityRejectsWrongBindingsAndStaleSnapshots()
+    {
+        QFETCH(int, mutation);
+        Parent parent; AddonNativeProviderContext owner(parent.lifetime.handle(), parent.object());
+        addon_test_native_provider_outcome(true, META_FETCHER_OUTCOME_NO_MATCH);
+        Job job, other; QString claim;
+        QVERIFY(owner.probeOutcome(job.job, META_FETCHER_PROVIDER_LASTFM, [&](const auto& value) { claim = value.claim; }));
+        QTRY_VERIFY(!claim.isEmpty());
+        auto* target = job.job; auto family = META_FETCHER_PROVIDER_LASTFM;
+        if (mutation == 0) target = other.job;
+        if (mutation == 1) family = META_FETCHER_PROVIDER_MUSICBRAINZ;
+        if (mutation == 2) input_item_SetArtist(vlc_metadata_job_GetRequest(job.job)->item, "Native artist");
+        if (mutation == 3) { input_item_SetURI(vlc_metadata_job_GetRequest(job.job)->item, "file:///other");
+            input_item_SetURI(vlc_metadata_job_GetRequest(job.job)->item, "file:///native/song.flac"); }
+        if (mutation == 4) vlc_metadata_job_Cancel(job.job);
+        if (mutation == 5) owner.close();
+        const auto gate = std::shared_ptr<vlc_metadata_artwork_admission_t>(
+            vlc_metadata_artwork_admission_New(vlc_tick_now() + VLC_TICK_FROM_SEC(10)), vlc_metadata_artwork_admission_Release);
+        QVERIFY(gate); QVERIFY(!owner.takeOutcome(claim, target, family, gate.get()));
+        QVERIFY(!vlc_metadata_artwork_admission_IsCurrent(gate.get()));
+    }
+    void outcomeFailureCannotEnterAnImageOrNegativeAuthority_data()
+    {
+        QTest::addColumn<int>("kind");
+        for (const auto kind : {META_FETCHER_OUTCOME_UNAVAILABLE, META_FETCHER_OUTCOME_DENIED, META_FETCHER_OUTCOME_ERROR})
+            QTest::newRow(qPrintable(QString::number(int(kind)))) << int(kind);
+    }
+    void outcomeFailureCannotEnterAnImageOrNegativeAuthority()
+    {
+        QFETCH(int, kind);
+        Parent parent; AddonNativeProviderContext owner(parent.lifetime.handle(), parent.object());
+        addon_test_native_provider_outcome(true, meta_fetcher_outcome_t(kind));
+        Job job; int completed = 0; AddonNativeProviderContext::Result result;
+        QVERIFY(owner.probeOutcome(job.job, META_FETCHER_PROVIDER_LASTFM, [&](const auto& value) { result = value; ++completed; }));
+        QTRY_COMPARE(completed, 1); QCOMPARE(result.status, VLC_SUCCESS); QVERIFY(!result.claim.isEmpty());
+        QVERIFY(!owner.validates(result.claim, job.job, META_FETCHER_PROVIDER_LASTFM));
+        const auto gate = std::shared_ptr<vlc_metadata_artwork_admission_t>(
+            vlc_metadata_artwork_admission_New(vlc_tick_now() + VLC_TICK_FROM_SEC(10)), vlc_metadata_artwork_admission_Release);
+        QVERIFY(gate); QVERIFY(!owner.takeOutcome(result.claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate.get()));
+        QVERIFY(!vlc_metadata_artwork_admission_IsCurrent(gate.get()));
+    }
+    void anOutcomeCanOnlyBeConsumedOnce()
+    {
+        Parent parent; AddonNativeProviderContext owner(parent.lifetime.handle(), parent.object());
+        addon_test_native_provider_outcome(true, META_FETCHER_OUTCOME_NO_MATCH);
+        Job job; QString claim;
+        QVERIFY(owner.probeOutcome(job.job, META_FETCHER_PROVIDER_LASTFM, [&](const auto& value) { claim = value.claim; }));
+        QTRY_VERIFY(!claim.isEmpty());
+        const auto gate = std::shared_ptr<vlc_metadata_artwork_admission_t>(
+            vlc_metadata_artwork_admission_New(vlc_tick_now() + VLC_TICK_FROM_SEC(10)), vlc_metadata_artwork_admission_Release);
+        QVERIFY(gate); auto accepted = owner.takeOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate.get());
+        QVERIFY(accepted); QVERIFY(!owner.takeOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate.get()));
+        QVERIFY(!vlc_metadata_artwork_admission_IsCurrent(gate.get()));
+    }
+    void repeatedCloseRevokesBeforeAnEarlierJobCancelReturns()
+    {
+        Parent parent; AddonNativeProviderContext owner(parent.lifetime.handle(), parent.object());
+        addon_test_native_provider_outcome(true, META_FETCHER_OUTCOME_NO_MATCH);
+        Job first; QString claim;
+        QVERIFY(owner.probeOutcome(first.job, META_FETCHER_PROVIDER_LASTFM, [&](const auto& value) { claim = value.claim; }));
+        QTRY_VERIFY(!claim.isEmpty());
+        const auto gate = std::shared_ptr<vlc_metadata_artwork_admission_t>(
+            vlc_metadata_artwork_admission_New(vlc_tick_now() + VLC_TICK_FROM_SEC(10)), vlc_metadata_artwork_admission_Release);
+        QVERIFY(gate); auto accepted = owner.takeOutcome(claim, first.job, META_FETCHER_PROVIDER_LASTFM, gate.get());
+        QVERIFY(accepted);
+        NativePause blocked; Job second; second.onEnded = [&] { blocked.wait(); };
+        const auto cleanup = qScopeGuard([&] {
+            blocked.release(); owner.close();
+            if (!parent.lifetime.handle().waitQt(std::chrono::seconds(5))) qFatal("The concurrent retirement did not join.");
+        });
+        addon_test_native_provider_queued(true);
+        QVERIFY(owner.probe(second.job, META_FETCHER_PROVIDER_LASTFM, [](const auto&) {}));
+        parent.lifetime.close(); QVERIFY(blocked.waitEntered());
+        // The first native retirement is still inside this real job callback.
+        // The owner-thread close must independently reach native gate revoke.
+        owner.close(); QVERIFY(!vlc_metadata_artwork_admission_IsCurrent(gate.get()));
+        QVERIFY(!parent.lifetime.handle().waitQt(std::chrono::milliseconds(30)));
+        blocked.release(); QVERIFY(parent.lifetime.handle().waitQt(std::chrono::seconds(3)));
+        QVERIFY(!blocked.timedOut); QCOMPARE(second.ended.load(), 1); QVERIFY(accepted.authority);
+    }
+#ifdef HAKONE_NATIVE_OUTCOME_WRAP
+    void aConsumedOutcomeKeepsItsNativeCallCountedThroughConversion()
+    {
+        Parent parent; AddonNativeProviderContext owner(parent.lifetime.handle(), parent.object());
+        addon_test_native_provider_outcome(true, META_FETCHER_OUTCOME_NO_MATCH);
+        Job job; QString claim;
+        QVERIFY(owner.probeOutcome(job.job, META_FETCHER_PROVIDER_LASTFM, [&](const auto& value) { claim = value.claim; }));
+        QTRY_VERIFY(!claim.isEmpty());
+        const auto gate = std::shared_ptr<vlc_metadata_artwork_admission_t>(
+            vlc_metadata_artwork_admission_New(vlc_tick_now() + VLC_TICK_FROM_SEC(10)), vlc_metadata_artwork_admission_Release);
+        QVERIFY(gate);
+        NativePause blocked; bool entered = false, joinedBeforeReturn = false;
+        admissionPause.store(&blocked);
+        const auto reset = qScopeGuard([&] { admissionPause.store(nullptr); blocked.release(); owner.close(); });
+        std::thread retiring([&] {
+            entered = blocked.waitEntered();
+            if (entered) {
+                parent.lifetime.close();
+                joinedBeforeReturn = parent.lifetime.handle().waitQt(std::chrono::milliseconds(50));
+            }
+            blocked.release();
+        });
+        // The test link wrapper pauses only the actual Core admission call,
+        // after takeClaim has removed this claim from the owner's pending map.
+        const auto accepted = owner.takeOutcome(claim, job.job, META_FETCHER_PROVIDER_LASTFM, gate.get());
+        retiring.join();
+        QVERIFY(entered); QVERIFY(!blocked.timedOut); QVERIFY(!joinedBeforeReturn);
+        QVERIFY(!accepted); QVERIFY(!vlc_metadata_artwork_admission_IsCurrent(gate.get()));
+        QVERIFY(parent.lifetime.handle().waitQt(std::chrono::seconds(3)));
+    }
+#endif
     void nativeExecutorsRequireAnAppJoin()
     {
         Parent parent; const auto before = addon_test_native_provider_deleted();
@@ -197,12 +385,15 @@ private slots:
     }
     void aSealedFamilyClaimUsesItsSeparateMaterializer_data()
     {
-        QTest::addColumn<bool>("withdraw"); QTest::newRow("allowed") << false; QTest::newRow("consent-withdrawn") << true;
+        QTest::addColumn<bool>("withdraw"); QTest::addColumn<bool>("outcome");
+        QTest::newRow("allowed") << false << false; QTest::newRow("consent-withdrawn") << true << false;
+        QTest::newRow("outcome-allowed") << false << true; QTest::newRow("outcome-consent-withdrawn") << true << true;
     }
     void aSealedFamilyClaimUsesItsSeparateMaterializer()
     {
-        QFETCH(bool, withdraw);
+        QFETCH(bool, withdraw); QFETCH(bool, outcome);
         Parent parent; QTemporaryDir cache;
+        if (outcome) addon_test_native_provider_outcome(true, META_FETCHER_OUTCOME_MATCH);
         QImage pixels(4, 4, QImage::Format_RGB32); pixels.fill(Qt::blue);
         QByteArray bytes; QBuffer output(&bytes); QVERIFY(output.open(QIODevice::WriteOnly)); QVERIFY(pixels.save(&output, "PNG"));
         std::atomic_int reads{0};
@@ -218,7 +409,9 @@ private slots:
             if (!parent.lifetime.handle().waitQt(std::chrono::seconds(5))) qFatal("The fixture join did not end.");
         });
         Job job, other;
-        QString claim; QVERIFY(owner.probe(job.job, META_FETCHER_PROVIDER_LASTFM, [&](const auto& value) { claim = value.claim; }));
+        QString claim; const auto completedClaim = [&](const auto& value) { claim = value.claim; };
+        QVERIFY(outcome ? owner.probeOutcome(job.job, META_FETCHER_PROVIDER_LASTFM, completedClaim)
+                        : owner.probe(job.job, META_FETCHER_PROVIDER_LASTFM, completedClaim));
         QTRY_VERIFY(!claim.isEmpty()); QVERIFY(!assets.resolve(job.job, [](const auto&) {}));
         QVERIFY(!materializer.resolve(claim, other.job, META_FETCHER_PROVIDER_LASTFM, [](const auto&) {}));
         QVERIFY(!materializer.resolve(claim, job.job, META_FETCHER_PROVIDER_MUSICBRAINZ, [](const auto&) {}));

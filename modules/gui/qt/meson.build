@@ -1920,12 +1920,14 @@ if qt6_dep.found()
                         'tests/fixtures/addon_native_provider_fixture.c',
                         '../../../src/preparser/metadata_native_provider.c'),
                     'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                    'moc_args': addon_test == 'native_provider_context' ? ['-DHAKONE_NATIVE_OUTCOME_WRAP'] : [],
+                    'cpp_args': addon_test == 'native_provider_context' ? ['-DHAKONE_NATIVE_OUTCOME_WRAP'] : [],
                     'link_with': [addon_host_library, libvlccore, libvlc],
                     'suite': ['qt', 'addons'],
                     'timeout': 90,
                     'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
                     'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-                    'link_args': qt_link_args + (addon_test == 'native_metadata_owner' ? ['-Wl,--wrap=_Znwm', '-Wl,--wrap=_Znwj', '-Wl,--wrap=_ZdlPv', '-Wl,--wrap=_ZdlPvm', '-Wl,--wrap=_ZdlPvj'] : []),
+                    'link_args': qt_link_args + (addon_test == 'native_metadata_owner' ? ['-Wl,--wrap=_Znwm', '-Wl,--wrap=_Znwj', '-Wl,--wrap=_ZdlPv', '-Wl,--wrap=_ZdlPvm', '-Wl,--wrap=_ZdlPvj'] : ['-Wl,--wrap=vlc_metadata_native_claim_AdmitOutcome']),
                 }
             endforeach
         endif

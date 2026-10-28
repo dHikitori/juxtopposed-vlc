@@ -147,6 +147,8 @@ if(VLC_BUILD_DIR)
             "${VLC_SOURCE_ROOT}/src/preparser/metadata_native_provider.c")
         target_include_directories(test_addon_native_provider_context PRIVATE "${VLC_SOURCE_ROOT}/src" "${VLC_SOURCE_ROOT}")
         target_link_libraries(test_addon_native_provider_context PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
+        target_compile_definitions(test_addon_native_provider_context PRIVATE HAKONE_NATIVE_OUTCOME_WRAP)
+        target_link_options(test_addon_native_provider_context PRIVATE "-Wl,--wrap=vlc_metadata_native_claim_AdmitOutcome")
         add_test(NAME addon_native_provider_context COMMAND test_addon_native_provider_context)
         set_tests_properties(addon_native_provider_context PROPERTIES TIMEOUT 90)
         add_executable(test_addon_native_metadata_owner "../tests/test_addon_native_metadata_owner.cpp"

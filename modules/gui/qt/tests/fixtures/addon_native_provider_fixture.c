@@ -16,7 +16,14 @@
 // This fixture replaces the native family's execution only. The target also
 // compiles the real metadata_native_provider.c and uses real shared Core jobs,
 // snapshots, revision tokens, and artwork records.
-struct pending { input_item_t *item; vlc_metadata_job_t *job; input_fetcher_probe_cb callback; void *opaque; };
+struct pending {
+    input_item_t *item;
+    vlc_metadata_job_t *job;
+    input_fetcher_probe_cb callback;
+    input_fetcher_probe_outcome_cb outcome_callback;
+    meta_fetcher_outcome_t outcome;
+    void *opaque;
+};
 struct input_fetcher_t {
     vlc_atomic_rc_t refs;
     vlc_mutex_t lock;
@@ -28,7 +35,11 @@ static vlc_cond_t fixture_changed = VLC_STATIC_COND;
 static input_fetcher_t *current;
 static atomic_bool queued, block_delete;
 static atomic_uint deleted;
+static atomic_bool outcomes_enabled;
+static atomic_int outcome_value;
 void addon_test_native_provider_queued(bool value) { atomic_store(&queued, value); }
+void addon_test_native_provider_outcome(bool enabled, meta_fetcher_outcome_t value)
+{ atomic_store(&outcome_value, value); atomic_store(&outcomes_enabled, enabled); }
 void addon_test_native_provider_block_delete(bool value)
 {
     vlc_mutex_lock(&fixture_lock); atomic_store(&block_delete, value);
@@ -49,17 +60,21 @@ void input_fetcher_Release(input_fetcher_t *fetcher)
 { if (vlc_atomic_rc_dec(&fetcher->refs)) { assert(!fetcher->count); free(fetcher); } }
 static void ended(struct pending value, int status)
 {
-    value.callback(value.item, status, value.opaque);
+    if (value.outcome_callback) value.outcome_callback(value.item, status, value.outcome, value.opaque);
+    else value.callback(value.item, status, value.opaque);
     input_item_Release(value.item); vlc_metadata_job_Release(value.job);
 }
-int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
-    meta_fetcher_provider_t family, input_fetcher_probe_cb callback, void *opaque)
+static int probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t family, input_fetcher_probe_cb callback,
+    input_fetcher_probe_outcome_cb outcome_callback, void *opaque)
 {
     assert(family >= META_FETCHER_PROVIDER_MUSICBRAINZ && family <= META_FETCHER_PROVIDER_LASTFM);
     if (!vlc_metadata_job_IsPending(job)) return -EINTR;
     struct pending value = {.item=input_item_Copy(vlc_metadata_job_GetRequest(job)->item),
-        .job=vlc_metadata_job_Hold(job), .callback=callback, .opaque=opaque};
-    assert(value.item); input_item_SetArtURL(value.item, "http://127.0.0.1/native-family.png");
+        .job=vlc_metadata_job_Hold(job), .callback=callback, .outcome_callback=outcome_callback,
+        .outcome=outcome_callback ? atomic_load(&outcome_value) : META_FETCHER_OUTCOME_MATCH, .opaque=opaque};
+    assert(value.item);
+    if (value.outcome == META_FETCHER_OUTCOME_MATCH) input_item_SetArtURL(value.item, "http://127.0.0.1/native-family.png");
     if (!atomic_load(&queued)) ended(value, VLC_SUCCESS);
     else {
         vlc_mutex_lock(&fetcher->lock); assert(fetcher->count < ARRAY_SIZE(fetcher->pending));
@@ -67,14 +82,16 @@ int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
     }
     return VLC_SUCCESS;
 }
-/* This fixture supports positive probes only. The outcome API returns an
- * explicit refusal and does not call its callback. It supplies no evidence
- * for a negative artwork result. */
+int input_fetcher_Probe(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t family, input_fetcher_probe_cb callback, void *opaque)
+{ return probe(fetcher, job, family, callback, NULL, opaque); }
+/* Outcome tests opt in to a controlled closed result. These tests exercise the
+ * native bridge, not the shipped family parser or its stream completion. */
 int input_fetcher_ProbeOutcome(input_fetcher_t *fetcher, vlc_metadata_job_t *job,
     meta_fetcher_provider_t family, input_fetcher_probe_outcome_cb callback, void *opaque)
 {
-    (void)fetcher; (void)job; (void)family; (void)callback; (void)opaque;
-    return VLC_ENOTSUP;
+    if (!atomic_load(&outcomes_enabled)) return VLC_ENOTSUP;
+    return probe(fetcher, job, family, NULL, callback, opaque);
 }
 static size_t finish(input_fetcher_t *fetcher, const void *key, int status)
 {
