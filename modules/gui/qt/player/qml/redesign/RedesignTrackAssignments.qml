@@ -25,6 +25,13 @@ RedesignTrackAssignmentDialog {
     property var pendingSaveRule: ({})
     RedesignPreferences { id: searchPreferences; ctx: MainCtx }
     providerConfigured: SubtitleSources.configured
+    providerConfigurationKnown: SubtitleSources.configurationKnown
+    providerListCurrent: !SubtitleSources.providerDisplayAttached || SubtitleSources.providerDisplayCurrent
+    providerListLoading: SubtitleSources.providerDisplayLoading
+    providerListError: SubtitleSources.providerDisplayError
+    providerDisplayBackend: typeof AddonManager !== "undefined" ? AddonManager : null
+    providerDisplayCandidates: SubtitleSources.displayProviders
+    providerActionGuard: () => SubtitleSources.providerDisplayIsCurrent()
     providerHasCustomKey: SubtitleSources.hasCustomKey
     providerHasConsumerKey: SubtitleSources.hasConsumerKey
     onlineLanguages: SubtitleSources.languages

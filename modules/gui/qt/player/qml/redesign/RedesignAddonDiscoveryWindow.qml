@@ -46,12 +46,11 @@ C.Popup {
             objectName: "addonDiscoveryWindowBrowser"
             Layout.fillWidth: true; Layout.fillHeight: true
             backend: root.backend
+            displayActive: root.visible
             playbackReviewAvailable: !!root.sourceConsentBackend && root.sourceConsentBackend.available === true
             scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
             onConfigureRequested: packageId => {
                 if (!root.settingsBackend) return
-                const schema = root.settingsBackend.settingsSchema(packageId)
-                if (schema.type !== "object") { actionError = qsTr("This add-on has no settings."); return }
                 settingsDialog.packageId = packageId; settingsDialog.open()
             }
             onPlaybackReviewRequested: source => sourceConsent.reviewSource(source)

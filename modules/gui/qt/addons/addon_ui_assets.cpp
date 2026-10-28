@@ -2,6 +2,7 @@
 #include "addon_ui_assets.hpp"
 #include "addon_manager.hpp"
 #include "addon_artwork_image.hpp"
+#include "addon_native_wake.hpp"
 #include <QCryptographicHash>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -87,15 +88,17 @@ QImage fail(QString* error, const char* message) { if (error) *error = QString::
 AddonUiAssets::Backend AddonUiAssets::managerBackend(AddonManager* manager)
 {
     const QPointer<AddonManager> target(manager);
-    return {[target](const QString& id) { return target ? target->uiAssetReader(id) : UiAssetReader{}; }};
+    return {[target](const QString& id) { return target ? target->uiAssetReader(id) : UiAssetReader{}; }, {},
+        [target](std::function<void()> wake) { return target?target->watchDisplayCatalogue(std::move(wake)):StoreAuthorityChanges{}; }};
 }
 AddonUiAssets::AddonUiAssets(AddonManager* manager, QObject* parent)
     : AddonUiAssets(managerBackend(manager), Options{}, parent)
 {
     if (manager) {
-        connect(manager, &AddonManager::revisionChanged, this, &AddonUiAssets::invalidate);
+        connect(manager, &AddonManager::revisionChanged, this, &AddonUiAssets::expireScopes);
         connect(manager, &AddonManager::packageWithdrawn, this, &AddonUiAssets::invalidatePackage);
-        connect(manager, &QObject::destroyed, this, &AddonUiAssets::invalidate);
+        connect(manager, &AddonManager::retiring, this, &AddonUiAssets::close, Qt::DirectConnection);
+        connect(manager, &QObject::destroyed, this, &AddonUiAssets::close);
     }
 }
 AddonUiAssets::AddonUiAssets(Backend backend, const Options& options, QObject* parent)
@@ -112,17 +115,24 @@ AddonUiAssets::AddonUiAssets(Backend backend, const Options& options, QObject* p
     m_options.maximumTickets = std::clamp(options.maximumTickets, 1, 256);
     m_options.maximumSessionImages = std::clamp(options.maximumSessionImages, 1, 32);
     m_options.maximumImages = std::clamp(options.maximumImages, 1, 64);
+    m_options.maximumStartRetries=std::clamp(options.maximumStartRetries,1,8);
     m_images->owner = this;
-    m_authorityTimer.setInterval(100);
-    connect(&m_authorityTimer, &QTimer::timeout, this, &AddonUiAssets::expireScopes);
+    m_retryTimer.setSingleShot(true);m_retryTimer.setInterval(100);
+    connect(&m_retryTimer,&QTimer::timeout,this,&AddonUiAssets::pump);
+    if(m_backend.subscribe) {
+        m_authorityWake=std::make_unique<AddonNativeWake>([this]{expireScopes();});
+        const auto subscribe=m_backend.subscribe;
+        if(m_authorityWake->valid())m_authorityChanges=subscribe(m_authorityWake->nativeCallback());
+        if(!m_authorityChanges)m_error=tr("The add-on image notification is not available.");
+    }
     const std::weak_ptr<SharedImages> weak = m_images;
     m_images->wake = [weak] {
         const auto shared = weak.lock(); if (!shared) return;
         QMutexLocker lock(&shared->mutex); const auto owner = shared->owner;
         if (owner) QMetaObject::invokeMethod(owner, [owner] {
-            if (!owner) return;
+            if (!owner || owner->m_closing) return;
             owner->pump();
-            if (owner) emit owner->imageBudgetChanged();
+            if (owner && !owner->m_closing) emit owner->imageBudgetChanged();
         }, Qt::QueuedConnection);
     };
     const auto budget = decodeBudget(); QMutexLocker lock(&budget->mutex); budget->services.append(m_images);
@@ -135,7 +145,9 @@ void AddonUiAssets::shutdown(bool notify)
     if (m_closing) return;
     m_closing = true;
     m_images->retiring.store(true, std::memory_order_release);
-    m_authorityTimer.stop();
+    m_retryTimer.stop();
+    if(m_authorityWake)m_authorityWake->close();
+    m_authorityChanges={};m_authorityWake.reset();
     { QMutexLocker lock(&m_images->mutex); m_images->owner = nullptr; m_images->tickets.clear(); m_images->claims.clear(); }
     for (const auto& claim : m_claims) disconnect(claim.destroyed);
     const auto sessions = m_scopes.keys();
@@ -173,7 +185,7 @@ QImage AddonUiAssets::decodeImage(const QByteArray& bytes, const QString& suffix
 }
 bool AddonUiAssets::openSession(const QString& session, const QString& contribution)
 {
-    if (m_closing || !m_lifetime.current()) return false;
+    if (m_closing || !m_lifetime.current() || (m_backend.subscribe && !m_authorityChanges)) return false;
     QPointer<AddonUiAssets> guard(this);
     closeSession(session, false); if (!guard || session.isEmpty() || session.size() > 128 || m_scopes.size() >= 32) return false;
     const auto epoch = ++m_epoch;
@@ -181,7 +193,6 @@ bool AddonUiAssets::openSession(const QString& session, const QString& contribut
     const auto read = prepare ? prepare(contribution) : UiAssetReader{};
     if (!guard || !read || m_epoch != epoch) return false;
     m_scopes.insert(session, {contribution, contribution.section('/', 0, 0), {}, epoch, false, {}, {}, {}, {}});
-    m_authorityTimer.start();
     m_captureQueue.append({nonce(), session, epoch, read}); m_error.clear();
     pump(); return true;
 }
@@ -234,17 +245,21 @@ void AddonUiAssets::captured(const QString& id, UiAssetCapture capture)
         if (m_cache.contains(key)) publish(session, it.key(), key);
         else { m_queue.append({nonce(), session, it.key(), suffix, key, epoch, encoded, std::move(bytesLease), capture.current, capture.live}); m_queuedBytes += encoded.size(); }
     }
-    pump(); emit sessionAssetsChanged(session);
+    const QPointer<AddonUiAssets> alive(this);pump();if(alive)emit sessionAssetsChanged(session);
 }
 void AddonUiAssets::pump()
 {
     if (!m_lifetime.current()) { close(); return; }
+    if(m_captureQueue.isEmpty() && m_queue.isEmpty())m_retryTimer.stop();
+    // A refused start can release an image-budget lease and wake this service.
+    // Keep that wake from spinning on the same full Qt-work quota.
+    if(m_retryTimer.isActive())return;
     if (!m_closing && m_captureJobs.isEmpty() && !m_captureQueue.isEmpty()) {
         const auto budget = decodeBudget(); bool admitted = false;
         { QMutexLocker lock(&budget->mutex); if (budget->captures < 1) { ++budget->captures; admitted = true; } }
         if (admitted) {
             auto lease = std::make_shared<CaptureLease>(); lease->budget = budget;
-            const auto work = m_captureQueue.takeFirst(); m_captureJobs.insert(work.id, work);
+            auto work = m_captureQueue.takeFirst(); m_captureJobs.insert(work.id, work);
             const auto shared = m_images;
             const bool started = m_lifetime.startQtWork([shared, work, lease]() mutable {
                 if (shared->retiring.load(std::memory_order_acquire)) return;
@@ -262,7 +277,13 @@ void AddonUiAssets::pump()
                 }, Qt::QueuedConnection);
             }, [shared] { shared->retiring.store(true, std::memory_order_release); },
                 [lease](const auto& ticket) { ticket.retain(lease); });
-            if (!started) { m_captureJobs.remove(work.id); m_captureQueue.prepend(work); }
+            if (!started) {
+                m_captureJobs.remove(work.id);++work.startFailures;m_captureQueue.prepend(work);
+                if(work.startFailures>=unsigned(m_options.maximumStartRetries)) {
+                    m_error=tr("Wait for other add-on image work to end. Then open the view again.");closeSession(work.session);return;
+                }
+                m_retryTimer.start();
+            }
         }
     }
 
@@ -290,7 +311,13 @@ void AddonUiAssets::pump()
             }, Qt::QueuedConnection);
         }, [shared] { shared->retiring.store(true, std::memory_order_release); },
             [jobLease](const auto& ticket) { ticket.retain(jobLease); });
-        if (!started) { m_jobs.remove(work.id); m_queue.prepend(work); return; }
+        if (!started) {
+            m_jobs.remove(work.id);++work.startFailures;m_queue.prepend(work);
+            if(work.startFailures>=unsigned(m_options.maximumStartRetries)) {
+                m_error=tr("Wait for other add-on image work to end. Then open the view again.");closeSession(work.session);return;
+            }
+            m_retryTimer.start();return;
+        }
     }
 }
 bool AddonUiAssets::makeRoom(qint64 bytes)
@@ -332,7 +359,7 @@ void AddonUiAssets::decoded(const QString& id, QImage image, const QString& erro
         }
         publish(work.session, work.alias, work.cacheKey);
     }
-    pump(); emit sessionAssetsChanged(work.session);
+    const QPointer<AddonUiAssets> alive(this);pump();if(alive)emit sessionAssetsChanged(work.session);
 }
 QVariantMap AddonUiAssets::sessionAssets(const QString& session) const
 {
@@ -374,7 +401,6 @@ void AddonUiAssets::closeSession(const QString& session, bool notify)
 {
     const auto found = m_scopes.find(session); if (found == m_scopes.end()) return;
     const auto scope = *found; m_scopes.erase(found);
-    if (m_scopes.isEmpty()) m_authorityTimer.stop();
     for (const auto& ticket : scope.tickets) removeTicket(ticket);
     for (auto it = m_queue.begin(); it != m_queue.end();) {
         if (it->session == session) { m_queuedBytes -= it->bytes.size(); it = m_queue.erase(it); } else ++it;
@@ -386,8 +412,9 @@ void AddonUiAssets::closeSession(const QString& session, bool notify)
     for (const auto& id : claims) if (m_claims.value(id).session == session) {
         disconnect(m_claims.take(id).destroyed); QMutexLocker lock(&m_images->mutex); m_images->claims.remove(id);
     }
-    pump(); if (!m_closing && notify) {
-        QPointer<AddonUiAssets> guard(this); emit sessionAssetsChanged(session);
+    QPointer<AddonUiAssets> guard(this);pump();if(!guard)return;
+    if (!m_closing && notify) {
+        emit sessionAssetsChanged(session);
         if (guard) emit imageBudgetChanged();
     }
 }
@@ -470,6 +497,7 @@ QVariantMap AddonUiAssets::statistics() const
         {"queuedJobs", m_queue.size() + m_captureQueue.size()}, {"claims", m_claims.size()},
         {"globalJobs", budget->jobs}, {"globalIntegrityCaptures", budget->captures}, {"globalClaims", budget->claims}, {"globalEncodedBytes", budget->bytes},
         {"globalDecodePixelReservation", qint64(budget->jobs) * 1024 * 1024 * 16},
-        {"decodePixelReservation", qint64(m_jobs.size()) * m_options.maximumDimension * m_options.maximumDimension * 16}};
+        {"decodePixelReservation", qint64(m_jobs.size()) * m_options.maximumDimension * m_options.maximumDimension * 16},
+        {"startRetryPending",m_retryTimer.isActive()}};
 }
 }

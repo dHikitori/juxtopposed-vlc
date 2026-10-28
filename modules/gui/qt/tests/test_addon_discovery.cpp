@@ -56,6 +56,56 @@ class TestAddonDiscovery : public QObject
 {
     Q_OBJECT
 private slots:
+    void staleDisplayDeniesQueuedCallsHandlesAndCompletion() {
+        Fake fake; bool fresh = true; auto backend = fake.backend(); backend.current = [&] { return fresh; };
+        AddonDiscoveryCoordinator discovery(std::move(backend)); QSignalSpy done(&discovery, &AddonDiscoveryCoordinator::finished);
+        discovery.roots(sourceId, "view", 1); fresh = false;
+        QTRY_COMPARE(done.size(), 1); QVERIFY(fake.calls.isEmpty()); QVERIFY(!discovery.supports(sourceId, "roots"));
+        fresh = true; discovery.roots(sourceId, "view", 1); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(discovery, fake.calls[0], page({media()})); QTRY_COMPARE(done.size(), 2);
+        const auto ref = firstRef(done); QVERIFY(!discovery.queueReference(ref).isEmpty());
+        fresh = false; QVERIFY(discovery.queueReference(ref).isEmpty());
+        fresh = true; discovery.roots(sourceId, "view", 1); QTRY_COMPARE(fake.calls.size(), 2);
+        fresh = false; complete(discovery, fake.calls[1], page({media("late")})); QTRY_COMPARE(done.size(), 3);
+        QVERIFY(done.last()[2].toMap().value("items").toList().isEmpty());
+        fresh = true; QVERIFY(!discovery.queueReference(ref).isEmpty());
+    }
+    void reentrantInvokeCannotRestoreCanceledOrStaleRequest() {
+        Fake fake; auto backend = fake.backend(); bool fresh = true; backend.current = [&] { return fresh; };
+        AddonDiscoveryCoordinator* owner = nullptr;
+        backend.invoke = [&](const QString&, const QString&, const QVariantMap&) { owner->cancelView("view"); fresh = false; return QStringLiteral("late-id"); };
+        AddonDiscoveryCoordinator discovery(std::move(backend)); owner = &discovery;
+        discovery.roots(sourceId, "view", 1); QTRY_VERIFY(fake.canceled.contains("late-id"));
+        QSignalSpy done(&discovery, &AddonDiscoveryCoordinator::finished);
+        discovery.operationFinished("late-id", sourceId, "match", page({media()}), {}); QTest::qWait(10); QCOMPARE(done.size(), 0);
+    }
+    void invokeDeletionRetainsCallableAndCancelsReturnedId() {
+        Fake fake; auto backend = fake.backend(); AddonDiscoveryCoordinator* discovery = nullptr;
+        bool returned = false;
+        backend.invoke = [&](const QString&, const QString&, const QVariantMap&) {
+            delete discovery; discovery = nullptr; returned = true; return QStringLiteral("after-delete");
+        };
+        discovery = new AddonDiscoveryCoordinator(std::move(backend));
+        discovery->roots(sourceId, "view", 1); QTRY_VERIFY(returned); QVERIFY(!discovery);
+        QVERIFY(fake.canceled.contains("after-delete"));
+    }
+    void invocationCancellationDeletionStillCancelsOutstandingNativeGate() {
+        Fake fake; fake.playable = true; auto backend = fake.backend();
+        AddonDiscoveryCoordinator* discovery = nullptr; QString deleteOnCancel;
+        backend.cancel = [&](const QString& id) {
+            fake.canceled.append(id);
+            if (id == deleteOnCancel) { const auto dying = discovery; discovery = nullptr; delete dying; }
+        };
+        discovery = new AddonDiscoveryCoordinator(std::move(backend));
+        QSignalSpy done(discovery, &AddonDiscoveryCoordinator::finished);
+        discovery->roots(sourceId, "view", 1); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(*discovery, fake.calls[0], page({media()})); QTRY_COMPARE(done.size(), 1);
+        const auto ref = firstRef(done); discovery->resolve(ref, "play", "view", 1); QTRY_COMPARE(fake.calls.size(), 2);
+        complete(*discovery, fake.calls[1], {{"url", "https://example.org/stream"}}); QTRY_COMPARE(fake.proposals.size(), 1);
+        const auto request = discovery->roots(sourceId, "view", 1); QTRY_COMPARE(fake.calls.size(), 3);
+        deleteOnCancel = fake.calls[2].id; discovery->cancel(request); QVERIFY(!discovery);
+        QCOMPARE(fake.canceledGates.count("gate-0"), 1); QCOMPARE(fake.canceled.count(deleteOnCancel), 1);
+    }
     void hostProfileReportsUnimplementedPlaybackAndSubscriptions() {
         Fake fake; AddonDiscoveryCoordinator discovery(fake.backend());
         QVERIFY(discovery.supports(sourceId, "roots"));

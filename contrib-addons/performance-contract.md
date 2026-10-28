@@ -527,3 +527,26 @@ still use fresh authority and an exact revision stamp.
 The matching sanitizer run, native runtime checks, consumer mounting, and new
 Windows package remain in progress. These normal tests do not establish full
 app responsiveness.
+
+## Cached display consumers
+
+Theme, visualizer, extension UI, settings, discovery, session, and subtitle
+display adapters now use the shared View when it is attached. Each adapter
+keeps that mode for its lifetime. Display refreshes retain open settings
+drafts and requested resources. Explicit actions still check fresh authority;
+settings saves also check the captured form revision. A retired View refuses
+fresh actions.
+
+The actual player analysis adapter attaches its native audio and player
+observers only while an active visualizer accepts frames. The default image
+and UI asset paths have no idle sweep timer. Exact native checks pass 103
+cases: subtitle service 59, source owner 23, consent UI 10, and player analysis
+11. All have zero warnings, skips, or stderr. The Subtitle fixture uses a
+separate observer context so the service's own disconnect does not remove
+the test trigger. No product repair was needed for that fixture failure.
+
+The native records are
+`/tmp/hakone-addon-core-display-proof/successor-native-tail-retry-finish-evidence/progress.json`
+and `/tmp/hakone-subtitle-observer-fixture/normal-proof/progress.json`.
+The 551-case shared normal run and 302-case QML run cover the matching
+consumer source. Matching sanitizers and the Windows build remain in progress.

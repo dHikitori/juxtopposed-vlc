@@ -17,6 +17,11 @@
 #include "util/subtitle_source_service.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_metadata_service.hpp"
+#include "addons/addon_catalogue_view.hpp"
+#include <QScopeGuard>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 #if defined(Q_OS_WIN) && defined(QT_STATIC)
 Q_IMPORT_PLUGIN(QSchannelBackend)
@@ -54,6 +59,50 @@ static QByteArray results() {
     return R"({"data":[{"attributes":{"language":"en","release":"The Wand S01E04","hearing_impaired":true,"files":[{"file_id":42,"file_name":"The_Wand_S01E04.en.srt"},{"file_id":43,"file_name":"../../other.srt"}]}}]})";
 }
 static QByteArray captions() { return "1\n00:00:01,000 --> 00:00:03,000\nTest captions\n"; }
+struct SubtitleDisplayWait {
+    std::mutex mutex; std::condition_variable changed; bool released=false; std::atomic_bool entered{false};
+    void wait() { std::unique_lock<std::mutex> lock(mutex); entered=true; changed.wait(lock,[&] { return released; }); }
+    void release() { { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all(); }
+};
+struct SubtitleDisplayFixture {
+    QTemporaryDir directory;
+    vlc::addons::AddonStreamLifetime lifetime;
+    std::unique_ptr<vlc::addons::AddonManager> manager;
+    QPointer<vlc::addons::AddonCatalogueView> view;
+    vlc::addons::DisplayCatalogueSnapshot snapshot;
+    std::shared_ptr<SubtitleDisplayWait> block;
+    std::atomic_uint reads{0},keys{0}; std::atomic_bool onOwner{false}; QThread* ownerThread=QThread::currentThread();
+    SubtitleDisplayFixture() {
+        manager=std::make_unique<vlc::addons::AddonManager>(directory.filePath("addons"));
+        vlc::addons::DisplayCataloguePackage row; auto& package=row.package;
+        package.manifest.id=QStringLiteral("org.example.display-subtitles"); package.manifest.name=QStringLiteral("Subtitle fixture");
+        package.manifest.version=QStringLiteral("1.0.0"); package.digest=QByteArray(64,'a'); package.generation=1; package.enabled=true;
+        vlc::addons::Contribution contribution; contribution.id=QStringLiteral("search"); contribution.type=QStringLiteral("metadata.provider");
+        contribution.contract=QStringLiteral("metadata@1"); contribution.features={QStringLiteral("subtitles")}; contribution.operations={QStringLiteral("searchAssets")};
+        contribution.document={{"id",contribution.id},{"type",contribution.type},{"contract",contribution.contract},
+            {"features",QJsonArray{"subtitles"}},{"operations",QJsonArray{"searchAssets"}}}; package.manifest.contributions={contribution};
+        row.schema={{"type","object"},{"required",QJsonArray{"key"}},
+            {"properties",QJsonObject{{"key",QJsonObject{{"type","string"},{"writeOnly",true}}}}}};
+        row.settings={{"_credentials",QJsonObject{{"key","00000000-0000-4000-8000-000000000002"}}}}; snapshot.packages={row};
+    }
+    void attach() {
+        vlc::addons::AddonCatalogueView::Backend backend;
+        backend.capture=[this]()->std::optional<vlc::addons::DisplayCatalogueSource> {
+            auto source=manager->displayCatalogueSource(); if(!source) return {};
+            source->workerExecutable=QCoreApplication::applicationFilePath(); source->credentialPresence.clear();
+            source->credentials=[this](const auto&,const auto&) { ++keys; onOwner=onOwner || QThread::currentThread()==ownerThread; return QByteArray("fixture-only-key"); };
+            auto state=snapshot; state.authority=state.queuedAuthority=source->queuedAuthority; const auto waiting=block;
+            source->reader=[this,state=std::move(state),waiting](const vlc::addons::DisplayCatalogueRequest&,vlc::addons::DisplayCatalogueSnapshot* out,QString*) {
+                ++reads; onOwner=onOwner || QThread::currentThread()==ownerThread; if(waiting) waiting->wait(); *out=state; return true;
+            }; return source;
+        };
+        backend.subscribe=[this](auto wake) { return manager->watchDisplayCatalogue(std::move(wake)); };
+        view=new vlc::addons::AddonCatalogueView(std::move(backend),lifetime.handle(),manager.get());
+        view->setObjectName(QStringLiteral("hakoneDisplayCatalogue"));
+        QObject::connect(manager.get(),&vlc::addons::AddonManager::revisionChanged,view,&vlc::addons::AddonCatalogueView::inputsChanged);
+    }
+    ~SubtitleDisplayFixture() { if(view) view->close(); lifetime.close(); lifetime.handle().waitQt(std::chrono::seconds(5)); manager.reset(); }
+};
 class TestSubtitleSources : public QObject {
     Q_OBJECT
     static SubtitleSourceService::Options options(Server& server) { SubtitleSourceService::Options o;o.apiBase=server.base();o.timeoutMs=1000;return o; }
@@ -61,6 +110,73 @@ class TestSubtitleSources : public QObject {
     static QVariantList search(SubtitleSourceService& client) { QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);client.search("The Wand S01E04","en");return result(spy).value("sources").toList(); }
     static QVariantList row(const QStringList& tracks) { return {QVariantMap{{"url","file:///movie.mkv"},{"baseline",QStringList{}},{"initialTracks",QStringList{}},{"tracks",tracks}}}; }
 private slots:
+    void incomingDeletionAfterUnregisterCannotReviveTheOldNativePath() {
+        QTemporaryDir directory; Server server; SubtitleSourceService client(options(server));
+        auto original=std::make_unique<vlc::addons::AddonManager>(directory.filePath("original"));
+        auto incoming=std::make_unique<vlc::addons::AddonManager>(directory.filePath("incoming"));
+        client.setStorageDirectory(directory.filePath("subtitles")); QVERIFY(client.setApiKey("native-test-key"));
+        client.setAddonManager(original.get()); bool armed=true; QObject externalObserver;
+        connect(original.get(),&vlc::addons::AddonManager::revisionChanged,&externalObserver,[&] { if(armed) { armed=false; incoming.reset(); } });
+        client.setAddonManager(incoming.get()); QVERIFY(!armed); QVERIFY(!incoming); QVERIFY(!client.configured());
+        original.reset(); QVERIFY(!client.configured()); QVERIFY(!client.configurationKnown()); client.fetchLanguages();
+        QSignalSpy finished(&client,&SubtitleSourceService::searchFinished); client.search("The Wand S01E04","en");
+        QVERIFY(!result(finished).value("success").toBool()); QVERIFY(server.requests.isEmpty());
+    }
+    void managerBindingSurvivesIncomingDeletionAndNewerReentry() {
+        for(const bool replace:{false,true}) {
+            QTemporaryDir directory; Server server; SubtitleSourceService client(options(server));
+            vlc::addons::AddonManager original(directory.filePath("original")),newer(directory.filePath("newer"));
+            auto incoming=std::make_unique<vlc::addons::AddonManager>(directory.filePath("incoming"));
+            client.setStorageDirectory(directory.filePath("subtitles")); QVERIFY(client.setApiKey("native-test-key"));
+            client.setAddonManager(&original); bool armed=true;
+            connect(&client,&SubtitleSourceService::searchProgressChanged,&client,[&] {
+                if(!armed) return; armed=false;
+                if(replace) client.setAddonManager(&newer); else incoming.reset();
+            });
+            client.setAddonManager(incoming.get()); QVERIFY(!armed); QVERIFY(client.configured());
+            if(replace) {
+                QVERIFY(original.providersForFeature("subtitles").isEmpty());
+                QCOMPARE(newer.providersForFeature("subtitles").size(),1);
+                QVERIFY(incoming->providersForFeature("subtitles").isEmpty());
+            } else { QVERIFY(!incoming); QCOMPARE(original.providersForFeature("subtitles").size(),1); }
+        }
+    }
+    void attachedStatusReadsNeverReadKeysAndExplicitFeatureChecksAreJoined() {
+        SubtitleDisplayFixture display; display.attach(); Server server; SubtitleSourceService client(options(server));
+        client.setAddonManager(display.manager.get());
+        QTRY_VERIFY(display.view->isCurrent()); QTRY_COMPARE(client.displayProviders().size(),2);
+        QVERIFY(client.providerDisplayAttached()); QVERIFY(!client.configured()); QVERIFY(!client.configurationKnown());
+        const auto reads=display.reads.load();
+        for(int i=0;i<100;++i) { client.configured(); client.configurationKnown(); client.displayProviders(); client.providerDisplayIsCurrent(); }
+        QTest::qWait(30); QCOMPARE(display.reads.load(),reads); QCOMPARE(display.keys.load(),0u); QVERIFY(server.requests.isEmpty());
+        const auto ticket=display.manager->prepareDisplayFeature(QStringLiteral("subtitles")); QVERIFY(!ticket.isEmpty());
+        QTRY_VERIFY(client.configured()); QVERIFY(client.configurationKnown()); QCOMPARE(display.keys.load(),1u); QVERIFY(!display.onOwner.load());
+        display.manager->releaseDisplayRequest(ticket);
+    }
+    void attachedDisplayRefreshDoesNotReplaceActualSearchAuthority() {
+        SubtitleDisplayFixture display; display.attach(); Server server;
+        server.respond=[](const HttpRequest&,QTcpSocket* socket) { Server::send(socket,results()); };
+        SubtitleSourceService client(options(server)); client.setAddonManager(display.manager.get());
+        client.setStorageDirectory(display.directory.filePath("subtitles")); QVERIFY(client.setApiKey("native-test-key"));
+        QTRY_VERIFY(display.view->isCurrent()); QTRY_VERIFY(client.configured());
+        const auto blocked=std::make_shared<SubtitleDisplayWait>(); display.block=blocked;
+        const auto release=qScopeGuard([&] { blocked->release(); }); display.view->refresh(); QTRY_VERIFY(blocked->entered.load());
+        QVERIFY(!client.providerDisplayCurrent()); QVERIFY(!client.configured()); QVERIFY(!client.configurationKnown());
+        QVERIFY(!client.displayProviders().isEmpty());
+        const auto sources=search(client); QCOMPARE(sources.size(),2); QCOMPARE(server.requests.size(),1);
+        QCOMPARE(server.requests[0].headers.value("api-key"),QByteArray("native-test-key")); QCOMPARE(display.keys.load(),0u);
+        blocked->release(); QTRY_VERIFY(display.view->isCurrent());
+    }
+    void destroyedDisplayAndRetiringManagerNeverFallBackToTheNativeKey() {
+        SubtitleDisplayFixture display; display.attach(); Server server; SubtitleSourceService client(options(server));
+        client.setAddonManager(display.manager.get()); client.setStorageDirectory(display.directory.filePath("subtitles"));
+        QVERIFY(client.setApiKey("native-test-key")); QTRY_VERIFY(display.view->isCurrent()); QTRY_VERIFY(client.configured());
+        delete display.view.data(); QVERIFY(!client.configured()); QVERIFY(!client.configurationKnown()); QVERIFY(client.displayProviders().isEmpty());
+        display.attach(); QTRY_VERIFY(display.view->isCurrent()); QVERIFY(!client.configured()); QVERIFY(!client.providerDisplayIsCurrent());
+        display.manager.reset(); QVERIFY(!client.configured()); client.fetchLanguages();
+        QSignalSpy finished(&client,&SubtitleSourceService::searchFinished); client.search("The Wand S01E04","en");
+        QVERIFY(!result(finished).value("success").toBool()); QVERIFY(server.requests.isEmpty());
+    }
     void sharedOwnerInvalidationEndsTheUiSearch()
     {
         QTemporaryDir directory; Server server;

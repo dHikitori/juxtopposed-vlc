@@ -122,8 +122,17 @@ TestCase {
         input.forceActiveFocus(); keyClick(Qt.Key_X); keyClick(Qt.Key_Y)
         compare(dialog.form.secretOperations.apiKey.value, "xy")
         keyClick(Qt.Key_Escape)
-        tryCompare(dialog, "visible", false)
-        compare(input.text, ""); compare(Object.keys(dialog.form.secretOperations).length, 0)
+        // Management may destroy its lazy dialog as soon as it closes.
+        tryVerify(() => {
+            const current = findChild(testCase, "addonManagementSettingsDialog")
+            return current === null || current.visible === false
+        })
+        const current = findChild(testCase, "addonManagementSettingsDialog")
+        if (current) {
+            const remainingInput = findChild(current.form, "addonSecretInput_apiKey")
+            if (remainingInput) compare(remainingInput.text, "")
+            compare(Object.keys(current.form.secretOperations).length, 0)
+        } else verify(findChild(testCase, "addonSecretInput_apiKey") === null)
         compare(manager.saveCalls, 0)
     }
     function test_builtinProviderRowOpensTheHostSetup() {

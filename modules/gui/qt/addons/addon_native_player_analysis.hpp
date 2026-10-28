@@ -10,6 +10,8 @@ class AddonNativePlayerAnalysis : public std::enable_shared_from_this<AddonNativ
 public:
     // Create, backend control, statistics, and close use one owner thread.
     // The owner closes this bridge before it destroys the native player.
+    // Creation installs no observers. Backend activity owns clock/state
+    // observation; startAnalysis and stopAnalysis own audio samples separately.
     static std::shared_ptr<AddonNativePlayerAnalysis> create(vlc_player_t*);
     ~AddonNativePlayerAnalysis();
     AddonVisualizers::Backend backend();

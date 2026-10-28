@@ -19,15 +19,23 @@ TestCase {
         property var modalResults: []
         property var replacements: ({})
         property bool badDocument: false
+        property bool available: true
+        property bool loading: false
+        property bool pendingDocument: false
+        property bool unavailableDocument: false
         property var routes: [{id: "org.example.ui/browser", name: "<b>Browser</b>", route: "addon/org.example.ui/browser"}]
         property var commands: []
         signal changed()
+        signal availabilityChanged()
+        signal documentsChanged()
         signal sessionChanged(string id)
         signal sessionFailed(string id)
         signal routeRequested(string route, var parameters)
         signal modalSessionRequested(string ticket, string contribution, var parameters)
         signal modalFinished(string ticket, bool accepted, var result)
         function descriptor(id) {
+            if (pendingDocument) return {id: id, pending: true, state: {label: "First"}, registeredCommands: ["org.example.ui/update"], messages: {}, assetUrls: {}}
+            if (unavailableDocument) return {id: id, unavailable: true, state: {}, registeredCommands: [], messages: {}, assetUrls: {}}
             return {id: id, document: {contract: "ui@1", id: "test", root: badDocument ? {type: "Loader", source: "package.qml"} :
                 {type: "Button", id: "action", text: {bind: "state.label"}, action: {command: "org.example.ui/update"}}},
                 state: {label: "First"}, registeredCommands: ["org.example.ui/update"], messages: {}, assetUrls: {}}
@@ -52,6 +60,13 @@ TestCase {
         function selectReplacement(hook, id) { replacements = Object.assign({}, replacements, {[hook]: id}); revision++; changed(); return true }
         function completeModal(ticket, result) { if (typeof result.code !== "string") return false; modalResults = modalResults.concat([{ticket: ticket, accepted: true, result: result}]); modalFinished(ticket, true, result); return true }
         function cancelModal(ticket) { modalResults = modalResults.concat([{ticket: ticket, accepted: false}]); modalFinished(ticket, false, {}); return true }
+        function materialize(id) {
+            const copy = JSON.parse(JSON.stringify(sessions)), previous = copy[id]
+            const fresh = descriptor(previous.id)
+            fresh.state = previous.state
+            copy[id] = fresh; sessions = copy; sessionChanged(id)
+        }
+        function setAvailability(current, pending) { available = current; loading = pending; availabilityChanged() }
         function patch(id, values) {
             const copy = JSON.parse(JSON.stringify(sessions)); copy[id].state = Object.assign({}, copy[id].state, values)
             sessions = copy; sessionChanged(id)
@@ -77,9 +92,63 @@ TestCase {
     function init() {
         fakeRegistry.sessions = ({}); fakeRegistry.closedSessions = []; fakeRegistry.dispatches = []; fakeRegistry.suspended = []
         fakeRegistry.failures = []; fakeRegistry.modalResults = []; fakeRegistry.replacements = ({}); fakeRegistry.badDocument = false
-        fakeRegistry.commands = []
+        fakeRegistry.commands = []; fakeRegistry.available = true; fakeRegistry.loading = false
+        fakeRegistry.pendingDocument = false; fakeRegistry.unavailableDocument = false
         visualizers.selectedVisualizer = ""; visualizers.selections = 0
         fakeRegistry.revision++; fakeRegistry.changed()
+    }
+    function test_pendingDocumentMaterializesTheSameSession() {
+        fakeRegistry.pendingDocument = true
+        const mount = createTemporaryObject(mountComponent, test)
+        tryVerify(() => mount.sessionId.length > 0 && mount.pending)
+        const id = mount.sessionId
+        verify(!mount.usable); verify(findChild(mount, "addonMountLoading").visible)
+        compare(fakeRegistry.failures.length, 0)
+        fakeRegistry.pendingDocument = false; fakeRegistry.materialize(id)
+        tryVerify(() => mount.usable)
+        compare(mount.sessionId, id); verify(!fakeRegistry.closedSessions.includes(id)); compare(fakeRegistry.failures.length, 0)
+    }
+    function test_unrelatedChangesKeepResolvedSessionState() {
+        const mount = createTemporaryObject(mountComponent, test)
+        tryVerify(() => mount.usable)
+        const id = mount.sessionId
+        fakeRegistry.patch(id, {label: "Kept"})
+        fakeRegistry.documentsChanged(); fakeRegistry.revision++; fakeRegistry.changed()
+        wait(20)
+        compare(mount.sessionId, id); compare(mount.descriptor.state.label, "Kept")
+        verify(!fakeRegistry.closedSessions.includes(id))
+    }
+    function test_temporaryFreshnessPreservesStaticStateAndBlocksActions() {
+        const mount = createTemporaryObject(mountComponent, test)
+        tryVerify(() => mount.usable)
+        const id = mount.sessionId
+        fakeRegistry.patch(id, {label: "Private state"}); fakeRegistry.setAvailability(false, true)
+        tryCompare(mount, "catalogueAvailable", false)
+        verify(mount.usable); compare(mount.descriptor.state.label, "Private state")
+        findChild(mount, "addonUiRenderer").commandRequested("org.example.ui/update", {})
+        compare(fakeRegistry.dispatches.length, 0); compare(fakeRegistry.failures.length, 0)
+        fakeRegistry.setAvailability(true, false); tryCompare(mount, "actionable", true)
+        compare(mount.sessionId, id); compare(mount.descriptor.state.label, "Private state")
+        verify(!fakeRegistry.closedSessions.includes(id))
+    }
+    function test_unavailableDocumentIsNotReportedAsAddonFailure() {
+        fakeRegistry.pendingDocument = true
+        const mount = createTemporaryObject(mountComponent, test)
+        tryVerify(() => mount.sessionId.length > 0)
+        const id = mount.sessionId
+        fakeRegistry.pendingDocument = false; fakeRegistry.unavailableDocument = true; fakeRegistry.materialize(id)
+        tryCompare(mount, "sessionId", "")
+        verify(fakeRegistry.closedSessions.includes(id)); compare(fakeRegistry.failures.length, 0)
+    }
+    function test_parameterChangeDuringLoadingKeepsTheNewIntent() {
+        const mount = createTemporaryObject(mountComponent, test)
+        tryVerify(() => mount.usable)
+        const old = mount.sessionId
+        fakeRegistry.setAvailability(false, true); mount.parameters = ({query: "new"})
+        tryVerify(() => fakeRegistry.closedSessions.includes(old))
+        fakeRegistry.setAvailability(true, false)
+        tryVerify(() => mount.usable && mount.sessionId !== old)
+        compare(mount.descriptor.state.parameters.query, "new")
     }
     function test_stateUpdatesStayInTheirSession() {
         const first = createTemporaryObject(mountComponent, test)
@@ -145,6 +214,23 @@ TestCase {
         tryVerify(() => !popup.visible)
         compare(fakeRegistry.modalResults.length, 1)
         compare(fakeRegistry.modalResults[0].accepted, false)
+    }
+    function test_modalConfirmationWaitsForCurrentDocument() {
+        const popup = createTemporaryObject(windowComponent, test)
+        fakeRegistry.modalSessionRequested("ticket", "org.example.ui/modal", {})
+        tryVerify(() => popup.visible && Object.keys(fakeRegistry.sessions).length > 0)
+        const id = Object.keys(fakeRegistry.sessions)[0]
+        fakeRegistry.patch(id, {result: {code: "ok"}})
+        const button = findChild(popup, "addonModalConfirm")
+        tryVerify(() => button.enabled)
+        fakeRegistry.setAvailability(false, true)
+        tryCompare(button, "enabled", false)
+        button.clicked(); compare(fakeRegistry.modalResults.length, 0); compare(popup.errorMessage, "")
+        verify(popup.visible); verify(!fakeRegistry.closedSessions.includes(id))
+        fakeRegistry.setAvailability(true, false)
+        tryCompare(button, "enabled", true)
+        button.clicked(); compare(fakeRegistry.modalResults.length, 1)
+        verify(fakeRegistry.modalResults[0].accepted); compare(fakeRegistry.modalResults[0].result.code, "ok")
     }
     function test_visualizerSelectionIsExplicitAndLabelsArePlain() {
         const picker = createTemporaryObject(pickerComponent, test)

@@ -37,11 +37,142 @@ TestCase {
     RedesignAddonSettings { id: settings; width: 450; backend: backend; packageId: "org.example.radio" }
     RedesignAddonView { id: view; x: 460; width: 420 }
     RedesignAddonProviders { id: providers; y: 650; width: 450; feature: "subtitles" }
+    Component { id: providerComponent; RedesignAddonProviders { width: 450; feature: "subtitles" } }
+    Component { id: spyComponent; SignalSpy {} }
+    Component {
+        id: displayComponent
+        QtObject {
+            property bool catalogueReady: true
+            property bool catalogueLoading: false
+            property int catalogueRevision: 1
+            property bool ownerCurrent: true
+            property int modeReads: 0
+            property int preparations: 0
+            property int releases: 0
+            property var observations: ({queries:0})
+            property var tickets: []
+            property var target: null
+            property var replacement: null
+            property bool hideDuringPrepare: false
+            property var afterRelease: null
+            signal catalogueChanged()
+            signal catalogueFreshnessChanged()
+            signal capabilitiesChanged()
+            signal retiring()
+            function displayCatalogueAttached() { modeReads++; return true }
+            function prepareDisplayFeature(feature) {
+                const id = String(++preparations); tickets = tickets.concat([id])
+                if (hideDuringPrepare) target.active = false
+                if (replacement) { const next = replacement; replacement = null; target.backend = next }
+                return id
+            }
+            function releaseDisplayRequest(id) {
+                releases++; tickets = tickets.filter(value => value !== id)
+                const callback=afterRelease; afterRelease=null; if(callback) callback()
+            }
+            function displayRequestCurrent(id) { observations.queries++; return ownerCurrent && catalogueReady && tickets.includes(id) }
+            function queryCount() { return observations.queries }
+            function refreshDisplayCatalogue() { catalogueFreshnessChanged() }
+            function retire() { tickets = []; retiring() }
+        }
+    }
     SignalSpy { id: commandSpy; target: view; signalName: "commandRequested" }
     SignalSpy { id: enabledSpy; target: providers; signalName: "enabledRequested" }
     SignalSpy { id: moveSpy; target: providers; signalName: "moveRequested" }
     SignalSpy { id: configureSpy; target: providers; signalName: "configureRequested" }
     function field(name) { return findChild(settings, name) }
+    function displayRows() {
+        return [{id:"org.example.provider/search",packageId:"org.example.provider",name:"Provider",enabled:true,configured:false,configurationKnown:false}]
+    }
+    Component {
+        id: boundProviderComponent
+        RedesignAddonProviders {
+            width:450; feature:"subtitles"
+            providers: {
+                if (!backendReady) return []
+                if (displayMode) return testCase.displayRows()
+                backend.observations.legacyReads=(backend.observations.legacyReads || 0)+1
+                return []
+            }
+        }
+    }
+    function test_fixedModeIsPublishedBeforeParentCanUseALegacyGetter() {
+        const owner=createTemporaryObject(displayComponent,testCase)
+        const panel=createTemporaryObject(boundProviderComponent,testCase,{backend:owner,y:580})
+        verify(!panel.backendReady); compare(owner.modeReads,0)
+        tryCompare(owner,"preparations",1); verify(panel.displayMode); verify(panel.backendReady)
+        compare(owner.observations.legacyReads || 0,0); compare(owner.modeReads,1)
+    }
+    function test_retirementBeforeQueuedModeCaptureDoesNotQueryOwner() {
+        const owner=createTemporaryObject(displayComponent,testCase)
+        const panel=createTemporaryObject(providerComponent,testCase,{backend:owner,providers:displayRows(),y:580})
+        owner.retire(); verify(!panel.currentForAction()); wait(20)
+        compare(owner.modeReads,0); compare(owner.preparations,0); compare(owner.queryCount(),0)
+    }
+    function test_providerDemandIsVisibleBoundedAndIgnoresCapabilityChanges() {
+        const owner=createTemporaryObject(displayComponent,testCase)
+        const panel=createTemporaryObject(providerComponent,testCase,{backend:owner,providers:displayRows(),y:580,actionGuard:()=>owner.ownerCurrent})
+        owner.target=panel; wait(10); compare(owner.modeReads,1); compare(owner.preparations,1)
+        for(let i=0;i<20;i++) { owner.capabilitiesChanged(); owner.catalogueRevision++ }
+        compare(owner.preparations,1); compare(owner.modeReads,1)
+        panel.visible=false; verify(!panel.currentForAction()); tryCompare(owner,"releases",1); compare(owner.tickets.length,0)
+        panel.active=false; panel.visible=true; compare(owner.preparations,1)
+        panel.active=true; tryCompare(owner,"preparations",2); compare(owner.tickets.length,1)
+    }
+    function test_providerActionsReadCurrentAuthorityEvenWithoutANotify() {
+        const owner=createTemporaryObject(displayComponent,testCase)
+        const panel=createTemporaryObject(providerComponent,testCase,{backend:owner,providers:displayRows(),y:580,actionGuard:()=>owner.ownerCurrent})
+        const spy=createTemporaryObject(spyComponent,testCase,{target:panel,signalName:"configureRequested"})
+        wait(10); owner.ownerCurrent=false
+        mouseClick(findChild(panel,"addonProviderConfigure_org.example.provider/search")); compare(spy.count,0)
+        owner.ownerCurrent=true
+        mouseClick(findChild(panel,"addonProviderConfigure_org.example.provider/search")); compare(spy.count,1)
+        compare(findChild(panel,"addonProviderStatus_org.example.provider/search").text,"Settings not checked")
+    }
+    function test_providerDemandBalancesInlineHideAndBackendReplacement() {
+        const owner=createTemporaryObject(displayComponent,testCase)
+        const panel=createTemporaryObject(providerComponent,testCase,{backend:owner,providers:[],y:580})
+        owner.target=panel; owner.hideDuringPrepare=true; panel.providers=displayRows()
+        tryCompare(owner,"preparations",1); compare(owner.releases,1); compare(owner.tickets.length,0)
+        const next=createTemporaryObject(displayComponent,testCase)
+        owner.hideDuringPrepare=false; owner.replacement=next; panel.active=true
+        tryCompare(next,"tickets",["1"]); compare(owner.releases,2); compare(owner.tickets.length,0)
+        panel.active=false; tryCompare(next,"releases",1); compare(next.tickets.length,0)
+    }
+    function test_providerRetirementStopsQueriesAndDoesNotUseLegacyFallback() {
+        const owner=createTemporaryObject(displayComponent,testCase)
+        const panel=createTemporaryObject(providerComponent,testCase,{backend:owner,providers:displayRows(),y:580})
+        tryCompare(owner,"preparations",1); owner.retire(); const queries=owner.queryCount()
+        verify(!panel.currentForAction()); panel.active=false; panel.active=true
+        compare(owner.queryCount(),queries); compare(owner.preparations,1); compare(owner.releases,0)
+    }
+    function test_disabledAndMissingProvidersCanBeManagedWithoutPresenceDemand() {
+        const owner=createTemporaryObject(displayComponent,testCase)
+        const rows=[{id:"org.example.disabled/search",packageId:"org.example.disabled",name:"Disabled",enabled:false,configured:false,configurationKnown:true},
+            {id:"org.example.missing/search",packageId:"org.example.missing",name:"Missing",enabled:true,configured:false,configurationKnown:true}]
+        const panel=createTemporaryObject(providerComponent,testCase,{backend:owner,providers:rows,y:450})
+        tryCompare(panel,"backendReady",true)
+        const configured=createTemporaryObject(spyComponent,testCase,{target:panel,signalName:"configureRequested"})
+        const enabled=createTemporaryObject(spyComponent,testCase,{target:panel,signalName:"enabledRequested"})
+        compare(owner.preparations,0)
+        mouseClick(findChild(panel,"addonProviderConfigure_org.example.missing/search")); compare(configured.count,1)
+        mouseClick(findChild(findChild(panel,"addonProviderEnabled_org.example.disabled/search"),"settingSwitch")); compare(enabled.count,1)
+        owner.catalogueReady=false
+        mouseClick(findChild(panel,"addonProviderConfigure_org.example.missing/search")); compare(configured.count,1)
+        compare(owner.preparations,0)
+    }
+    function test_releaseCallbackCannotReplaceANewerBackendCapture() {
+        const original=createTemporaryObject(displayComponent,testCase)
+        const intermediate=createTemporaryObject(displayComponent,testCase)
+        const latest=createTemporaryObject(displayComponent,testCase)
+        const panel=createTemporaryObject(providerComponent,testCase,{backend:original,providers:displayRows(),y:580})
+        tryCompare(original,"preparations",1)
+        original.afterRelease=()=>panel.backend=latest
+        panel.backend=intermediate
+        verify(!panel.currentForAction())
+        tryCompare(latest,"preparations",1); compare(original.releases,1); compare(intermediate.preparations,0)
+        verify(panel.currentForAction()); panel.active=false; tryCompare(latest,"releases",1)
+    }
     function viewDocument(root) { return {contract: "ui@1", id: "example", root: root} }
     function init() {
         backend.schema = {type: "object", additionalProperties: false,

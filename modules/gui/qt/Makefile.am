@@ -1577,6 +1577,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonRecovery.qml \
 	player/qml/redesign/RedesignAddonNode.qml \
 	player/qml/redesign/RedesignAddonAssetImage.qml \
+	player/qml/redesign/RedesignAddonFeatureDemand.qml \
 	player/qml/redesign/RedesignAddonProviders.qml \
 	player/qml/redesign/RedesignAddonSettings.qml \
 	player/qml/redesign/RedesignAddonSettingsDialog.qml \
@@ -2787,6 +2788,12 @@ test_qt_addon_native_player_analysis_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDO
 check_PROGRAMS += test_qt_addon_native_player_analysis
 TESTS += test_qt_addon_native_player_analysis
 
+if HAVE_LINUX
+test_qt_addon_native_player_analysis_CPPFLAGS += -DHAKONE_ANALYSIS_OBSERVER_WRAP
+test_qt_addon_native_player_analysis_LDFLAGS += -Wl,--wrap=vlc_player_AddTimer -Wl,--wrap=vlc_player_RemoveTimer -Wl,--wrap=vlc_player_aout_AddListener -Wl,--wrap=vlc_player_aout_RemoveListener -Wl,--wrap=vlc_player_AddListener -Wl,--wrap=vlc_player_RemoveListener
+tests/test_addon_native_player_analysis.moc: $(srcdir)/tests/test_addon_native_player_analysis.cpp
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_ANALYSIS_OBSERVER_WRAP $< -o $@
+endif
 
 test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.cpp
 nodist_test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.moc

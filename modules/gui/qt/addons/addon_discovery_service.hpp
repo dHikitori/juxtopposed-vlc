@@ -3,9 +3,11 @@
 #include "addon_discovery_coordinator.hpp"
 #include "addon_queue_transactions.hpp"
 #include <QPointer>
+#include <QSet>
 
 namespace vlc::addons {
 class AddonManager;
+class AddonCatalogueView;
 // One owner for source views and their user actions. Package data stays behind
 // the coordinator. The queue adapter receives only validated source references.
 class AddonDiscoveryService final : public QObject
@@ -13,6 +15,9 @@ class AddonDiscoveryService final : public QObject
     Q_OBJECT
     Q_PROPERTY(QVariantList sources READ sources NOTIFY changed FINAL)
     Q_PROPERTY(int revision READ revision NOTIFY changed FINAL)
+    Q_PROPERTY(bool available READ available NOTIFY availabilityChanged FINAL)
+    Q_PROPERTY(bool loading READ loading NOTIFY availabilityChanged FINAL)
+    Q_PROPERTY(QString preparationError READ preparationError NOTIFY availabilityChanged FINAL)
 public:
     struct PlaylistBackend {
         using Choices = std::function<void(bool available, const QVariantList&, bool more, const QString&)>;
@@ -25,8 +30,15 @@ public:
     AddonDiscoveryService(AddonDiscoveryCoordinator::Backend, AddonQueueTransactions::Backend, QObject* parent = nullptr);
     AddonDiscoveryService(AddonManager*, AddonDiscoveryCoordinator::Backend, AddonQueueTransactions::Backend, QObject* parent = nullptr);
     ~AddonDiscoveryService() override;
-    QVariantList sources() const { return m_coordinator.sources(); }
+    QVariantList sources() const { return m_closing ? QVariantList{} : m_coordinator.sources(); }
     int revision() const { return m_revision; }
+    bool available() const;
+    bool loading() const;
+    QString preparationError() const { return m_preparationError; }
+    // Each visible page holds one opaque request. Requests share one feature
+    // ticket and never start a guest or a native source on their own.
+    Q_INVOKABLE QString acquireDisplay();
+    Q_INVOKABLE void releaseDisplay(const QString& request);
     Q_INVOKABLE QString openSource(const QString& source);
     Q_INVOKABLE QVariantMap view(const QString& id) const;
     Q_INVOKABLE bool browse(const QString& view, const QString& node);
@@ -50,21 +62,24 @@ public:
     Q_INVOKABLE QString play(const QString& view, const QString& item);
     Q_INVOKABLE void closeView(const QString& view);
     void invalidate();
+    void close();
 public slots:
     void operationFinished(const QString& invocation, const QString& contribution, const QString& status,
                            const QVariantMap& data, const QString& error);
 signals:
     void changed();
+    void availabilityChanged();
     void viewChanged(const QString& view);
     void viewClosed(const QString& view);
     void actionFinished(const QString& view, bool success, const QString& error);
 private:
     struct View {
         QString source, pending, cursor, query, error;
+        QVariantMap sourceIdentity;
         QStringList path;
         QVariantList items;
         quint64 generation = 1;
-        bool busy = false, append = false;
+        bool busy = false, append = false, started = false;
         QVariantList playlists;
         QString playlistTarget, playlistError;
         AddonQueueTransactions::Cancel playlistCancel;
@@ -76,6 +91,11 @@ private:
     bool fetch(const QString& view, bool append = false);
     bool visibleMedia(const View&, const QString& item) const;
     void completed(const QString&, const QString&, const QVariantMap&, const QString&);
+    void displayChanged();
+    void syncDisplayDemand();
+    bool needsDisplayDemand() const;
+    bool viewCurrent(const View&) const;
+    void startView(const QString&);
     AddonDiscoveryCoordinator m_coordinator;
     AddonQueueTransactions m_transactions;
     QHash<QString, View> m_views;
@@ -85,6 +105,12 @@ private:
     QHash<QString, QString> m_libraryActions;
     PlaylistBackend m_playlists;
     SourcePlayback m_sourcePlayback;
+    QPointer<AddonCatalogueView> m_display;
+    QSet<QString> m_displayRequests;
+    QString m_featureTicket;
+    QString m_preparationError;
+    quint64 m_demandGeneration = 0;
+    bool m_displayAttached = false, m_acquiringDemand = false, m_demandRefused = false;
     int m_revision = 0;
     bool m_closing = false;
 };

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_theme_service.hpp"
 #include "addon_theme_document.hpp"
+#include "addon_catalogue_view.hpp"
 #include "addon_manager.hpp"
 #include <QDir>
 #include <QFile>
@@ -26,15 +27,25 @@ AddonThemeService::AddonThemeService(AddonManager* manager, QObject* parent)
     }
     if (manager) {
         m_settingsFile = QDir(manager->storageDirectory()).filePath(QStringLiteral("theme-selection.json"));
-        QFile file(m_settingsFile);
-        if (file.open(QIODevice::ReadOnly) && file.size() <= 4096) {
-            const auto saved = QJsonDocument::fromJson(file.readAll()).object();
-            m_selected = saved.value(QStringLiteral("selectedTheme")).toString();
-            if (m_selected.size() > 256) m_selected.clear();
-            m_requestedHighContrast = saved.value(QStringLiteral("highContrast")).toBool();
-            m_reducedMotion = saved.value(QStringLiteral("reducedMotion")).toBool();
+        m_catalogue = AddonCatalogueView::attached(manager);
+        m_catalogueMode = bool(m_catalogue);
+        if (m_catalogueMode) {
+            connect(m_catalogue, &AddonCatalogueView::catalogueChanged, this, &AddonThemeService::refresh);
+            connect(m_catalogue, &AddonCatalogueView::documentsChanged, this, &AddonThemeService::refresh);
+            connect(m_catalogue, &AddonCatalogueView::freshnessChanged, this, &AddonThemeService::refresh);
+            connect(m_catalogue, &QObject::destroyed, this, [this] { m_catalogue = nullptr; refresh(); });
+        } else {
+            // The unattached host API remains available to isolated tools.
+            QFile file(m_settingsFile);
+            if (file.open(QIODevice::ReadOnly) && file.size() <= 4096) {
+                const auto saved = QJsonDocument::fromJson(file.readAll()).object();
+                m_selected = saved.value(QStringLiteral("selectedTheme")).toString();
+                if (m_selected.size() > 256) m_selected.clear();
+                m_requestedHighContrast = saved.value(QStringLiteral("highContrast")).toBool();
+                m_reducedMotion = saved.value(QStringLiteral("reducedMotion")).toBool();
+            }
+            connect(manager, &AddonManager::revisionChanged, this, &AddonThemeService::refresh);
         }
-        connect(manager, &AddonManager::revisionChanged, this, &AddonThemeService::refresh);
         connect(manager, &QObject::destroyed, this, [this] { m_manager = nullptr; refresh(); });
     }
     refresh();
@@ -79,14 +90,42 @@ bool AddonThemeService::persist(const QString& selected, bool highContrast)
 }
 bool AddonThemeService::selectTheme(const QString& id)
 {
+    if (!readyForChange()) return false;
     if (!id.isEmpty() && std::none_of(m_available.begin(), m_available.end(), [&](const QVariant& row) { return row.toMap().value("id").toString() == id; })) {
         m_error = tr("This theme is not available. First, enable its add-on."); ++m_revision; emit revisionChanged(); return false;
     }
     if (!persist(id, m_requestedHighContrast)) { m_error = tr("The app cannot save the theme selection."); ++m_revision; emit revisionChanged(); return false; }
-    m_selected = id; refresh(); return true;
+    m_selected = id;
+    if (m_catalogueMode) {
+        m_error.clear();
+        if (id.isEmpty()) { m_active = {}; m_tokenCache.clear(); m_loading = false; }
+        else m_loading = true;
+        const QPointer<AddonThemeService> alive(this);
+        ++m_revision; emit revisionChanged();
+        if (!alive) return true;
+        // A theme selection is an explicit add-on action. Request its one
+        // declared document without a synchronous resource fallback.
+        if (m_catalogue && !id.isEmpty()) {
+            const auto themes = m_catalogue->themes();
+            for (const auto& value : themes) {
+                const auto row = value.toMap();
+                if (row.value("id").toString() != id) continue;
+                const bool requested = m_catalogue->ensureDocument(id, row.value("field").toString());
+                if (!alive) return true;
+                if (!requested) {
+                    m_loading = false; m_error = tr("The app cannot prepare the selected theme. Try again.");
+                    ++m_revision; emit revisionChanged(); return false;
+                }
+                break;
+            }
+        }
+        refreshCatalogue();
+    } else refresh();
+    return true;
 }
 bool AddonThemeService::setHighContrast(bool enabled)
 {
+    if (!readyForChange()) return false;
     if (!persist(m_selected, enabled)) { m_error = tr("The app cannot save the accessibility setting."); ++m_revision; emit revisionChanged(); return false; }
     m_requestedHighContrast = enabled; m_tokenCache.clear(); ++m_revision; emit revisionChanged(); return true;
 }
@@ -98,6 +137,7 @@ void AddonThemeService::setUserAccentOverride(const QString& option)
 }
 bool AddonThemeService::setReducedMotion(bool enabled)
 {
+    if (!readyForChange()) return false;
     const auto previous = m_reducedMotion; m_reducedMotion = enabled;
     if (!persist(m_selected, m_requestedHighContrast)) {
         m_reducedMotion = previous; m_error = tr("The app cannot save the motion setting."); ++m_revision; emit revisionChanged(); return false;
@@ -106,6 +146,7 @@ bool AddonThemeService::setReducedMotion(bool enabled)
 }
 void AddonThemeService::refresh()
 {
+    if (m_catalogueMode) { refreshCatalogue(); return; }
     QVariantList available;
     QJsonObject active;
     QString selectedError;
@@ -123,6 +164,58 @@ void AddonThemeService::refresh()
     std::sort(available.begin(), available.end(), [](const QVariant& a, const QVariant& b) { return a.toMap().value("id").toString() < b.toMap().value("id").toString(); });
     m_available = available; m_active = active; m_tokenCache.clear();
     m_error = !selectedError.isEmpty() ? selectedError : usingFallback() ? tr("The selected theme is not available. The app uses the built-in theme.") : QString();
+    ++m_revision; emit revisionChanged();
+}
+bool AddonThemeService::readyForChange()
+{
+    if (!m_catalogueMode || (m_catalogue && m_catalogue->isCurrent() && m_preferencesLoaded)) return true;
+    m_error = tr("The theme list is not ready. Try again.");
+    ++m_revision; emit revisionChanged(); return false;
+}
+void AddonThemeService::refreshCatalogue()
+{
+    const auto catalogue = m_catalogue;
+    if (!catalogue || !catalogue->isCurrent()) {
+        const bool loading = catalogue && catalogue->loading();
+        const auto error = catalogue ? catalogue->error() : tr("The theme list is not available.");
+        if (m_loading == loading && m_error == error) return;
+        m_loading = loading; m_error = error;
+        ++m_revision; emit revisionChanged(); return;
+    }
+    // The service owns these core preferences after their one joined startup
+    // read. Contrast and motion changes must not trigger package verification.
+    const bool firstPreferences = !m_preferencesLoaded;
+    if (firstPreferences) {
+        const auto preferences = catalogue->preferences(QStringLiteral("appearance"));
+        m_selected = catalogue->selectedTheme();
+        m_requestedHighContrast = preferences.value(QStringLiteral("highContrast")).toBool();
+        m_reducedMotion = preferences.value(QStringLiteral("reducedMotion")).toBool();
+        m_preferencesLoaded = true;
+    }
+    QVariantList available;
+    QVariantMap selected;
+    for (const auto& value : catalogue->themes()) {
+        const auto row = value.toMap();
+        available.append(QVariantMap{{"id", row.value("id")}, {"packageId", row.value("packageId")},
+            {"name", row.value("name")}, {"light", row.value("light")}, {"dark", row.value("dark")}});
+        if (row.value("id").toString() == m_selected) selected = row;
+    }
+    std::sort(available.begin(), available.end(), [](const QVariant& a, const QVariant& b) { return a.toMap().value("id").toString() < b.toMap().value("id").toString(); });
+    QJsonObject active;
+    QString error;
+    bool loading = false;
+    if (!m_selected.isEmpty() && !selected.isEmpty()) {
+        const auto field = selected.value("field").toString();
+        const auto state = catalogue->documentState(m_selected, field);
+        if (state == QLatin1String("ready")) active = catalogue->resource(m_selected, field);
+        else if (state == QLatin1String("pending")) { active = m_active; loading = true; }
+    }
+    if (!loading && !m_selected.isEmpty() && active.isEmpty())
+        error = tr("The selected theme is not available. The app uses the built-in theme.");
+    const bool changed = firstPreferences || m_available != available || m_active != active || m_error != error || m_loading != loading;
+    if (!changed) return;
+    if (firstPreferences || m_active != active) m_tokenCache.clear();
+    m_available = std::move(available); m_active = std::move(active); m_error = std::move(error); m_loading = loading;
     ++m_revision; emit revisionChanged();
 }
 void AddonThemeService::observePlatformPreferences(QObject* source)

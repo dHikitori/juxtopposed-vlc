@@ -1111,6 +1111,7 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonRecovery.qml',
        'player/qml/redesign/RedesignAddonNode.qml',
        'player/qml/redesign/RedesignAddonAssetImage.qml',
+       'player/qml/redesign/RedesignAddonFeatureDemand.qml',
        'player/qml/redesign/RedesignAddonProviders.qml',
        'player/qml/redesign/RedesignAddonSettings.qml',
        'player/qml/redesign/RedesignAddonSettingsDialog.qml',
@@ -1953,6 +1954,10 @@ if qt6_dep.found()
             if addon_test == 'display_catalogue' and host_system == 'linux'
                 display_defines += ['-DHAKONE_DISPLAY_READER_LOCK_WRAP']
                 display_links += ['-Wl,--wrap=open']
+            endif
+            if addon_test == 'native_player_analysis' and host_system == 'linux'
+                display_defines += ['-DHAKONE_ANALYSIS_OBSERVER_WRAP']
+                display_links += ['-Wl,--wrap=vlc_player_AddTimer', '-Wl,--wrap=vlc_player_RemoveTimer', '-Wl,--wrap=vlc_player_aout_AddListener', '-Wl,--wrap=vlc_player_aout_RemoveListener', '-Wl,--wrap=vlc_player_AddListener', '-Wl,--wrap=vlc_player_RemoveListener']
             endif
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,

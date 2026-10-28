@@ -5,6 +5,7 @@
 #include <QThread>
 #include <QSet>
 #include <chrono>
+#include <limits>
 
 namespace vlc::addons {
 namespace {
@@ -59,28 +60,51 @@ AddonSessionUi::AddonSessionUi(AddonSessionHost* host,Catalog catalog,QObject* p
 AddonSessionUi::~AddonSessionUi() { m_destroying=true; close(); }
 void AddonSessionUi::publish() { ++m_revision; emit changed(); }
 bool AddonSessionUi::fail(const QString& error) { m_error=error; m_status.clear(); publish(); return false; }
+bool AddonSessionUi::currentDisplay(const QString& controller) {
+    if(!m_backend.catalog.attached) return true;
+    auto read=m_backend.catalog.state; auto rowsRead=m_backend.catalog.read; const QPointer<AddonSessionUi> alive(this);
+    const auto state=read ? read() : QVariantMap{}; read={};
+    if(!alive || m_closed || !m_displayActive || !state.value("current").toBool() || !state.value("ready").toBool()) return false;
+    const auto rows=rowsRead ? rowsRead() : QVariantList{}; rowsRead={};
+    if(!alive || m_closed || !m_displayActive) return false;
+    for(const auto& value:rows) { const auto row=value.toMap(); if(row.value("id").toString()==controller) return row.value("ready").toBool(); }
+    return false;
+}
 void AddonSessionUi::clearReview() {
     m_timer.stop();
     ++m_generation;
-    QString ticket; ticket.swap(m_ticket); m_review.clear(); m_preparing=false; m_expires=0; m_earlyReady.clear();
+    QString ticket; ticket.swap(m_ticket); m_reviewController.clear(); m_review.clear(); m_preparing=false; m_expires=0; m_earlyReady.clear();
     const auto cancel=m_backend.cancel; const auto owner=m_owner; if(owner && cancel && !ticket.isEmpty()) cancel(ticket);
 }
 void AddonSessionUi::refresh() {
     Q_ASSERT(QThread::currentThread()==thread());
     if(m_closed || !m_owner || !m_catalogOwner) return;
-    const auto read=m_backend.catalog.read; const auto sessions=m_backend.sessions; const QPointer<AddonSessionUi> alive(this);
-    const auto rows=read(); if(!alive || m_closed || !m_owner || !m_catalogOwner) return;
+    if(m_refreshEpoch==std::numeric_limits<quint64>::max()) { close(); return; }
+    const auto epoch=++m_refreshEpoch;
+    auto read=m_backend.catalog.read; auto stateRead=m_backend.catalog.state; auto sessions=m_backend.sessions;
+    const QPointer<AddonSessionUi> alive(this);
+    const auto state=stateRead ? stateRead() : QVariantMap{}; stateRead={};
+    if(!alive || m_closed || epoch!=m_refreshEpoch || !m_owner || !m_catalogOwner) return;
+    const bool attached=m_backend.catalog.attached;
+    const bool current=!attached || (m_displayActive && state.value("current").toBool());
+    const auto rows=read(); read={};
+    if(!alive || m_closed || epoch!=m_refreshEpoch || !m_owner || !m_catalogOwner) return;
     QVariantList controllers; QSet<QString> ids;
     for(const auto& value:rows) {
         const auto row=value.toMap(); const auto id=row.value("id").toString();
         if(controllers.size()>=32) break;
-        if(!bounded(id,256) || ids.contains(id) || !row.value("enabled").toBool() || !row.value("configured").toBool()) continue;
+        if(!bounded(id,256) || ids.contains(id)) continue;
+        if(!attached && (!row.value("enabled").toBool() || !row.value("configured").toBool())) continue;
         QStringList origins;
         for(const auto& origin:row.value("origins").toStringList()) if(origins.size()<32 && !exactWssOrigin(origin).isEmpty() && !origins.contains(origin)) origins.append(origin);
-        if(origins.isEmpty()) continue;
-        ids.insert(id); controllers.append(QVariantMap{{"id",id},{"name",label(row.value("name").toString())},{"origins",origins},{"operations",subset(row.value("operations"),controls)}});
+        if(origins.isEmpty() && !attached) continue;
+        ids.insert(id); controllers.append(QVariantMap{{"id",id},{"name",label(row.value("name").toString())},
+            {"origins",origins},{"operations",subset(row.value("operations"),controls)},
+            {"ready",!attached || (current && state.value("ready").toBool() && row.value("ready").toBool() && !origins.isEmpty())},
+            {"state",label(row.value("state").toString())}});
     }
-    const auto active=sessions(); if(!alive || m_closed || !m_owner || !m_catalogOwner) return;
+    const auto active=sessions(); sessions={};
+    if(!alive || m_closed || epoch!=m_refreshEpoch || !m_owner || !m_catalogOwner) return;
     QVariantList visible;
     for(const auto& value:active) {
         if(visible.size()>=8) break; auto row=value.toMap();
@@ -89,10 +113,13 @@ void AddonSessionUi::refresh() {
         visible.append(row);
     }
     m_controllers=std::move(controllers); m_sessions=std::move(visible);
+    m_displayCurrent=current; m_displayLoading=attached && state.value("loading").toBool();
+    m_displayError=attached ? label(state.value("error").toString()) : QString{};
+    if(!current && !m_ticket.isEmpty()) { clearReview(); if(!alive || m_closed || epoch!=m_refreshEpoch) return; }
     if(!m_ticket.isEmpty() && !m_preparing) {
         const auto read=m_backend.review; const auto ticket=m_ticket; const auto generation=m_generation;
         const auto current=read(ticket);
-        if(!alive || m_closed || !m_owner || !m_catalogOwner || ticket!=m_ticket || generation!=m_generation) return;
+        if(!alive || m_closed || epoch!=m_refreshEpoch || !m_owner || !m_catalogOwner || ticket!=m_ticket || generation!=m_generation) return;
         if(current.isEmpty() || current!=m_review) { clearReview(); if(!alive) return; fail(tr("The add-on or playback changed. Open the review again.")); return; }
     }
     if(!m_starting.isEmpty()) {
@@ -108,10 +135,12 @@ bool AddonSessionUi::prepare(const QString& id,const QString& relay,const QStrin
     const auto generation=m_generation;
     refresh(); if(!alive) return false;
     if(m_closed || m_generation!=generation) return false;
+    const bool display=currentDisplay(id); if(!alive || m_closed || m_generation!=generation) return false;
+    if(!display) return fail(tr("The controller list changed. Wait for it to finish or try again."));
     QVariantMap selected; for(const auto& value:m_controllers) if(value.toMap().value("id").toString()==id) selected=value.toMap();
     const auto url=QUrl(relay,QUrl::StrictMode); auto origin=url; origin.setPath(QString{}); origin.setQuery(QString{}); origin.setFragment(QString{}); if(origin.port()==443) origin.setPort(-1);
-    if(selected.isEmpty() || url.scheme()!=QLatin1String("wss") || !selected.value("origins").toStringList().contains(origin.toString(QUrl::FullyEncoded))) return fail(tr("This controller does not permit that relay."));
-    m_error.clear(); m_status.clear(); m_preparing=true; m_creating=true; m_expires=nowMs()+30000;
+    if(selected.isEmpty() || !selected.value("ready").toBool() || url.scheme()!=QLatin1String("wss") || !selected.value("origins").toStringList().contains(origin.toString(QUrl::FullyEncoded))) return fail(tr("This controller does not permit that relay."));
+    m_error.clear(); m_status.clear(); m_reviewController=id; m_preparing=true; m_creating=true; m_expires=nowMs()+30000;
     const auto prepare=m_backend.prepare; const auto cancel=m_backend.cancel; const auto owner=m_owner;
     const auto ticket=prepare(id,url,room,selected.value("operations").toStringList());
     if(!alive) { if(owner && cancel && !ticket.isEmpty()) cancel(ticket); return false; }
@@ -134,11 +163,15 @@ bool AddonSessionUi::accept(const QStringList& operations) {
     if(m_closed || m_preparing || m_ticket.isEmpty() || m_review.isEmpty() || nowMs()>=m_expires || operations.size()>4) return fail(tr("Open a current session review first."));
     QSet<QString> unique; const auto allowed=m_review.value("operations").toStringList();
     for(const auto& operation:operations) if(!controls.contains(operation) || !allowed.contains(operation) || unique.contains(operation)) return fail(tr("Select only the playback controls in this review.")); else unique.insert(operation);
-    const QPointer<AddonSessionUi> alive(this); const auto read=m_backend.review; const auto ticket=m_ticket; const auto generation=m_generation; const auto displayed=m_review;
+    const QPointer<AddonSessionUi> alive(this); const auto read=m_backend.review; const auto ticket=m_ticket; const auto generation=m_generation;
+    const auto displayed=m_review; const auto controller=m_reviewController;
     const auto current=read(ticket);
     if(!alive || m_closed || !m_owner || !m_catalogOwner || ticket!=m_ticket || generation!=m_generation || displayed!=m_review) return false;
     if(current.isEmpty() || current!=displayed) { clearReview(); if(alive) fail(tr("The review changed. Open it again.")); return false; }
-    m_timer.stop(); m_ticket.clear(); m_review.clear(); m_preparing=false; m_expires=0; m_error.clear();
+    const bool display=currentDisplay(controller);
+    if(!alive || m_closed || ticket!=m_ticket || generation!=m_generation || displayed!=m_review) return false;
+    if(!display) { clearReview(); if(alive) fail(tr("The controller list changed. Open a new review.")); return false; }
+    m_timer.stop(); m_ticket.clear(); m_reviewController.clear(); m_review.clear(); m_preparing=false; m_expires=0; m_error.clear();
     m_accepting=true; m_earlySessions.clear();
     const auto accept=m_backend.accept; const auto result=accept(ticket,operations); if(!alive) return false;
     m_accepting=false;
@@ -148,7 +181,31 @@ bool AddonSessionUi::accept(const QStringList& operations) {
     m_earlySessions.clear(); m_starting=result; m_status=tr("The app checks playback before the session starts."); refresh(); return true;
 }
 void AddonSessionUi::cancelReview() { const QPointer<AddonSessionUi> alive(this); clearReview(); if(alive) { m_error.clear(); publish(); } }
-void AddonSessionUi::viewClosed() { cancelReview(); }
+void AddonSessionUi::viewClosed() { setDisplayActive(false); }
+void AddonSessionUi::setDisplayActive(bool active) {
+    if(m_closed) return;
+    if(active && m_displayActive) return;
+    if(m_displayEpoch==std::numeric_limits<quint64>::max()) { close(); return; }
+    const auto epoch=++m_displayEpoch;
+    const QPointer<AddonSessionUi> alive(this);
+    m_displayActive=active;
+    if(!active) {
+        clearReview();
+        if(!alive || m_closed || epoch!=m_displayEpoch || m_displayActive!=active) return;
+    }
+    auto setActive=m_backend.catalog.setActive;
+    if(setActive) setActive(active); setActive={};
+    if(!alive || m_closed || epoch!=m_displayEpoch || m_displayActive!=active) return;
+    m_error.clear(); refresh();
+}
+void AddonSessionUi::retryDisplay() {
+    if(m_closed || !m_displayActive || !m_backend.catalog.attached) return;
+    const auto epoch=m_displayEpoch;
+    const QPointer<AddonSessionUi> alive(this); clearReview();
+    if(!alive || m_closed || epoch!=m_displayEpoch || !m_displayActive) return;
+    auto retry=m_backend.catalog.retry; if(retry) retry(); retry={};
+    if(alive && !m_closed && epoch==m_displayEpoch && m_displayActive) refresh();
+}
 bool AddonSessionUi::resume(const QString& id) {
     if(m_closed || !m_owner) return false;
     bool allowed=false; for(const auto& value:m_sessions) { const auto row=value.toMap(); if(row.value("id").toString()==id && row.value("suspended").toBool() && row.value("connected").toBool()) allowed=true; }
@@ -171,7 +228,15 @@ void AddonSessionUi::sessionChanged(const QString& id,const QString& state) {
 }
 void AddonSessionUi::close() {
     if(m_closed) return;
-    m_closed=true; m_timer.stop(); const QPointer<AddonSessionUi> alive(this); clearReview(); if(!alive) return;
-    m_controllers.clear(); m_sessions.clear(); m_starting.clear(); m_status.clear(); if(!m_destroying) publish();
+    m_closed=true; m_displayActive=false; m_displayCurrent=false; m_displayLoading=false; m_timer.stop();
+    ++m_generation;
+    QString ticket; ticket.swap(m_ticket); m_reviewController.clear(); m_review.clear(); m_preparing=false; m_expires=0; m_earlyReady.clear();
+    m_controllers.clear(); m_sessions.clear(); m_starting.clear(); m_status.clear();
+    auto setActive=m_backend.catalog.setActive; auto cancel=m_backend.cancel; const auto owner=m_owner;
+    const QPointer<AddonSessionUi> alive(this);
+    if(setActive) setActive(false); setActive={};
+    // Both detached obligations must finish if either callback deletes us.
+    if(owner && cancel && !ticket.isEmpty()) cancel(ticket); cancel={};
+    if(alive && !m_destroying) publish();
 }
 }

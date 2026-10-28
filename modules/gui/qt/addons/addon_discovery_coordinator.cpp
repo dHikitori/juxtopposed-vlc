@@ -47,9 +47,10 @@ AddonDiscoveryCoordinator::AddonDiscoveryCoordinator(Backend backend, QObject* p
 AddonDiscoveryCoordinator::~AddonDiscoveryCoordinator()
 {
     const auto requests = m_requests;
+    const auto cancel = m_backend.cancel, cancelPlayable = m_backend.cancelPlayable;
     for (const auto& request : requests) {
-        if (!request.invocation.isEmpty() && m_backend.cancel) m_backend.cancel(request.invocation);
-        if (!request.gateJob.isEmpty() && m_backend.cancelPlayable) m_backend.cancelPlayable(request.gateJob);
+        if (!request.invocation.isEmpty() && cancel) cancel(request.invocation);
+        if (!request.gateJob.isEmpty() && cancelPlayable) cancelPlayable(request.gateJob);
     }
 }
 
@@ -61,8 +62,22 @@ QVariantMap AddonDiscoveryCoordinator::registration(const QString& source) const
 }
 bool AddonDiscoveryCoordinator::available(const QVariantMap& source, const QString& operation) const
 {
-    return source.value(QStringLiteral("enabled")).toBool() && source.value(QStringLiteral("configured")).toBool()
+    return isCurrent() && source.value(QStringLiteral("enabled")).toBool() && source.value(QStringLiteral("configured")).toBool()
         && !partition(source).isEmpty() && declaredOperations(source).contains(operation);
+}
+bool AddonDiscoveryCoordinator::isCurrent() const
+{
+    const auto current = m_backend.current;
+    return !current || current();
+}
+QVariantMap AddonDiscoveryCoordinator::sourceIdentity(const QString& source) const
+{
+    const auto entry = registration(source);
+    if (entry.isEmpty()) return {};
+    return {{QStringLiteral("partition"), partition(entry)}, {QStringLiteral("account"), account(entry)},
+        {QStringLiteral("enabled"), entry.value(QStringLiteral("enabled"))},
+        {QStringLiteral("configured"), entry.value(QStringLiteral("configured"))},
+        {QStringLiteral("configurationKnown"), entry.value(QStringLiteral("configurationKnown"), true)}};
 }
 QVariantList AddonDiscoveryCoordinator::sources() const
 {
@@ -74,7 +89,9 @@ QVariantList AddonDiscoveryCoordinator::sources() const
         if (!m_backend.authorizePlayable) operations.removeAll(QStringLiteral("resolve"));
         output.append(QVariantMap{{QStringLiteral("id"), entry.value(QStringLiteral("id"))},
             {QStringLiteral("name"), entry.value(QStringLiteral("name"))}, {QStringLiteral("enabled"), entry.value(QStringLiteral("enabled"))},
-            {QStringLiteral("configured"), entry.value(QStringLiteral("configured"))}, {QStringLiteral("operations"), operations}});
+            {QStringLiteral("configured"), entry.value(QStringLiteral("configured"))},
+            {QStringLiteral("configurationKnown"), entry.value(QStringLiteral("configurationKnown"), true)},
+            {QStringLiteral("operations"), operations}});
     }
     return output;
 }
@@ -86,7 +103,7 @@ bool AddonDiscoveryCoordinator::supports(const QString& source, const QString& o
 bool AddonDiscoveryCoordinator::current(const Handle& handle) const
 {
     const auto source = registration(handle.source);
-    return source.value(QStringLiteral("enabled")).toBool() && source.value(QStringLiteral("configured")).toBool()
+    return isCurrent() && source.value(QStringLiteral("enabled")).toBool() && source.value(QStringLiteral("configured")).toBool()
         && partition(source) == handle.partition && account(source) == handle.account
         && m_views.contains(handle.view) && m_views.value(handle.view) == handle.generation;
 }
@@ -156,6 +173,7 @@ QString AddonDiscoveryCoordinator::subscribe(const QString&, const QString& view
 QString AddonDiscoveryCoordinator::start(const QString& source, const QString& operation, QVariantMap context,
                                         const QString& view, quint64 generation, const QString& cursor, const QString& intent)
 {
+    if (!isCurrent()) return rejected(view, generation, QStringLiteral("unavailable"), tr("The source list is being updated. Try again when it is ready."));
     if (!enterView(view, generation)) return rejected(view, generation, QStringLiteral("error"), tr("The discovery view is no longer valid."));
     const auto entry = registration(source);
     if (entry.isEmpty() || !entry.value(QStringLiteral("enabled")).toBool())
@@ -186,9 +204,24 @@ QString AddonDiscoveryCoordinator::start(const QString& source, const QString& o
         const auto found = m_requests.constFind(request);
         if (found == m_requests.cend()) return;
         const auto job = *found;
-        const auto invocation = m_backend.invoke ? m_backend.invoke(job.source, job.operation, job.context) : QString{};
+        const auto now = registration(job.source);
+        if (!available(now, job.operation) || partition(now) != partition(job.registration)
+            || account(now) != account(job.registration)) {
+            finish(request, QStringLiteral("unavailable"), {}, tr("The discovery source changed before the request started.")); return;
+        }
+        const auto invoke = m_backend.invoke;
+        const auto cancel = m_backend.cancel;
+        const QPointer<AddonDiscoveryCoordinator> owner(this);
+        const auto invocation = invoke ? invoke(job.source, job.operation, job.context) : QString{};
+        if (!owner) { if (!invocation.isEmpty() && cancel) cancel(invocation); return; }
         auto current = m_requests.find(request);
-        if (current == m_requests.end()) { if (!invocation.isEmpty() && m_backend.cancel) m_backend.cancel(invocation); return; }
+        const auto latest = registration(job.source);
+        if (current == m_requests.end() || !available(latest, job.operation)
+            || partition(latest) != partition(job.registration) || account(latest) != account(job.registration)
+            || m_views.value(job.view) != job.generation) {
+            if (current != m_requests.end()) finish(request, QStringLiteral("unavailable"), {}, tr("The discovery source changed before the request started."));
+            if (!invocation.isEmpty() && cancel) cancel(invocation); return;
+        }
         if (invocation.isEmpty() || m_invocations.contains(invocation)) { finish(request, QStringLiteral("error"), {}, tr("The discovery source did not start.")); return; }
         current->invocation = invocation;
         m_invocations.insert(invocation, request);
@@ -338,7 +371,9 @@ void AddonDiscoveryCoordinator::authorize(const QString& request, const QVariant
     guarded.insert(QStringLiteral("hostContext"), QVariantMap{{QStringLiteral("view"), job.view},
         {QStringLiteral("generation"), QVariant::fromValue(job.generation)}, {QStringLiteral("intent"), job.intent}});
     const QPointer<AddonDiscoveryCoordinator> owner(this);
-    const auto gateJob = m_backend.authorizePlayable(job.source, guarded, [owner, request](const QString& handle, const QString& error) {
+    const auto authorizePlayable = m_backend.authorizePlayable;
+    const auto cancelPlayable = m_backend.cancelPlayable;
+    const auto gateJob = authorizePlayable(job.source, guarded, [owner, request](const QString& handle, const QString& error) {
         if (!owner) return;
         QTimer::singleShot(0, owner, [owner, request, handle, error] {
             if (!owner || !owner->m_requests.contains(request)) return;
@@ -356,9 +391,10 @@ void AddonDiscoveryCoordinator::authorize(const QString& request, const QVariant
             owner->finish(request, QStringLiteral("match"), {{QStringLiteral("playbackHandle"), handle}});
         });
     });
+    if (!owner) { if (!gateJob.isEmpty() && cancelPlayable) cancelPlayable(gateJob); return; }
     auto current = m_requests.find(request);
     if (current != m_requests.end()) current->gateJob = gateJob;
-    else if (!gateJob.isEmpty() && m_backend.cancelPlayable) m_backend.cancelPlayable(gateJob);
+    else if (!gateJob.isEmpty() && cancelPlayable) cancelPlayable(gateJob);
 }
 
 void AddonDiscoveryCoordinator::finish(const QString& request, const QString& status, QVariantMap data, const QString& error)
@@ -367,8 +403,11 @@ void AddonDiscoveryCoordinator::finish(const QString& request, const QString& st
     if (found == m_requests.cend()) return;
     const auto job = *found;
     m_requests.remove(request); m_invocations.remove(job.invocation);
-    if (!job.invocation.isEmpty() && m_backend.cancel) m_backend.cancel(job.invocation);
-    if (!job.gateJob.isEmpty() && m_backend.cancelPlayable) m_backend.cancelPlayable(job.gateJob);
+    const auto cancel = m_backend.cancel, cancelPlayable = m_backend.cancelPlayable;
+    const QPointer<AddonDiscoveryCoordinator> owner(this);
+    if (!job.invocation.isEmpty() && cancel) cancel(job.invocation);
+    if (!job.gateJob.isEmpty() && cancelPlayable) cancelPlayable(job.gateJob);
+    if (!owner) return;
     data.insert(QStringLiteral("view"), job.view); data.insert(QStringLiteral("generation"), QVariant::fromValue(job.generation));
     data.insert(QStringLiteral("source"), job.source);
     emit finished(request, status, data, error);
@@ -379,14 +418,20 @@ void AddonDiscoveryCoordinator::cancel(const QString& request)
     if (found == m_requests.cend()) return;
     const auto job = *found;
     m_requests.remove(request); m_invocations.remove(job.invocation);
-    if (!job.invocation.isEmpty() && m_backend.cancel) m_backend.cancel(job.invocation);
-    if (!job.gateJob.isEmpty() && m_backend.cancelPlayable) m_backend.cancelPlayable(job.gateJob);
+    const auto cancel = m_backend.cancel, cancelPlayable = m_backend.cancelPlayable;
+    const QPointer<AddonDiscoveryCoordinator> owner(this);
+    if (!job.invocation.isEmpty() && cancel) cancel(job.invocation);
+    if (!job.gateJob.isEmpty() && cancelPlayable) cancelPlayable(job.gateJob);
+    if (!owner) return;
     emit canceled(request);
 }
 void AddonDiscoveryCoordinator::cancelView(const QString& view)
 {
     const auto requests = m_requests.keys();
-    for (const auto& request : requests) if (m_requests.value(request).view == view) cancel(request);
+    const QPointer<AddonDiscoveryCoordinator> owner(this);
+    for (const auto& request : requests) if (m_requests.value(request).view == view) {
+        cancel(request); if (!owner) return;
+    }
     revokeHandles(view);
     if (m_views.contains(view)) {
         if (m_closedViews.size() >= MaxViews * 2) m_closedViews.erase(m_closedViews.begin());

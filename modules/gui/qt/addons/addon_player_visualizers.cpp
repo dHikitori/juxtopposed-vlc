@@ -13,6 +13,7 @@ AddonVisualizers* createPlayerVisualizers(AddonManager* manager, PlayerControlle
     if (!player) return new AddonVisualizers(manager, {}, parent);
     const auto analysis = AddonNativePlayerAnalysis::create(player->getPlayer());
     auto* result = new AddonVisualizers(manager, analysis->backend(), parent);
+    QObject::connect(player, &PlayerController::inputChanged, result, &AddonVisualizers::mediaChanged);
     QObject::connect(player, &QObject::destroyed, result, [analysis, result] { result->close(); analysis->close(); });
     return result;
 }

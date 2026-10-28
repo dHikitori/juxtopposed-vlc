@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "addon_stream_lifetime.hpp"
+#include "addon_store_authority.hpp"
 #include <QObject>
 #include <QImage>
 #include <QMap>
@@ -13,6 +14,7 @@
 namespace vlc::addons {
 class AddonManager;
 class AddonAssetImageProvider;
+class AddonNativeWake;
 struct UiAssetCapture {
     QVariantMap registration;
     QMap<QString, QByteArray> assets;
@@ -41,10 +43,14 @@ public:
         int maximumTickets = 256;
         int maximumSessionImages = 32;
         int maximumImages = 64;
+        int maximumStartRetries = 8;
     };
     struct Backend {
         std::function<UiAssetReader(const QString&)> prepare;
         std::function<QImage(const QByteArray&, const QString&, const Options&, QString*)> decode = {};
+        // Optional for isolated explicit-lifecycle tools. Production backends
+        // subscribe before any capture and signal only through a native wake.
+        std::function<StoreAuthorityChanges(std::function<void()>)> subscribe = {};
     };
     struct SharedImages;
     explicit AddonUiAssets(AddonManager*, QObject* parent = nullptr);
@@ -74,8 +80,8 @@ signals:
 private:
     friend class AddonAssetImageProvider;
     struct Scope { QString contribution, package, stamp; quint64 epoch = 0; bool suspended = false; QVariantMap urls; QMap<QString, QString> tickets; QVariantMap registration; std::function<bool()> live; };
-    struct Work { QString id, session, alias, suffix, cacheKey; quint64 epoch = 0; QByteArray bytes; std::shared_ptr<void> bytesLease; std::function<bool()> current, live; };
-    struct CaptureWork { QString id, session; quint64 epoch; UiAssetReader read; };
+    struct Work { QString id, session, alias, suffix, cacheKey; quint64 epoch = 0; QByteArray bytes; std::shared_ptr<void> bytesLease; std::function<bool()> current, live; unsigned startFailures=0; };
+    struct CaptureWork { QString id, session; quint64 epoch; UiAssetReader read; unsigned startFailures=0; };
     struct Cache { QImage image; qint64 bytes = 0; int pins = 0; quint64 use = 0; };
     struct Claim { QString session; QPointer<QObject> owner; QMetaObject::Connection destroyed; std::shared_ptr<void> lease; };
     static Backend managerBackend(AddonManager*);
@@ -100,7 +106,9 @@ private:
     QList<CaptureWork> m_captureQueue;
     QHash<QString, Cache> m_cache;
     QHash<QString, Claim> m_claims;
-    QTimer m_authorityTimer;
+    std::unique_ptr<AddonNativeWake> m_authorityWake;
+    StoreAuthorityChanges m_authorityChanges;
+    QTimer m_retryTimer;
     qint64 m_queuedBytes = 0, m_cacheBytes = 0;
     quint64 m_epoch = 0, m_use = 0;
     bool m_closing = false;

@@ -24,20 +24,31 @@ struct AddonNativePlayerAnalysis::State {
     audio_output_t* samplesOutput = nullptr;
     AddonAudioAnalysis* analysis = nullptr;
     std::uint64_t generation = 0;
-    std::atomic<std::uint64_t> blocks{0}, accepted{0}, formatChanges{0}, outputChanges{0}, maximumCopyUs{0};
+    std::atomic<std::uint64_t> blocks{0}, accepted{0}, formatChanges{0}, outputChanges{0}, maximumCopyUs{0}, clockCallbacks{0};
     AddonVisualizerClock clock;
     unsigned formatRate = 0, formatChannels = 0;
     vlc_fourcc_t formatCodec = 0;
 
-    explicit State(vlc_player_t* value) : player(value)
+    explicit State(vlc_player_t* value) : player(value) {}
+    bool setActivity(bool active)
     {
-        if (!player) return;
+        if (!active) { deactivate(); return true; }
+        if (!player) return false;
+        if (timer && listener && outputListener) return true;
+        deactivate();
+        if (!clock.isLockFree() || !clockCallbacks.is_lock_free()) return false;
+        clock.mediaChanged();
         static const struct vlc_player_timer_cbs timerCallbacks{
-            [](const vlc_player_timer_point* point, void* data) { static_cast<State*>(data)->clock.update(*point); },
+            [](const vlc_player_timer_point* point, void* data) {
+                auto& state = *static_cast<State*>(data);
+                state.clockCallbacks.fetch_add(1, std::memory_order_relaxed);
+                state.clock.update(*point);
+            },
             [](vlc_tick_t date, void* data) { static_cast<State*>(data)->clock.pause(date); },
             [](const vlc_player_timer_point* point, void* data) { static_cast<State*>(data)->clock.seek(point); }
         };
         timer = vlc_player_AddTimer(player, VLC_TICK_FROM_MS(10), &timerCallbacks, this);
+        if (!timer) return false;
         static const struct vlc_player_aout_cbs outputCallbacks = [] {
             struct vlc_player_aout_cbs cbs{};
             cbs.on_device_changed = [](audio_output_t*, const char*, void* data) {
@@ -47,6 +58,7 @@ struct AddonNativePlayerAnalysis::State {
             return cbs;
         }();
         outputListener = vlc_player_aout_AddListener(player, &outputCallbacks, this);
+        if (!outputListener) { deactivate(); return false; }
         static const struct vlc_player_cbs playerCallbacks = [] {
             struct vlc_player_cbs cbs{};
             cbs.on_current_media_changed = [](vlc_player_t*, input_item_t*, void* data) { static_cast<State*>(data)->clock.mediaChanged(); };
@@ -55,10 +67,16 @@ struct AddonNativePlayerAnalysis::State {
             };
             return cbs;
         }();
-        vlc_player_locker lock{player};
-        const auto state = vlc_player_GetState(player);
-        clock.setRunning(state == VLC_PLAYER_STATE_PLAYING || state == VLC_PLAYER_STATE_PAUSED);
-        listener = vlc_player_AddListener(player, &playerCallbacks, this);
+        {
+            vlc_player_locker lock{player};
+            listener = vlc_player_AddListener(player, &playerCallbacks, this);
+            if (listener) {
+                const auto state = vlc_player_GetState(player);
+                clock.setRunning(state == VLC_PLAYER_STATE_PLAYING || state == VLC_PLAYER_STATE_PAUSED);
+            }
+        }
+        if (!listener) { deactivate(); return false; }
+        return true;
     }
     void stop()
     {
@@ -69,7 +87,7 @@ struct AddonNativePlayerAnalysis::State {
         samplesOutput = nullptr;
         analysis = nullptr;
     }
-    void close()
+    void deactivate()
     {
         stop();
         if (listener && player) {
@@ -78,9 +96,10 @@ struct AddonNativePlayerAnalysis::State {
         if (timer && player) vlc_player_RemoveTimer(player, timer);
         if (outputListener && player) vlc_player_aout_RemoveListener(player, outputListener);
         outputListener = nullptr;
-        timer = nullptr; player = nullptr;
+        timer = nullptr;
         clock.setRunning(false);
     }
+    void close() { deactivate(); player = nullptr; }
     bool start(AddonAudioAnalysis* target, std::uint64_t value)
     {
         stop(); if (!player || !timer || !listener || !outputListener || !target || !clock.isLockFree() || !blocks.is_lock_free()
@@ -117,6 +136,7 @@ struct AddonNativePlayerAnalysis::State {
     }
     AddonVisualizers::Snapshot snapshot()
     {
+        if (!player || !timer || !listener || !outputListener) return {};
         if (player && samplesOutput) {
             auto* output = vlc_player_aout_Hold(player); const bool changed = output != samplesOutput;
             if (output) aout_Release(output);
@@ -139,7 +159,8 @@ AddonVisualizers::Backend AddonNativePlayerAnalysis::backend()
     const auto self = shared_from_this();
     return {[self] { return self->m_state->snapshot(); },
         [self](AddonAudioAnalysis* analysis, std::uint64_t epoch) { return self->m_state->start(analysis, epoch); },
-        [self] { self->m_state->stop(); }};
+        [self] { self->m_state->stop(); },
+        [self](bool active) { return self->m_state->setActivity(active); }};
 }
 QVariantMap AddonNativePlayerAnalysis::statistics() const
 {
@@ -149,6 +170,8 @@ QVariantMap AddonNativePlayerAnalysis::statistics() const
         {"formatChanges", QVariant::fromValue<qulonglong>(m_state->formatChanges.load(std::memory_order_relaxed))},
         {"outputChanges", QVariant::fromValue<qulonglong>(m_state->outputChanges.load(std::memory_order_relaxed))},
         {"maximumCopyUs", QVariant::fromValue<qulonglong>(m_state->maximumCopyUs.load(std::memory_order_relaxed))},
+        {"clockCallbacks", QVariant::fromValue<qulonglong>(m_state->clockCallbacks.load(std::memory_order_relaxed))},
+        {"observing", m_state->timer && m_state->listener && m_state->outputListener},
         {"subscribed", m_state->samples != nullptr}};
 }
 }

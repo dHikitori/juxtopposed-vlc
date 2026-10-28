@@ -11,17 +11,41 @@ ColumnLayout {
     property color accentColor: "#d37918"
     property bool lightTheme: false
     property var selectedOperations: []
+    property var displayOwner: null
+    property bool displayMounted: false
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property var controllers: backend ? backend.controllers || [] : []
     readonly property var review: backend ? backend.review || ({}) : ({})
     readonly property string reviewSignature: JSON.stringify(review)
     readonly property var selectedController: controllers[controller.currentIndex] || ({})
     readonly property bool busy: !!backend && (backend.preparing === true || backend.starting === true)
+    readonly property bool displayCurrent: !backend || backend.displayCurrent === undefined || backend.displayCurrent === true
+    readonly property bool displayLoading: !!backend && backend.displayLoading === true
+    readonly property string displayError: backend ? backend.displayError || "" : ""
+    readonly property bool controllerReady: displayCurrent && selectedController.ready !== false
     spacing: theme.dp(10)
     onReviewSignatureChanged: selectedOperations = []
-    onActiveChanged: if (!active && backend && typeof backend.viewClosed === "function") backend.viewClosed()
-    onVisibleChanged: if (!visible && backend && typeof backend.viewClosed === "function") backend.viewClosed()
-    Component.onDestruction: if (backend && typeof backend.viewClosed === "function") backend.viewClosed()
+    onActiveChanged: syncDisplay()
+    onVisibleChanged: syncDisplay()
+    onBackendChanged: syncDisplay()
+    Component.onCompleted: { displayMounted = true; syncDisplay() }
+    Component.onDestruction: releaseDisplay(displayOwner)
+    function releaseDisplay(owner) {
+        if (!owner) return
+        if (typeof owner.setDisplayActive === "function") owner.setDisplayActive(false)
+        else if (typeof owner.viewClosed === "function") owner.viewClosed()
+    }
+    function syncDisplay() {
+        if (!displayMounted) return
+        if (displayOwner !== backend) {
+            const retired = displayOwner
+            displayOwner = backend
+            releaseDisplay(retired)
+        }
+        if (!displayOwner) return
+        if (typeof displayOwner.setDisplayActive === "function") displayOwner.setDisplayActive(active && visible)
+        else if (!active || !visible) releaseDisplay(displayOwner)
+    }
     function operationLabel(value) {
         return ({play: qsTr("Play"), pause: qsTr("Pause"), seek: qsTr("Seek"), setRate: qsTr("Temporary speed correction")})[value] || value
     }
@@ -41,8 +65,11 @@ ColumnLayout {
     }
     Text {
         Layout.fillWidth: true; wrapMode: Text.Wrap; textFormat: Text.PlainText
-        text: root.controllers.length ? qsTr("Select an add-on, relay address, and room. Review what the session can share before you join.")
-            : qsTr("No enabled session controller is ready. Add a controller and enter its settings first.")
+        objectName: "addonSessionIntroduction"
+        text: root.displayLoading ? qsTr("The app checks session controllers.")
+            : !root.displayCurrent ? qsTr("The controller list is not ready. Try again.")
+            : root.controllers.length ? qsTr("Select an add-on, relay address, and room. Review what the session can share before you join.")
+            : qsTr("No session controller is installed. Add a controller first.")
         color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
     }
     RedesignComboBox {
@@ -57,25 +84,46 @@ ColumnLayout {
         delegate: C.ItemDelegate {
             required property int index
             width: ListView.view.width; implicitHeight: root.theme.dp(36)
-            contentItem: Text { text: (root.controllers[index] || {}).name || ""; textFormat: Text.PlainText; elide: Text.ElideRight; color: root.theme.foreground; font.pixelSize: root.theme.dp(14) }
+            contentItem: Text {
+                readonly property var entry: root.controllers[index] || ({})
+                text: (entry.name || "") + (entry.state ? " — " + entry.state : "")
+                textFormat: Text.PlainText; elide: Text.ElideRight; color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
+            }
             background: Rectangle { color: hovered ? root.theme.hover : root.theme.panel }
         }
+    }
+    Text {
+        objectName: "addonSessionControllerState"; Layout.fillWidth: true
+        text: root.selectedController.state || ""; visible: text.length > 0
+        textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+    }
+    Text {
+        objectName: "addonSessionDisplayError"; Layout.fillWidth: true
+        text: root.displayError; visible: text.length > 0; textFormat: Text.PlainText
+        wrapMode: Text.Wrap; color: root.theme.danger; font.pixelSize: root.theme.dp(13); Accessible.role: Accessible.AlertMessage
+    }
+    RedesignButton {
+        objectName: "addonSessionRetry"
+        visible: !root.displayLoading && (!root.displayCurrent || root.displayError.length > 0)
+        caption: qsTr("Try again"); text: caption; tooltipTextFormat: Text.PlainText
+        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+        onClicked: if (root.backend && typeof root.backend.retryDisplay === "function") root.backend.retryDisplay()
     }
     SessionInput {
         id: relay; objectName: "addonSessionRelay"; Layout.fillWidth: true
         maximumLength: 2048; placeholderText: qsTr("Relay address: wss://relay.example/room")
-        enabled: !root.busy && root.controllers.length > 0; Accessible.name: qsTr("Relay address")
+        enabled: !root.busy && root.controllerReady && root.controllers.length > 0; Accessible.name: qsTr("Relay address")
         onTextEdited: root.backend.cancelReview()
     }
     SessionInput {
         id: room; objectName: "addonSessionRoom"; Layout.fillWidth: true
-        maximumLength: 256; placeholderText: qsTr("Room name"); enabled: !root.busy && root.controllers.length > 0
+        maximumLength: 256; placeholderText: qsTr("Room name"); enabled: !root.busy && root.controllerReady && root.controllers.length > 0
         Accessible.name: qsTr("Room name"); onTextEdited: root.backend.cancelReview()
     }
     RedesignButton {
         objectName: "addonSessionPrepare"
         caption: qsTr("Review session"); text: caption; tooltipTextFormat: Text.PlainText
-        enabled: !root.busy && !!root.selectedController.id && relay.text.length > 0 && room.text.length > 0
+        enabled: !root.busy && root.controllerReady && !!root.selectedController.id && relay.text.length > 0 && room.text.length > 0
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         onClicked: root.backend.prepare(root.selectedController.id, relay.text, room.text)
     }
@@ -111,7 +159,7 @@ ColumnLayout {
             RedesignButton {
                 objectName: "addonSessionAccept"
                 caption: root.selectedOperations.length ? qsTr("Join with selected controls") : qsTr("Join with observation only"); text: caption; tooltipTextFormat: Text.PlainText
-                enabled: !root.busy; scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                enabled: !root.busy && root.displayCurrent && root.controllerReady; scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.backend.accept(root.selectedOperations)
             }
             RedesignButton {

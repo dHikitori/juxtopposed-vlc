@@ -33,15 +33,19 @@ ColumnLayout {
         return registry.replacement(hook)
     }
     readonly property bool scopeAllowed: {
-        if (!registry || !replacement.id || typeof registry.canUseSelection !== "function"
+        if (!registry || !replacement.id || typeof registry.canPrepareSelection !== "function" || typeof registry.canUseSelection !== "function"
             || typeof registry.validateSessionResult !== "function") return false
         registry.revision
-        return registry.canUseSelection(replacement.id, hook)
+        return registry.canPrepareSelection(replacement.id, hook)
     }
     readonly property bool targetTitlesAllowed: kind === "playlist" || replacement.selectionTitlesAllowed === true
-    readonly property bool prepared: active && !dismissed && !stale && scopeAllowed && !!snapshotData && mount.usable
+    readonly property bool catalogueAvailable: !!registry && (registry.available === undefined || registry.available === true)
+    // Keep the parsed view and private choices while the catalogue refreshes.
+    // Only a current, fully loaded session can confirm those choices.
+    readonly property bool resolved: active && !dismissed && !stale && scopeAllowed && !!snapshotData && mount.usable
         && !!mount.descriptor.state && (mount.descriptor.state.parameters || {}).choiceSet === snapshotData.choiceSet
-    readonly property bool usingReplacement: visible && prepared
+    readonly property bool prepared: resolved && catalogueAvailable && mount.actionable
+    readonly property bool usingReplacement: visible && resolved
     readonly property var preview: {
         if (!usingReplacement || !snapshotData || !mount.descriptor.state) return null
         const result = mount.descriptor.state.result || ({})
@@ -67,7 +71,7 @@ ColumnLayout {
     function invalidate() { stale = true; refreshTimer.restart() }
     function begin() { dismissed = false; errorMessage = ""; consumedChoiceSet = ""; invalidate() }
     function confirm() {
-        if (!usingReplacement || busy || (snapshotData && consumedChoiceSet === snapshotData.choiceSet)
+        if (!prepared || !usingReplacement || busy || (snapshotData && consumedChoiceSet === snapshotData.choiceSet)
             || !snapshotData || mount.parameters.choiceSet !== snapshotData.choiceSet
             || (mount.descriptor.state.parameters || {}).choiceSet !== snapshotData.choiceSet
             || typeof registry.validateSessionResult !== "function") return false
@@ -117,7 +121,7 @@ ColumnLayout {
     Timer {
         id: fallbackTimer
         interval: 0
-        onTriggered: if (root.active && !root.dismissed && !root.stale && (!root.snapshotData || !root.scopeAllowed)) root.fallbackRequested()
+        onTriggered: if (root.catalogueAvailable && root.active && !root.dismissed && !root.stale && (!root.snapshotData || !root.scopeAllowed)) root.fallbackRequested()
     }
     RedesignButton {
         objectName: "addonSelectionRecovery"
@@ -184,7 +188,7 @@ ColumnLayout {
         RedesignButton {
             objectName: "addonSelectionConfirm"
             caption: qsTr("Confirm"); text: caption; tooltipTextFormat: Text.PlainText
-            enabled: root.usingReplacement && !!root.preview && !root.busy && root.snapshotData && root.consumedChoiceSet !== root.snapshotData.choiceSet
+            enabled: root.prepared && root.usingReplacement && !!root.preview && !root.busy && root.snapshotData && root.consumedChoiceSet !== root.snapshotData.choiceSet
             primaryAction: true
             scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
             onClicked: root.confirm()

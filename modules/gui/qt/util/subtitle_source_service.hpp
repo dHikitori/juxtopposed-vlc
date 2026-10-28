@@ -13,7 +13,7 @@
 #include <QHash>
 #include <functional>
 
-namespace vlc::addons { class AddonManager; }
+namespace vlc::addons { class AddonManager; class AddonCatalogueView; }
 class AddonMetadataCoordinator;
 class AddonMetadataService;
 
@@ -21,6 +21,12 @@ class SubtitleSourceService : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool configured READ configured NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool configurationKnown READ configurationKnown NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool providerDisplayAttached READ providerDisplayAttached NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool providerDisplayCurrent READ providerDisplayCurrent NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool providerDisplayLoading READ providerDisplayLoading NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(QString providerDisplayError READ providerDisplayError NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(QVariantList displayProviders READ displayProviders NOTIFY configurationChanged FINAL)
     Q_PROPERTY(bool hasCustomKey READ hasCustomKey NOTIFY configurationChanged FINAL)
     Q_PROPERTY(bool hasConsumerKey READ hasConsumerKey CONSTANT FINAL)
     Q_PROPERTY(QVariantList languages READ languages NOTIFY languagesChanged FINAL)
@@ -43,6 +49,13 @@ public:
     void setMetadataService(AddonMetadataService* service);
     void setStorageDirectory(const QString& directory);
     bool configured() const;
+    bool configurationKnown() const;
+    bool providerDisplayAttached() const { return m_providerDisplayMode; }
+    bool providerDisplayCurrent() const;
+    bool providerDisplayLoading() const;
+    QString providerDisplayError() const;
+    QVariantList displayProviders() const;
+    Q_INVOKABLE bool providerDisplayIsCurrent() const { return m_providerDisplayMode ? providerDisplayCurrent() : !m_addonManagerRetired; }
     bool hasCustomKey() const { return m_customKey; }
     bool hasConsumerKey() const { return !m_options.consumerApiKey.isEmpty(); }
     QVariantList languages() const;
@@ -73,6 +86,9 @@ signals:
 protected:
     bool eventFilter(QObject* object, QEvent* event) override;
 private:
+    bool providerDisplayBound() const;
+    bool configuredForExecution() const;
+    void retireAddonManager();
     struct AddonRecord { QString contribution; QVariantMap candidate; QString nativeUrl; QString partition; };
     void refreshBuiltinRegistration();
     void beginProviderSearch(quint64 generation);
@@ -105,6 +121,10 @@ private:
     bool writeSubtitle(const QString& path, const QByteArray& bytes);
     Options m_options;
     QPointer<vlc::addons::AddonManager> m_addonManager;
+    QPointer<vlc::addons::AddonCatalogueView> m_providerDisplay;
+    bool m_providerDisplayMode = false;
+    bool m_addonManagerRetired = false;
+    quint64 m_addonBindingEpoch = 0;
     QPointer<AddonMetadataCoordinator> m_metadata;
     QPointer<AddonMetadataService> m_sharedMetadata;
     bool m_ownedMetadataProfile = false;

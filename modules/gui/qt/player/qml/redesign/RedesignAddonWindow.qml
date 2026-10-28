@@ -56,9 +56,11 @@ C.Popup {
             RedesignButton {
                 visible: root.modal
                 caption: qsTr("Confirm"); text: caption
-                enabled: mount.usable
+                objectName: "addonModalConfirm"
+                enabled: mount.actionable
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: {
+                    if (!mount.actionable) return
                     if (!root.registry.completeModal(root.modalTicket, mount.descriptor.state.result || ({})))
                         root.errorMessage = qsTr("The add-on result does not agree with its schema.")
                 }

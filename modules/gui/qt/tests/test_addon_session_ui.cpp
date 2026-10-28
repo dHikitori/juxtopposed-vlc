@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addons/addon_session_ui.hpp"
 #include "addons/addon_session_host.hpp"
+#include "addons/addon_manager.hpp"
+#include "addons/addon_catalogue_view.hpp"
 #include <QTest>
 #include <QJsonArray>
 #include <QTemporaryDir>
 #include <QScopeGuard>
+#include <QCoreApplication>
+#include <QThread>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 using namespace vlc::addons;
 namespace vlc::addons {
 class AddonSessionUiTestAccess {
@@ -42,6 +49,18 @@ struct Fake {
         b.sessions=[this] { return sessions; }; return b;
     }
 };
+struct DisplayFake : Fake {
+    bool current=true,ready=true,loading=false,active=false;
+    QString displayError;
+    unsigned activations=0,releases=0,retries=0;
+    AddonSessionUi::Backend attachedBackend() {
+        auto b=backend(); b.catalog.attached=true;
+        for(auto& value:controllers) { auto row=value.toMap(); row.insert("ready",true); value=row; }
+        b.catalog.state=[this] { return QVariantMap{{"current",current},{"ready",ready},{"loading",loading},{"error",displayError}}; };
+        b.catalog.setActive=[this](bool value) { if(active==value) return; active=value; if(value) ++activations; else ++releases; };
+        b.catalog.retry=[this] { ++retries; }; return b;
+    }
+};
 struct Actual {
     QObject owner; QTemporaryDir directory; StoreAuthority store{directory.path()}; AddonStreamLifetime lifetime;
     struct Native { std::mutex mutex; SessionPlayerSnapshot state; std::atomic_uint grants{0},revokes{0}; };
@@ -73,10 +92,232 @@ struct Actual {
     }
     ~Actual() { host->close(); lifetime.close(); lifetime.handle().waitQt(std::chrono::seconds(5)); }
 };
+struct DisplayWait {
+    std::mutex mutex; std::condition_variable changed; bool released=false;
+    std::atomic_bool entered{false};
+    void wait() { std::unique_lock<std::mutex> lock(mutex); entered=true; changed.wait(lock,[&] { return released; }); }
+    void release() { { std::lock_guard<std::mutex> lock(mutex); released=true; } changed.notify_all(); }
+};
+struct DisplayFixture {
+    QTemporaryDir directory;
+    StoreAuthority authority{directory.path()};
+    AddonStreamLifetime lifetime;
+    std::unique_ptr<AddonManager> manager;
+    QPointer<AddonCatalogueView> view;
+    DisplayCatalogueSnapshot snapshot;
+    std::shared_ptr<DisplayWait> block;
+    std::atomic_uint reads{0},keys{0},probes{0};
+    std::atomic_bool onOwner{false};
+    QThread* ownerThread=QThread::currentThread();
+    DisplayFixture() {
+        manager=std::make_unique<AddonManager>(directory.filePath(QStringLiteral("manager")));
+        DisplayCataloguePackage row; auto& package=row.package;
+        package.manifest.id=QStringLiteral("org.example.session"); package.manifest.name=QStringLiteral("<b>Controller</b>");
+        package.manifest.version=QStringLiteral("1.0.0"); package.digest=QByteArray(64,'a'); package.generation=1;
+        package.enabled=true; row.savedEnabled=true;
+        package.grants={{"network.websocket",QJsonObject{{"origins",QJsonArray{"wss://relay.example"}}}},
+            {"playback.control",QJsonObject{{"operations",QJsonArray{"pause","seek"}}}}};
+        Contribution contribution; contribution.id=QStringLiteral("controller"); contribution.type=QStringLiteral("session.controller");
+        contribution.contract=QStringLiteral("session@1"); contribution.operations={QStringLiteral("run")};
+        contribution.document={{"id",contribution.id},{"type",contribution.type},{"contract",contribution.contract},
+            {"operations",QJsonArray{QStringLiteral("run")}}}; package.manifest.contributions={contribution};
+        row.schema={{"type","object"},{"required",QJsonArray{"key"}},
+            {"properties",QJsonObject{{"key",QJsonObject{{"type","string"},{"writeOnly",true}}}}}};
+        row.settings={{"_credentials",QJsonObject{{"key","00000000-0000-4000-8000-000000000002"}}}};
+        snapshot.packages={row};
+    }
+    AddonCatalogueView* attach() {
+        AddonCatalogueView::Backend backend;
+        backend.capture=[this]()->std::optional<DisplayCatalogueSource> {
+            DisplayCatalogueSource source; source.queuedAuthority=authority.capture();
+            source.workerExecutable=QCoreApplication::applicationFilePath();
+            source.credentials=[this](const auto&,const auto&) {
+                ++keys; onOwner=onOwner || QThread::currentThread()==ownerThread; return QByteArray("temporary-test-key");
+            };
+            // This display fixture supplies a bounded platform observation. It
+            // proves demand scheduling, not an actual TLS transport handshake.
+            source.tlsProbe=[this]()->std::optional<bool> {
+                ++probes; onOwner=onOwner || QThread::currentThread()==ownerThread; return true;
+            };
+            auto state=snapshot; state.queuedAuthority=state.authority=source.queuedAuthority; const auto waiting=block;
+            source.reader=[this,state=std::move(state),waiting](const DisplayCatalogueRequest&,DisplayCatalogueSnapshot* out,QString*) {
+                ++reads; onOwner=onOwner || QThread::currentThread()==ownerThread;
+                if(waiting) waiting->wait(); *out=state; return true;
+            }; return source;
+        };
+        backend.subscribe=[this](auto wake) { return authority.onChanged(std::move(wake)); };
+        view=new AddonCatalogueView(std::move(backend),lifetime.handle(),manager.get());
+        view->setObjectName(QStringLiteral("hakoneDisplayCatalogue")); return view;
+    }
+    ~DisplayFixture() {
+        if(view) view->close(); lifetime.close(); lifetime.handle().waitQt(std::chrono::seconds(5)); manager.reset();
+    }
+};
 }
 class TestAddonSessionUi : public QObject {
     Q_OBJECT
 private slots:
+    void actualAttachedManagerHasNoInactiveSessionReadsOrPlatformProbe() {
+        DisplayFixture display; display.snapshot.packages.clear(); display.attach(); QTRY_VERIFY(display.view->isCurrent());
+        Actual actual; QVERIFY(actual.host->mount(display.manager->hostServices()));
+        AddonSessionUi ui(actual.host.get(),display.manager.get());
+        QCOMPARE(display.reads.load(),1u); QCOMPARE(display.keys.load(),0u); QCOMPARE(display.probes.load(),0u);
+        for(int i=0;i<50;++i) {
+            ui.refresh(); QVERIFY(QMetaObject::invokeMethod(display.manager.get(),"capabilitiesChanged",Qt::DirectConnection));
+        }
+        ui.setDisplayActive(true); QTest::qWait(40);
+        QVERIFY(ui.displayCurrent()); QVERIFY(ui.controllers().isEmpty()); QCOMPARE(display.reads.load(),1u);
+        QCOMPARE(display.keys.load(),0u); QCOMPARE(display.probes.load(),0u); QVERIFY(!display.onOwner.load());
+    }
+    void actualAttachedManagerKeepsUnknownRowsAndOwnsOnlyOneVisibleDemand() {
+        DisplayFixture display;
+        auto disabled=display.snapshot.packages[0]; disabled.package.manifest.id=QStringLiteral("org.example.disabled");
+        disabled.package.enabled=false; display.snapshot.packages.append(disabled);
+        display.attach(); QTRY_VERIFY(display.view->isCurrent()); Actual actual;
+        QVERIFY(actual.host->mount(display.manager->hostServices()));
+        AddonSessionUi ui(actual.host.get(),display.manager.get());
+        QCOMPARE(ui.controllers().size(),2); QCOMPARE(display.keys.load(),0u); QCOMPARE(display.probes.load(),0u);
+        QVERIFY(!ui.controllers()[0].toMap().value("ready").toBool());
+        QCOMPARE(ui.controllers()[0].toMap().value("state").toString(),QStringLiteral("Settings not checked"));
+        QCOMPARE(ui.controllers()[1].toMap().value("state").toString(),QStringLiteral("Disabled"));
+        ui.setDisplayActive(true); QTRY_VERIFY(ui.controllers()[0].toMap().value("ready").toBool());
+        QCOMPARE(display.keys.load(),1u); QCOMPARE(display.probes.load(),1u); QVERIFY(!display.onOwner.load());
+        const auto reads=display.reads.load();
+        for(int i=0;i<50;++i) { ui.refresh(); QMetaObject::invokeMethod(display.manager.get(),"capabilitiesChanged",Qt::DirectConnection); }
+        QTest::qWait(40); QCOMPARE(display.reads.load(),reads); QCOMPARE(display.probes.load(),1u);
+        QStringList other;
+        for(int i=0;i<32;++i) { const auto ticket=display.view->acquireFeature(QStringLiteral("session.controller")); if(!ticket.isEmpty()) other.append(ticket); }
+        QCOMPARE(other.size(),31); for(const auto& ticket:other) display.view->release(ticket);
+        ui.viewClosed(); other.clear();
+        for(int i=0;i<32;++i) { const auto ticket=display.view->acquireFeature(QStringLiteral("session.controller")); if(!ticket.isEmpty()) other.append(ticket); }
+        QCOMPARE(other.size(),32); for(const auto& ticket:other) display.view->release(ticket);
+        QCOMPARE(actual.grants(),0u); QCOMPARE(actual.transports,0u);
+    }
+    void actualAttachedManagerDoesNotProbeDisabledOrUnsupportedControllers() {
+        DisplayFixture display; display.snapshot.packages[0].package.enabled=false;
+        auto unsupported=display.snapshot.packages[0]; unsupported.package.manifest.id=QStringLiteral("org.example.unsupported");
+        unsupported.package.enabled=true; unsupported.package.manifest.contributions[0].document.insert("contract",QStringLiteral("future@2"));
+        display.snapshot.packages.append(unsupported); display.attach(); QTRY_VERIFY(display.view->isCurrent());
+        Actual actual; QVERIFY(actual.host->mount(display.manager->hostServices()));
+        AddonSessionUi ui(actual.host.get(),display.manager.get()); ui.setDisplayActive(true); QTest::qWait(40);
+        QCOMPARE(ui.controllers().size(),1); QCOMPARE(display.reads.load(),1u); QCOMPARE(display.probes.load(),0u); QCOMPARE(display.keys.load(),0u);
+    }
+    void actualAttachedStaleRefreshKeepsEndOnTheNativeHost() {
+        DisplayFixture display; display.attach(); QTRY_VERIFY(display.view->isCurrent()); Actual actual;
+        QVERIFY(actual.host->mount(display.manager->hostServices()));
+        AddonSessionUi ui(actual.host.get(),display.manager.get()); ui.setDisplayActive(true);
+        QTRY_VERIFY(ui.controllers()[0].toMap().value("ready").toBool());
+        QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        QTRY_VERIFY(!ui.review().isEmpty()); QVERIFY(ui.accept()); QTRY_COMPARE(ui.sessions().size(),1);
+        const auto id=ui.sessions()[0].toMap().value("id").toString();
+        const auto blocked=std::make_shared<DisplayWait>(); display.block=blocked;
+        const auto release=qScopeGuard([&] { blocked->release(); }); display.authority.invalidate();
+        QTRY_VERIFY(blocked->entered.load()); ui.refresh(); QVERIFY(!ui.displayCurrent());
+        QVERIFY(!ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        QVERIFY(ui.end(id)); QVERIFY(actual.host->sessions().isEmpty());
+        blocked->release(); QTRY_VERIFY(display.view->isCurrent());
+    }
+    void actualAttachedViewDestructionNeverAdoptsASuccessorOrLegacyReader() {
+        DisplayFixture display; display.attach(); QTRY_VERIFY(display.view->isCurrent()); Actual actual;
+        QVERIFY(actual.host->mount(display.manager->hostServices()));
+        AddonSessionUi ui(actual.host.get(),display.manager.get()); ui.setDisplayActive(true);
+        QTRY_VERIFY(ui.controllers()[0].toMap().value("ready").toBool());
+        delete display.view.data(); ui.refresh(); QVERIFY(ui.controllers().isEmpty()); QVERIFY(!ui.displayCurrent());
+        QVERIFY(!ui.displayError().isEmpty()); const auto probes=display.probes.load();
+        display.attach(); QTRY_VERIFY(display.view->isCurrent()); ui.retryDisplay(); ui.refresh();
+        QVERIFY(ui.controllers().isEmpty()); QVERIFY(!ui.displayCurrent()); QCOMPARE(display.probes.load(),probes);
+        QVERIFY(!ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room"))); QCOMPARE(actual.grants(),0u);
+    }
+    void attachedDisplayNeedsExplicitActivityAndReadyState() {
+        DisplayFake fake; AddonSessionUi ui(fake.attachedBackend()); fake.ui=&ui;
+        QCOMPARE(fake.activations,0u); QVERIFY(!ui.displayCurrent()); QCOMPARE(ui.controllers().size(),1);
+        QVERIFY(!ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        QCOMPARE(fake.prepared,0u); ui.setDisplayActive(true); ui.setDisplayActive(true); QCOMPARE(fake.activations,1u);
+        fake.ready=false; ui.refresh(); QVERIFY(ui.displayCurrent()); QVERIFY(!ui.controllers()[0].toMap().value("ready").toBool());
+        QVERIFY(!ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room"))); QCOMPARE(fake.prepared,0u);
+        fake.ready=true; ui.refresh(); QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        ui.viewClosed(); QCOMPARE(fake.releases,1u); QVERIFY(!ui.displayCurrent()); QCOMPARE(fake.canceled.size(),1);
+    }
+    void attachedDisabledAndUnknownRowsStayVisibleWithoutAdmission() {
+        DisplayFake fake; auto backend=fake.attachedBackend();
+        auto disabled=fake.controllers[0].toMap(); disabled["id"]=QStringLiteral("org.example.disabled/controller");
+        disabled["enabled"]=false; disabled["ready"]=false; disabled["state"]=QStringLiteral("Disabled");
+        auto unknown=fake.controllers[0].toMap(); unknown["configured"]=false; unknown["ready"]=false;
+        unknown["state"]=QStringLiteral("Settings not checked"); fake.controllers={disabled,unknown};
+        AddonSessionUi ui(std::move(backend)); fake.ui=&ui; ui.setDisplayActive(true);
+        QCOMPARE(ui.controllers().size(),2); QCOMPARE(ui.controllers()[0].toMap().value("state").toString(),QStringLiteral("Disabled"));
+        QVERIFY(!ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room"))); QCOMPARE(fake.prepared,0u);
+    }
+    void attachedAuthorityIsCheckedAtRequestAndFinalAcceptance() {
+        DisplayFake fake; fake.inlineReady=true; AddonSessionUi ui(fake.attachedBackend()); fake.ui=&ui; ui.setDisplayActive(true);
+        fake.current=false;
+        QVERIFY(!ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room"))); QCOMPARE(fake.prepared,0u);
+        fake.current=true; QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        // No UI signal is delivered. The action must read current authority.
+        fake.ready=false; QVERIFY(!ui.accept()); QCOMPARE(fake.accepted,0u); QCOMPARE(fake.canceled.size(),1);
+        QVERIFY(ui.review().isEmpty());
+        fake.ready=true; QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        auto disabled=fake.controllers[0].toMap(); disabled["ready"]=false; fake.controllers={disabled};
+        QVERIFY(!ui.accept()); QCOMPARE(fake.accepted,0u); QCOMPARE(fake.canceled.size(),2);
+    }
+    void attachedStaleDisplayKeepsSessionEndAvailable() {
+        DisplayFake fake; fake.sessions={QVariantMap{{"id",QStringLiteral("session-1")},{"starting",false},{"suspended",false},{"connected",true}}};
+        AddonSessionUi ui(fake.attachedBackend()); fake.ui=&ui; ui.setDisplayActive(true);
+        fake.current=false; fake.loading=true; fake.displayError=QStringLiteral("List changed"); ui.refresh();
+        QVERIFY(!ui.displayCurrent()); QVERIFY(ui.displayLoading()); QCOMPARE(ui.sessions().size(),1);
+        QVERIFY(ui.end(QStringLiteral("session-1"))); QCOMPARE(fake.ended,1u); QVERIFY(ui.sessions().isEmpty());
+        ui.retryDisplay(); QCOMPARE(fake.retries,1u); ui.viewClosed(); ui.retryDisplay(); QCOMPARE(fake.retries,1u);
+    }
+    void closeFinishesDetachedReviewCancellationAfterDisplayCallbackDeletesUi() {
+        DisplayFake fake; fake.inlineReady=true; auto backend=fake.attachedBackend();
+        AddonSessionUi* ui=nullptr; bool armed=false;
+        backend.catalog.setActive=[&](bool value) { fake.active=value; if(!value && armed) { armed=false; delete ui; ui=nullptr; } };
+        ui=new AddonSessionUi(std::move(backend)); fake.ui=ui; ui->setDisplayActive(true);
+        QVERIFY(ui->prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        armed=true; ui->close(); QVERIFY(!ui); QCOMPARE(fake.canceled,QStringList{QStringLiteral("ticket-1")});
+    }
+    void activityCallbackCanHideOrDeleteThePageFacade() {
+        for(const bool destroy:{false,true}) {
+            DisplayFake fake; auto backend=fake.attachedBackend(); AddonSessionUi* ui=nullptr;
+            backend.catalog.setActive=[&](bool value) {
+                if(!value) { ++fake.releases; return; }
+                ++fake.activations;
+                if(destroy) { delete ui; ui=nullptr; } else ui->viewClosed();
+            };
+            ui=new AddonSessionUi(std::move(backend)); fake.ui=ui; ui->setDisplayActive(true);
+            QCOMPARE(fake.activations,1u); QCOMPARE(fake.releases,1u);
+            if(destroy) QVERIFY(!ui);
+            else { QVERIFY(!ui->displayCurrent()); delete ui; }
+        }
+    }
+    void reviewCancellationCanReopenThePageWithoutRetiringItsNewDemand() {
+        DisplayFake fake; fake.inlineReady=true; auto backend=fake.attachedBackend(); bool reopen=true;
+        backend.cancel=[&](const auto& ticket) {
+            fake.canceled.append(ticket);
+            if(reopen) { reopen=false; fake.ui->setDisplayActive(true); }
+        };
+        AddonSessionUi ui(std::move(backend)); fake.ui=&ui; ui.setDisplayActive(true);
+        QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        ui.viewClosed(); QVERIFY(ui.displayCurrent()); QVERIFY(fake.active);
+        QCOMPARE(fake.releases,0u); QCOMPARE(fake.canceled.size(),1);
+        QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        ui.viewClosed(); QVERIFY(!fake.active); QCOMPARE(fake.releases,1u);
+    }
+    void displayStateCallbackCannotAcceptAnOlderReviewAfterReplacement() {
+        DisplayFake fake; fake.inlineReady=true; auto backend=fake.attachedBackend(); bool armed=false;
+        backend.catalog.state=[&] {
+            if(armed) {
+                armed=false; fake.ui->viewClosed(); fake.ui->setDisplayActive(true);
+                fake.review.insert("name",QStringLiteral("Replacement"));
+                fake.ui->prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("New room"));
+            }
+            return QVariantMap{{"current",true},{"ready",true}};
+        };
+        AddonSessionUi ui(std::move(backend)); fake.ui=&ui; ui.setDisplayActive(true);
+        QVERIFY(ui.prepare(controller,QStringLiteral("wss://relay.example/room"),QStringLiteral("Room")));
+        armed=true; QVERIFY(!ui.accept()); QCOMPARE(fake.accepted,0u);
+        QCOMPARE(ui.review().value("name").toString(),QStringLiteral("Replacement"));
+    }
     void idleFacadeHasNoReviewTimer() {
         AddonSessionUi unavailable(AddonSessionUi::Backend{});
         QVERIFY(!AddonSessionUiTestAccess::reviewTimerActive(unavailable));

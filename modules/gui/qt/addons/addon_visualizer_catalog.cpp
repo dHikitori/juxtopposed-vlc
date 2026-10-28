@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_visualizer_catalog.hpp"
 #include "addon_manager.hpp"
+#include "addon_catalogue_view.hpp"
 #include "addon_store_authority.hpp"
 #include <QDir>
 #include <QFile>
@@ -68,22 +69,59 @@ AddonUiAssets::Backend AddonVisualizerCatalog::backend(AddonManager* manager, co
             capture.current = [epoch, expected, authority] { return authority.current() && epoch->load(std::memory_order_acquire) == expected; };
             capture.live = capture.current; return capture;
         };
-    }};
+    },{},[owner](std::function<void()> wake) { return owner?owner->watchDisplayCatalogue(std::move(wake)):StoreAuthorityChanges{}; }};
 }
 AddonVisualizerCatalog::AddonVisualizerCatalog(AddonManager* manager, QObject* parent)
-    : QObject(parent), m_manager(manager), m_epoch(std::make_shared<std::atomic<quint64>>(0)), m_assets(new AddonUiAssets(backend(manager, m_epoch), {}, this))
+    : QObject(parent), m_manager(manager), m_display(AddonCatalogueView::attached(manager)),
+      m_displayMode(bool(m_display)), m_epoch(std::make_shared<std::atomic<quint64>>(0))
 {
-    connect(m_assets, &AddonUiAssets::sessionAssetsChanged, this, [this](const QString& id) { if (id == m_session) completed(); });
-    if (manager) {
-        connect(manager, &AddonManager::revisionChanged, this, &AddonVisualizerCatalog::reload);
-        connect(manager, &QObject::destroyed, this, &AddonVisualizerCatalog::reload);
+    if (m_displayMode) {
+        connect(m_display, &AddonCatalogueView::catalogueChanged, this, &AddonVisualizerCatalog::reload);
+        connect(m_display, &AddonCatalogueView::freshnessChanged, this, &AddonVisualizerCatalog::changed);
+        connect(m_display, &QObject::destroyed, this, &AddonVisualizerCatalog::changed);
+    } else {
+        m_assets = new AddonUiAssets(backend(manager, m_epoch), {}, this);
+        connect(m_assets, &AddonUiAssets::sessionAssetsChanged, this, [this](const QString& id) { if (id == m_session) completed(); });
+        if (manager) connect(manager, &AddonManager::revisionChanged, this, &AddonVisualizerCatalog::reload);
     }
+    if (manager) connect(manager, &QObject::destroyed, this, &AddonVisualizerCatalog::reload);
     reload();
 }
 AddonVisualizerCatalog::~AddonVisualizerCatalog()
-{ m_epoch->fetch_add(1, std::memory_order_acq_rel); disconnect(m_assets, nullptr, this, nullptr); m_assets->close(); }
+{
+    m_epoch->fetch_add(1, std::memory_order_acq_rel);
+    if (m_assets) { disconnect(m_assets, nullptr, this, nullptr); m_assets->close(); }
+}
+bool AddonVisualizerCatalog::current() const
+{ return m_displayMode ? m_display && m_display->isCurrent() : bool(m_manager); }
+QString AddonVisualizerCatalog::partition(const QString& id) const
+{
+    for (const auto& value : m_choices) {
+        const auto row = value.toMap();
+        if (row.value(QStringLiteral("id")).toString() == id && row.value(QStringLiteral("enabled")).toBool())
+            return row.value(QStringLiteral("displayPartition")).toString();
+    }
+    return {};
+}
 void AddonVisualizerCatalog::reload()
 {
+    if (m_displayMode) {
+        if (!m_display) { emit changed(); return; } // Fixed mode: no legacy read after destruction.
+        QVariantList choices;
+        for (const auto& value : m_display->contributions(QStringLiteral("visualizer"), true)) {
+            const auto row = value.toMap(), document = row.value(QStringLiteral("document")).toMap();
+            if (document.value(QStringLiteral("contract")).toString() != QLatin1String("visualizer@1")) continue;
+            const auto channels = document.value(QStringLiteral("analysisChannels")).toStringList();
+            const auto granted = m_display->grantedScope(row.value(QStringLiteral("packageId")).toString(), QStringLiteral("audio.analysis"))
+                .value(QStringLiteral("channels")).toArray();
+            bool enabled = row.value(QStringLiteral("enabled")).toBool() && !channels.isEmpty();
+            for (const auto& channel : channels) enabled &= granted.contains(QJsonValue(channel));
+            choices.append(QVariantMap{{"id", row.value("id")}, {"packageId", row.value("packageId")},
+                {"name", row.value("name")}, {"enabled", enabled}, {"displayPartition", row.value("displayPartition")}});
+        }
+        if (choices != m_choices) { m_choices = std::move(choices); emit changed(); }
+        return;
+    }
     m_epoch->fetch_add(1, std::memory_order_acq_rel); const auto previous = m_session; m_session.clear();
     if (!previous.isEmpty()) m_assets->closeSession(previous);
     m_choices.clear();
@@ -94,7 +132,7 @@ void AddonVisualizerCatalog::reload()
     emit changed();
 }
 bool AddonVisualizerCatalog::loading() const
-{ return !m_session.isEmpty() && m_assets->sessionLoading(m_session); }
+{ return m_displayMode ? m_display && m_display->loading() : !m_session.isEmpty() && m_assets->sessionLoading(m_session); }
 void AddonVisualizerCatalog::completed()
 {
     if (loading()) return;

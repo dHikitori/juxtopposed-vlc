@@ -2,6 +2,7 @@
 #include "subtitle_source_service.hpp"
 #include "subtitle_matching.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_catalogue_view.hpp"
 #include "addons/addon_metadata_coordinator.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include <QDir>
@@ -25,6 +26,7 @@
 #include <QUuid>
 #include <memory>
 #include <algorithm>
+#include <limits>
 #if __has_include("subtitle_consumer_key.hpp")
 #include "subtitle_consumer_key.hpp"
 #else
@@ -133,6 +135,21 @@ SubtitleSourceService::~SubtitleSourceService()
 
 bool SubtitleSourceService::configured() const
 {
+    if (m_providerDisplayMode) {
+        if (!providerDisplayCurrent()) return false;
+        const auto providers = displayProviders();
+        return std::any_of(providers.cbegin(), providers.cend(), [](const QVariant& value) {
+            const auto provider = value.toMap();
+            return provider.value("enabled").toBool() && provider.value("configurationKnown").toBool()
+                && provider.value("configured").toBool();
+        });
+    }
+    return configuredForExecution();
+}
+
+bool SubtitleSourceService::configuredForExecution() const
+{
+    if (m_addonManagerRetired) return false;
     if (!m_addonManager) return !m_apiKey.isEmpty();
     const auto providers = m_addonManager->providersForFeature(QStringLiteral("subtitles"));
     return std::any_of(providers.cbegin(), providers.cend(), [](const QVariant& value) {
@@ -141,22 +158,94 @@ bool SubtitleSourceService::configured() const
     });
 }
 
+bool SubtitleSourceService::providerDisplayBound() const
+{
+    return m_providerDisplayMode && !m_addonManagerRetired && m_addonManager && m_providerDisplay
+        && vlc::addons::AddonCatalogueView::attached(m_addonManager) == m_providerDisplay;
+}
+bool SubtitleSourceService::providerDisplayCurrent() const { return providerDisplayBound() && m_providerDisplay->isCurrent(); }
+bool SubtitleSourceService::providerDisplayLoading() const { return providerDisplayBound() && m_providerDisplay->loading(); }
+QString SubtitleSourceService::providerDisplayError() const
+{
+    if (!m_providerDisplayMode) return {};
+    return providerDisplayBound() ? m_providerDisplay->error() : tr("The subtitle provider list is not available.");
+}
+QVariantList SubtitleSourceService::displayProviders() const
+{
+    if (!m_providerDisplayMode) return !m_addonManagerRetired && m_addonManager
+        ? m_addonManager->providersForFeature(QStringLiteral("subtitles")) : QVariantList{};
+    return providerDisplayBound() ? m_addonManager->displayProvidersForFeature(QStringLiteral("subtitles")) : QVariantList{};
+}
+bool SubtitleSourceService::configurationKnown() const
+{
+    if (!m_providerDisplayMode) return !m_addonManagerRetired;
+    if (!providerDisplayCurrent()) return false;
+    bool unknown = false;
+    for (const auto& value : displayProviders()) {
+        const auto provider = value.toMap();
+        if (!provider.value("enabled").toBool()) continue;
+        if (provider.value("configurationKnown").toBool() && provider.value("configured").toBool()) return true;
+        unknown |= !provider.value("configurationKnown").toBool();
+    }
+    return !unknown;
+}
+void SubtitleSourceService::retireAddonManager()
+{
+    // Do not call Manager once its retirement signal starts. Execution still
+    // uses its authoritative paths while the bound Manager is open.
+    if (m_addonBindingEpoch != std::numeric_limits<quint64>::max()) ++m_addonBindingEpoch;
+    m_addonManagerRetired = true; m_addonManager = nullptr;
+    const QPointer<SubtitleSourceService> alive(this);
+    cancelSearch(); if (!alive) return;
+    cancelPreparation(); if (!alive) return;
+    if (m_metadata) m_metadata->invalidate(); if (!alive) return;
+    emit configurationChanged();
+}
+
 void SubtitleSourceService::setAddonManager(vlc::addons::AddonManager* manager)
 {
-    if (m_addonManager == manager) return;
+    if (m_addonManager == manager && !m_addonManagerRetired) return;
+    if (m_addonBindingEpoch == std::numeric_limits<quint64>::max()) return;
+    const auto epoch = ++m_addonBindingEpoch;
+    const QPointer<vlc::addons::AddonManager> incoming(manager);
+    const bool hasIncoming = manager != nullptr;
+    const QPointer<SubtitleSourceService> alive(this);
+    const auto current = [&] { return alive && epoch == m_addonBindingEpoch && (!hasIncoming || incoming); };
     setMetadataService(nullptr);
-    cancelSearch(); cancelPreparation();
-    if (m_addonManager) {
-        disconnect(m_addonManager, nullptr, this, nullptr);
-        m_addonManager->unregisterBuiltinProvider(builtinSubtitles);
+    if (!current()) return;
+    cancelSearch(); if (!current()) return;
+    cancelPreparation(); if (!current()) return;
+    // From this point an aborted transition cannot revive the old native path.
+    // The unregister notification may delete either Manager or bind a newer one.
+    const auto previousManager = m_addonManager;
+    m_addonManager = nullptr; m_addonManagerRetired = true;
+    const auto publishAbort = [&] { if (alive && epoch == m_addonBindingEpoch) emit configurationChanged(); };
+    if (m_providerDisplay) disconnect(m_providerDisplay, nullptr, this, nullptr);
+    if (previousManager) {
+        disconnect(previousManager, nullptr, this, nullptr);
+        previousManager->unregisterBuiltinProvider(builtinSubtitles);
+        if (!current()) { publishAbort(); return; }
     }
-    delete m_metadata; m_metadata = nullptr;
-    delete m_builtin; m_builtin = nullptr;
+    const auto metadata = m_metadata; m_metadata = nullptr; delete metadata; if (!current()) { publishAbort(); return; }
+    const auto builtin = m_builtin; m_builtin = nullptr; delete builtin; if (!current()) { publishAbort(); return; }
     m_builtinSearches.clear(); m_addonRecords.clear();
-    m_addonManager = manager;
-    if (!manager) { emit configurationChanged(); return; }
+    auto* const target = incoming.data();
+    m_addonManager = target;
+    m_addonManagerRetired = false;
+    m_providerDisplayMode = target && target->displayCatalogueAttached();
+    m_providerDisplay = m_providerDisplayMode ? vlc::addons::AddonCatalogueView::attached(target) : nullptr;
+    if (!target) { emit configurationChanged(); return; }
+    connect(target, &vlc::addons::AddonManager::retiring, this, &SubtitleSourceService::retireAddonManager, Qt::DirectConnection);
+    connect(target, &QObject::destroyed, this, &SubtitleSourceService::retireAddonManager);
+    connect(target, &vlc::addons::AddonManager::capabilitiesChanged, this, &SubtitleSourceService::configurationChanged);
+    if (m_providerDisplay) {
+        connect(m_providerDisplay, &vlc::addons::AddonCatalogueView::catalogueChanged, this, &SubtitleSourceService::configurationChanged);
+        connect(m_providerDisplay, &vlc::addons::AddonCatalogueView::freshnessChanged, this, &SubtitleSourceService::configurationChanged);
+        connect(m_providerDisplay, &QObject::destroyed, this, &SubtitleSourceService::configurationChanged);
+    }
     m_builtin = new SubtitleSourceService(m_options, this);
     if (!m_storageDirectory.isEmpty()) m_builtin->setStorageDirectory(m_storageDirectory);
+    if (!current()) return;
     AddonMetadataCoordinator::Backend backend;
     backend.providersForFeature = [this](const QString& feature) {
         return m_addonManager ? m_addonManager->providersForFeature(feature) : QVariantList{};
@@ -181,7 +270,7 @@ void SubtitleSourceService::setAddonManager(vlc::addons::AddonManager* manager)
         } else if (m_addonManager) m_addonManager->cancel(invocation);
     };
     m_metadata = new AddonMetadataCoordinator(std::move(backend), this);
-    connect(manager, &vlc::addons::AddonManager::operationFinished, m_metadata, &AddonMetadataCoordinator::operationFinished);
+    connect(target, &vlc::addons::AddonManager::operationFinished, m_metadata, &AddonMetadataCoordinator::operationFinished);
     connect(m_metadata, &AddonMetadataCoordinator::finished, this, &SubtitleSourceService::finishProviderSearch);
     connect(m_builtin, &SubtitleSourceService::searchFinished, this, [this](quint64 request, const QVariantMap& result) {
         const auto invocation = m_builtinSearches.take(request);
@@ -211,7 +300,7 @@ void SubtitleSourceService::setAddonManager(vlc::addons::AddonManager* manager)
         const auto generation = m_prepareGeneration;
         QTimer::singleShot(0, this, [this, generation] { downloadNext(generation); });
     });
-    connect(manager, &vlc::addons::AddonManager::operationFinished, this,
+    connect(target, &vlc::addons::AddonManager::operationFinished, this,
         [this](const QString& invocation, const QString& contribution, const QString& status, const QVariantMap& data, const QString& error) {
         if (invocation != m_providerResolve || m_providerResolveGeneration != m_prepareGeneration || !m_preparing) return;
         m_providerResolve.clear();
@@ -241,13 +330,14 @@ void SubtitleSourceService::setAddonManager(vlc::addons::AddonManager* manager)
             QTimer::singleShot(0, owner, [owner, generation] { if (owner) owner->downloadNext(generation); });
         });
     });
-    connect(manager, &vlc::addons::AddonManager::revisionChanged, this, [this] {
+    connect(target, &vlc::addons::AddonManager::revisionChanged, this, [this] {
         if (!m_providerSearch.isEmpty()) finishSearch(m_searchGeneration, tr("Subtitle provider settings changed. Search again."));
         if (m_preparing) finishPreparation(m_prepareGeneration, tr("Subtitle provider settings changed. Try again."));
         if (m_metadata) m_metadata->invalidate();
         cancelSearch(); cancelPreparation(); m_addonRecords.clear(); emit configurationChanged();
     });
     refreshBuiltinRegistration();
+    if (!current() || m_addonManager != incoming) return;
     emit configurationChanged();
 }
 
@@ -482,6 +572,7 @@ QVariantList SubtitleSourceService::parseSources(const QByteArray& bytes, QStrin
 
 void SubtitleSourceService::fetchLanguages()
 {
+    if (m_addonManagerRetired) return;
     if (m_apiKey.isEmpty() || (m_addonManager && !providerAvailable(builtinSubtitles)) || m_languagesLoaded || m_languagesReply) return;
     const auto generation = ++m_languagesGeneration;
     m_languagesReply = request(m_options.apiBase.resolved(QUrl(QStringLiteral("infos/languages"))), {}, true,
@@ -545,7 +636,7 @@ quint64 SubtitleSourceService::searchMedia(const QVariantMap& input, const QStri
         targets = selected != targets.cend() ? QVariantList{*selected} : QVariantList{QVariantMap{{"url", anchor}}};
     }
     QString error;
-    if (!configured()) error = m_addonManager ? tr("Set up a subtitle provider in Add-on settings.")
+    if (!configuredForExecution()) error = m_addonManager ? tr("Set up a subtitle provider in Add-on settings.")
         : tr("OpenSubtitles is not set up. Add an API key to use this source.");
     else if (query.size() > 512 || (!language.isEmpty() && !code.match(language).hasMatch())) error = tr("Enter a title and select a subtitle language.");
     else if (!input.value("details").toMap().value("airDate").toString().isEmpty()

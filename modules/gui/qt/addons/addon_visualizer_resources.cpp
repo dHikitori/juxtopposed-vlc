@@ -166,7 +166,7 @@ AddonUiAssets::Backend AddonVisualizerResources::backend(AddonManager* manager, 
             { QMutexLocker lock(&shared->mutex); if (!current()) return reject(); shared->prepared = std::move(prepared); }
             return capture;
         };
-    }};
+    },{},[owner](std::function<void()> wake) { return owner?owner->watchDisplayCatalogue(std::move(wake)):StoreAuthorityChanges{}; }};
 }
 AddonVisualizerResources::AddonVisualizerResources(AddonManager* manager, QObject* parent)
     : QObject(parent), m_manager(manager), m_shared(std::make_shared<Shared>()), m_assets(new AddonUiAssets(backend(manager, m_shared), profile(), this))

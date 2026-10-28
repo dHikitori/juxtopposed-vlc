@@ -9,10 +9,18 @@ ColumnLayout {
     property real scaleFactor: 1
     property bool lightTheme: false
     property Component videoBackdropContent
+    property bool active: true
+    property bool managerRetired: false
     // The host supplies the manager; standalone dialogs/tests can omit it.
     property var addonManager: typeof AddonManager !== "undefined" ? AddonManager : null
     property color accentColor: "#d37918"
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
+    onAddonManagerChanged: managerRetired = false
+    Connections {
+        target: root.addonManager
+        ignoreUnknownSignals: true
+        function onRetiring() { root.managerRetired = true }
+    }
     spacing: theme.dp(10)
     Text { text: qsTr("Online Subtitles"); color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16); Layout.topMargin: root.theme.dp(24) }
     Text {
@@ -35,17 +43,43 @@ ColumnLayout {
         active: !!root.addonManager
         sourceComponent: ColumnLayout {
             spacing: root.theme.dp(8)
-            readonly property var providers: { root.addonManager.revision; return root.addonManager.providersForFeature("subtitles") }
+            readonly property var providers: {
+                if (!providerList.backendReady || !root.addonManager || root.managerRetired) return []
+                // The native facade reads the exact bound View and refuses a
+                // replaced or retiring Manager. Standalone fixtures can omit it.
+                const nativeRows = root.sourceService.displayProviders
+                if (nativeRows !== undefined) return nativeRows
+                if (providerList.displayMode) {
+                    root.addonManager.catalogueRevision; root.addonManager.catalogueReady
+                    return root.addonManager.displayProvidersForFeature("subtitles")
+                }
+                root.addonManager.revision
+                return root.addonManager.providersForFeature("subtitles")
+            }
             RedesignAddonProviders {
+                id: providerList
                 Layout.fillWidth: true
                 providers: parent.providers
+                backend: root.addonManager
+                active: root.active && root.visible
+                listCurrent: !root.managerRetired && (!displayMode || (root.sourceService.providerDisplayAttached === true
+                    ? root.sourceService.providerDisplayCurrent === true : root.addonManager.catalogueReady === true)
+                    )
+                loading: !root.managerRetired && displayMode && (root.sourceService.providerDisplayAttached === true
+                    ? root.sourceService.providerDisplayLoading === true : root.addonManager.catalogueLoading === true)
+                listError: root.managerRetired ? qsTr("The subtitle provider list is not available.")
+                    : displayMode ? (root.sourceService.providerDisplayError || root.addonManager.catalogueError || "") : ""
+                actionGuard: typeof root.sourceService.providerDisplayIsCurrent === "function"
+                    ? () => root.sourceService.providerDisplayIsCurrent() : null
                 feature: "subtitles"; heading: qsTr("Subtitle providers")
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 onEnabledRequested: (id, enabled) => {
+                    if (root.managerRetired || !currentForAction()) return
                     const provider = providers.find(entry => entry.id === id)
                     if (provider) root.addonManager.setEnabled(provider.packageId, enabled)
                 }
                 onMoveRequested: (id, direction) => {
+                    if (root.managerRetired || !currentForAction()) return
                     const ids = providers.map(entry => entry.id)
                     const from = ids.indexOf(id), to = from + direction
                     if (from < 0 || to < 0 || to >= ids.length) return
@@ -53,6 +87,7 @@ ColumnLayout {
                     root.addonManager.setProviderOrder("subtitles", ids)
                 }
                 onConfigureRequested: packageId => {
+                    if (root.managerRetired || !currentForAction()) return
                     const provider = providers.find(entry => entry.packageId === packageId)
                     if (provider && provider.builtin) { setup.open(); return }
                     addonConfiguration.packageId = packageId

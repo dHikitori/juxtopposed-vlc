@@ -6,11 +6,15 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include "addons/addon_ui_registry.hpp"
+#include "addons/addon_catalogue_view.hpp"
+#include "addons/addon_stream_lifetime.hpp"
+#include <memory>
 
 using namespace vlc::addons;
 class TestAddonUiRegistry : public QObject
 {
     Q_OBJECT
+    std::unique_ptr<AddonStreamLifetime> m_lifetime;
     static void write(const QString& path, const QByteArray& bytes) {
         QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), bytes.size());
     }
@@ -66,6 +70,145 @@ class TestAddonUiRegistry : public QObject
         manifest.insert("contributions", contributions); write(path + QStringLiteral("/addon.json"), QJsonDocument(manifest).toJson());
     }
 private slots:
+    void init() {
+        m_lifetime=std::make_unique<AddonStreamLifetime>();
+        QVERIFY(AddonStreamLifetime::registerApplication(m_lifetime->handle()));
+    }
+    void cleanup() {
+        const auto handle=m_lifetime->handle();handle.close();QVERIFY(handle.waitQt(std::chrono::seconds(5)));
+        QVERIFY(AddonStreamLifetime::unregisterApplication(handle));m_lifetime.reset();
+    }
+    void attachedCatalogueLoadsPendingDocumentsIntoTheSameSession() {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto catalogue=std::make_unique<AddonCatalogueView>(&manager,m_lifetime->handle());int invokes=0;
+        AddonUiRegistry registry(&manager,{[&](const QString&,const QString&,const QVariantMap&){++invokes;return QStringLiteral("request");},[](const QString&){}});
+        QVERIFY(!registry.available());QVERIFY(registry.loading());QVERIFY(registry.routes().isEmpty());QVERIFY(!registry.triggerCommand("org.example.ui/update"));
+        QTRY_VERIFY(catalogue->isCurrent());QTRY_VERIFY(registry.available());QCOMPARE(registry.routes().size(),1);
+        QSignalSpy base(&registry,&AddonUiRegistry::changed),failed(&registry,&AddonUiRegistry::sessionFailed);
+        const auto id=registry.createSession("org.example.ui/browser",{{"query","radio"}});QVERIFY(!id.isEmpty());
+        QVERIFY(registry.session(id).value("pending").toBool());QVERIFY(!registry.dispatchSession(id,"org.example.ui/update"));QCOMPARE(invokes,0);
+        QTRY_VERIFY(!registry.session(id).value("document").toMap().isEmpty());QVERIFY(!registry.session(id).value("pending").toBool());QCOMPARE(failed.size(),0);QCOMPARE(base.size(),0);
+        QVERIFY(registry.dispatchSession(id,"org.example.ui/update"));QCOMPARE(invokes,1);
+        registry.operationFinished("request","org.example.ui/update","match",{{"patch",QVariantMap{{"result","Kept"}}}},{});
+        QCOMPARE(registry.session(id).value("state").toMap().value("result").toString(),QStringLiteral("Kept"));
+        const auto other=registry.createSession("org.example.ui/modal");QVERIFY(!other.isEmpty());
+        QTRY_VERIFY(!registry.session(other).value("document").toMap().isEmpty());
+        QCOMPARE(registry.session(id).value("state").toMap().value("result").toString(),QStringLiteral("Kept"));QCOMPARE(base.size(),0);
+        registry.closeSession(other);registry.closeSession(id);
+    }
+    void declaredLocaleMustBeReadyBeforeSessionActions_data() {
+        QTest::addColumn<bool>("valid");QTest::newRow("valid")<<true;QTest::newRow("malformed")<<false;
+    }
+    void declaredLocaleMustBeReadyBeforeSessionActions() {
+        QFETCH(bool,valid);QTemporaryDir source,storage;package(source.path());
+        QFile file(source.filePath("addon.json"));QVERIFY(file.open(QIODevice::ReadOnly));auto manifest=QJsonDocument::fromJson(file.readAll()).object();file.close();
+        auto files=manifest.value("files").toArray();files.append("locale.json");manifest.insert("files",files);
+        manifest.insert("locales",QJsonObject{{"default","en"},{"files",QJsonObject{{"en","locale.json"}}}});
+        write(source.filePath("addon.json"),QJsonDocument(manifest).toJson());write(source.filePath("locale.json"),valid?QByteArray("{\"label\":\"Ready\"}"):QByteArray("[]"));
+        AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto catalogue=std::make_unique<AddonCatalogueView>(&manager,m_lifetime->handle());int invokes=0;
+        AddonUiRegistry registry(&manager,{[&](const QString&,const QString&,const QVariantMap&){++invokes;return QStringLiteral("request");},[](const QString&){}});QTRY_VERIFY(registry.available());
+        const auto id=registry.createSession("org.example.ui/browser");QVERIFY(!id.isEmpty());QVERIFY(!registry.dispatchSession(id,"org.example.ui/update"));
+        if(valid) {
+            QTRY_COMPARE(registry.session(id).value("messages").toMap().value("label").toString(),QStringLiteral("Ready"));
+            QVERIFY(registry.dispatchSession(id,"org.example.ui/update"));QCOMPARE(invokes,1);
+        } else {
+            QTRY_VERIFY(registry.session(id).value("unavailable").toBool());QVERIFY(registry.session(id).value("document").toMap().isEmpty());
+            QVERIFY(!registry.dispatchSession(id,"org.example.ui/update"));QCOMPARE(invokes,0);QVERIFY(registry.errorMessage().isEmpty());
+        }
+        registry.closeSession(id);
+    }
+    void attachedRefreshRetainsSafeStateAndWithdrawalRetiresIt() {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto catalogue=std::make_unique<AddonCatalogueView>(&manager,m_lifetime->handle());int invokes=0;
+        AddonUiRegistry registry(&manager,{[&](const QString&,const QString&,const QVariantMap&){++invokes;return QStringLiteral("request");},[](const QString&){}});
+        QTRY_VERIFY(registry.available());const auto id=registry.createSession("org.example.ui/browser");QVERIFY(!id.isEmpty());QTRY_VERIFY(!registry.session(id).value("document").toMap().isEmpty());
+        QVERIFY(registry.dispatchSession(id,"org.example.ui/update"));registry.operationFinished("request","org.example.ui/update","match",{{"patch",QVariantMap{{"result","Private state"}}}},{});
+        QSignalSpy failed(&registry,&AddonUiRegistry::sessionFailed);catalogue->refresh();QVERIFY(!registry.available());QVERIFY(catalogue->retainedCatalogueCurrent());
+        QVERIFY(!registry.session(id).value("document").toMap().isEmpty());QVERIFY(!registry.dispatchSession(id,"org.example.ui/update"));QVERIFY(!registry.openRoute("addon/org.example.ui/browser"));QVERIFY(registry.createSession("org.example.ui/browser").isEmpty());
+        QTRY_VERIFY(registry.available());QCOMPARE(failed.size(),0);QCOMPARE(registry.session(id).value("state").toMap().value("result").toString(),QStringLiteral("Private state"));
+        QVERIFY(manager.setEnabled("org.example.ui",false));QVERIFY(!registry.available());QVERIFY(!registry.triggerCommand("org.example.ui/update"));
+        QTRY_VERIFY(registry.session(id).isEmpty());QVERIFY(failed.size()>0);QTRY_VERIFY(registry.available());QVERIFY(registry.routes().isEmpty());QCOMPARE(invokes,1);
+    }
+    void attachedViewDestructionCannotFallBackToManager() {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto catalogue=std::make_unique<AddonCatalogueView>(&manager,m_lifetime->handle());int invokes=0;
+        AddonUiRegistry registry(&manager,{[&](const QString&,const QString&,const QVariantMap&){++invokes;return QStringLiteral("request");},[](const QString&){}});QTRY_VERIFY(registry.available());QCOMPARE(registry.routes().size(),1);
+        const auto id=registry.createSession("org.example.ui/browser");QVERIFY(!id.isEmpty());QTRY_VERIFY(!registry.session(id).value("document").toMap().isEmpty());catalogue.reset();
+        QVERIFY(!registry.available());QVERIFY(registry.session(id).isEmpty());QVERIFY(!registry.openRoute("addon/org.example.ui/browser"));QVERIFY(!registry.triggerCommand("org.example.ui/update"));QVERIFY(registry.createSession("org.example.ui/browser").isEmpty());
+        QVERIFY(manager.setEnabled("org.example.ui",false));QCOMPARE(registry.routes().size(),1);QCOMPARE(invokes,0);
+    }
+    void activeDocumentTicketsAreReleasedOnSessionClose() {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto catalogue=std::make_unique<AddonCatalogueView>(&manager,m_lifetime->handle());AddonUiRegistry registry(&manager);QTRY_VERIFY(registry.available());
+        QStringList sessions;for(int i=0;i<32;++i){const auto id=registry.createSession("org.example.ui/browser");QVERIFY(!id.isEmpty());sessions.append(id);}
+        QVERIFY(registry.createSession("org.example.ui/browser").isEmpty());QVERIFY(catalogue->acquireDocument("org.example.ui/browser","view").isEmpty());
+        for(const auto& id:sessions)registry.closeSession(id);
+        QStringList tickets;for(int i=0;i<32;++i){const auto ticket=catalogue->acquireDocument("org.example.ui/browser","view");QVERIFY(!ticket.isEmpty());tickets.append(ticket);}QVERIFY(catalogue->acquireDocument("org.example.ui/browser","view").isEmpty());
+        for(const auto& ticket:tickets)catalogue->release(ticket);
+    }
+    void attachedTypedSelectionsNeedReadyCurrentSessions() {
+        QTemporaryDir source,storage;selectionPackage(source.path(),true,true);AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto catalogue=std::make_unique<AddonCatalogueView>(&manager,m_lifetime->handle());AddonUiRegistry registry(&manager);QTRY_VERIFY(registry.available());
+        const QString hook=QStringLiteral("dialog.add-to-playlist.content@1"),contribution=QStringLiteral("org.example.ui/playlist");QVERIFY(registry.selectReplacement(hook,contribution));QTRY_COMPARE(registry.replacement(hook).value("id").toString(),contribution);QTRY_VERIFY(registry.available());
+        const QVariantMap parameters{{"choiceSet","one"},{"targets",QVariantList{QVariantMap{{"ref","target:0"},{"title","Films"},{"enabled",true}}}},{"assets",QVariantList{}}};
+        QVERIFY(registry.canPrepareSelection(contribution,hook));QVERIFY(!registry.canUseSelection(contribution,hook));
+        const auto session=registry.createSession(contribution,parameters);QVERIFY(!session.isEmpty());QVERIFY(!registry.canUseSelection(contribution,hook));const QVariantMap result{{"choiceSet","one"},{"selected",QVariantList{QStringLiteral("target:0")}}};QVERIFY(!registry.validateSessionResult(session,result));
+        QTRY_VERIFY(!registry.session(session).value("document").toMap().isEmpty());QVERIFY(registry.canUseSelection(contribution,hook));QVERIFY(registry.validateSessionResult(session,result));QVERIFY(!registry.validateSessionResult(session,{{"choiceSet","old"},{"selected",QVariantList{QStringLiteral("target:0")}}}));
+        catalogue->refresh();QVERIFY(registry.canPrepareSelection(contribution,hook));QVERIFY(!registry.canUseSelection(contribution,hook));QVERIFY(!registry.validateSessionResult(session,result));QTRY_VERIFY(registry.available());QVERIFY(registry.canUseSelection(contribution,hook));QVERIFY(registry.validateSessionResult(session,result));registry.closeSession(session);
+    }
+    void malformedLocaleCannotGrantTypedSelectionReadiness() {
+        QTemporaryDir source,storage;selectionPackage(source.path(),true);QFile file(source.filePath("addon.json"));QVERIFY(file.open(QIODevice::ReadOnly));
+        auto manifest=QJsonDocument::fromJson(file.readAll()).object();file.close();auto files=manifest.value("files").toArray();files.append("locale.json");manifest.insert("files",files);
+        manifest.insert("locales",QJsonObject{{"default","en"},{"files",QJsonObject{{"en","locale.json"}}}});write(source.filePath("addon.json"),QJsonDocument(manifest).toJson());write(source.filePath("locale.json"),"[]");
+        AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto catalogue=std::make_unique<AddonCatalogueView>(&manager,m_lifetime->handle());AddonUiRegistry registry(&manager);QTRY_VERIFY(registry.available());
+        const QString hook=QStringLiteral("dialog.add-to-playlist.content@1"),contribution=QStringLiteral("org.example.ui/playlist");QVERIFY(registry.selectReplacement(hook,contribution));QTRY_VERIFY(registry.available());
+        QVERIFY(registry.canPrepareSelection(contribution,hook));QVERIFY(!registry.canUseSelection(contribution,hook));
+        const auto session=registry.createSession(contribution,{{"choiceSet","one"},{"targets",QVariantList{}},{"assets",QVariantList{}}});QVERIFY(!session.isEmpty());
+        QTRY_VERIFY(registry.session(session).value("unavailable").toBool());QVERIFY(!registry.canUseSelection(contribution,hook));
+        QVERIFY(!registry.validateSessionResult(session,{{"choiceSet","one"},{"selected",QVariantList{}}}));registry.closeSession(session);
+    }
+    void invokeReentryCannotPublishAnOldRequest_data() {
+        QTest::addColumn<int>("mode");QTest::newRow("closed-session")<<0;QTest::newRow("suspended-session")<<1;QTest::newRow("withdrawn-package")<<2;
+    }
+    void invokeReentryCannotPublishAnOldRequest() {
+        QFETCH(int,mode);QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        QString session;QStringList cancelled;AddonUiRegistry* active=nullptr;
+        AddonUiRegistry registry(&manager,AddonUiRegistry::Backend{
+            [&](const QString&,const QString&,const QVariantMap&){
+                if(mode==0)active->closeSession(session);else if(mode==1)active->suspendSession(session,true);else manager.setEnabled("org.example.ui",false);
+                return QStringLiteral("old-request");},[&](const QString& request){cancelled.append(request);}});active=&registry;
+        session=registry.createSession("org.example.ui/browser");QVERIFY(!session.isEmpty());QSignalSpy completed(&registry,&AddonUiRegistry::commandCompleted);
+        QVERIFY(!registry.dispatchSession(session,"org.example.ui/update"));QCOMPARE(cancelled,QStringList{QStringLiteral("old-request")});
+        registry.operationFinished("old-request","org.example.ui/update","match",{{"patch",QVariantMap{{"result","Late"}}}},{});QCOMPARE(completed.size(),0);
+        if(mode==1)QVERIFY(registry.session(session).value("state").toMap().value("result").isNull());else QVERIFY(registry.session(session).isEmpty());
+    }
+    void backendRetirementCannotLeaveANewRequestUnowned() {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        std::unique_ptr<AddonUiRegistry> registry;QStringList cancelled;
+        registry=std::make_unique<AddonUiRegistry>(&manager,AddonUiRegistry::Backend{
+            [&](const QString&,const QString&,const QVariantMap&){registry.reset();return QStringLiteral("unpublished");},
+            [&](const QString& request){cancelled.append(request);}});
+        QVERIFY(!registry->triggerCommand("org.example.ui/update"));QVERIFY(!registry);QCOMPARE(cancelled,QStringList{QStringLiteral("unpublished")});
+    }
+    void cancellationCallbackCanRetireTheRegistry() {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        std::unique_ptr<AddonUiRegistry> registry;QStringList cancelled;
+        registry=std::make_unique<AddonUiRegistry>(&manager,AddonUiRegistry::Backend{
+            [](const QString&,const QString&,const QVariantMap&){return QStringLiteral("request");},
+            [&](const QString& request){cancelled.append(request);registry.reset();}});
+        QVERIFY(registry->triggerCommand("org.example.ui/update"));QVERIFY(manager.setEnabled("org.example.ui",false));
+        QVERIFY(!registry);QCOMPARE(cancelled,QStringList{QStringLiteral("request")});
+    }
+    void sessionPublicationCanRetireTheRegistry() {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.ui",true));
+        auto registry=std::make_unique<AddonUiRegistry>(&manager,AddonUiRegistry::Backend{
+            [](const QString&,const QString&,const QVariantMap&){return QStringLiteral("request");},[](const QString&){}});
+        const auto id=registry->createSession("org.example.ui/browser");QVERIFY(!id.isEmpty());QVERIFY(registry->dispatchSession(id,"org.example.ui/update"));
+        QObject::connect(registry.get(),&AddonUiRegistry::sessionChanged,&manager,[&]{registry.reset();});
+        registry->operationFinished("request","org.example.ui/update","match",{{"patch",QVariantMap{{"result","Done"}}}},{});QVERIFY(!registry);
+    }
     void typedSelectionNeedsExplicitChoiceAndDataScope() {
         const QString playlist = QStringLiteral("org.example.ui/playlist"), subtitles = QStringLiteral("org.example.ui/subtitles");
         const QString playlistHook = QStringLiteral("dialog.add-to-playlist.content@1"), subtitleHook = QStringLiteral("subtitles.search.content@1");

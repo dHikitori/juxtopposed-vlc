@@ -20,6 +20,7 @@
 #include <QtEndian>
 #include <vector>
 #include <atomic>
+#include <thread>
 #include <QTimer>
 #include "addons/addon_ui_assets.hpp"
 #include "addons/addon_asset_image_provider.hpp"
@@ -36,14 +37,17 @@ QByteArray raster(const char* format = "PNG", int width = 4, int height = 4, QCo
 struct Fake {
     QString identity = QStringLiteral("release-1/account-1/grant-1");
     bool enabled = true;
+    QTemporaryDir notificationDirectory;
+    StoreAuthority notifications{notificationDirectory.path()};
+    std::shared_ptr<std::atomic_uint> prepares=std::make_shared<std::atomic_uint>(0),reads=std::make_shared<std::atomic_uint>(0),liveChecks=std::make_shared<std::atomic_uint>(0);
     std::shared_ptr<std::atomic<unsigned>> epoch = std::make_shared<std::atomic<unsigned>>(0);
     QMap<QString, QByteArray> images{{QStringLiteral("cover"), raster()}};
-    void setIdentity(const QString& value) { identity = value; ++*epoch; }
-    void setEnabled(bool value) { enabled = value; ++*epoch; }
+    void setIdentity(const QString& value) { identity = value; ++*epoch; notifications.invalidate(); }
+    void setEnabled(bool value) { enabled = value; ++*epoch; notifications.invalidate(); }
     AddonUiAssets::Backend backend()
     {
         return {[this](const QString&) {
-            QVariantMap assets; for (auto it = images.begin(); it != images.end(); ++it) {
+            ++*prepares;QVariantMap assets; for (auto it = images.begin(); it != images.end(); ++it) {
                 const QString path = it.key() + QStringLiteral(".png"); assets.insert(it.key(), QVariantMap{{"path", path}});
             }
             UiAssetCapture captured;
@@ -51,9 +55,9 @@ struct Fake {
                 {"accountReference", "account-1"}, {"assetStamp", identity}, {"assets", assets}};
             captured.assets = images;
             captured.current = [epoch = epoch, expected = epoch->load()] { return epoch->load() == expected; };
-            captured.live = captured.current;
-            return [captured] { return captured; };
-        }};
+            captured.live = [current=captured.current,checks=liveChecks] {++*checks;return current();};
+            return [captured,count=reads] {++*count;return captured;};
+        },{},[source=notifications](std::function<void()> wake){return source.onChanged(std::move(wake));}};
     }
 };
 
@@ -102,6 +106,72 @@ class TestAddonUiAssets : public QObject
 {
     Q_OBJECT
 private slots:
+    void idleScopesDoNotPollAuthority_data()
+    {
+        QTest::addColumn<int>("mode");QTest::newRow("no-scope")<<0;QTest::newRow("static-no-images")<<1;QTest::newRow("static-one-image")<<2;
+    }
+    void idleScopesDoNotPollAuthority()
+    {
+        QFETCH(int,mode);Fake fake;if(mode==1)fake.images.clear();AddonUiAssets assets(fake.backend(),{});
+        if(mode) {QVERIFY(assets.openSession("idle","example/view"));QTRY_VERIFY(!assets.sessionLoading("idle"));}
+        QTRY_COMPARE(AddonStreamLifetime::applicationHandle().qtWorkCount(),0u);
+        QCoreApplication::sendPostedEvents(nullptr,QEvent::MetaCall);QCoreApplication::processEvents();QTest::qWait(20);
+        const auto checks=fake.liveChecks->load(),prepares=fake.prepares->load(),reads=fake.reads->load();
+        QSignalSpy changed(&assets,&AddonUiAssets::sessionAssetsChanged),budget(&assets,&AddonUiAssets::imageBudgetChanged);
+        QVERIFY(!assets.statistics().value("startRetryPending").toBool());QTest::qWait(350);
+        QCOMPARE(fake.liveChecks->load(),checks);QCOMPARE(fake.prepares->load(),prepares);QCOMPARE(fake.reads->load(),reads);
+        QCOMPARE(changed.size(),0);QCOMPARE(budget.size(),0);QVERIFY(!assets.statistics().value("startRetryPending").toBool());
+        QCOMPARE(assets.statistics().value("jobs").toInt(),0);QCOMPARE(assets.statistics().value("queuedJobs").toInt(),0);
+    }
+    void nativeNoticesOnlyCloseStaleScopes()
+    {
+        Fake fake;auto backend=fake.backend();const auto prepare=backend.prepare;
+        const auto first=std::make_shared<std::atomic_bool>(true),second=std::make_shared<std::atomic_bool>(true);
+        backend.prepare=[prepare,first,second](const QString& id){const auto reader=prepare(id);return [reader,live=id==QLatin1String("first/view")?first:second]{auto capture=reader();capture.live=[live]{return live->load();};return capture;};};
+        AddonUiAssets assets(backend,{});AddonAssetImageProvider provider(&assets);QObject a,b;
+        QVERIFY(assets.openSession("first","first/view"));QVERIFY(assets.openSession("second","second/view"));
+        QTRY_COMPARE(assets.sessionAssets("first").size(),1);QTRY_COMPARE(assets.sessionAssets("second").size(),1);
+        const auto claimA=assets.claimImage("first",&a),claimB=assets.claimImage("second",&b);
+        const auto urlA=assets.assetUrlForClaim("first","asset:cover",claimA),urlB=assets.assetUrlForClaim("second","asset:cover",claimB);
+        QTRY_COMPARE(AddonStreamLifetime::applicationHandle().qtWorkCount(),0u);const auto reads=fake.reads->load();
+        fake.notifications.displayUnlocked();QTest::qWait(20);QCOMPARE(assets.statistics().value("claims").toInt(),2);QCOMPARE(fake.reads->load(),reads);
+        first->store(false);fake.notifications.displayUnlocked();
+        QVERIFY(provider.requestImage(providerId(urlA),nullptr,{}).isNull());QTRY_COMPARE(assets.statistics().value("claims").toInt(),1);
+        QVERIFY(!provider.requestImage(providerId(urlB),nullptr,{}).isNull());QCOMPARE(assets.assetUrlForClaim("second","asset:cover",claimB),urlB);QCOMPARE(fake.reads->load(),reads);
+    }
+    void nativeStoreChangesRevokeWithoutManagerRevision()
+    {
+        QTemporaryDir source,storage;package(source.path());AddonManager manager(storage.path());QVERIFY(manager.installLocalPackage(source.path(),true));QVERIFY(manager.setEnabled("org.example.images",true));
+        AddonUiAssets assets(&manager);AddonAssetImageProvider provider(&assets);QObject owner;QVERIFY(assets.openSession("native","org.example.images/view"));QTRY_COMPARE(assets.sessionAssets("native").size(),1);
+        const auto claim=assets.claimImage("native",&owner),url=assets.assetUrlForClaim("native","asset:cover",claim);QVERIFY(!provider.requestImage(providerId(url),nullptr,{}).isNull());
+        QSignalSpy revisions(&manager,&AddonManager::revisionChanged);PackageStore store(storage.path());QVERIFY(store.setEnabled("org.example.images",false));QCOMPARE(revisions.size(),0);
+        QVERIFY(provider.requestImage(providerId(url),nullptr,{}).isNull());QTRY_COMPARE(assets.statistics().value("claims").toInt(),0);QVERIFY(assets.sessionAssets("native").isEmpty());QCOMPARE(revisions.size(),0);
+    }
+    void notificationRefusalDoesNotStartAnUnwatchedSession()
+    {
+        Fake fake;auto backend=fake.backend();backend.subscribe=[](std::function<void()>){return StoreAuthorityChanges{};};AddonUiAssets assets(backend,{});
+        QVERIFY(!assets.openSession("refused","example/view"));QVERIFY(!assets.errorMessage().isEmpty());QCOMPARE(fake.prepares->load(),0u);QCOMPARE(fake.reads->load(),0u);
+        QVERIFY(!assets.statistics().value("startRetryPending").toBool());
+    }
+    void nativeNoticeCanOutliveTheClosedQtOwner()
+    {
+        Fake fake;auto backend=fake.backend();const auto subscribe=backend.subscribe;std::function<void()> late;
+        backend.subscribe=[&late,subscribe](std::function<void()> wake){late=wake;return subscribe(std::move(wake));};
+        auto assets=std::make_unique<AddonUiAssets>(backend,AddonUiAssets::Options{});QVERIFY(bool(late));assets.reset();
+        std::thread thread([late]{for(unsigned i=0;i<100;++i)late();});thread.join();QCoreApplication::processEvents();
+    }
+    void refusedWorkStartsStopAfterABoundedRetry()
+    {
+        const auto lifetime=AddonStreamLifetime::applicationHandle();QTRY_COMPARE(lifetime.qtWorkCount(),0u);
+        struct Control {QSemaphore entered,release;};const auto control=std::make_shared<Control>();
+        const auto cleanup=qScopeGuard([control]{control->release.release(AddonStreamLifetime::QtWorkLimit);});
+        for(unsigned i=0;i<AddonStreamLifetime::QtWorkLimit;++i)QVERIFY(lifetime.startQtWork([control]{control->entered.release();control->release.acquire();},[control]{control->release.release(AddonStreamLifetime::QtWorkLimit);}));
+        QTRY_COMPARE(control->entered.available(),int(AddonStreamLifetime::QtWorkLimit));Fake fake;AddonUiAssets::Options options;options.maximumStartRetries=2;AddonUiAssets assets(fake.backend(),options);
+        QVERIFY(assets.openSession("busy","example/view"));QVERIFY(assets.statistics().value("startRetryPending").toBool());
+        QTRY_VERIFY(!assets.sessionLoading("busy"));QVERIFY(!assets.errorMessage().isEmpty());QCOMPARE(fake.reads->load(),0u);QCOMPARE(assets.statistics().value("queuedJobs").toInt(),0);QVERIFY(!assets.statistics().value("startRetryPending").toBool());
+        control->release.release(AddonStreamLifetime::QtWorkLimit);QTRY_COMPARE(lifetime.qtWorkCount(),0u);
+        QVERIFY(assets.openSession("retry","example/view"));QTRY_COMPARE(assets.sessionAssets("retry").size(),1);QVERIFY(!assets.statistics().value("startRetryPending").toBool());
+    }
     void staticRasterFormats_data()
     {
         QTest::addColumn<QByteArray>("format"); QTest::addColumn<QString>("suffix");
@@ -275,7 +345,7 @@ private slots:
         QVERIFY(!provider.requestImage(providerId(url), nullptr, {}).isNull()); live->store(false);
         QVERIFY(provider.requestImage(providerId(url), nullptr, {}).isNull()); QVERIFY(assets.sessionPixels("published").isEmpty());
         QVERIFY(assets.assetUrlForClaim("published", "asset:cover", claim).isEmpty());
-        QTRY_COMPARE(assets.statistics().value("claims").toInt(), 0);
+        fake.notifications.displayUnlocked();QTRY_COMPARE(assets.statistics().value("claims").toInt(), 0);
     }
     void pendingDecodeKeepsItsBudgetWithoutBlockingClose_data()
     {

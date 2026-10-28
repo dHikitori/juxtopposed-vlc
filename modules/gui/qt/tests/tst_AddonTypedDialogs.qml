@@ -19,12 +19,17 @@ TestCase {
         property var closed: []
         property bool scopeAllowed: true
         property bool schemaAllowed: true
+        property bool available: true
+        property bool loading: false
         signal changed()
+        signal availabilityChanged()
         signal sessionChanged(string id)
         signal sessionFailed(string id)
+        function setAvailability(current, pending) { available = current; loading = pending; availabilityChanged() }
         function replacement(hook) { return selected[hook] ? {id: selected[hook], selectionTitlesAllowed: false} : ({}) }
-        function canUseSelection(id, hook) { return scopeAllowed && selected[hook] === id }
-        function validateSessionResult(id, result) { return schemaAllowed && !!sessions[id] }
+        function canPrepareSelection(id, hook) { return scopeAllowed && selected[hook] === id }
+        function canUseSelection(id, hook) { return available && scopeAllowed && selected[hook] === id }
+        function validateSessionResult(id, result) { return available && schemaAllowed && !!sessions[id] }
         function selectReplacement(hook, id) { selected = Object.assign({}, selected, {[hook]: id}); ++revision; changed(); return true }
         function sections(hook) { return [] }
         function createSession(id, parameters, context) {
@@ -78,6 +83,7 @@ TestCase {
         tryVerify(() => !playlistDialog.visible && !subtitleDialog.visible)
         preparation.cancel(); prepareSelection = false
         registry.sessions = ({}); registry.closed = []; registry.selected = ({}); registry.scopeAllowed = true; registry.schemaAllowed = true
+        registry.available = true; registry.loading = false
         ++registry.revision; registry.changed()
         playlists.deferred = false; playlists.callbacks = []; playlists.returnedRows = null; playlists.clear()
         playlists.append([{id: "playlist-17", name: "Films", thumbnail: "", readOnly: false},
@@ -117,6 +123,27 @@ TestCase {
         return picker
     }
     function subtitleResult(picker, assets) { return {choiceSet: picker.snapshotData.choiceSet, assignments: [{targetRef: "target:0", assetRefs: assets}]} }
+    function test_refreshKeepsTypedDialogChoicesWithoutAllowingSave_data() {
+        return [{tag: "playlist", subtitles: false}, {tag: "subtitles", subtitles: true}]
+    }
+    function test_refreshKeepsTypedDialogChoicesWithoutAllowingSave(data) {
+        const picker = data.subtitles ? subtitles() : playlist()
+        const dialog = data.subtitles ? subtitleDialog : playlistDialog
+        const save = data.subtitles ? subtitleSave : playlistSave
+        const mount = findChild(picker, "addonSelectionMount"), session = mount.sessionId, snapshot = picker.snapshotData.choiceSet
+        registry.result(picker, data.subtitles ? subtitleResult(picker, ["asset:0"]) : {choiceSet: snapshot, selected: ["target:1"]})
+        const button = findChild(dialog, data.subtitles ? "trackAssignmentSave" : "addToPlaylistSave")
+        verify(button !== null); verify(button.enabled)
+        registry.setAvailability(false, true)
+        tryCompare(picker, "prepared", false)
+        verify(picker.usingReplacement); verify(picker.visible); verify(!button.enabled)
+        dialog.submit(); compare(save.count, 0); verify(!dialog.addonFallback)
+        compare(mount.sessionId, session); compare(picker.snapshotData.choiceSet, snapshot)
+        registry.setAvailability(true, false)
+        tryCompare(picker, "prepared", true); verify(button.enabled)
+        compare(mount.sessionId, session); compare(picker.snapshotData.choiceSet, snapshot)
+        verify(!registry.closed.includes(session)); dialog.submit(); compare(save.count, 1)
+    }
     function test_playlistUsesThePrivateIdAfterCoreSave() {
         const picker = playlist()
         const data = JSON.stringify(findChild(picker, "addonSelectionMount").parameters)

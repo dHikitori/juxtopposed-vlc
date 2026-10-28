@@ -36,7 +36,7 @@ C.Dialog {
     property alias newName: nameField.text
     property alias filterText: searchField.text
     readonly property bool valid: itemCount > 0 && !checkingTarget
-        && (addonWanted ? addonPicker.usingReplacement && !!addonPicker.preview : currentSelection || newName.trim().length > 0)
+        && (addonWanted ? addonPicker.prepared && addonPicker.usingReplacement && !!addonPicker.preview : currentSelection || newName.trim().length > 0)
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal saveRequested(string key, string name)
     title: qsTr("Add to Playlist")
@@ -57,7 +57,7 @@ C.Dialog {
     }
     function submit() {
         if (!valid || busy) return
-        if (addonWanted) { if (addonPicker.usingReplacement) addonPicker.confirm(); return }
+        if (addonWanted) { if (addonPicker.prepared && addonPicker.usingReplacement) addonPicker.confirm(); return }
         submitCore()
     }
     function submitCore() {
@@ -380,7 +380,7 @@ C.Dialog {
         registry: root.addonRegistry; hook: "dialog.add-to-playlist.content@1"; kind: "playlist"
         choiceSet: "playlist:" + root.addonDialogGeneration + ":" + root.addonPlaylistRevision + ":" + root.itemCount
         targets: root.addonTargets; active: root.visible && root.addonChoicesReady && root.addonWanted
-        visible: prepared; busy: root.busy || root.checkingTarget; showActions: false; showRecovery: false
+        visible: resolved; busy: root.busy || root.checkingTarget; showActions: false; showRecovery: false
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         onConfirmed: selection => root.acceptAddonSelection(selection)
         onFallbackRequested: root.addonFallback = true

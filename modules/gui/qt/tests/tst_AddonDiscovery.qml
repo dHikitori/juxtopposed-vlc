@@ -10,14 +10,23 @@ TestCase {
     QtObject {
         id: service
         property int revision: 0
+        property bool available: true
+        property bool loading: false
+        property string preparationError: ""
+        property int displaySerial: 0
+        property var releasedRequests: []
+        property var acquireHook: null
         property var sources: [{id: "org.example.radio/source", name: "<b>Radio</b>", enabled: true, configured: true, operations: ["roots", "browse", "search"]}]
         property var calls: []
         property var current: ({})
         property int serial: 0
         signal changed()
+        signal availabilityChanged()
         signal viewChanged(string id)
         signal viewClosed(string id)
         signal actionFinished(string id, bool success, string error)
+        function acquireDisplay() { const id = "display-" + (++displaySerial); if (acquireHook) acquireHook(); return id }
+        function releaseDisplay(id) { releasedRequests = releasedRequests.concat([id]) }
         function openSource(source) {
             calls = calls.concat([{operation: "open", source: source}])
             const id = "view-" + (++serial)
@@ -36,6 +45,22 @@ TestCase {
         function choosePlaylist(id, choice) { calls = calls.concat([{operation: "choose", id: id, choice: choice}]); return true }
         function clearPlaylist(id) { calls = calls.concat([{operation: "release", id: id}]); current = Object.assign({}, current, {playlistTarget: "", canAddToPlaylist: false}); viewChanged(id) }
         function play(id, ref) { calls = calls.concat([{operation: "play", id: id, ref: ref}]); return "play-request" }
+    }
+    QtObject {
+        id: otherService
+        property int revision: 0
+        property bool available: true
+        property bool loading: false
+        property var sources: []
+        property int requests: 0
+        property var released: []
+        signal changed()
+        signal availabilityChanged()
+        signal viewChanged(string id)
+        signal viewClosed(string id)
+        signal actionFinished(string id, bool success, string error)
+        function acquireDisplay() { return "other-" + (++requests) }
+        function releaseDisplay(id) { released = released.concat([id]) }
     }
     Component { id: pageComponent; RedesignAddonDiscovery { width: 750; height: 550; backend: service } }
     QtObject {
@@ -62,11 +87,76 @@ TestCase {
     SignalSpy { id: menuSignal; signalName: "discoveryRequested" }
     function init() {
         service.calls = []; service.current = ({})
+        service.available = true; service.loading = false; service.preparationError = ""; service.displaySerial = 0; service.releasedRequests = []; service.acquireHook = null
+        otherService.requests = 0; otherService.released = []
         service.sources = [{id: "org.example.radio/source", name: "<b>Radio</b>", enabled: true, configured: true, operations: ["roots", "browse", "search"]}]
         service.revision++; navigationSignal.clear(); menuSignal.clear()
         sourceReview.selected = ""; sourceReview.preparations = 0; sourceReview.approvals = 0; sourceReview.closes = 0; sourceReview.review = ({})
     }
-    function page() { return createTemporaryObject(pageComponent, test) }
+    function page() {
+        const before = service.displaySerial
+        const view = createTemporaryObject(pageComponent, test)
+        tryCompare(service, "displaySerial", before + 1)
+        return view
+    }
+    function test_visiblePageOwnsOnlyOneDisplayRequest() {
+        const view = page(); compare(service.displaySerial, 1); compare(service.calls.length, 0)
+        compare(view.displayRequest, "display-1")
+        view.visible = false; compare(service.releasedRequests.length, 1); compare(service.releasedRequests[0], "display-1")
+        view.visible = true; tryCompare(service, "displaySerial", 2)
+        view.destroy(); wait(0); compare(service.releasedRequests.length, 2); compare(service.releasedRequests[1], "display-2")
+    }
+    function test_closedWindowDoesNotPrepareSourcePresence() {
+        const shell = createTemporaryObject(windowComponent, test)
+        compare(service.displaySerial, 0); compare(service.calls.length, 0)
+        shell.open(); tryCompare(shell, "visible", true); tryCompare(service, "displaySerial", 1)
+        shell.close(); tryCompare(shell, "visible", false); compare(service.releasedRequests.length, 1)
+    }
+    function test_loadingPreservesRowsSelectionAndSourceWithoutSetupError() {
+        const view = page(); view.openSource("org.example.radio/source"); view.select("item-1")
+        tryVerify(() => findChild(view, "addonDiscoveryItem_item-1") !== null)
+        const id = view.viewId
+        service.available = false; service.loading = true; service.availabilityChanged()
+        compare(view.viewId, id); compare(view.selected[0], "item-1"); compare(view.actionError, "")
+        verify(findChild(view, "addonDiscoveryItem_item-1") !== null)
+        verify(!findChild(view, "addonDiscoveryItem_item-1").enabled); verify(!findChild(view, "addonDiscoveryOpen").enabled)
+        verify(findChild(view, "addonDiscoveryLoading").visible); compare(service.calls.length, 1)
+        service.available = true; service.loading = false; service.availabilityChanged()
+        compare(view.viewId, id); compare(view.selected[0], "item-1"); compare(service.calls.length, 1)
+        verify(findChild(view, "addonDiscoveryItem_item-1").enabled)
+    }
+    function test_unknownConfigurationDefersExplicitOpenWithoutSetupError() {
+        service.sources = [Object.assign({}, service.sources[0], {configurationKnown: false, configured: false})]
+        const view = page(); view.openSource("org.example.radio/source")
+        verify(view.pendingOpen); compare(view.viewId, ""); compare(service.calls.length, 0); compare(view.actionError, "")
+        verify(findChild(view, "addonDiscoveryLoading").visible)
+        service.sources = [Object.assign({}, service.sources[0], {configurationKnown: true, configured: true})]; ++service.revision; service.changed()
+        tryVerify(() => view.viewId.length > 0); compare(service.calls.length, 1); compare(service.calls[0].operation, "open")
+        verify(!view.pendingOpen); compare(view.actionError, "")
+    }
+    function test_backendReplacementReleasesThroughExactOriginalOwner() {
+        const view = page(); view.openSource("org.example.radio/source")
+        view.backend = otherService
+        compare(service.releasedRequests.length, 1); compare(service.releasedRequests[0], "display-1")
+        compare(service.calls[service.calls.length - 1].operation, "close")
+        tryCompare(otherService, "requests", 1); compare(view.viewId, "")
+        view.visible = false; compare(otherService.released.length, 1); compare(otherService.released[0], "other-1")
+    }
+    function test_acquireReentryReleasesReturnedObsoleteRequest() {
+        const view = page(); view.visible = false
+        service.acquireHook = () => { view.visible = false }
+        view.visible = true
+        tryCompare(service, "displaySerial", 2); compare(view.displayRequest, "")
+        compare(service.releasedRequests.length, 2); compare(service.releasedRequests[1], "display-2")
+        service.acquireHook = null
+    }
+    function test_preparationRefusalIsVisibleWithoutAnAddonFailure() {
+        service.available = false; service.preparationError = "Close another add-on view, then open this page."
+        const view = page(); view.openSource("org.example.radio/source")
+        compare(view.actionError, ""); compare(service.calls.length, 0)
+        const status = findChild(view, "addonDiscoveryLoading")
+        verify(status.visible); compare(status.text, service.preparationError)
+    }
     function test_openSourceDoesNotPlayOrEnqueue() {
         const view = page()
         const choices = findChild(view, "addonDiscoverySources")

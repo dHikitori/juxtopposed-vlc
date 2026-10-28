@@ -54,6 +54,26 @@ C.Dialog {
     property bool providerHasCustomKey: false
     property bool providerHasConsumerKey: false
     property bool providerConfigured: false
+    property bool providerConfigurationKnown: true
+    property bool providerListCurrent: true
+    property bool providerListLoading: false
+    property string providerListError: ""
+    property var providerDisplayBackend: null
+    property var providerDisplayCandidates: []
+    property var providerActionGuard: null
+    property bool providerCheckPending: false
+    readonly property bool providerSearchReady: providerConfigured && providerConfigurationKnown && providerListCurrent
+    onProviderSearchReadyChanged: runPendingProviderSearch()
+    onOnlineModeChanged: if (!onlineMode) providerCheckPending = false
+    RedesignAddonFeatureDemand {
+        id: providerDemand
+        backend: root.providerDisplayBackend; feature: "subtitles"
+        active: root.visible && root.onlineMode
+        eligible: root.providerDisplayCandidates.some(row => row.enabled === true && row.builtin !== true
+            && (row.configurationKnown !== true || row.configured === true))
+        onCurrentChanged: Qt.callLater(root.runPendingProviderSearch)
+        onBindingReadyChanged: Qt.callLater(root.runPendingProviderSearch)
+    }
     property bool searching: false
     property string searchProgressText: ""
     property int searchRequestId: 0
@@ -222,7 +242,7 @@ C.Dialog {
         if (visible || saving) return false
         context = target; subtitles = subtitleMode
         addonFallback = false
-        sourceIndex = 0; onlineSources = []; linkSources = []; linkText = ""; sourceMappings = ({}); sourceKinds = ({}); searchTitle = ""; manualSearch = false; searchDetails = ({}); searchIdentities = ({}); manualSearchLanguage = false; searching = false; cancelableSave = false
+        sourceIndex = 0; providerCheckPending = false; onlineSources = []; linkSources = []; linkText = ""; sourceMappings = ({}); sourceKinds = ({}); searchTitle = ""; manualSearch = false; searchDetails = ({}); searchIdentities = ({}); manualSearchLanguage = false; searching = false; cancelableSave = false
         refreshSearchLanguage()
         rows = []; sources = []; drafts = ({}); selectedRows = ({}); errorMessage = ""
         sourceFolderCategory = 0
@@ -324,20 +344,45 @@ C.Dialog {
         if (saving || loadingDrop || index === sourceIndex || index < 0 || index >= sourceChoices.length) return
         searchDebounce.stop(); ++searchRequestId; searching = false; searchCanceled(); cancelMatching()
         ++sourceRequestId; loadingSources = false; errorMessage = ""; sourceIndex = index
-        if (onlineMode) { languagesRequested(); requestSearch() }
+        if (onlineMode) { providerCheckPending = true; runPendingProviderSearch() }
         else if (linkMode) performMatching()
         else if (sourceFolder) requestSources()
     }
     function requestSearch() {
         searchDebounce.stop()
-        if (!visible || !onlineMode || !providerConfigured || saving || loading || loadingDrop) return
+        if (!visible || !onlineMode || saving || loading || loadingDrop) return
+        if (!providerSearchReady) { providerCheckPending = true; return }
+        if (!providerCurrentForAction()) { providerCheckPending = true; return }
+        providerCheckPending = false
         cancelMatching(); ++searchRequestId; searching = true; errorMessage = ""
         searchRequested(searchTitle, searchLanguage, searchRequestId)
+    }
+    function providerCurrentForAction() {
+        // An attached backend must finish fixed-mode capture first. Portable
+        // providers require their exact presence ticket. Configured builtins
+        // use the current native guard without creating a portable demand.
+        let demandReady = !providerDisplayBackend && !providerDemand.hadBackend
+        if (!demandReady && providerDemand.bindingReady) {
+            if (!providerDemand.displayMode || providerDemand.eligible)
+                demandReady = providerDemand.currentForAction()
+            else
+                demandReady = typeof providerActionGuard === "function" && providerDemand.managementCurrent()
+                    && providerDisplayCandidates.some(row => row.builtin === true && row.enabled === true
+                        && row.available !== false && row.configured === true && row.configurationKnown !== false)
+        }
+        const current = demandReady && (typeof providerActionGuard !== "function" || providerActionGuard())
+        if (!current) errorMessage = qsTr("The subtitle provider list changed. Wait for it to finish or try again.")
+        return current
+    }
+    function runPendingProviderSearch() {
+        if (!providerCheckPending || !visible || !onlineMode || !providerSearchReady || saving || loading || loadingDrop) return
+        if (!providerCurrentForAction()) return
+        providerCheckPending = false; languagesRequested(); requestSearch()
     }
     function loadSearch(request, result) {
         if (!visible || request !== searchRequestId || !onlineMode) return
         searching = false
-        if (!result.success) { onlineSources = []; errorMessage = result.error || qsTr("VLC cannot search for subtitles. Try again."); return }
+        if (!result.success) { errorMessage = result.error || qsTr("VLC cannot search for subtitles. Try again."); return }
         searchIdentities = result.identities || ({})
         errorMessage = result.warning || ""
         onlineSources = (result.sources || []).map(item => Object.assign({}, item, {url: sourceMappings[item.url] || item.url})); performMatching(true)
@@ -359,8 +404,7 @@ C.Dialog {
     function finishSetup(success, error = "") {
         if (success) {
             providerSetup.close()
-            if (providerConfigured) { languagesRequested(); requestSearch() }
-            else { searching = false; onlineSources = [] }
+            providerCheckPending = true; runPendingProviderSearch()
         }
         else providerSetup.errorMessage = error || qsTr("VLC cannot save the API key. Make sure that the API key is correct. Try again.")
     }
@@ -433,7 +477,7 @@ C.Dialog {
     function submit() {
         if (saving || loading || loadingSources || loadingDrop || matching) return
         if (addonWanted) {
-            if (!addonPicker.usingReplacement) return
+            if (!addonPicker.prepared || !addonPicker.usingReplacement) return
             if (addonPicker.preview && (addonSelectionChanged || folderRuleChanged)) addonPicker.confirm()
             else if (folderRuleChanged) { discardAddonAutomaticDrafts(); submitCore() }
             return
@@ -480,7 +524,7 @@ C.Dialog {
             addonPicker.begin()
         }
     }
-    onClosed: { ++searchRequestId; searching = false; searchDebounce.stop(); searchCanceled(); providerSetup.close(); searchEditor.close(); manualSearch = false; searchDetails = ({}); searchIdentities = ({}); linkText = ""; linkSources = []; onlineSources = []; sourceMappings = ({}); sourceKinds = ({}); pendingFolderRule = ({}); removeFolderRule = false; folderRuleBaseline = ""; folderRuleLoaded = false; folderRuleTouched = false; saving = false; cancelableSave = false; ++dropRequestId; loadingDrop = false; cancelMatching(); ++requestId; ++sourceRequestId; picker.close(); rows = []; sources = []; drafts = ({}); selectedRows = ({}) }
+    onClosed: { ++searchRequestId; providerCheckPending = false; searching = false; searchDebounce.stop(); searchCanceled(); providerSetup.close(); searchEditor.close(); manualSearch = false; searchDetails = ({}); searchIdentities = ({}); linkText = ""; linkSources = []; onlineSources = []; sourceMappings = ({}); sourceKinds = ({}); pendingFolderRule = ({}); removeFolderRule = false; folderRuleBaseline = ""; folderRuleLoaded = false; folderRuleTouched = false; saving = false; cancelableSave = false; ++dropRequestId; loadingDrop = false; cancelMatching(); ++requestId; ++sourceRequestId; picker.close(); rows = []; sources = []; drafts = ({}); selectedRows = ({}) }
     Timer { id: searchDebounce; interval: 600; onTriggered: root.requestSearch() }
     Shortcut { sequence: "Ctrl+O"; enabled: root.visible && !root.saving; onActivated: { root.selectSource(0); root.filesRequested("") } }
     Shortcut { sequences: ["Ctrl+Return", "Ctrl+Enter"]; enabled: root.visible && !root.saving; onActivated: root.submit() }
@@ -575,7 +619,7 @@ C.Dialog {
                 objectName: "trackAssignmentSearch"
                 visible: root.onlineMode
                 Layout.fillWidth: true; Layout.preferredHeight: root.theme.dp(34)
-                enabled: root.providerConfigured && !root.saving
+                enabled: root.providerSearchReady && !root.saving
                 text: root.searchTitle; placeholderText: qsTr("Search subtitles")
                 leftPadding: root.theme.dp(42); rightPadding: root.theme.dp(10)
                 color: root.lightTheme ? root.theme.foreground : "#969696"; placeholderTextColor: root.theme.foreground
@@ -599,7 +643,7 @@ C.Dialog {
                 visible: root.onlineMode
                 Layout.preferredWidth: Math.min(root.theme.dp(200), root.width * 0.20); Layout.preferredHeight: root.theme.dp(34)
                 model: root.searchLanguageChoices; textRole: "text"
-                enabled: root.providerConfigured && !root.saving
+                enabled: root.providerSearchReady && !root.saving
                 function syncLanguage() { currentIndex = root.searchLanguageChoices.findIndex(item => item.code === root.searchLanguage) }
                 Connections { target: root; function onSearchLanguageChanged() { languageChoice.syncLanguage() } }
                 onModelChanged: Qt.callLater(syncLanguage)
@@ -779,7 +823,7 @@ C.Dialog {
             choiceSet: "subtitles:" + root.requestId + ":" + root.searchRequestId + ":" + root.sourceIndex + ":" + root.scopeIndex
             targets: root.addonTargets; assets: root.addonAssets
             active: root.visible && root.addonWanted && !root.loading && !root.loadingSources && !root.loadingDrop && !root.matching && !root.searching
-            visible: prepared; busy: root.saving; showActions: false; showRecovery: false
+            visible: resolved; busy: root.saving; showActions: false; showRecovery: false
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             onConfirmed: assignments => root.applyAddonSelection(assignments)
             onFallbackRequested: root.addonFallback = true
@@ -793,15 +837,20 @@ C.Dialog {
         }
         Text {
             anchors.centerIn: parent; width: parent.width - root.theme.dp(40); horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
-            visible: !addonPicker.usingReplacement && !(root.onlineMode && !root.providerConfigured) && (root.loading || root.loadingSources || root.loadingDrop || root.matching || root.searching || (!list.count && !root.errorMessage))
+            visible: !addonPicker.usingReplacement && !(root.onlineMode && !root.providerSearchReady) && (root.loading || root.loadingSources || root.loadingDrop || root.matching || root.searching || (!list.count && !root.errorMessage))
             text: root.searching ? root.searchProgressText || qsTr("Searching subtitles…") : root.matching ? qsTr("Matching tracks…") : root.loading || root.loadingSources || root.loadingDrop ? qsTr("Loading files…") : root.onlineMode ? qsTr("No subtitles found. Try another title or language.") : root.linkMode ? qsTr("Paste a direct subtitle file link. Then select Add.") : root.fileMode ? qsTr("Select a folder or select track files from your computer.") : qsTr("There are no media files here.")
             color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
         }        Column {
             anchors.centerIn: parent; width: Math.max(0, parent.width - root.theme.dp(60))
-            spacing: root.theme.dp(16); visible: root.onlineMode && !root.providerConfigured
+            spacing: root.theme.dp(16); visible: root.onlineMode && !root.providerSearchReady && !root.visibleSources.length
             Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
-                text: qsTr("OpenSubtitles is not set up. Add an API key to use this source.")
+                objectName: "trackAssignmentProviderState"
+                text: root.providerListError || providerDemand.errorMessage || (root.providerListLoading || !root.providerConfigurationKnown
+                    ? qsTr("The app checks subtitle provider settings.")
+                    : !root.providerListCurrent ? qsTr("The subtitle provider list is not ready. Try again.")
+                    : qsTr("Set up a subtitle provider in extension settings, or add an OpenSubtitles key."))
+                textFormat: Text.PlainText
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
             }
             RedesignButton {
@@ -809,6 +858,14 @@ C.Dialog {
                 anchors.horizontalCenter: parent.horizontalCenter
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 caption: qsTr("Set up OpenSubtitles"); text: caption; onClicked: providerSetup.open()
+            }
+            RedesignButton {
+                objectName: "trackAssignmentProviderRetry"
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: providerDemand.displayMode && !root.providerListLoading
+                scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                caption: qsTr("Try again"); text: caption
+                onClicked: providerDemand.retry()
             }
         }
 
@@ -872,7 +929,7 @@ C.Dialog {
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             caption: root.saving ? qsTr("Saving…") : qsTr("Save"); text: caption
             enabled: !root.saving && !root.loading && !root.loadingSources && !root.loadingDrop && !root.matching
-                && (root.addonWanted ? addonPicker.usingReplacement && (root.addonSelectionChanged || root.folderRuleChanged) : root.changedRows.length > 0 || root.folderRuleChanged)
+                && (root.addonWanted ? addonPicker.prepared && addonPicker.usingReplacement && (root.addonSelectionChanged || root.folderRuleChanged) : root.changedRows.length > 0 || root.folderRuleChanged)
             primaryAction: true; captionFontWeight: Font.DemiBold; captionVerticalOffset: 1
             onClicked: root.submit()
         }

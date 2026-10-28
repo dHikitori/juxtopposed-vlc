@@ -18,21 +18,64 @@ FocusScope {
     property var selected: []
     property string actionError: ""
     property bool ready: false
+    property bool displayActive: visible
+    property var viewOwner: null
+    property var displayOwner: null
+    property string displayRequest: ""
+    property int displayGeneration: 0
+    property bool pendingOpen: false
     property bool playbackReviewAvailable: false
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property var sources: { if (!backend) return []; backend.revision; return backend.sources || [] }
     readonly property var source: sources.find(entry => entry.id === sourceId) || ({})
     readonly property var sourceChoices: [{value: "", label: qsTr("Select source")}].concat(sources.map(entry => ({value: entry.id, label: entry.name || entry.id})))
     readonly property bool canSearch: (source.operations || []).includes("search")
+    readonly property bool displayAvailable: !!backend && backend.available !== false
+    readonly property bool displayLoading: !!backend && backend.loading === true
+    readonly property bool sourceChecking: sourceId.length > 0 && source.configurationKnown === false
+    readonly property bool actionable: displayAvailable && !sourceChecking
     signal configureRequested(string packageId)
     signal playlistRequested(var itemReferences)
     signal playbackReviewRequested(string source)
-    function closeView() { if (backend && viewId.length) backend.closeView(viewId); viewId = ""; viewState = ({}); rows.clear(); selected = []; playlistPickerOpen = false; playlistChoice = "" }
+    function closeView() {
+        const owner = viewOwner, id = viewId
+        viewId = ""; viewOwner = null; pendingOpen = false; viewState = ({}); rows.clear(); selected = []; playlistPickerOpen = false; playlistChoice = ""
+        if (owner && id.length) owner.closeView(id)
+    }
+    function releaseDisplay() {
+        ++displayGeneration
+        const owner = displayOwner, request = displayRequest
+        displayOwner = null; displayRequest = ""
+        if (owner && request.length && owner.releaseDisplay) owner.releaseDisplay(request)
+    }
+    function requestDisplay() {
+        releaseDisplay()
+        if (!ready || !displayActive || !backend || !backend.acquireDisplay) return
+        // The backend can change visibility or binding inputs. Run it after
+        // the property binding that requested preparation has returned.
+        Qt.callLater(root.finishDisplayRequest, backend, displayGeneration)
+    }
+    function finishDisplayRequest(owner, generation) {
+        if (!owner || generation !== displayGeneration || !ready || !displayActive || backend !== owner) return
+        const request = owner.acquireDisplay()
+        if (generation !== displayGeneration || !ready || !displayActive || backend !== owner) {
+            if (request.length && owner.releaseDisplay) owner.releaseDisplay(request)
+            return
+        }
+        displayOwner = owner; displayRequest = request
+    }
+    function retryPendingOpen() {
+        if (ready && displayActive && pendingOpen && actionable) openSource(sourceId)
+    }
     function openSource(id) {
         closeView(); sourceId = id; actionError = ""; query.text = ""
-        if (!id.length) return
-        viewId = backend.openSource(id)
+        if (!id.length || !backend || !displayActive) return
+        if (!actionable) { pendingOpen = true; return }
+        const owner = backend
+        viewId = owner.openSource(id)
+        if (viewId.length) viewOwner = owner
         if (viewId.length) reload()
+        else if (!actionable) pendingOpen = true
         else actionError = qsTr("Set up and enable this discovery source.")
     }
     function reload() {
@@ -61,7 +104,7 @@ FocusScope {
         if (!target.length || !backend.enqueue(viewId, selected, target)) actionError = qsTr("The app cannot add this selection to the playlist.")
         else { playlistPickerOpen = false; playlistChoice = "" }
     }
-    function search() { if (viewId.length) { selected = []; actionError = ""; backend.search(viewId, query.text) } }
+    function search() { if (actionable && viewId.length) { selected = []; actionError = ""; backend.search(viewId, query.text) } }
     function enqueue() {
         actionError = ""
         if (!backend.enqueue(viewId, selected)) actionError = qsTr("The app cannot add this selection to the queue.")
@@ -70,15 +113,22 @@ FocusScope {
         actionError = ""
         if (!backend.play(viewId, selected[0])) actionError = qsTr("The app cannot play this item.")
     }
-    Component.onCompleted: ready = true
-    Component.onDestruction: closeView()
-    onVisibleChanged: if (ready && !visible) closeView()
+    Component.onCompleted: { ready = true; requestDisplay() }
+    Component.onDestruction: { ready = false; closeView(); releaseDisplay() }
+    onDisplayActiveChanged: if (ready) {
+        if (!displayActive) { closeView(); releaseDisplay() }
+        else requestDisplay()
+    }
+    onBackendChanged: if (ready) { closeView(); requestDisplay() }
+    onSourcesChanged: retryPendingOpen()
     Connections {
         target: root.backend
+        function onChanged() { root.retryPendingOpen(); root.reload() }
+        function onAvailabilityChanged() { root.retryPendingOpen(); root.reload() }
         function onViewChanged(id) { if (id === root.viewId) root.reload() }
         function onViewClosed(id) {
             if (id !== root.viewId) return
-            root.viewId = ""; root.viewState = ({}); rows.clear(); root.selected = []; root.playlistPickerOpen = false; root.playlistChoice = ""
+            root.viewId = ""; root.viewOwner = null; root.viewState = ({}); rows.clear(); root.selected = []; root.playlistPickerOpen = false; root.playlistChoice = ""
             root.actionError = qsTr("The source changed. Open it again.")
         }
         function onActionFinished(id, success, error) { if (id === root.viewId) root.actionError = success ? "" : error }
@@ -99,20 +149,20 @@ FocusScope {
             }
             RedesignButton {
                 objectName: "addonDiscoveryOpen"
-                caption: qsTr("Open source"); text: caption; enabled: root.sourceId.length > 0
+                caption: qsTr("Open source"); text: caption; enabled: root.sourceId.length > 0 && root.actionable
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.openSource(root.sourceId)
             }
             RedesignButton {
                 objectName: "addonDiscoveryConfigure"
-                caption: qsTr("Settings"); text: caption; enabled: root.sourceId.length > 0
+                caption: qsTr("Settings"); text: caption; enabled: root.sourceId.length > 0 && root.displayAvailable
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.configureRequested(root.sourceId.split("/")[0])
             }
             RedesignButton {
                 objectName: "addonDiscoveryPlaybackReview"
                 visible: root.playbackReviewAvailable
-                enabled: root.sourceId.length > 0 && (root.source.operations || []).includes("resolve")
+                enabled: root.actionable && root.sourceId.length > 0 && (root.source.operations || []).includes("resolve")
                 caption: qsTr("Playback access"); text: caption; tooltipTextFormat: Text.PlainText
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.playbackReviewRequested(root.sourceId)
@@ -122,14 +172,14 @@ FocusScope {
             Layout.fillWidth: true
             RedesignButton {
                 objectName: "addonDiscoveryBack"
-                iconName: "back"; text: qsTr("Back"); enabled: root.viewState.canGoBack === true
+                iconName: "back"; text: qsTr("Back"); enabled: root.actionable && root.viewState.canGoBack === true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.backend.back(root.viewId)
             }
             C.TextField {
                 id: query
                 objectName: "addonDiscoveryQuery"
-                Layout.fillWidth: true; enabled: root.viewId.length > 0 && root.canSearch
+                Layout.fillWidth: true; enabled: root.actionable && root.viewId.length > 0 && root.canSearch
                 placeholderText: qsTr("Search source"); Accessible.name: placeholderText
                 color: root.theme.bright; font.pixelSize: root.theme.dp(14); selectByMouse: true
                 maximumLength: 512
@@ -142,6 +192,13 @@ FocusScope {
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.search()
             }
+        }
+        Text {
+            objectName: "addonDiscoveryLoading"
+            Layout.fillWidth: true; visible: root.displayLoading || !root.displayAvailable || root.sourceChecking
+            text: (root.backend && root.backend.preparationError) || (root.displayLoading ? qsTr("Updating sources…") : root.sourceChecking ? qsTr("Checking source settings…") : qsTr("Sources are not available yet."))
+            textFormat: Text.PlainText; wrapMode: Text.Wrap
+            color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
         }
         Text {
             Layout.fillWidth: true; visible: root.viewState.busy === true
@@ -164,7 +221,7 @@ FocusScope {
                 text: title; caption: title; captionTextFormat: Text.PlainText; tooltipTextFormat: Text.PlainText
                 captionMaximumWidth: Math.max(0, width - root.theme.dp(80))
                 iconName: kind === "node" ? "folder" : "music"; leftAligned: true
-                enabled: available
+                enabled: available && root.actionable
                 selected: root.selected.includes(ref)
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: kind === "node" ? root.backend.browse(root.viewId, ref) : root.select(ref)
@@ -173,14 +230,14 @@ FocusScope {
                 objectName: "addonDiscoveryMore"
                 visible: root.viewState.hasMore === true
                 height: visible ? implicitHeight : 0
-                caption: qsTr("More items"); text: caption; enabled: root.viewState.busy !== true
+                caption: qsTr("More items"); text: caption; enabled: root.actionable && root.viewState.busy !== true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.backend.loadMore(root.viewId)
             }
         }
         Text {
             Layout.fillWidth: true
-            visible: rows.count === 0 && root.viewState.busy !== true && !root.viewState.error && !root.actionError
+            visible: root.actionable && rows.count === 0 && root.viewState.busy !== true && !root.viewState.error && !root.actionError
             text: !root.viewId.length ? qsTr("Select a source.") : root.canSearch ? qsTr("Use search to find media.") : qsTr("This source has no items.")
             textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
         }
@@ -206,7 +263,7 @@ FocusScope {
                 }
                 RedesignButton {
                     objectName: "addonDiscoveryPlaylistSearch"
-                    caption: qsTr("Search"); text: caption; enabled: root.viewState.playlistBusy !== true
+                    caption: qsTr("Search"); text: caption; enabled: root.actionable && root.viewState.playlistBusy !== true
                     scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                     onClicked: { root.playlistChoice = ""; root.backend.loadPlaylists(root.viewId, playlistQuery.text) }
                 }
@@ -217,7 +274,7 @@ FocusScope {
                 readonly property var choices: [{ref: "", name: qsTr("Select playlist")}].concat(root.viewState.playlists || [])
                 model: choices; textRole: "name"; valueRole: "ref"; labelTextFormat: Text.PlainText
                 currentIndex: Math.max(0, choices.findIndex(entry => entry.ref === root.playlistChoice))
-                enabled: root.viewState.playlistBusy !== true
+                enabled: root.actionable && root.viewState.playlistBusy !== true
                 Accessible.name: qsTr("Playlist")
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onActivated: index => {
@@ -243,7 +300,7 @@ FocusScope {
                 RedesignButton {
                     objectName: "addonDiscoveryPlaylistConfirm"
                     caption: qsTr("Add"); text: caption
-                    enabled: root.selected.length > 0 && root.viewState.canAddToPlaylist === true && root.viewState.playlistBusy !== true
+                    enabled: root.actionable && root.selected.length > 0 && root.viewState.canAddToPlaylist === true && root.viewState.playlistBusy !== true
                     scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                     onClicked: root.addToPlaylist()
                 }
@@ -253,20 +310,20 @@ FocusScope {
             Layout.fillWidth: true
             RedesignButton {
                 objectName: "addonDiscoveryPlay"
-                caption: qsTr("Play"); text: caption; enabled: root.selected.length === 1 && root.viewState.canPlay === true
+                caption: qsTr("Play"); text: caption; enabled: root.actionable && root.selected.length === 1 && root.viewState.canPlay === true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.play()
             }
             RedesignButton {
                 objectName: "addonDiscoveryEnqueue"
-                caption: qsTr("Add to queue"); text: caption; enabled: root.selected.length > 0 && root.viewState.canEnqueue === true
+                caption: qsTr("Add to queue"); text: caption; enabled: root.actionable && root.selected.length > 0 && root.viewState.canEnqueue === true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.enqueue()
             }
             RedesignButton {
                 objectName: "addonDiscoveryPlaylist"
                 visible: root.playlistActionsAvailable
-                caption: qsTr("Add to playlist"); text: caption; enabled: root.selected.length > 0
+                caption: qsTr("Add to playlist"); text: caption; enabled: root.actionable && root.selected.length > 0
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: {
                     root.playlistPickerOpen = true; root.playlistChoice = ""

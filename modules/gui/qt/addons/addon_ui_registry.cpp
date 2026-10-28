@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_ui_registry.hpp"
 #include "addon_ui_assets.hpp"
+#include "addon_catalogue_view.hpp"
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -53,69 +54,142 @@ bool boundedData(const QJsonValue& value, int depth, qsizetype& nodes)
 AddonUiRegistry::AddonUiRegistry(AddonManager* manager, QObject* parent)
     : AddonUiRegistry(manager, Backend{}, parent) {}
 AddonUiRegistry::AddonUiRegistry(AddonManager* manager, Backend backend, QObject* parent)
-    : QObject(parent), m_manager(manager), m_backend(std::move(backend))
+    : QObject(parent), m_attached(AddonCatalogueView::attached(manager)!=nullptr),
+      m_catalogue(AddonCatalogueView::attached(manager)),m_manager(manager),m_backend(std::move(backend))
 {
     const QPointer<AddonManager> guardedManager(manager);
     if (!m_backend.invoke) m_backend.invoke = [guardedManager](const QString& id, const QString& operation, const QVariantMap& context) { return guardedManager ? guardedManager->invoke(id, operation, context) : QString(); };
     if (!m_backend.cancel) m_backend.cancel = [guardedManager](const QString& request) { if (guardedManager) guardedManager->cancel(request); };
-    QFile file(QDir(manager->storageDirectory()).filePath(QStringLiteral("ui-replacements.json")));
-    if (file.open(QIODevice::ReadOnly) && file.size() <= 64 * 1024) m_selected = QJsonDocument::fromJson(file.readAll()).object();
-    connect(manager, &AddonManager::revisionChanged, this, &AddonUiRegistry::reload);
-    connect(manager, &AddonManager::operationFinished, this, &AddonUiRegistry::operationFinished);
-    connect(manager, &QObject::destroyed, this, &AddonUiRegistry::reload);
+    if(m_attached) {
+        connect(m_catalogue,&AddonCatalogueView::catalogueChanged,this,&AddonUiRegistry::reloadAttached);
+        connect(m_catalogue,&AddonCatalogueView::documentsChanged,this,&AddonUiRegistry::viewDocumentsChanged);
+        connect(m_catalogue,&AddonCatalogueView::freshnessChanged,this,&AddonUiRegistry::viewFreshnessChanged);
+        connect(m_catalogue,&QObject::destroyed,this,[this]{const QPointer<AddonUiRegistry> alive(this);retireSessions();if(alive)emit availabilityChanged();});
+    } else if(manager) {
+        QFile file(QDir(manager->storageDirectory()).filePath(QStringLiteral("ui-replacements.json")));
+        if(file.open(QIODevice::ReadOnly)&&file.size()<=64*1024)m_selected=QJsonDocument::fromJson(file.readAll()).object();
+        connect(manager,&AddonManager::revisionChanged,this,&AddonUiRegistry::reload);
+    }
+    if(manager) {
+        connect(manager,&AddonManager::operationFinished,this,&AddonUiRegistry::operationFinished);
+        connect(manager,&AddonManager::retiring,this,[this]{m_ownerRetired=true;const QPointer<AddonUiRegistry> alive(this);retireSessions();if(alive)emit availabilityChanged();});
+        connect(manager,&QObject::destroyed,this,[this]{m_ownerRetired=true;const QPointer<AddonUiRegistry> alive(this);retireSessions();if(alive)emit availabilityChanged();});
+    }
     reload();
 }
 AddonUiRegistry::~AddonUiRegistry()
 {
-    for (const auto& session : m_sessions) disconnect(session.ownerDestroyed);
-    if (m_assets) {
-        disconnect(m_assets, nullptr, this, nullptr);
-        for (const auto& session : m_sessions.keys()) m_assets->closeSession(session, false);
+    m_destroying=true;retireSessions(false);
+}
+bool AddonUiRegistry::available() const noexcept
+{ return !m_destroying && !m_ownerRetired && !m_reloading && m_manager && (!m_attached || (m_catalogue && m_catalogue->isCurrent())); }
+bool AddonUiRegistry::loading() const noexcept
+{ return m_attached && m_catalogue && m_catalogue->loading(); }
+QJsonObject AddonUiRegistry::scope(const QString& package,const QString& capability) const
+{
+    if(m_attached)return m_catalogue?m_catalogue->grantedScope(package,capability):QJsonObject{};
+    return m_manager?m_manager->grantedScope(package,capability):QJsonObject{};
+}
+QString AddonUiRegistry::documentField(const QVariantMap& entry)
+{ return entry.value(QStringLiteral("document")).toMap().contains(QStringLiteral("view"))?QStringLiteral("view"):QStringLiteral("resource"); }
+QString AddonUiRegistry::holdDocument(const QString& id)
+{ return m_attached && m_catalogue?m_catalogue->acquireDocument(id,documentField(m_entries.value(id))):QString{}; }
+void AddonUiRegistry::dropDocument(const QString& ticket)
+{ if(!ticket.isEmpty() && m_catalogue)m_catalogue->release(ticket); }
+void AddonUiRegistry::retireSessions(bool notify)
+{
+    const auto cancel=m_backend.cancel;
+    const QPointer<AddonUiRegistry> alive(this);const auto sessions=m_sessions.keys();
+    for(const auto& id:sessions){closeSession(id);if(!alive)return;if(notify)emit sessionFailed(id);if(!alive)return;}
+    const auto pending=m_runningCommands;m_runningCommands.clear();
+    for(auto it=pending.begin();it!=pending.end();++it){cancel(it.key());if(!alive)return;if(notify&&!it->replacement.isEmpty())emit replacementFinished(it->replacement,false);if(!alive)return;}
+    const auto modals=m_modals.keys();m_modals.clear();if(notify)for(const auto& ticket:modals){emit modalFinished(ticket,false,{});if(!alive)return;}
+    const auto replacements=m_replacementViews.keys();m_replacementViews.clear();if(notify)for(const auto& ticket:replacements){emit replacementFinished(ticket,false);if(!alive)return;}
+}
+void AddonUiRegistry::viewFreshnessChanged()
+{
+    if(m_destroying)return;
+    // Lazy document demand does not invalidate the catalogue. A real Store
+    // withdrawal revokes sessions; an unchanged-token refresh keeps static UI.
+    const QPointer<AddonUiRegistry> alive(this);
+    if(!m_catalogue || !m_catalogue->retainedCatalogueCurrent())retireSessions();
+    if(!alive || m_destroying)return;
+    if(m_catalogue && !m_catalogue->loading() && !m_catalogue->error().isEmpty()) {
+        const auto sessions=m_sessions.keys();
+        for(const auto& id:sessions)if(m_sessions.contains(id)&&!m_sessions[id].ready) {
+            m_sessions[id].descriptor.insert(QStringLiteral("pending"),false);m_sessions[id].descriptor.insert(QStringLiteral("unavailable"),true);
+            emit sessionChanged(id);if(!alive)return;emit sessionFailed(id);if(!alive)return;
+        }
     }
-    for (const auto& request : m_runningCommands.keys()) m_backend.cancel(request);
+    emit availabilityChanged();if(!alive)return;
+    if(available())viewDocumentsChanged();
+}
+void AddonUiRegistry::reloadAttached()
+{
+    if(m_destroying || !m_catalogue || !m_catalogue->isCurrent())return;
+    QMap<QString,QVariantMap> entries;
+    for(const auto& type:{QStringLiteral("ui.command"),QStringLiteral("ui.route"),QStringLiteral("ui.modal"),QStringLiteral("ui.section"),QStringLiteral("ui.replacement")})
+        for(const auto& value:m_catalogue->contributions(type)) {
+            const auto entry=value.toMap(),document=entry.value(QStringLiteral("document")).toMap();const auto hook=document.value(QStringLiteral("hook")).toString();
+            if(!hook.isEmpty()&&(!hooks().contains(hook)||!hooks().value(hook).contains(type)))continue;
+            if(permitted(entry,hook))entries.insert(entry.value(QStringLiteral("id")).toString(),entry);
+        }
+    const auto selected=QJsonObject::fromVariantMap(m_catalogue->preferences(QStringLiteral("uiReplacements")));
+    const bool changed=entries!=m_entries || selected!=m_selected;
+    m_reloading=true;
+    const auto sessions=m_sessions.keys();const QPointer<AddonUiRegistry> alive(this);
+    for(const auto& key:sessions) {
+        const auto old=m_sessions.value(key);const auto declaration=entries.value(old.contribution).value(QStringLiteral("document")).toMap();
+        const auto hook=declaration.value(QStringLiteral("hook")).toString();
+        if(!entries.contains(old.contribution)||entries.value(old.contribution)!=m_entries.value(old.contribution)
+            ||(declaration.value(QStringLiteral("type")).toString()==QLatin1String("ui.replacement")&&selected.value(hook).toString()!=old.contribution)) {
+            closeSession(key);if(!alive)return;emit sessionFailed(key);if(!alive)return;
+        }
+    }
+    for(auto it=m_failed.begin();it!=m_failed.end();)if(entries.value(*it)!=m_entries.value(*it))it=m_failed.erase(it);else ++it;
+    m_entries=std::move(entries);m_selected=selected;m_reloading=false;
+    if(changed){++m_revision;emit this->changed();if(!alive)return;}
+    emit availabilityChanged();if(!alive)return;viewDocumentsChanged();
+}
+void AddonUiRegistry::viewDocumentsChanged()
+{
+    if(m_destroying || !m_catalogue)return;
+    m_documentRevision=m_catalogue->documentRevision();m_documentValidity.clear();m_validatedDocumentRevision=m_documentRevision;
+    const auto sessions=m_sessions.keys();const QPointer<AddonUiRegistry> alive(this);
+    for(const auto& id:sessions){materializeSession(id);if(!alive)return;}
+    emit documentsChanged();
 }
 void AddonUiRegistry::setAssetService(AddonUiAssets* assets)
 {
-    QPointer<AddonUiRegistry> guard(this);
-    if (m_assets == assets) return;
-    if (m_assets) disconnect(m_assets, nullptr, this, nullptr);
-    const auto sessions = m_sessions.keys();
-    if (m_assets) for (const auto& session : sessions) m_assets->closeSession(session, false);
-    m_assets = assets;
-    if (assets) {
-        connect(assets, &AddonUiAssets::imageBudgetChanged, this, &AddonUiRegistry::imageBudgetChanged);
-        connect(assets, &AddonUiAssets::sessionAssetsChanged, this, [this](const QString& id) {
-            auto session = m_sessions.find(id); if (session == m_sessions.end()) return;
-            session->descriptor.insert(QStringLiteral("assetUrls"), m_assets ? m_assets->sessionAssets(id) : QVariantMap{});
-            emit sessionChanged(id);
+    QPointer<AddonUiRegistry> guard(this);if(m_assets==assets)return;
+    if(m_assets)disconnect(m_assets,nullptr,this,nullptr);
+    const auto sessions=m_sessions.keys();
+    for(const auto& id:sessions){if(m_assets)m_assets->closeSession(id,false);if(!guard)return;if(m_sessions.contains(id))m_sessions[id].assetsOpened=false;}
+    m_assets=assets;
+    if(assets) {
+        connect(assets,&AddonUiAssets::imageBudgetChanged,this,&AddonUiRegistry::imageBudgetChanged);
+        connect(assets,&AddonUiAssets::sessionAssetsChanged,this,[this](const QString& id) {
+            if(!available())return;
+            auto session=m_sessions.find(id);if(session==m_sessions.end()||!session->ready)return;
+            session->descriptor.insert(QStringLiteral("assetUrls"),m_assets?m_assets->sessionAssets(id):QVariantMap{});emit sessionChanged(id);
         });
-        connect(assets, &QObject::destroyed, this, [this] {
-            const auto ids = m_sessions.keys(); QPointer<AddonUiRegistry> guard(this);
-            for (const auto& id : ids) {
-                if (!m_sessions.contains(id)) continue;
-                m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"), QVariantMap{}); emit sessionChanged(id); if (!guard) return;
-            }
+        connect(assets,&QObject::destroyed,this,[this] {
+            const auto sessions=m_sessions.keys();const QPointer<AddonUiRegistry> alive(this);
+            for(const auto& id:sessions){if(!m_sessions.contains(id))continue;m_sessions[id].assetsOpened=false;m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"),QVariantMap{});emit sessionChanged(id);if(!alive)return;}
         });
     }
-    for (const auto& id : sessions) {
-        if (m_assets) m_assets->openSession(id, m_sessions.value(id).contribution);
-        if (!guard) return;
-        if (m_sessions.contains(id)) m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"), m_assets ? m_assets->sessionAssets(id) : QVariantMap{});
+    if(!available())return;
+    for(const auto& id:sessions) {
+        if(m_attached){materializeSession(id);if(!guard)return;continue;}
+        if(!m_sessions.contains(id)||m_sessions[id].suspended)continue;
+        const bool opened=m_assets&&m_assets->openSession(id,m_sessions[id].contribution);if(!guard)return;
+        if(m_sessions.contains(id)){m_sessions[id].assetsOpened=opened;m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"),m_assets?m_assets->sessionAssets(id):QVariantMap{});}
     }
 }
 void AddonUiRegistry::reload()
 {
-    const auto sessions = m_sessions.keys();
-    for (const auto& id : sessions) { closeSession(id); emit sessionFailed(id); }
-    const auto pending = m_runningCommands;
-    m_runningCommands.clear();
-    for (auto it = pending.begin(); it != pending.end(); ++it) {
-        m_backend.cancel(it.key());
-        if (!it->replacement.isEmpty()) emit replacementFinished(it->replacement, false);
-    }
-    const auto modals = m_modals.keys(); for (const auto& ticket : modals) cancelModal(ticket);
-    const auto replacements = m_replacementViews.keys(); m_replacementViews.clear();
-    for (const auto& ticket : replacements) emit replacementFinished(ticket, false);
+    if(m_attached){reloadAttached();return;}
+    const QPointer<AddonUiRegistry> alive(this);retireSessions();if(!alive)return;
     m_entries.clear(); m_failed.clear();
     if (m_manager) for (const auto& type : {QStringLiteral("ui.command"), QStringLiteral("ui.route"), QStringLiteral("ui.modal"), QStringLiteral("ui.section"), QStringLiteral("ui.replacement")}) {
         for (const auto& value : m_manager->contributionsOfType(type)) {
@@ -130,7 +204,7 @@ void AddonUiRegistry::reload()
 }
 bool AddonUiRegistry::permitted(const QVariantMap& entry, const QString& hook) const
 {
-    const auto scope = m_manager->grantedScope(entry.value("packageId").toString(), QStringLiteral("ui.contribute"));
+    const auto scope = this->scope(entry.value("packageId").toString(),QStringLiteral("ui.contribute"));
     if (scope.isEmpty()) return false;
     return hook.isEmpty() || scope.value("hooks").toArray().contains(hook);
 }
@@ -159,7 +233,7 @@ QVariantList AddonUiRegistry::sections(const QString& hook) const
     for (const auto& entry : m_entries) {
         const auto document = entry.value("document").toMap();
         if (document.value("type").toString() == QLatin1String("ui.section") && document.value("hook").toString() == hook) {
-            const auto descriptor = view(entry.value("id").toString()); if (!descriptor.isEmpty()) result.append(descriptor);
+            const auto descriptor = this->descriptor(entry.value("id").toString(),false); if (!descriptor.isEmpty()) result.append(descriptor);
         }
     }
     return result;
@@ -177,16 +251,16 @@ QVariantMap AddonUiRegistry::replacement(const QString& hook) const
     const auto id = m_selected.value(hook).toString();
     if (!m_entries.contains(id) || m_entries.value(id).value("document").toMap().value("hook").toString() != hook) return {};
     if (hook.startsWith(QLatin1String("actions."))) return m_entries.value(id);
-    auto descriptor = view(id);
+    auto descriptor = this->descriptor(id,false);
     if (!descriptor.isEmpty() && hook == QLatin1String("subtitles.search.content@1")) {
-        const auto fields = m_manager->grantedScope(m_entries.value(id).value("packageId").toString(), QStringLiteral("metadata.context")).value("fields").toArray();
+        const auto fields = scope(m_entries.value(id).value("packageId").toString(),QStringLiteral("metadata.context")).value("fields").toArray();
         descriptor.insert(QStringLiteral("selectionTitlesAllowed"), fields.contains(QStringLiteral("title")));
     }
     return descriptor;
 }
 bool AddonUiRegistry::selectReplacement(const QString& hook, const QString& id)
 {
-    if (!replaceable(hook)) return false;
+    if (!available() || !replaceable(hook)) return false;
     if (!id.isEmpty()) {
         const auto choices = replacementChoices(hook);
         if (std::none_of(choices.begin(), choices.end(), [&](const QVariant& value) { return value.toMap().value("id").toString() == id; })) return false;
@@ -197,6 +271,7 @@ bool AddonUiRegistry::selectReplacement(const QString& hook, const QString& id)
     if (!QDir().mkpath(m_manager->storageDirectory()) || !file.open(QIODevice::WriteOnly)) return false;
     const auto bytes = QJsonDocument(selected).toJson(QJsonDocument::Compact);
     if (file.write(bytes) != bytes.size() || !file.commit()) return false;
+    if(m_attached){m_catalogue->refresh();return true;}
     m_selected = selected; ++m_revision; emit changed(); return true;
 }
 bool AddonUiRegistry::validViewDocument(const QJsonObject& document)
@@ -217,8 +292,30 @@ bool AddonUiRegistry::validViewDocument(const QJsonObject& document)
     return validate(document.value("root").toObject(), 0);
 }
 QVariantMap AddonUiRegistry::view(const QString& id) const
+{ return descriptor(id,true); }
+QVariantMap AddonUiRegistry::descriptor(const QString& id,bool request) const
 {
-    if (!m_entries.contains(id) || m_failed.contains(id)) return {};
+    if(m_attached) {
+        if(!m_entries.contains(id)||m_failed.contains(id))return {};
+        const auto entry=m_entries.value(id),contribution=entry.value(QStringLiteral("document")).toMap();
+        const auto field=documentField(entry);
+        QString state=m_catalogue?m_catalogue->documentState(id,field):QStringLiteral("unavailable");
+        if(request && state==QLatin1String("pending") && m_catalogue)m_catalogue->ensureDocument(id,field);
+        const auto document=m_catalogue?m_catalogue->resource(id,field):QJsonObject{};
+        bool valid=false;
+        if(state==QLatin1String("ready")) {
+            const auto revision=m_catalogue->documentRevision();if(revision!=m_validatedDocumentRevision){m_documentValidity.clear();m_validatedDocumentRevision=revision;}
+            if(!m_documentValidity.contains(id))m_documentValidity.insert(id,validViewDocument(document));valid=m_documentValidity.value(id);
+            if(!valid)state=QStringLiteral("unavailable");
+        }
+        QStringList registered;for(const auto& command:commands())if(command.toMap().value(QStringLiteral("packageId"))==entry.value(QStringLiteral("packageId")))registered.append(command.toMap().value(QStringLiteral("id")).toString());
+        QVariantMap result{{"id",id},{"packageId",entry.value(QStringLiteral("packageId"))},{"state",contribution.value(QStringLiteral("state")).toMap()},
+            {"registeredCommands",registered},{"assetUrls",QVariantMap{}},{"pending",state==QLatin1String("pending")},
+            {"unavailable",state==QLatin1String("unavailable")},{"available",available()&&valid}};
+        if(valid){result.insert(QStringLiteral("document"),document.toVariantMap());result.insert(QStringLiteral("messages"),m_catalogue->settingsMessages(entry.value(QStringLiteral("packageId")).toString()));}
+        return result;
+    }
+    if (!m_manager || m_ownerRetired || !m_entries.contains(id) || m_failed.contains(id)) return {};
     const auto entry = m_entries.value(id), contribution = entry.value("document").toMap();
     const auto document = m_manager->contributionResource(id, contribution.contains("view") ? QStringLiteral("view") : QStringLiteral("resource"));
     if (!validViewDocument(document)) return {};
@@ -236,6 +333,7 @@ bool AddonUiRegistry::parametersValid(const QVariantMap& parameters, const QJson
 }
 bool AddonUiRegistry::openRoute(const QString& route, const QVariantMap& parameters)
 {
+    if(!available())return false;
     for (const auto& entry : routes()) {
         const auto item = entry.toMap(); if (item.value("route").toString() != route) continue;
         if (view(item.value("id").toString()).isEmpty() || !parametersValid(parameters, QJsonObject::fromVariantMap(item.value("document").toMap().value("parameters").toMap()))) return false;
@@ -245,10 +343,12 @@ bool AddonUiRegistry::openRoute(const QString& route, const QVariantMap& paramet
 }
 bool AddonUiRegistry::openModal(const QString& id, const QVariantMap& parameters)
 {
+    if(!available())return false;
     if (m_modals.size() >= 8 || !m_entries.contains(id) || m_entries.value(id).value("document").toMap().value("type").toString() != QLatin1String("ui.modal")
         || view(id).isEmpty() || !parametersValid(parameters, QJsonObject::fromVariantMap(m_entries.value(id).value("document").toMap().value("parameters").toMap()))) return false;
     const auto ticket = QUuid::createUuid().toString(QUuid::WithoutBraces); m_modals.insert(ticket, id);
-    emit modalRequested(id, parameters); emit modalSessionRequested(ticket, id, parameters); return true;
+    const QPointer<AddonUiRegistry> alive(this);emit modalRequested(id, parameters);if(!alive)return false;
+    emit modalSessionRequested(ticket, id, parameters); return true;
 }
 bool AddonUiRegistry::triggerCommand(const QString& id, const QVariantMap& arguments)
 {
@@ -256,6 +356,7 @@ bool AddonUiRegistry::triggerCommand(const QString& id, const QVariantMap& argum
 }
 bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, const QString& sessionId, const QString& replacement)
 {
+    if(!available())return false;
     if (m_runningCommands.size() >= 64) return false;
     const auto entry = m_entries.value(id); const auto document = entry.value("document").toMap();
     if (entry.isEmpty() || document.value("type").toString() != QLatin1String("ui.command")
@@ -265,7 +366,8 @@ bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, 
         if (!route.startsWith(QLatin1String("addon/"))) route = QStringLiteral("addon/") + entry.value("packageId").toString() + '/' + route;
         if (!route.startsWith(QStringLiteral("addon/") + entry.value("packageId").toString() + '/')) return false;
         if (!replacement.isEmpty()) for (const auto& candidate : routes()) if (candidate.toMap().value("route").toString() == route) m_replacementViews.insert(replacement, candidate.toMap().value("id").toString());
-        const bool success = openRoute(route, arguments);
+        const QPointer<AddonUiRegistry> alive(this);const bool success = openRoute(route, arguments);
+        if(!alive)return false;
         if (!success) m_replacementViews.remove(replacement);
         if (success && !replacement.isEmpty()) QTimer::singleShot(15000, this, [this, replacement] {
             if (m_replacementViews.remove(replacement)) emit replacementFinished(replacement, false);
@@ -283,28 +385,39 @@ bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, 
     quint64 generation = 0;
     if (!sessionId.isEmpty()) {
         const auto session = m_sessions.constFind(sessionId);
-        if (session == m_sessions.cend() || session->suspended || session->descriptor.value("packageId") != entry.value("packageId")) return false;
+        if (session == m_sessions.cend() || session->suspended || !session->ready || session->descriptor.value("packageId") != entry.value("packageId")) return false;
         context.insert("parameters", session->parameters);
         context.insert("ui", session->context);
         context.insert("state", session->descriptor.value("state"));
         context.insert("identity", session->context.value("identity"));
         generation = session->generation;
     }
-    const auto request = m_backend.invoke(id, operation, context);
+    const auto invoke=m_backend.invoke;const auto cancel=m_backend.cancel;
+    const QPointer<AddonUiRegistry> alive(this);
+    const auto request = invoke(id, operation, context);
+    if(!alive){if(!request.isEmpty())cancel(request);return false;}
     if (request.isEmpty()) return false;
+    bool current=available() && m_entries.value(id)==entry;
+    if(current && !sessionId.isEmpty()) {
+        const auto session=m_sessions.constFind(sessionId);
+        current=session!=m_sessions.cend() && session->ready && !session->suspended
+            && session->generation==generation && session->descriptor.value("packageId")==entry.value("packageId");
+    }
+    if(!current){cancel(request);return false;}
     m_runningCommands.insert(request, {id, sessionId, replacement, generation});
     QTimer::singleShot(15000, this, [this, request] {
         if (!m_runningCommands.contains(request)) return;
         const auto pending = m_runningCommands.take(request);
-        m_backend.cancel(request);
-        emit commandCompleted(pending.command, false, {});
-        if (!pending.replacement.isEmpty()) emit replacementFinished(pending.replacement, false);
-        if (!pending.session.isEmpty() && m_sessions.contains(pending.session)) emit sessionFailed(pending.session);
+        const auto cancel=m_backend.cancel;const QPointer<AddonUiRegistry> alive(this);cancel(request);if(!alive)return;
+        emit commandCompleted(pending.command, false, {});if(!alive)return;
+        if (!pending.replacement.isEmpty()) emit replacementFinished(pending.replacement, false);if(!alive)return;
+        if (!pending.session.isEmpty() && m_sessions.contains(pending.session) && available()) emit sessionFailed(pending.session);
     });
     return true;
 }
 bool AddonUiRegistry::triggerReplacement(const QString& hook, const QVariantMap& arguments)
 {
+    if(!available())return false;
     if (hook != QLatin1String("actions.subtitles.open@1")) return false;
     const auto entry = replacement(hook); if (entry.isEmpty()) return false;
     const auto command = entry.value("document").toMap().value("command").toString();
@@ -312,8 +425,9 @@ bool AddonUiRegistry::triggerReplacement(const QString& hook, const QVariantMap&
 }
 void AddonUiRegistry::reportViewFailure(const QString& id)
 {
-    const auto tickets = m_replacementViews.keys(id);
-    for (const auto& ticket : tickets) { m_replacementViews.remove(ticket); emit replacementFinished(ticket, false); }
+    if(m_attached && !available())return;
+    const auto tickets = m_replacementViews.keys(id);const QPointer<AddonUiRegistry> alive(this);
+    for (const auto& ticket : tickets) { m_replacementViews.remove(ticket); emit replacementFinished(ticket, false);if(!alive)return; }
     if (m_entries.contains(id)) { m_failed.insert(id); m_error = tr("An add-on view is not available. Use the built-in view."); ++m_revision; emit changed(); }
 }
 
@@ -324,7 +438,7 @@ QVariantMap AddonUiRegistry::projectContext(const QVariantMap& entry, const QVar
         if (input.value(key).metaType().id() == QMetaType::QString && input.value(key).toString().size() <= 256) output.insert(key, input.value(key));
     }
     const auto identity = input.value(QStringLiteral("identity")).toMap();
-    const auto fields = m_manager->grantedScope(entry.value("packageId").toString(), QStringLiteral("metadata.context")).value("fields").toArray();
+    const auto fields = scope(entry.value("packageId").toString(),QStringLiteral("metadata.context")).value("fields").toArray();
     QVariantMap permitted;
     for (const auto& field : fields) {
         const auto name = field.toString(); const auto value = QJsonValue::fromVariant(identity.value(name));
@@ -333,26 +447,50 @@ QVariantMap AddonUiRegistry::projectContext(const QVariantMap& entry, const QVar
     if (!permitted.isEmpty()) output.insert(QStringLiteral("identity"), permitted);
     return output;
 }
-QString AddonUiRegistry::createSession(const QString& id, const QVariantMap& parameters, const QVariantMap& context)
+QString AddonUiRegistry::createSession(const QString& id,const QVariantMap& parameters,const QVariantMap& context)
 {
-    if (m_sessions.size() >= 32) return {};
-    const auto descriptor = view(id);
-    if (descriptor.isEmpty() || !parametersValid(parameters, QJsonObject::fromVariantMap(m_entries.value(id).value("document").toMap().value("parameters").toMap()))) return {};
-    const auto key = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    Session session{id, descriptor, parameters, projectContext(m_entries.value(id), context), ++m_generation, false};
-    auto state = descriptor.value("state").toMap();
-    state.insert(QStringLiteral("parameters"), parameters); state.insert(QStringLiteral("context"), session.context);
-    session.descriptor.insert(QStringLiteral("state"), state);
-    m_sessions.insert(key, session);
-    if (m_assets) {
-        QPointer<AddonUiRegistry> guard(this); m_assets->openSession(key, id);
-        if (!guard) return {};
-        if (m_sessions.contains(key)) m_sessions[key].descriptor.insert(QStringLiteral("assetUrls"), m_assets ? m_assets->sessionAssets(key) : QVariantMap{});
+    if(!available() || m_sessions.size()>=32)return {};
+    auto value=descriptor(id,false);
+    if(value.isEmpty() || value.value(QStringLiteral("unavailable")).toBool()
+        || !parametersValid(parameters,QJsonObject::fromVariantMap(m_entries.value(id).value(QStringLiteral("document")).toMap().value(QStringLiteral("parameters")).toMap())))return {};
+    const auto ticket=holdDocument(id);if(m_attached && ticket.isEmpty())return {};
+    const auto key=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    Session session{id,value,parameters,projectContext(m_entries.value(id),context),++m_generation,false};
+    session.documentTicket=ticket;session.ready=!value.value(QStringLiteral("pending")).toBool();
+    auto state=value.value(QStringLiteral("state")).toMap();state.insert(QStringLiteral("parameters"),parameters);state.insert(QStringLiteral("context"),session.context);
+    session.descriptor.insert(QStringLiteral("state"),state);m_sessions.insert(key,session);
+    const QPointer<AddonUiRegistry> alive(this);
+    if(session.ready && m_assets) {
+        const bool opened=m_assets->openSession(key,id);if(!alive)return {};
+        if(m_sessions.contains(key)){m_sessions[key].assetsOpened=opened;m_sessions[key].descriptor.insert(QStringLiteral("assetUrls"),m_assets?m_assets->sessionAssets(key):QVariantMap{});}
     }
     return key;
 }
+bool AddonUiRegistry::materializeSession(const QString& id)
+{
+    if(!m_attached || !available() || !m_sessions.contains(id))return false;
+    const auto old=m_sessions.value(id);auto value=descriptor(old.contribution,false);
+    if(value.isEmpty() || value.value(QStringLiteral("unavailable")).toBool()) {
+        m_sessions[id].ready=false;m_sessions[id].descriptor.insert(QStringLiteral("unavailable"),true);m_sessions[id].descriptor.insert(QStringLiteral("pending"),false);
+        const QPointer<AddonUiRegistry> alive(this);emit sessionChanged(id);if(alive)emit sessionFailed(id);return false;
+    }
+    if(value.value(QStringLiteral("pending")).toBool())return false;
+    value.insert(QStringLiteral("state"),old.descriptor.value(QStringLiteral("state")));
+    value.insert(QStringLiteral("assetUrls"),m_assets&&old.assetsOpened?m_assets->sessionAssets(id):old.descriptor.value(QStringLiteral("assetUrls")));
+    const bool changed=!old.ready || value!=old.descriptor;
+    m_sessions[id].descriptor=std::move(value);m_sessions[id].ready=true;
+    const QPointer<AddonUiRegistry> alive(this);
+    if(m_assets && !old.suspended && !old.assetsOpened) {
+        const bool opened=m_assets->openSession(id,old.contribution);if(!alive)return false;
+        if(!m_sessions.contains(id))return false;
+        m_sessions[id].assetsOpened=opened;m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"),m_assets?m_assets->sessionAssets(id):QVariantMap{});
+    }
+    if(changed)emit sessionChanged(id);
+    return true;
+}
 bool AddonUiRegistry::bindSessionOwner(const QString& id, QObject* owner)
 {
+    if(!available())return false;
     auto session = m_sessions.find(id);
     if (session == m_sessions.end() || !owner || (session->owner && session->owner != owner)) return false;
     if (!session->owner) {
@@ -364,7 +502,7 @@ bool AddonUiRegistry::bindSessionOwner(const QString& id, QObject* owner)
 QString AddonUiRegistry::claimImage(const QString& id, QObject* owner)
 {
     const auto session = m_sessions.constFind(id);
-    if (!m_assets || session == m_sessions.cend() || session->suspended || !session->owner || !owner || owner == session->owner) return {};
+    if (!available() || !m_assets || session == m_sessions.cend() || !session->ready || session->suspended || !session->owner || !owner || owner == session->owner) return {};
     QObject* parent = owner; QSet<QObject*> visited;
     for (int depth = 0; parent && depth < 128 && !visited.contains(parent); ++depth) {
         if (parent == session->owner) return m_assets->claimImage(id, owner);
@@ -379,17 +517,26 @@ void AddonUiRegistry::releaseImage(const QString& claim)
 QString AddonUiRegistry::assetUrlForClaim(const QString& id, const QString& alias, const QString& claim) const
 {
     const auto session = m_sessions.constFind(id);
-    return m_assets && session != m_sessions.cend() && !session->suspended && session->owner ? m_assets->assetUrlForClaim(id, alias, claim) : QString{};
+    return available() && m_assets && session != m_sessions.cend() && session->ready && !session->suspended && session->owner ? m_assets->assetUrlForClaim(id, alias, claim) : QString{};
 }
 QVariantMap AddonUiRegistry::session(const QString& id) const
-{ return m_sessions.contains(id) ? m_sessions.value(id).descriptor : QVariantMap{}; }
+{
+    if(!m_sessions.contains(id))return {};
+    auto value=m_sessions.value(id).descriptor;
+    if(m_attached)value.insert(QStringLiteral("available"),available()&&m_sessions.value(id).ready);
+    return value;
+}
 bool AddonUiRegistry::dispatchSession(const QString& id, const QString& command, const QVariantMap& arguments)
 {
+    if(!available())return false;
     const auto session = m_sessions.find(id);
-    if (session == m_sessions.end() || session->suspended || !session->descriptor.value("registeredCommands").toStringList().contains(command)) return false;
-    session->generation = ++m_generation;
-    cancelSessionJobs(id);
-    return dispatch(command, arguments, id, {});
+    if (session == m_sessions.end() || !session->ready || session->suspended || !session->descriptor.value("registeredCommands").toStringList().contains(command)) return false;
+    const auto generation=session->generation=++m_generation;
+    const QPointer<AddonUiRegistry> alive(this);cancelSessionJobs(id);
+    if(!alive || !available())return false;
+    const auto current=m_sessions.constFind(id);
+    return current!=m_sessions.cend() && current->ready && !current->suspended && current->generation==generation
+        && dispatch(command, arguments, id, {});
 }
 void AddonUiRegistry::cancelSessionJobs(const QString& id)
 {
@@ -401,21 +548,24 @@ void AddonUiRegistry::cancelSessionJobs(const QString& id)
 }
 void AddonUiRegistry::suspendSession(const QString& id, bool suspended)
 {
+    if(!suspended && !available())return;
     auto it = m_sessions.find(id); if (it == m_sessions.end() || it->suspended == suspended) return;
     it->suspended = suspended; it->generation = ++m_generation;
     QPointer<AddonUiRegistry> guard(this);
-    if (m_assets) m_assets->suspendSession(id, suspended);
+    if (m_assets && it->assetsOpened) m_assets->suspendSession(id, suspended);
     if (guard && suspended) cancelSessionJobs(id);
+    else if(guard && m_attached)materializeSession(id);
 }
 void AddonUiRegistry::closeSession(const QString& id)
 {
-    const auto session = m_sessions.constFind(id); if (session != m_sessions.cend()) disconnect(session->ownerDestroyed);
-    m_sessions.remove(id); QPointer<AddonUiRegistry> guard(this);
-    if (m_assets) m_assets->closeSession(id);
-    if (guard) cancelSessionJobs(id);
+    const auto session=m_sessions.constFind(id);QString ticket;
+    if(session!=m_sessions.cend()){disconnect(session->ownerDestroyed);ticket=session->documentTicket;}
+    m_sessions.remove(id);QPointer<AddonUiRegistry> guard(this);dropDocument(ticket);if(!guard)return;
+    if(m_assets)m_assets->closeSession(id);if(guard)cancelSessionJobs(id);
 }
 QString AddonUiRegistry::executeReplacement(const QString& hook, const QVariantMap& arguments)
 {
+    if(!available())return {};
     if (hook != QLatin1String("actions.subtitles.open@1")) return {};
     const auto entry = replacement(hook); if (entry.isEmpty()) return {};
     const auto ticket = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -425,10 +575,16 @@ void AddonUiRegistry::operationFinished(const QString& request, const QString& c
 {
     if (!m_runningCommands.contains(request)) return;
     const auto pending = m_runningCommands.take(request);
+    if(!available()) {
+        const QPointer<AddonUiRegistry> alive(this);emit commandCompleted(pending.command,false,{});
+        if(alive&&!pending.replacement.isEmpty())emit replacementFinished(pending.replacement,false);
+        return;
+    }
+    const QPointer<AddonUiRegistry> alive(this);
     bool success = contribution == pending.command && (status == QLatin1String("match") || status == QLatin1String("partial"));
     auto session = m_sessions.find(pending.session);
     if (!pending.session.isEmpty()) {
-        if (session == m_sessions.end() || session->suspended || session->generation != pending.generation) return;
+        if (session == m_sessions.end() || !session->ready || session->suspended || session->generation != pending.generation) return;
         if (success && (data.contains("state") || data.contains("patch"))) {
             const auto stateValue = data.value(data.contains("state") ? QStringLiteral("state") : QStringLiteral("patch"));
             success = stateValue.metaType().id() == QMetaType::QVariantMap;
@@ -442,22 +598,24 @@ void AddonUiRegistry::operationFinished(const QString& request, const QString& c
             auto packageState = json; packageState.remove(QStringLiteral("parameters")); packageState.remove(QStringLiteral("context"));
             const auto schema = QJsonObject::fromVariantMap(m_entries.value(session->contribution).value("document").toMap().value("stateSchema").toMap());
             success = success && !schema.isEmpty() && validateUiValue(schema, packageState);
-            if (success) { session->descriptor.insert(QStringLiteral("state"), state); emit sessionChanged(pending.session); }
+            if (success) { session->descriptor.insert(QStringLiteral("state"), state); emit sessionChanged(pending.session);if(!alive)return; }
         }
-        if (!success) emit sessionFailed(pending.session);
+        if (!success) emit sessionFailed(pending.session);if(!alive)return;
     }
-    emit commandCompleted(pending.command, success, success ? data : QVariantMap{});
+    emit commandCompleted(pending.command, success, success ? data : QVariantMap{});if(!alive)return;
     if (!pending.replacement.isEmpty()) emit replacementFinished(pending.replacement, success);
 }
 void AddonUiRegistry::acknowledgeSession(const QString& id)
 {
-    const auto session = m_sessions.constFind(id); if (session == m_sessions.cend() || session->suspended) return;
-    const auto tickets = m_replacementViews.keys(session->contribution);
-    for (const auto& ticket : tickets) { m_replacementViews.remove(ticket); emit replacementFinished(ticket, true); }
+    const auto session = m_sessions.constFind(id); if (!available() || session == m_sessions.cend() || !session->ready || session->suspended) return;
+    const auto tickets = m_replacementViews.keys(session->contribution);const QPointer<AddonUiRegistry> alive(this);
+    for (const auto& ticket : tickets) { m_replacementViews.remove(ticket); emit replacementFinished(ticket, true);if(!alive)return; }
 }
 bool AddonUiRegistry::completeModal(const QString& ticket, const QVariantMap& result)
 {
-    if (!m_modals.contains(ticket)) return false;
+    if (!available() || !m_modals.contains(ticket)) return false;
+    const auto candidate=descriptor(m_modals.value(ticket),false);
+    if(candidate.isEmpty() || candidate.value(QStringLiteral("pending")).toBool() || candidate.value(QStringLiteral("unavailable")).toBool())return false;
     const auto contribution = m_entries.value(m_modals.value(ticket)).value("document").toMap();
     if (!parametersValid(result, QJsonObject::fromVariantMap(contribution.value("resultSchema").toMap()))) return false;
     m_modals.remove(ticket); emit modalFinished(ticket, true, result); return true;
@@ -465,15 +623,23 @@ bool AddonUiRegistry::completeModal(const QString& ticket, const QVariantMap& re
 void AddonUiRegistry::cancelModal(const QString& ticket)
 { if (m_modals.remove(ticket)) emit modalFinished(ticket, false, {}); }
 
-bool AddonUiRegistry::canUseSelection(const QString& id, const QString& hook) const
+bool AddonUiRegistry::canUseSelection(const QString& id,const QString& hook) const
 {
-    if (!m_manager || (hook != QLatin1String("subtitles.search.content@1") && hook != QLatin1String("dialog.add-to-playlist.content@1"))
-        || m_selected.value(hook).toString() != id || view(id).isEmpty()) return false;
+    if(!available() || !canPrepareSelection(id,hook))return false;
+    const auto candidate=descriptor(id,false);
+    return !candidate.isEmpty() && !candidate.value(QStringLiteral("pending")).toBool()
+        && !candidate.value(QStringLiteral("unavailable")).toBool();
+}
+bool AddonUiRegistry::canPrepareSelection(const QString& id, const QString& hook) const
+{
+    if (!m_manager || m_ownerRetired || m_destroying || m_reloading || (m_attached && !m_catalogue)
+        || (hook != QLatin1String("subtitles.search.content@1") && hook != QLatin1String("dialog.add-to-playlist.content@1"))
+        || m_selected.value(hook).toString() != id || !m_entries.contains(id) || m_failed.contains(id)) return false;
     const auto entry = m_entries.value(id), document = entry.value("document").toMap();
     if (document.value("type").toString() != QLatin1String("ui.replacement") || document.value("hook").toString() != hook
         || !permitted(entry, hook)) return false;
     if (hook == QLatin1String("dialog.add-to-playlist.content@1")) {
-        const auto scope = m_manager->grantedScope(entry.value("packageId").toString(), QStringLiteral("library.read"));
+        const auto scope = this->scope(entry.value("packageId").toString(),QStringLiteral("library.read"));
         return scope.value("collections").toArray().contains(QStringLiteral("playlists"))
             && scope.value("fields").toArray().contains(QStringLiteral("title"));
     }
@@ -483,7 +649,7 @@ bool AddonUiRegistry::canUseSelection(const QString& id, const QString& hook) co
 bool AddonUiRegistry::validateSessionResult(const QString& id, const QVariantMap& result) const
 {
     const auto session = m_sessions.constFind(id);
-    if (session == m_sessions.cend() || session->suspended || !m_entries.contains(session->contribution)) return false;
+    if (!available() || session == m_sessions.cend() || !session->ready || session->suspended || !m_entries.contains(session->contribution)) return false;
     const auto choiceSet = session->parameters.value(QStringLiteral("choiceSet"));
     if (choiceSet.metaType().id() != QMetaType::QString || choiceSet.toString().isEmpty()
         || result.value(QStringLiteral("choiceSet")) != choiceSet) return false;

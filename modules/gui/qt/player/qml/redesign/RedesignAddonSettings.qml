@@ -14,7 +14,7 @@ ColumnLayout {
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property bool dirty: JSON.stringify(draftValues) !== JSON.stringify(initialValues) || Object.keys(secretOperations).length > 0
     readonly property bool credentialPersistenceAvailable: !backend || backend.credentialPersistenceAvailable === undefined || backend.credentialPersistenceAvailable === true
-    readonly property bool validSchema: schemaError.length === 0
+    readonly property bool validSchema: schemaError.length === 0 && (!displayMode || loaded)
     property string errorMessage: ""
     property bool conflict: false
     property var fieldErrors: ({})
@@ -29,13 +29,111 @@ ColumnLayout {
     property int resetGeneration: 0
     property bool saving: false
     property bool ready: false
+    // Fixed for this backend. Losing an attached view never enables legacy I/O.
+    property bool displayMode: false
+    property bool loaded: false
+    property bool retired: false
+    property bool preparing: false
+    property string settingsTicket: ""
+    property int ticketGeneration: 0
+    property var ticketOwner: null
+    property string ticketPackage: ""
+    property string capturedStamp: ""
+    property var preparedMessages: ({})
+    readonly property bool dataReady: {
+        if (!displayMode) return true
+        if (!backend || !settingsTicket.length || retired) return false
+        backend.catalogueRevision; backend.catalogueReady
+        return backend.catalogueReady === true && typeof backend.displayRequestCurrent === "function"
+            && backend.displayRequestCurrent(settingsTicket) && typeof backend.displaySettingsState === "function"
+            && backend.displaySettingsState(packageId) === "ready"
+    }
+    readonly property string displayError: displayMode && backend ? backend.catalogueError || "" : ""
     signal saved()
     signal discarded()
     signal pickerRequested(string fieldName, string kind)
     signal connectionRequested(string fieldName)
     spacing: theme.dp(12)
 
+    function setBackendMode() {
+        displayMode = !!backend && typeof backend.displayCatalogueAttached === "function" && backend.displayCatalogueAttached()
+    }
+    function releaseTicket() {
+        ++ticketGeneration
+        const owner = ticketOwner, ticket = settingsTicket
+        settingsTicket = ""; ticketOwner = null; ticketPackage = ""; preparing = false
+        try { if (owner && ticket.length && typeof owner.releaseDisplayRequest === "function") owner.releaseDisplayRequest(ticket) } catch (error) {}
+    }
+    function clearDraft() {
+        secretOperations = ({}); fieldErrors = ({}); draftValues = ({}); initialValues = ({}); initialBackendValues = ({}); secretStatus = ({})
+        schema = {type: "object", properties: {}, additionalProperties: false}; schemaError = ""; preparedMessages = ({}); resetGeneration++
+    }
     function reload() {
+        if (!displayMode) { loadLegacy(); return }
+        clearDraft(); loaded = false; retired = false; conflict = false; errorMessage = ""
+        capturedStamp = backend && typeof backend.displaySettingsStamp === "function" ? backend.displaySettingsStamp(packageId) : ""
+        if (!backend || !packageId.length) { releaseTicket(); return }
+        if (ticketOwner !== backend || ticketPackage !== packageId || settingsTicket.length && backend.catalogueReady === true
+                && !backend.displayRequestCurrent(settingsTicket)) releaseTicket()
+        if (!settingsTicket.length && typeof backend.prepareDisplaySettings === "function") {
+            const owner = backend, id = packageId, generation = ++ticketGeneration
+            preparing = true; ticketOwner = owner; ticketPackage = id
+            const ticket = owner.prepareDisplaySettings(id)
+            if (generation !== ticketGeneration || owner !== backend || id !== packageId || retired) {
+                // A synchronous close/rebind owns the newer form state.
+                try { if (ticket.length && typeof owner.releaseDisplayRequest === "function") owner.releaseDisplayRequest(ticket) } catch (error) {}
+                return
+            }
+            settingsTicket = ticket; preparing = false
+        }
+        if (!settingsTicket.length) { errorMessage = qsTr("The app cannot prepare these settings. Close another settings window and try again."); return }
+        observeBackend()
+    }
+    function observeBackend() {
+        if (!displayMode) { observeLegacy(); return }
+        if (!ready || saving || preparing || retired || !backend || !settingsTicket.length) return
+        if (backend.catalogueReady !== true) return
+        if (typeof backend.displayRequestCurrent !== "function" || !backend.displayRequestCurrent(settingsTicket)) {
+            retired = true; conflict = true; releaseTicket()
+            errorMessage = qsTr("The settings view stopped. Select Cancel and open the settings again."); return
+        }
+        const stamp = typeof backend.displaySettingsStamp === "function" ? backend.displaySettingsStamp(packageId) : ""
+        if (!stamp.length || capturedStamp.length && stamp !== capturedStamp) {
+            conflict = true; errorMessage = qsTr("The package or saved settings changed. Select Cancel and open the settings again."); return
+        }
+        if (!capturedStamp.length) capturedStamp = stamp
+        const state = backend.displaySettingsState(packageId)
+        if (state !== "ready") {
+            if (state === "unavailable") schemaError = qsTr("The app cannot load these settings. Select Cancel and try again.")
+            return
+        }
+        if (loaded) return // Preserve private edits through unrelated refreshes.
+        const nextSchema = backend.displaySettingsSchema(packageId)
+        schemaError = Contract.validateSettingsSchema(nextSchema)
+        if (schemaError.length) return
+        schema = Contract.clone(nextSchema)
+        preparedMessages = Contract.clone(backend.displaySettingsMessages(packageId) || {})
+        initialBackendValues = Contract.clone(backend.displaySettingsValues(packageId) || {})
+        secretStatus = Contract.clone(backend.displaySettingsSecretStatus(packageId) || {})
+        initialValues = Contract.defaults(schema, initialBackendValues); draftValues = Contract.clone(initialValues); loaded = true
+    }
+    function currentForSave() {
+        return !displayMode || !!backend && settingsTicket.length > 0 && !retired
+            && backend.catalogueReady === true && backend.displayRequestCurrent(settingsTicket)
+            && backend.displaySettingsState(packageId) === "ready"
+            && backend.displaySettingsStamp(packageId) === capturedStamp
+    }
+    function retryPreparation() {
+        if (!displayMode || !backend || saving || retired) return
+        if (!settingsTicket.length) { reload(); return }
+        if (typeof backend.refreshDisplayCatalogue === "function") backend.refreshDisplayCatalogue()
+    }
+    function retirePackage(id) {
+        if (!displayMode || saving || id !== packageId) return
+        retired = true; conflict = true; releaseTicket()
+        errorMessage = qsTr("The add-on stopped. Select Cancel and open the settings again.")
+    }
+    function loadLegacy() {
         secretOperations = ({}); fieldErrors = ({}); errorMessage = ""; conflict = false
         resetGeneration++
         if (!backend || !packageId.length) {
@@ -52,9 +150,9 @@ ColumnLayout {
         initialValues = Contract.defaults(schema, initialBackendValues)
         draftValues = Contract.clone(initialValues)
     }
-    function observeBackend() {
+    function observeLegacy() {
         if (!ready || saving || !backend || !packageId.length) return
-        if (!dirty) { reload(); return }
+        if (!dirty) { loadLegacy(); return }
         if (JSON.stringify(backend.settingsSchema(packageId)) !== JSON.stringify(schema)
                 || JSON.stringify(backend.settingsValues(packageId) || {}) !== JSON.stringify(initialBackendValues)
                 || JSON.stringify(backend.settingsSecretStatus(packageId) || {}) !== JSON.stringify(secretStatus)) {
@@ -75,33 +173,52 @@ ColumnLayout {
         secretOperations = next
         fieldErrors = Object.assign({}, fieldErrors, {[name]: ""})
     }
-    function discard() { reload(); discarded() }
+    function discard() {
+        if (displayMode) { releaseTicket(); clearDraft(); loaded = false; capturedStamp = "" }
+        else reload()
+        discarded()
+    }
     function resetDefaults() {
-        if (conflict) return
+        if (conflict || displayMode && !dataReady) return
         draftValues = Contract.defaults(schema, {})
         secretOperations = ({}); fieldErrors = ({}); errorMessage = ""; resetGeneration++
     }
     function save() {
         observeBackend()
-        if (!validSchema || conflict || !backend || !packageId.length || saving) return false
+        if (!validSchema || conflict || !backend || !packageId.length || saving || !currentForSave()) return false
         fieldErrors = Contract.settingsErrors(schema, draftValues, secretStatus, secretOperations, credentialPersistenceAvailable)
         if (Object.keys(fieldErrors).length) { errorMessage = qsTr("Do a check of the highlighted settings."); return false }
         saving = true
         // The backend revalidates the complete object and commits credential ops atomically.
-        const success = backend.saveAddonSettings(packageId, Contract.clone(draftValues), Contract.clone(secretOperations))
+        const success = displayMode
+            ? backend.saveDisplaySettings(packageId, capturedStamp, Contract.clone(draftValues), Contract.clone(secretOperations))
+            : backend.saveAddonSettings(packageId, Contract.clone(draftValues), Contract.clone(secretOperations))
         saving = false
         if (!success) { errorMessage = qsTr("The app cannot save these settings. Your saved settings did not change."); return false }
-        reload(); saved(); return true
+        if (displayMode) releaseTicket(); else reload()
+        saved(); return true
     }
     onPackageIdChanged: if (ready) reload()
-    onBackendChanged: if (ready) reload()
-    Component.onCompleted: { ready = true; reload() }
-    Component.onDestruction: secretOperations = ({})
+    onBackendChanged: if (ready) { releaseTicket(); setBackendMode(); reload() }
+    Component.onCompleted: { setBackendMode(); ready = true; reload() }
+    Component.onDestruction: { releaseTicket(); secretOperations = ({}) }
     Connections {
         target: root.backend
         ignoreUnknownSignals: true
         function onRevisionChanged() { root.observeBackend() }
         function onChanged() { root.observeBackend() }
+        function onCatalogueChanged() { root.observeBackend() }
+        function onCatalogueFreshnessChanged() { root.observeBackend() }
+        function onPackageWithdrawn(id) { root.retirePackage(id) }
+        function onRetiring() { root.retirePackage(root.packageId) }
+    }
+    Text {
+        objectName: "addonSettingsLoading"
+        Layout.fillWidth: true
+        visible: root.displayMode && !root.loaded && !root.conflict && root.settingsTicket.length > 0
+        text: root.displayError || qsTr("The app prepares these settings.")
+        textFormat: Text.PlainText; wrapMode: Text.Wrap
+        color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
     }
     Repeater {
         model: root.validSchema ? Object.keys(root.schema.properties) : []
@@ -128,7 +245,7 @@ ColumnLayout {
     Text {
         objectName: "addonSettingsError"
         Layout.fillWidth: true; visible: text.length > 0
-        text: root.schemaError || root.errorMessage; textFormat: Text.PlainText; wrapMode: Text.Wrap
+        text: root.schemaError || root.errorMessage || root.displayError; textFormat: Text.PlainText; wrapMode: Text.Wrap
         color: root.theme.danger; font.pixelSize: root.theme.dp(13)
         Accessible.role: Accessible.AlertMessage
     }
@@ -137,7 +254,7 @@ ColumnLayout {
         RedesignButton {
             objectName: "addonSettingsSave"
             caption: qsTr("Save"); text: caption; primaryAction: true
-            enabled: root.validSchema && root.dirty && !root.conflict && !root.saving
+            enabled: root.validSchema && root.dirty && !root.conflict && !root.saving && (!root.displayMode || root.dataReady)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             onClicked: root.save()
         }
@@ -148,8 +265,16 @@ ColumnLayout {
             onClicked: root.discard()
         }
         RedesignButton {
+            objectName: "addonSettingsRetry"
+            caption: qsTr("Try again"); text: caption
+            visible: root.displayMode && !root.dataReady && !root.conflict && root.displayError.length > 0
+            enabled: !root.saving && root.backend && root.backend.catalogueLoading !== true
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            onClicked: root.retryPreparation()
+        }
+        RedesignButton {
             objectName: "addonSettingsDefaults"
-            caption: qsTr("Use default settings"); text: caption; enabled: root.validSchema && !root.conflict && !root.saving
+            caption: qsTr("Use default settings"); text: caption; enabled: root.validSchema && !root.conflict && !root.saving && (!root.displayMode || root.dataReady)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             onClicked: root.resetDefaults()
         }

@@ -16,22 +16,35 @@ TestCase {
         property bool scopeAllowed: true
         property bool schemaAllowed: true
         property bool largeView: false
+        property bool pendingDocument: false
         property bool mediaTitles: false
+        property bool available: true
+        property bool loading: false
         property string selected: "org.example.ui/picker"
         signal changed()
+        signal availabilityChanged()
         signal sessionChanged(string id)
         signal sessionFailed(string id)
+        function setAvailability(current, pending) { available = current; loading = pending; availabilityChanged() }
         function replacement(hook) { return selected.length ? {id: selected, selectionTitlesAllowed: mediaTitles} : ({}) }
-        function canUseSelection(id, hook) { return scopeAllowed && selected === id && ["dialog.add-to-playlist.content@1", "subtitles.search.content@1"].includes(hook) }
+        function canPrepareSelection(id, hook) { return scopeAllowed && selected === id && ["dialog.add-to-playlist.content@1", "subtitles.search.content@1"].includes(hook) }
+        function canUseSelection(id, hook) { return available && !pendingDocument && scopeAllowed && selected === id && ["dialog.add-to-playlist.content@1", "subtitles.search.content@1"].includes(hook) }
         function createSession(id, parameters, context) {
             const key = "session-" + (++serial)
-            sessions = Object.assign({}, sessions, {[key]: {id: id,
+            const entry = {id: id,
                 document: {contract: "ui@1", id: "picker", root: {type: "Text", text: largeView ? "Line\n".repeat(1000) : "Choices"}},
-                state: {parameters: JSON.parse(JSON.stringify(parameters))}, registeredCommands: [], messages: {}, assetUrls: {}}})
+                state: {parameters: JSON.parse(JSON.stringify(parameters))}, registeredCommands: [], messages: {}, assetUrls: {}}
+            if (pendingDocument) { delete entry.document; entry.pending = true }
+            sessions = Object.assign({}, sessions, {[key]: entry})
             return key
         }
+        function materialize(id) {
+            const copy = JSON.parse(JSON.stringify(sessions))
+            copy[id].document = {contract: "ui@1", id: "picker", root: {type: "Text", text: "Choices"}}
+            copy[id].pending = false; sessions = copy; sessionChanged(id)
+        }
         function session(id) { return sessions[id] || ({}) }
-        function validateSessionResult(id, result) { return schemaAllowed && !!sessions[id] }
+        function validateSessionResult(id, result) { return available && schemaAllowed && !!sessions[id] }
         function closeSession(id) { closed = closed.concat([id]); const copy = Object.assign({}, sessions); delete copy[id]; sessions = copy }
         function suspendSession(id, suspended) {}
         function acknowledgeSession(id) {}
@@ -60,6 +73,7 @@ TestCase {
         signal sessionChanged(string id)
         signal sessionFailed(string id)
         function replacement(hook) { return {id: "org.example.ui/picker"} }
+        function canPrepareSelection(id, hook) { return true }
         function canUseSelection(id, hook) { return true }
         function createSession(id, parameters, context) {
             const key = fakeRegistry.createSession(id, parameters, context)
@@ -85,6 +99,7 @@ TestCase {
     SignalSpy { id: fallback; signalName: "fallbackRequested" }
     function init() {
         fakeRegistry.sessions = ({}); fakeRegistry.closed = []; fakeRegistry.scopeAllowed = true; fakeRegistry.schemaAllowed = true; fakeRegistry.largeView = false
+        fakeRegistry.available = true; fakeRegistry.loading = false; fakeRegistry.pendingDocument = false
         fakeRegistry.selected = "org.example.ui/picker"; fakeRegistry.mediaTitles = false; ++fakeRegistry.revision
         confirmed.clear(); canceled.clear(); fallback.clear()
     }
@@ -97,6 +112,18 @@ TestCase {
     }
     function mount(surface) { return findChild(surface, "addonSelectionMount") }
     function draft(surface, target) { return {choiceSet: surface.snapshotData.choiceSet, selected: [target || "target:1"]} }
+    function test_pendingSelectionCanMountWithoutGrantingConfirmation() {
+        fakeRegistry.pendingDocument = true
+        const view = createTemporaryObject(selectionComponent, test)
+        confirmed.target = view; fallback.target = view
+        tryVerify(() => mount(view).sessionId.length > 0)
+        const id = mount(view).sessionId, snapshot = view.snapshotData.choiceSet
+        verify(view.scopeAllowed); verify(!view.prepared); verify(!view.confirm()); compare(fallback.count, 0)
+        fakeRegistry.pendingDocument = false; fakeRegistry.materialize(id)
+        tryVerify(() => view.prepared && view.usingReplacement)
+        compare(mount(view).sessionId, id); compare(view.snapshotData.choiceSet, snapshot); compare(fallback.count, 0)
+        fakeRegistry.result(id, draft(view)); verify(view.confirm()); compare(confirmed.count, 1)
+    }
     function test_confirmUsesPrivateIdentityOnlyOnce() {
         const view = surface()
         fakeRegistry.result(mount(view).sessionId, draft(view))
@@ -105,13 +132,34 @@ TestCase {
         verify(view.confirm()); compare(confirmed.count, 1); compare(confirmed.signalArguments[0][0].key, "playlist-23")
         verify(!view.confirm()); compare(confirmed.count, 1)
     }
-    function test_registryRestartCannotRepeatAConfirmedChoiceSet() {
+    function test_unrelatedCatalogueChangeCannotRepeatAConfirmedChoiceSet() {
         const view = surface(); const session = mount(view).sessionId
         const value = draft(view); fakeRegistry.result(session, value)
         verify(view.confirm()); ++fakeRegistry.revision; fakeRegistry.changed()
-        tryVerify(() => mount(view).sessionId !== session)
+        wait(20); compare(mount(view).sessionId, session)
         fakeRegistry.result(mount(view).sessionId, value)
         verify(!view.confirm()); compare(confirmed.count, 1)
+    }
+    function test_temporaryFreshnessKeepsTheDraftAndDisablesConfirmation_data() {
+        return [{tag: "playlist", subtitles: false}, {tag: "subtitles", subtitles: true}]
+    }
+    function test_temporaryFreshnessKeepsTheDraftAndDisablesConfirmation(data) {
+        const view = data.subtitles ? createTemporaryObject(subtitleComponent, test) : surface()
+        confirmed.target = view; fallback.target = view; tryVerify(() => view.usingReplacement)
+        const id = mount(view).sessionId, snapshot = view.snapshotData.choiceSet
+        const value = data.subtitles ? {choiceSet: snapshot, assignments: [{targetRef: "target:0", assetRefs: ["asset:0"]}]} : draft(view)
+        fakeRegistry.result(id, value)
+        verify(view.prepared); verify(findChild(view, "addonSelectionConfirm").enabled)
+        fakeRegistry.setAvailability(false, true)
+        tryCompare(view, "prepared", false)
+        verify(view.usingReplacement); verify(mount(view).usable)
+        verify(!findChild(view, "addonSelectionConfirm").enabled); verify(!view.confirm())
+        compare(confirmed.count, 0); compare(fallback.count, 0); compare(view.errorMessage, "")
+        compare(mount(view).sessionId, id); compare(view.snapshotData.choiceSet, snapshot)
+        fakeRegistry.setAvailability(true, false)
+        tryCompare(view, "prepared", true)
+        compare(mount(view).sessionId, id); compare(view.snapshotData.choiceSet, snapshot)
+        verify(!fakeRegistry.closed.includes(id)); verify(view.confirm()); compare(confirmed.count, 1)
     }
     function test_changedTargetSnapshotRejectsTheOldDraft() {
         const view = surface(), oldSession = mount(view).sessionId, old = draft(view)

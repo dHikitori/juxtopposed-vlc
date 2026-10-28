@@ -51,6 +51,10 @@ C.Dialog {
                 Layout.fillWidth: true
                 backend: root.backend; packageId: root.packageId
                 messages: {
+                    if (!form.ready) return root.messages
+                    if (form.displayMode) {
+                        return Object.assign({}, form.preparedMessages, root.messages)
+                    }
                     if (root.backend && typeof root.backend.settingsMessages === "function") {
                         root.backend.revision
                         return Object.assign({}, root.backend.settingsMessages(root.packageId), root.messages)

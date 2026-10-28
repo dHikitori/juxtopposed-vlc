@@ -6,11 +6,74 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
+#include <QThread>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <cmath>
 #include "addons/addon_manager.hpp"
 #include "addons/addon_theme_service.hpp"
+#include "addons/addon_catalogue_view.hpp"
 
 using namespace vlc::addons;
+
+namespace {
+struct ThemeReadGate {
+    std::mutex mutex; std::condition_variable changed; bool released=false;
+    std::atomic_bool entered{false};
+    void wait() { std::unique_lock<std::mutex> lock(mutex); entered=true; changed.wait(lock,[this] { return released; }); }
+    void release() { std::lock_guard<std::mutex> lock(mutex); released=true; changed.notify_all(); }
+};
+struct ThemeDisplay {
+    QTemporaryDir directory;
+    StoreAuthority authority{directory.path()};
+    AddonStreamLifetime lifetime;
+    AddonManager manager{directory.filePath(QStringLiteral("profile"))};
+    std::unique_ptr<AddonCatalogueView> view;
+    DisplayCatalogueSnapshot snapshot;
+    std::shared_ptr<ThemeReadGate> gate;
+    std::atomic_uint reads{0}; std::atomic_bool readOnOwner{false};
+    QThread* owner=QThread::currentThread();
+    const QString id=QStringLiteral("org.example.display/midnight");
+    explicit ThemeDisplay(QJsonObject document,bool blocked=false) {
+        DisplayCataloguePackage row;
+        row.package.manifest.id=QStringLiteral("org.example.display");
+        row.package.manifest.name=QStringLiteral("Display theme"); row.package.manifest.version=QStringLiteral("1.0.0");
+        row.package.manifest.files={QStringLiteral("theme.json")};
+        row.package.digest=QByteArray(64,'a'); row.package.generation=1; row.package.enabled=true; row.savedEnabled=true;
+        row.schema={{"type","object"},{"properties",QJsonObject{}}};
+        Contribution contribution; contribution.id=QStringLiteral("midnight"); contribution.type=QStringLiteral("theme");
+        contribution.document={{"id",contribution.id},{"type",contribution.type},{"theme",QStringLiteral("theme.json")}};
+        row.package.manifest.contributions={contribution}; row.resources.insert(QStringLiteral("midnight/theme"),document);
+        snapshot.packages={row}; snapshot.selectedTheme=id;
+        snapshot.themes={QVariantMap{{"id",id},{"packageId",row.package.manifest.id},{"name",row.package.manifest.name},
+            {"field",QStringLiteral("theme")},{"enabled",true},{"light",true},{"dark",true}}};
+        snapshot.displayPreferences={{"appearance",QJsonObject{{"selectedTheme",id},{"highContrast",false},{"reducedMotion",false}}}};
+        if(blocked) gate=std::make_shared<ThemeReadGate>();
+        AddonCatalogueView::Backend backend;
+        backend.capture=[this]() -> std::optional<DisplayCatalogueSource> {
+            DisplayCatalogueSource source; source.queuedAuthority=authority.capture();
+            auto state=snapshot; state.queuedAuthority=state.authority=source.queuedAuthority;
+            const auto wait=gate;
+            source.reader=[this,state=std::move(state),wait](const auto&,DisplayCatalogueSnapshot* out,QString*) {
+                ++reads; readOnOwner=QThread::currentThread()==owner;
+                if(wait) wait->wait();
+                *out=state; return true;
+            };
+            return source;
+        };
+        backend.subscribe=[this](std::function<void()> wake) { return authority.onChanged(std::move(wake)); };
+        view=std::make_unique<AddonCatalogueView>(std::move(backend),lifetime.handle(),&manager);
+        view->setObjectName(QStringLiteral("hakoneDisplayCatalogue"));
+    }
+    ~ThemeDisplay() {
+        if(gate) gate->release();
+        if(view) view->close();
+        lifetime.close(); lifetime.handle().waitQt(std::chrono::seconds(5));
+        view.reset();
+    }
+};
+}
 
 class PlatformThemePreferences : public QObject
 {
@@ -57,6 +120,61 @@ class TestAddonTheme : public QObject
         const auto a = luminance(first), b = luminance(second); return (std::max(a, b) + .05) / (std::min(a, b) + .05);
     }
 private slots:
+    void attachedLoadingNeverUsesTheLegacyPreferenceFile() {
+        ThemeDisplay display(reference(),true);
+        QVERIFY(QDir().mkpath(display.manager.storageDirectory()));
+        QFile poison(QDir(display.manager.storageDirectory()).filePath(QStringLiteral("theme-selection.json")));
+        QVERIFY(poison.open(QIODevice::WriteOnly));
+        QVERIFY(poison.write("{\"selectedTheme\":\"org.example.poison/theme\"}")>0); poison.close();
+        AddonThemeService service(&display.manager);
+        QVERIFY(service.loading()); QVERIFY(service.selectedTheme().isEmpty());
+        QVERIFY(service.availableThemes().isEmpty());
+        QTRY_VERIFY(display.gate->entered.load());
+        display.gate->release(); QTRY_VERIFY(display.view->isCurrent());
+        QCOMPARE(service.selectedTheme(),display.id); QCOMPARE(service.availableThemes().size(),1);
+        QVERIFY(!service.loading()); QVERIFY(!service.usingFallback()); QVERIFY(!display.readOnOwner.load());
+    }
+    void attachedRepeatedReadsAndCorePreferencesDoNotRecapturePackages() {
+        ThemeDisplay display(reference()); QTRY_VERIFY(display.view->isCurrent());
+        AddonThemeService service(&display.manager);
+        QCOMPARE(service.availableThemes().size(),1); QVERIFY(!service.usingFallback());
+        const auto reads=display.reads.load(); const auto revision=service.revision();
+        for(int i=0;i<100;++i) {
+            service.refresh(); service.availableThemes(); service.tokens(false); service.tokens(true);
+        }
+        QCOMPARE(service.revision(),revision); QCOMPARE(display.reads.load(),reads);
+        QVERIFY(service.setHighContrast(true)); QVERIFY(service.setReducedMotion(true));
+        QTest::qWait(40);
+        QVERIFY(service.highContrast()); QVERIFY(service.reducedMotion());
+        QCOMPARE(display.reads.load(),reads); QVERIFY(!display.readOnOwner.load());
+    }
+    void attachedRefreshKeepsThePaletteAndRejectsStaleChanges() {
+        ThemeDisplay display(reference()); QTRY_VERIFY(display.view->isCurrent());
+        AddonThemeService service(&display.manager); const auto before=service.tokens(false);
+        const auto themes=service.availableThemes();
+        display.gate=std::make_shared<ThemeReadGate>(); display.view->refresh();
+        QTRY_VERIFY(display.gate->entered.load());
+        QCOMPARE(service.availableThemes(),themes); QCOMPARE(service.tokens(false),before);
+        QVERIFY(!service.selectTheme(QString())); QVERIFY(!service.setHighContrast(true));
+        QCOMPARE(service.selectedTheme(),display.id); QVERIFY(!service.highContrast());
+        display.gate->release(); QTRY_VERIFY(display.view->isCurrent());
+        QCOMPARE(service.tokens(false),before); QVERIFY(!service.usingFallback());
+        display.view.reset(); service.refresh();
+        QCOMPARE(service.availableThemes(),themes); QCOMPARE(service.tokens(false),before);
+        QVERIFY(!service.selectTheme(QString()));
+    }
+    void attachedDisableAndRestoreUseAcceptedSnapshots() {
+        ThemeDisplay display(reference()); QTRY_VERIFY(display.view->isCurrent());
+        AddonThemeService service(&display.manager); const auto before=service.tokens(false);
+        const auto themes=display.snapshot.themes;
+        display.snapshot.packages[0].package.enabled=false; display.snapshot.themes.clear();
+        display.authority.invalidate(); QTRY_VERIFY(service.usingFallback());
+        QVERIFY(service.availableThemes().isEmpty()); QCOMPARE(service.selectedTheme(),display.id);
+        display.snapshot.packages[0].package.enabled=true; display.snapshot.themes=themes;
+        display.authority.invalidate();
+        QTRY_VERIFY(display.view->isCurrent() && !service.loading() && !service.usingFallback());
+        QCOMPARE(service.tokens(false),before); QCOMPARE(service.availableThemes().size(),1);
+    }
     void referenceAndBounds()
     {
         QString error;

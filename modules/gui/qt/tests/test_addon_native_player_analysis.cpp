@@ -17,9 +17,52 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <cmath>
+#include <atomic>
 #include "addons/addon_native_player_analysis.hpp"
 using namespace vlc::addons;
 using vlc_player_locker = vlc_locker<vlc_player_t, vlc_player_Lock, vlc_player_Unlock>;
+
+#ifdef HAKONE_ANALYSIS_OBSERVER_WRAP
+namespace {
+std::atomic_int failObserver{0};
+std::atomic_uint liveTimers{0}, liveOutputs{0}, livePlayers{0};
+}
+extern "C" {
+vlc_player_timer_id* __real_vlc_player_AddTimer(vlc_player_t*, vlc_tick_t, const vlc_player_timer_cbs*, void*);
+void __real_vlc_player_RemoveTimer(vlc_player_t*, vlc_player_timer_id*);
+vlc_player_aout_listener_id* __real_vlc_player_aout_AddListener(vlc_player_t*, const vlc_player_aout_cbs*, void*);
+void __real_vlc_player_aout_RemoveListener(vlc_player_t*, vlc_player_aout_listener_id*);
+vlc_player_listener_id* __real_vlc_player_AddListener(vlc_player_t*, const vlc_player_cbs*, void*);
+void __real_vlc_player_RemoveListener(vlc_player_t*, vlc_player_listener_id*);
+vlc_player_timer_id* __wrap_vlc_player_AddTimer(vlc_player_t* player, vlc_tick_t period, const vlc_player_timer_cbs* cbs, void* data) {
+    if (failObserver.load() == 1) return nullptr;
+    auto* result = __real_vlc_player_AddTimer(player, period, cbs, data);
+    if (result) ++liveTimers;
+    return result;
+}
+void __wrap_vlc_player_RemoveTimer(vlc_player_t* player, vlc_player_timer_id* listener) {
+    __real_vlc_player_RemoveTimer(player, listener); --liveTimers;
+}
+vlc_player_aout_listener_id* __wrap_vlc_player_aout_AddListener(vlc_player_t* player, const vlc_player_aout_cbs* cbs, void* data) {
+    if (failObserver.load() == 2) return nullptr;
+    auto* result = __real_vlc_player_aout_AddListener(player, cbs, data);
+    if (result) ++liveOutputs;
+    return result;
+}
+void __wrap_vlc_player_aout_RemoveListener(vlc_player_t* player, vlc_player_aout_listener_id* listener) {
+    __real_vlc_player_aout_RemoveListener(player, listener); --liveOutputs;
+}
+vlc_player_listener_id* __wrap_vlc_player_AddListener(vlc_player_t* player, const vlc_player_cbs* cbs, void* data) {
+    if (failObserver.load() == 3) return nullptr;
+    auto* result = __real_vlc_player_AddListener(player, cbs, data);
+    if (result) ++livePlayers;
+    return result;
+}
+void __wrap_vlc_player_RemoveListener(vlc_player_t* player, vlc_player_listener_id* listener) {
+    __real_vlc_player_RemoveListener(player, listener); --livePlayers;
+}
+}
+#endif
 
 namespace {
 bool put(const QString& path, const QByteArray& data)
@@ -50,7 +93,8 @@ struct NativePlayer {
     NativePlayer()
     {
 #ifdef VLC_ADDON_NATIVE_BUILD_ROOT
-        qputenv("VLC_PLUGIN_PATH", QByteArray(VLC_ADDON_NATIVE_BUILD_ROOT "/modules"));
+        const auto scopedModules = qgetenv("VLC_TEST_PLUGIN_PATH");
+        qputenv("VLC_PLUGIN_PATH", scopedModules.isEmpty() ? QByteArray(VLC_ADDON_NATIVE_BUILD_ROOT "/modules") : scopedModules);
 #endif
         const char* args[]{"--ignore-config", "--quiet", "--no-plugins-cache", "--no-media-library",
             "--no-metadata-network-access", "--aout=adummy", "--vout=vdummy", "--text-renderer=tdummy"};
@@ -73,6 +117,7 @@ struct NativePlayer {
         input_item_Release(item); return result;
     }
     enum vlc_player_state state() { vlc_player_locker lock{player}; return vlc_player_GetState(player); }
+    vlc_tick_t time() { vlc_player_locker lock{player}; return vlc_player_GetTime(player); }
 };
 constexpr const char* firstSource = "mock://video_track_count=0;audio_track_count=1;audio_rate=48000;audio_channels=2;length=30000000";
 constexpr const char* secondSource = "mock://video_track_count=0;audio_track_count=1;audio_rate=44100;audio_channels=1;length=30000000";
@@ -81,10 +126,69 @@ class TestAddonNativePlayerAnalysis : public QObject
 {
     Q_OBJECT
 private slots:
+    void ordinaryPlaybackDoesNotInstallAnUnusedObserver() {
+        NativePlayer native; QVERIFY(native.player); QVERIFY(native.analysis); QVERIFY(native.start(firstSource));
+#ifdef HAKONE_ANALYSIS_OBSERVER_WRAP
+        QCOMPARE(liveTimers.load(), 0u); QCOMPARE(liveOutputs.load(), 0u); QCOMPARE(livePlayers.load(), 0u);
+#endif
+        QTRY_COMPARE_WITH_TIMEOUT(native.state(), VLC_PLAYER_STATE_PLAYING, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(native.time() > VLC_TICK_FROM_MS(100), 5000);
+        QVERIFY(!native.analysis->statistics().value("observing").toBool());
+        QVERIFY(!native.analysis->statistics().value("subscribed").toBool());
+        QCOMPARE(native.analysis->statistics().value("clockCallbacks").toULongLong(), qulonglong(0));
+        QCOMPARE(native.analysis->backend().snapshot().epoch, std::uint64_t(0));
+        const auto before = native.time();
+        QTRY_VERIFY_WITH_TIMEOUT(native.time() > before + VLC_TICK_FROM_MS(100), 3000);
+        QCOMPARE(native.analysis->statistics().value("clockCallbacks").toULongLong(), qulonglong(0));
+        QCOMPARE(native.analysis->statistics().value("blocks").toULongLong(), qulonglong(0));
+    }
+#ifdef HAKONE_ANALYSIS_OBSERVER_WRAP
+    void partialObserverRegistrationHasNoRetainedNativeListener_data() {
+        QTest::addColumn<int>("failure");
+        QTest::newRow("clock") << 1; QTest::newRow("output") << 2; QTest::newRow("player") << 3;
+    }
+    void partialObserverRegistrationHasNoRetainedNativeListener() {
+        QFETCH(int, failure);
+        NativePlayer native; QVERIFY(native.player); const auto backend = native.analysis->backend();
+        QVERIFY(backend.setActivity); failObserver = failure;
+        const auto resetFailure = qScopeGuard([] { failObserver = 0; });
+        QVERIFY(!backend.setActivity(true));
+        QCOMPARE(liveTimers.load(), 0u); QCOMPARE(liveOutputs.load(), 0u); QCOMPARE(livePlayers.load(), 0u);
+        QVERIFY(!native.analysis->statistics().value("observing").toBool());
+        QCOMPARE(backend.snapshot().epoch, std::uint64_t(0));
+        failObserver = 0; QVERIFY(backend.setActivity(true)); QVERIFY(backend.setActivity(false));
+        QCOMPARE(liveTimers.load(), 0u); QCOMPARE(liveOutputs.load(), 0u); QCOMPARE(livePlayers.load(), 0u);
+    }
+#endif
+    void firstSelectionWhilePausedUsesOnlyRealNativeClockPoints() {
+        QTemporaryDir files; QVERIFY(package(files.filePath(QStringLiteral("package"))));
+        AddonManager manager(files.filePath(QStringLiteral("profile")));
+        QVERIFY(manager.installLocalPackage(files.filePath(QStringLiteral("package")), true));
+        QVERIFY(manager.setEnabled(QStringLiteral("org.example.native-visual"), true));
+        NativePlayer native; QVERIFY(native.player); QVERIFY(native.start(firstSource));
+        QTRY_COMPARE_WITH_TIMEOUT(native.state(), VLC_PLAYER_STATE_PLAYING, 5000);
+        { vlc_player_locker lock{native.player}; vlc_player_Pause(native.player); }
+        QTRY_COMPARE_WITH_TIMEOUT(native.state(), VLC_PLAYER_STATE_PAUSED, 5000);
+        QCOMPARE(native.analysis->statistics().value("clockCallbacks").toULongLong(), qulonglong(0));
+        native.visualizers = std::make_unique<AddonVisualizers>(&manager, native.analysis->backend()); QObject surface;
+        QTRY_VERIFY(native.visualizers->availableVisualizers().size() > 1);
+        QVERIFY(native.visualizers->selectVisualizer(QStringLiteral("org.example.native-visual/spectrum")));
+        QTRY_VERIFY(!native.visualizers->loading());
+        QVERIFY(!native.analysis->statistics().value("observing").toBool());
+        native.visualizers->setSurface(&surface, true, {320, 240});
+        QVERIFY(native.analysis->statistics().value("observing").toBool());
+        const auto paused = native.analysis->backend().snapshot();
+        if (paused.epoch) QVERIFY(native.analysis->statistics().value("clockCallbacks").toULongLong() > 0);
+        if (!paused.epoch) { QVERIFY(!native.visualizers->active()); QVERIFY(native.visualizers->image().isNull()); }
+        { vlc_player_locker lock{native.player}; vlc_player_Resume(native.player); }
+        QTRY_VERIFY_WITH_TIMEOUT(native.visualizers->active(), 5000);
+        QVERIFY(native.analysis->statistics().value("clockCallbacks").toULongLong() > 0);
+        QVERIFY(native.analysis->statistics().value("accepted").toULongLong() > 0);
+    }
     void outputResetWithdrawsTheOldSampleObserver()
     {
         NativePlayer native; QVERIFY(native.player); AddonAudioAnalysis audio;
-        const auto backend = native.analysis->backend(); QVERIFY(backend.startAnalysis(&audio, 1));
+        const auto backend = native.analysis->backend(); QVERIFY(backend.setActivity(true)); QVERIFY(backend.startAnalysis(&audio, 1));
         const auto epoch = native.analysis->statistics().value("epoch").toULongLong();
         vlc_player_aout_Reset(native.player); backend.snapshot();
         QVERIFY(!native.analysis->statistics().value("subscribed").toBool());
@@ -114,9 +218,13 @@ private slots:
         QVERIFY(!native.visualizers->image().isNull());
         native.visualizers->setSurface(&surface, false, {});
         QVERIFY(!native.analysis->statistics().value("subscribed").toBool()); QVERIFY(native.visualizers->image().isNull());
-        const auto blocks = native.analysis->statistics().value("blocks"); const auto hidden = native.analysis->backend().snapshot();
-        QTRY_VERIFY_WITH_TIMEOUT(native.analysis->backend().snapshot().timeUs > hidden.timeUs + 100000, 3000);
+        const auto blocks = native.analysis->statistics().value("blocks");
+        const auto callbacks = native.analysis->statistics().value("clockCallbacks"); const auto hidden = native.time();
+        QVERIFY(!native.analysis->statistics().value("observing").toBool());
+        QCOMPARE(native.analysis->backend().snapshot().epoch, std::uint64_t(0));
+        QTRY_VERIFY_WITH_TIMEOUT(native.time() > hidden + VLC_TICK_FROM_MS(100), 3000);
         QCOMPARE(native.analysis->statistics().value("blocks"), blocks);
+        QCOMPARE(native.analysis->statistics().value("clockCallbacks"), callbacks);
         native.visualizers->setSurface(&surface, true, {320, 240}); QTRY_VERIFY_WITH_TIMEOUT(native.visualizers->active(), 5000);
         qInfo().noquote() << "Native visualizer measurements" << native.analysis->statistics();
         qInfo().noquote() << "Native render measurements" << native.visualizers->statistics();
@@ -138,6 +246,20 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(native.state(), VLC_PLAYER_STATE_PAUSED, 5000);
         QTRY_VERIFY(!native.analysis->backend().snapshot().playing);
         const auto frozen = native.visualizers->image(); native.visualizers->refresh(); QCOMPARE(native.visualizers->image(), frozen);
+        QVERIFY(native.analysis->statistics().value("observing").toBool());
+        native.visualizers->setColors({QColor(Qt::darkBlue), QColor(Qt::white), QColor(Qt::green)});
+        QTRY_VERIFY_WITH_TIMEOUT((native.visualizers->refresh(), native.visualizers->image() != frozen), 5000);
+        QVERIFY(native.analysis->statistics().value("observing").toBool());
+        native.visualizers->setSurface(&surface, false, {});
+        QVERIFY(!native.analysis->statistics().value("observing").toBool());
+        QVERIFY(!native.analysis->statistics().value("subscribed").toBool()); QVERIFY(native.visualizers->image().isNull());
+        const auto hiddenCallbacks = native.analysis->statistics().value("clockCallbacks").toULongLong();
+        QTest::qWait(80); QCOMPARE(native.analysis->statistics().value("clockCallbacks").toULongLong(), hiddenCallbacks);
+        QCOMPARE(native.analysis->backend().snapshot().epoch, std::uint64_t(0));
+        native.visualizers->setSurface(&surface, true, {320, 240});
+        const auto shownPaused = native.analysis->backend().snapshot();
+        if (shownPaused.epoch) QVERIFY(native.analysis->statistics().value("clockCallbacks").toULongLong() > hiddenCallbacks);
+        else { QVERIFY(!native.visualizers->active()); QVERIFY(native.visualizers->image().isNull()); }
         const auto epoch = native.analysis->statistics().value("epoch").toULongLong();
         { vlc_player_locker lock{native.player}; vlc_player_SetTime(native.player, VLC_TICK_FROM_SEC(3)); vlc_player_Resume(native.player); }
         QTRY_VERIFY_WITH_TIMEOUT(native.analysis->statistics().value("epoch").toULongLong() > epoch, 5000);

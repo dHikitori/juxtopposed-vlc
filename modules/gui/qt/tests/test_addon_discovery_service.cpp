@@ -3,8 +3,76 @@
 #include <QSignalSpy>
 #include "addons/addon_discovery_service.hpp"
 #include "addons/addon_player_discovery.hpp"
+#include "addons/addon_catalogue_view.hpp"
+#include "addons/addon_manager.hpp"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QTemporaryDir>
+#include <QThread>
+#include <atomic>
 
 using namespace vlc::addons;
+#ifdef HAKONE_DISCOVERY_INVOKE_WRAP
+namespace {
+std::function<QString(const QString&, const QString&, const QVariantMap&)> discoveryInvoke;
+struct InvokeScope {
+    explicit InvokeScope(decltype(discoveryInvoke) invoke) { discoveryInvoke = std::move(invoke); }
+    ~InvokeScope() { discoveryInvoke = {}; }
+};
+}
+extern "C" QString __real__ZN3vlc6addons12AddonManager6invokeERK7QStringS4_RK4QMapIS2_8QVariantE(AddonManager*,const QString&,const QString&,const QVariantMap&);
+extern "C" QString __wrap__ZN3vlc6addons12AddonManager6invokeERK7QStringS4_RK4QMapIS2_8QVariantE(AddonManager* owner,const QString& source,const QString& operation,const QVariantMap& context)
+{
+    const auto invoke = discoveryInvoke;
+    return invoke ? invoke(source, operation, context)
+        : __real__ZN3vlc6addons12AddonManager6invokeERK7QStringS4_RK4QMapIS2_8QVariantE(owner,source,operation,context);
+}
+#endif
+namespace {
+struct DisplayFixture {
+    QTemporaryDir profile;
+    AddonStreamLifetime lifetime;
+    AddonManager manager{profile.path()};
+    StoreAuthority authority{profile.path() + QStringLiteral("/display-fixture")};
+    DisplayCatalogueSnapshot snapshot;
+    QPointer<AddonCatalogueView> display;
+    std::atomic_uint reads{0}, credentials{0};
+    std::atomic_bool readOnGui{false}, credentialOnGui{false};
+    QThread* gui = QThread::currentThread();
+    explicit DisplayFixture(bool protectedSettings = false) {
+        DisplayCataloguePackage row; auto& package = row.package;
+        package.manifest.id = QStringLiteral("org.example.radio"); package.manifest.name = QStringLiteral("Radio");
+        package.manifest.version = QStringLiteral("1.0.0"); package.identity.source = QStringLiteral("https://github.com/hakone-org/radio-fixture");
+        package.digest = QByteArray(64, 'a'); package.generation = 1; package.enabled = true; row.savedEnabled = true;
+        row.schema = {{"type", "object"}, {"properties", QJsonObject{}}};
+        if (protectedSettings) {
+            row.schema = {{"type", "object"}, {"required", QJsonArray{"apiKey"}},
+                {"properties", QJsonObject{{"apiKey", QJsonObject{{"type", "string"}, {"writeOnly", true}}}}}};
+            row.settings = {{"_credentials", QJsonObject{{"apiKey", "00000000-0000-4000-8000-000000000001"}}}};
+        }
+        Contribution source; source.id = QStringLiteral("source"); source.type = QStringLiteral("discovery.source");
+        source.operations = {QStringLiteral("roots"), QStringLiteral("search")};
+        source.document = {{"id", source.id}, {"type", source.type}, {"name", "Radio"}};
+        package.manifest.contributions.append(source); snapshot.packages.append(row);
+        AddonCatalogueView::Backend backend;
+        backend.capture = [this]() -> std::optional<DisplayCatalogueSource> {
+            DisplayCatalogueSource source; source.queuedAuthority = authority.capture(); source.workerExecutable = QStringLiteral("/bin/true");
+            auto state = snapshot; state.authority = source.queuedAuthority; state.queuedAuthority = source.queuedAuthority;
+            source.reader = [this, state](const DisplayCatalogueRequest&, DisplayCatalogueSnapshot* out, QString*) {
+                ++reads; readOnGui = QThread::currentThread() == gui; *out = state; return true;
+            };
+            source.credentials = [this](const QString&, const QString&) {
+                ++credentials; credentialOnGui = QThread::currentThread() == gui; return QByteArray("temporary-fixture-key");
+            };
+            return source;
+        };
+        backend.subscribe = [this](std::function<void()> wake) { return authority.onChanged(std::move(wake)); };
+        display = new AddonCatalogueView(std::move(backend), lifetime.handle(), &manager);
+        display->setObjectName(QStringLiteral("hakoneDisplayCatalogue"));
+    }
+    ~DisplayFixture() { delete display.data(); lifetime.close(); lifetime.handle().waitQt(std::chrono::seconds(5)); }
+};
+}
 class TestAddonDiscoveryService : public QObject
 {
     Q_OBJECT
@@ -36,6 +104,84 @@ class TestAddonDiscoveryService : public QObject
     };
     static QVariantList items(AddonDiscoveryService& service, const QString& id) { return service.view(id).value("items").toList(); }
 private slots:
+    void attachedRowsAndConstructorsAreMemoryOnlyAndRetainViewsOnUnrelatedChanges() {
+#ifndef HAKONE_DISCOVERY_INVOKE_WRAP
+        QSKIP("This real Manager adapter fixture needs the test-only GNU invocation wrapper.");
+#else
+        DisplayFixture display; QTRY_VERIFY(display.display->isCurrent());
+        Fixture fixture; InvokeScope invoke(fixture.backend().invoke); AddonDiscoveryService service(&display.manager, fixture.backend(), {});
+        QVERIFY(service.available()); QCOMPARE(service.sources().size(), 1); QCOMPARE(display.credentials.load(), 0u);
+        const auto reads = display.reads.load();
+        for (int i = 0; i < 20; ++i) { QCOMPARE(service.sources().size(), 1); QVERIFY(service.available()); }
+        QCOMPARE(display.reads.load(), reads); QVERIFY(!display.readOnGui);
+        const auto id = service.openSource("org.example.radio/source"); QVERIFY(!id.isEmpty());
+        QTRY_COMPARE(fixture.calls.size(), 1); fixture.complete(service, 0, {{"items", QVariantList{Fixture::item("station")}}});
+        QTRY_COMPARE(items(service, id).size(), 1); const auto retained = items(service, id);
+        QSignalSpy closed(&service, &AddonDiscoveryService::viewClosed);
+        emit display.manager.revisionChanged(); QCOMPARE(closed.size(), 0); QCOMPARE(items(service, id), retained);
+        display.display->refresh(); QCOMPARE(items(service, id), retained); QVERIFY(!service.available());
+        QTRY_VERIFY(service.available()); QCOMPARE(closed.size(), 0); QCOMPARE(items(service, id), retained);
+        // A different package changes the global token, not this source identity.
+        auto other = display.snapshot.packages.first(); other.package.manifest.id = QStringLiteral("org.example.other");
+        other.package.manifest.contributions.clear(); display.snapshot.packages.append(other); display.authority.invalidate();
+        QVERIFY(!service.available()); QCOMPARE(items(service, id), retained);
+        QTRY_VERIFY(service.available()); QCOMPARE(closed.size(), 0); QCOMPARE(items(service, id), retained);
+        ++display.snapshot.packages[0].settingsRevision; display.authority.invalidate();
+        QTRY_COMPARE(closed.size(), 1); QVERIFY(service.view(id).isEmpty());
+#endif
+    }
+    void visibleRequestsSharePresenceAndHiddenRowsNeverOpenWallet() {
+        DisplayFixture display(true); QTRY_VERIFY(display.display->isCurrent());
+        Fixture fixture; AddonDiscoveryService service(&display.manager, fixture.backend(), {});
+        QCOMPARE(service.sources().size(), 1); QVERIFY(!service.sources().first().toMap().value("configurationKnown").toBool());
+        QVERIFY(service.openSource("org.example.radio/source").isEmpty()); QCOMPARE(display.credentials.load(), 0u);
+        QStringList requests;
+        for (int i = 0; i < 16; ++i) { const auto request = service.acquireDisplay(); QVERIFY(!request.isEmpty()); requests.append(request); }
+        QVERIFY(service.acquireDisplay().isEmpty());
+        QTRY_VERIFY(service.sources().first().toMap().value("configured").toBool()); QCOMPARE(display.credentials.load(), 1u); QVERIFY(!display.credentialOnGui);
+        const auto count = display.reads.load(); QTest::qWait(250); QCOMPARE(display.reads.load(), count); QVERIFY(fixture.calls.isEmpty());
+        for (const auto& request : requests) service.releaseDisplay(request);
+        display.authority.invalidate(); QTRY_VERIFY(display.display->isCurrent()); QCOMPARE(display.credentials.load(), 1u);
+        QVERIFY(!service.sources().first().toMap().value("configurationKnown").toBool());
+        const auto next = service.acquireDisplay(); QVERIFY(!next.isEmpty());
+        QTRY_VERIFY(service.sources().first().toMap().value("configured").toBool()); QCOMPARE(display.credentials.load(), 2u);
+        service.close(); QVERIFY(!service.available()); QVERIFY(service.acquireDisplay().isEmpty());
+        display.authority.invalidate(); QTRY_VERIFY(display.display->isCurrent()); QCOMPARE(display.credentials.load(), 2u);
+    }
+    void destroyedAttachedViewNeverFallsBackToManagerScans() {
+        DisplayFixture display; QTRY_VERIFY(display.display->isCurrent()); Fixture fixture;
+        AddonDiscoveryService service(&display.manager, fixture.backend(), {}); QCOMPARE(service.sources().size(), 1);
+        const auto request = service.acquireDisplay(); QVERIFY(!request.isEmpty());
+        delete display.display.data(); QVERIFY(!service.available()); QVERIFY(service.sources().isEmpty());
+        service.releaseDisplay(request); QVERIFY(service.openSource("org.example.radio/source").isEmpty()); QVERIFY(fixture.calls.isEmpty());
+    }
+    void fullSharedQuotaHasAnExplicitReopenPathWithoutRetries() {
+        DisplayFixture display(true); QTRY_VERIFY(display.display->isCurrent());
+        QStringList held; for (int i = 0; i < 32; ++i) { const auto ticket = display.display->acquireFeature(QStringLiteral("metadata.provider")); QVERIFY(!ticket.isEmpty()); held.append(ticket); }
+        Fixture fixture; AddonDiscoveryService service(&display.manager, fixture.backend(), {});
+        const auto request = service.acquireDisplay(); QVERIFY(!request.isEmpty()); QVERIFY(!service.available());
+        QVERIFY(!service.preparationError().isEmpty()); const auto reads = display.reads.load();
+        QTest::qWait(250); QCOMPARE(display.credentials.load(), 0u);
+        // The already-queued unrelated feature capture may finish once; the
+        // refused Discovery demand must not create a recurring retry loop.
+        QTRY_VERIFY(display.display->isCurrent()); const auto quiet = display.reads.load();
+        QTest::qWait(250); QCOMPARE(display.reads.load(), quiet); QVERIFY(quiet >= reads);
+        for (const auto& ticket : held) display.display->release(ticket);
+        QVERIFY(!service.available()); service.releaseDisplay(request);
+        const auto reopened = service.acquireDisplay(); QVERIFY(!reopened.isEmpty()); QVERIFY(service.preparationError().isEmpty());
+        QTRY_VERIFY(service.sources().first().toMap().value("configured").toBool()); QCOMPARE(display.credentials.load(), 1u);
+        service.releaseDisplay(reopened);
+    }
+    void deniedGuardKeepsStaticRowsAndDoesNotRefreshNativeSource() {
+        Fixture fixture; auto backend = fixture.backend(); bool fresh = true; backend.current = [&] { return fresh; };
+        AddonDiscoveryService service(std::move(backend), {}); int refreshes = 0;
+        service.setSourcePlayback({{}, {}, [&](const QString&) { ++refreshes; }});
+        fresh = false; QVERIFY(service.openSource("org.example.radio/source").isEmpty()); QCOMPARE(refreshes, 0);
+        fresh = true; const auto id = service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 1); QCOMPARE(refreshes, 1);
+        fixture.complete(service, 0, {{"items", QVariantList{Fixture::item("station")}}}); QTRY_COMPARE(items(service, id).size(), 1);
+        const auto old = items(service, id); fresh = false; QVERIFY(!service.search(id, "query")); QVERIFY(!service.canEnqueue(id));
+        QCOMPARE(items(service, id), old); fresh = true; QVERIFY(service.search(id, "query"));
+    }
     void stablePlayAndEnqueueDoNotResolveBeforeTheNativeOpen() {
         Fixture fixture; fixture.sources[0]=QVariantMap{{"id","org.example.radio/source"},{"name","Radio"},{"enabled",true},{"configured",true},
             {"accountReference","public:fixture"},{"cachePartition","release-1"},{"operations",QStringList{"roots","resolve"}}};

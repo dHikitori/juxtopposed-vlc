@@ -21,12 +21,19 @@ public:
         // current gesture/session authority. An absent adapter denies playback.
         std::function<QString(const QString&, const QVariantMap&, PlayableCompletion)> authorizePlayable;
         std::function<void(const QString&)> cancelPlayable;
+        // Memory-only display freshness. It must not emit signals, call
+        // external code, or reenter/destroy this owner. Execution keeps its
+        // own authority; this callback never replaces that authority.
+        // Isolated adapters may omit this when they own invalidation.
+        std::function<bool()> current;
     };
     explicit AddonDiscoveryCoordinator(Backend backend, QObject* parent = nullptr);
     ~AddonDiscoveryCoordinator() override;
 
     Q_INVOKABLE QVariantList sources() const;
     Q_INVOKABLE bool supports(const QString& source, const QString& operation) const;
+    QVariantMap sourceIdentity(const QString& source) const;
+    bool isCurrent() const;
     Q_INVOKABLE QString roots(const QString& source, const QString& view, quint64 generation, const QString& cursor = {});
     Q_INVOKABLE QString browse(const QString& node, const QString& view, quint64 generation,
                               const QString& cursor = {});
