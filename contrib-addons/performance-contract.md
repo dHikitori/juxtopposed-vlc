@@ -218,6 +218,49 @@ sanitizer proof SHA-256 is
 `ef06445b7577c6dcf5fa8f3f24fe2f695c9609e3ad9acac87509ccd26062b393`.
 This change is not in the published Windows build yet.
 
+## Verified idle source playback change
+
+The mounted source owner and native resolver no longer run their 20 ms timers
+without work. The consent UI no longer runs a 250 ms timer without a review.
+These were about 104 callbacks per second while source playback was available
+but unused. This is a source-derived rate, not a measured CPU saving.
+
+Open reviews use one expiry wake. Active resolutions and issued transports
+retain their required checks. Cached approval changes arrive through bounded
+native notifications. Those display subscriptions use a separate quota from
+native cancellation watches. A final notification follows the outer writer's
+completion. Ordinary inactive source playback needs no recurring timer.
+
+The initial six-suite normal run passes 147 cases. A 29-case follow-up checks
+the final owner change, including an unapproved review notification. All 148
+current sanitizer cases pass: consent 39, consent UI 23, resolver 44, source
+owner 19, real owner/UI binding 10, and Store authority 13. The applied hashes
+match the tested copies. Earlier-source controls fail their designated idle
+checks. There are no failed or skipped cases or runtime diagnostics in the
+accepted runs.
+
+The sanitizer build compiles all 44 host producers and matching meta-objects.
+The native source-owner run uses the documented HTTP/WAV modules and native
+fallback resampler, with real playback assertions. A separate no-owner full
+module scan reproduces the existing 20,918-byte leak in 145 allocations. That
+failed run and its control remain recorded. No product codec choice or
+sanitizer suppression changed. A build-space stop is also retained; resuming
+with a thin archive kept all 45 compiled object hashes unchanged through the
+last build command. Completed binaries and producer objects are retained in
+verified lossless archives.
+
+The records are in `/tmp/hakone-source-idle-timers/`. The final sanitizer proof
+is `san-final-proof/proof.json`, SHA-256
+`fdd5352de996ebb65f4a2b7585a0d3e2b8cd42c3151ac781ef902693e6531a8c`.
+Qt and Core remain ordinary shared dependencies. An arbitrary external Core
+close has no empty-owner notification; supported app retirement closes the
+owner directly, and fresh actions still check Core state.
+
+The TLS support probe now runs on joined work. Deferring that startup probe
+until an explicit source action remains open. Shared catalogue integration,
+inactive visualizer checks, and full app performance measurements also remain
+open. The published Windows build does not contain these source timer fixes.
+
 ## Stream handle expiry helper
 
 The stream preparation helper no longer starts its 250 ms expiry timer at

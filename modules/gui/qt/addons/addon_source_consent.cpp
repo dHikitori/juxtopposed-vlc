@@ -100,7 +100,13 @@ template<class Epoch> struct LiveMutation {
         value->writers.fetch_add(1,std::memory_order_acq_rel); advance(value);
         authority.emplace(value->authority.mutation());
     }
-    ~LiveMutation() { advance(value); authority.reset(); value->writers.fetch_sub(1,std::memory_order_release); }
+    ~LiveMutation() {
+        advance(value); authority.reset();
+        value->writers.fetch_sub(1,std::memory_order_release);
+        // Store mutation completion can wake before this outer writer ends.
+        // Send a final display wake after every live flag is observable.
+        value->authority.displayUnlocked();
+    }
 };
 }
 struct AddonSourceConsent::LiveEpoch {
@@ -142,6 +148,34 @@ struct ConsentNativeCancel {
         }
     }
 };
+}
+AddonSourceConsent::DisplayChanges::operator bool() const noexcept {
+    if(!m_count) return false;
+    for(unsigned index=0;index<m_count;++index) if(!m_changes[index]) return false;
+    return true;
+}
+AddonSourceConsent::DisplayChanges AddonSourceConsent::displayChanges(std::function<void()> wake) const noexcept {
+    try {
+        DisplayChanges changes;
+        if(!wake || !m_liveOwner || !m_liveProfile || !m_liveProfile->reset) return changes;
+        changes.m_changes[0]=m_packageAuthority.onChanged(wake);
+        changes.m_changes[1]=m_liveOwner->authority.onChanged(wake);
+        changes.m_changes[2]=m_liveProfile->reset->authority.onChanged(std::move(wake));
+        changes.m_count=3;
+        if(!changes) return {};
+        return changes;
+    } catch(...) { return {}; }
+}
+AddonSourceConsent::DisplayChanges AddonSourceConsent::LiveToken::entryChanges(std::function<void()> wake) const noexcept {
+    try {
+        DisplayChanges changes;
+        if(!wake || !m_entry || !m_receipt) return changes;
+        changes.m_changes[0]=m_entry->authority.onChanged(wake);
+        changes.m_changes[1]=m_receipt->authority.onChanged(std::move(wake));
+        changes.m_count=2;
+        if(!changes) return {};
+        return changes;
+    } catch(...) { return {}; }
 }
 struct AddonSourceConsent::LiveWatch::State {
     // Release the shared call before its retained native watch quotas.

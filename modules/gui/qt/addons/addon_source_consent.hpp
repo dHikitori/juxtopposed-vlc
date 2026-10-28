@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include <array>
 #include "addon_store_authority.hpp"
 #include <QHash>
 #include <QSet>
@@ -27,6 +28,17 @@ public:
     };
     struct Ticket { QString id; Binding binding; };
     class LiveToken;
+    // Display notifications use a separate quota. They do not retain native
+    // cancellation watches and cannot grant source playback authority.
+    class DisplayChanges {
+    public:
+        explicit operator bool() const noexcept;
+    private:
+        friend class AddonSourceConsent;
+        friend class LiveToken;
+        std::array<StoreAuthorityChanges,3> m_changes;
+        unsigned m_count=0;
+    };
     class LiveWatch {
     public:
         LiveWatch() = default;
@@ -39,6 +51,9 @@ public:
     class LiveToken {
     public:
         bool current() const noexcept;
+        // One entry and receipt subscription per cached binding. The owner
+        // separately retains the shared package, owner, and profile wakes.
+        DisplayChanges entryChanges(std::function<void()> nativeWake) const noexcept;
         // Keep this watch through the native lease. The callback and its capture
         // must use native state only. Do not wait for Qt or change authority.
         LiveWatch onInvalidated(std::function<void()> nativeCancel) const noexcept;
@@ -89,6 +104,9 @@ public:
     // Create these on joined background work. An approval token cannot mint an
     // input intent. Its current() method and the returned revokers use memory only.
     std::optional<LiveToken> approvalToken(const Binding&) const;
+    // One shared subscription set per source owner. Callbacks use native state
+    // only and must not block or call a QObject. They grant no authority.
+    DisplayChanges displayChanges(std::function<void()> nativeWake) const noexcept;
     std::function<void()> nativeBindingRevoker(const Binding&) const;
     std::function<void()> nativeProfileRevoker() const;
     std::function<void()> nativeOwnerRevoker() const;

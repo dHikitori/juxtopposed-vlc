@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <memory>
+#include <thread>
 #include "lib/libvlc_internal.h"
 #include "addons/addon_discovery_source_owner.hpp"
 #include "addons/addon_manager.hpp"
@@ -54,6 +55,19 @@ struct Fixture {
 class TestAddonSourceConsentUiOwner : public QObject {
     Q_OBJECT
 private slots:
+    void aStoreChangeInvalidatesAnUnapprovedOpenReview() {
+        Fixture fixture; QVERIFY(fixture.instance); QVERIFY(fixture.installSource());
+        QVERIFY(fixture.owner->activate()); QTRY_VERIFY(fixture.ui->available());
+        QVERIFY(fixture.ui->prepare(configuredSource)); QTRY_VERIFY(!fixture.ui->review().isEmpty());
+        QVERIFY(!fixture.ui->review().value("approved").toBool());
+        QVERIFY(!fixture.owner->canUseSource(configuredSource));
+        QCoreApplication::processEvents();
+        const auto directory=fixture.directory.path();
+        std::thread writer([directory] { PackageStore(directory).invalidateAuthority(); }); writer.join();
+        QTRY_VERIFY(fixture.ui->review().isEmpty());
+        QVERIFY(!fixture.ui->errorMessage().isEmpty()); QVERIFY(!fixture.ui->approve());
+        QVERIFY(!fixture.owner->canUseSource(configuredSource));
+    }
     void theNativeReviewNeedsAnExplicitAllowAndRemoveAction() {
         Fixture fixture; QVERIFY(fixture.instance); QVERIFY(fixture.installSource());
         QVERIFY(fixture.owner->activate()); QTRY_VERIFY(fixture.ui->available());

@@ -7,6 +7,7 @@
 #include <QUuid>
 #include <atomic>
 #include <thread>
+#include <vector>
 #include <QScopeGuard>
 #include <QElapsedTimer>
 #include <condition_variable>
@@ -51,6 +52,46 @@ class TestAddonSourceConsent : public QObject
     static bool write(const QString& path,const QByteArray& bytes) { QFile file(path); return file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size(); }
     using Reason=AddonSourceConsent::IntentReason;
 private slots:
+    void displaySubscriptionsKeepAllNativeCancellationSlotsAvailable() {
+        Fixture f; std::atomic_uint display{0},canceled{0};
+        AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
+        QVERIFY(f.approve(store)); const auto token=store.approvalToken(f.binding); QVERIFY(token);
+        const auto shared=store.displayChanges([&] { ++display; }); QVERIFY(bool(shared));
+        const auto entry=token->entryChanges([&] { ++display; }); QVERIFY(bool(entry));
+        StoreAuthority authority(f.profile.path()); const auto baseline=authority.capture();
+        std::vector<StoreAuthorityWatch> native; native.reserve(StoreAuthorityToken::WatchLimit);
+        for(unsigned index=0;index<StoreAuthorityToken::WatchLimit;++index) {
+            auto watch=baseline.onInvalidated([&] { ++canceled; }); QVERIFY(bool(watch)); native.push_back(std::move(watch));
+        }
+        QCOMPARE(canceled.load(),0u);
+        std::thread writer([&] { authority.invalidate(); }); writer.join();
+        QCOMPARE(canceled.load(),StoreAuthorityToken::WatchLimit); QVERIFY(display.load()>0);
+    }
+    void bindingAndProfileChangesWakeTheDisplayWithoutQtDelivery() {
+        Fixture f; std::atomic_uint sharedCalls{0},entryCalls{0};
+        AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
+        QVERIFY(f.approve(store)); const auto token=store.approvalToken(f.binding); QVERIFY(token);
+        const auto shared=store.displayChanges([&] { ++sharedCalls; }); QVERIFY(bool(shared));
+        const auto entry=token->entryChanges([&] { ++entryCalls; }); QVERIFY(bool(entry));
+        const auto revoke=store.nativeBindingRevoker(f.binding); QVERIFY(revoke);
+        std::thread writer(revoke); writer.join();
+        QVERIFY(!token->current()); QVERIFY(entryCalls.load()>0); QCOMPARE(sharedCalls.load(),0u);
+        const auto reset=store.nativeProfileRevoker(); QVERIFY(reset);
+        std::thread profile(reset); profile.join(); QVERIFY(sharedCalls.load()>0);
+    }
+    void refusedDisplayQuotaDoesNotConsumeNativeCancellationQuota() {
+        Fixture f; std::atomic_uint wake{0},cancel{0};
+        AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
+        StoreAuthority authority(f.profile.path());
+        std::vector<StoreAuthorityChanges> displays;
+        for(unsigned index=0;index<StoreAuthority::ChangeLimit;++index) {
+            auto changes=authority.onChanged([&] { ++wake; }); QVERIFY(bool(changes)); displays.push_back(std::move(changes));
+        }
+        QVERIFY(!store.displayChanges([&] { ++wake; }));
+        const auto native=authority.capture().onInvalidated([&] { ++cancel; }); QVERIFY(bool(native));
+        QCOMPARE(cancel.load(),0u); displays.clear();
+        QVERIFY(bool(store.displayChanges([&] { ++wake; })));
+    }
     void distributionIdentityNamesUseHakone_data() {
         QTest::addColumn<QString>("identity"); QTest::addColumn<int>("kind"); QTest::addColumn<bool>("accepted");
         const int distribution=int(AddonSourceConsent::SourceKind::Distribution);

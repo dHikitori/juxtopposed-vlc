@@ -19,6 +19,8 @@ struct vlc_source_lease;
 
 namespace vlc::addons {
 // Call this owner on its Qt thread. Native callbacks never wait for that thread.
+class AddonNativeWake;
+struct NativeSourceResolverTestAccess;
 class AddonNativeSourceResolver final : public QObject
 {
 public:
@@ -97,6 +99,7 @@ public:
     static unsigned admissionWorkCount() noexcept;
     static unsigned admissionWorkLimit() noexcept;
 private:
+    friend struct NativeSourceResolverTestAccess;
     struct Gate;
     struct Guard;
     struct Pending;
@@ -113,12 +116,14 @@ private:
     void drainCancellations();
     void fail(const std::shared_ptr<Pending>&, int);
     bool prune();
+    void scheduleMaintenance();
     Backend m_backend;
     Limits m_limits;
     std::shared_ptr<Gate> m_gate;
     std::shared_ptr<vlc_source_backend> m_native;
     std::unordered_map<vlc_source_job*, std::shared_ptr<Pending>> m_jobs;
     std::vector<Issued> m_issued;
+    std::unique_ptr<AddonNativeWake> m_wake;
     QTimer m_cancelPoll;
     bool m_bound = false;
 };

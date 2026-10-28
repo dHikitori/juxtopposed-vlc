@@ -69,6 +69,7 @@ private:
     void resolved(const QString&,const QString&,const QString&,const QVariantMap&,const QString&);
     void cancelResolve(const QString&);
     void tick();
+    void scheduleMaintenance();
     void notify();
     QPointer<AddonManager> m_manager;
     vlc_object_t* m_instance;
@@ -82,6 +83,7 @@ private:
     QHash<QString,QString> m_refreshes,m_invocations;
     QHash<QString,std::shared_ptr<Resolve>> m_resolves;
     PrepareTransport m_prepareTransport;
+    std::unique_ptr<AddonNativeWake> m_wake;
     QTimer m_poll;
     QString m_error;
     unsigned m_controls=0;

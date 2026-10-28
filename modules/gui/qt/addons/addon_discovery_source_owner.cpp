@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <algorithm>
+#include <climits>
 #include "addon_discovery_source_owner.hpp"
+#include "addon_native_wake.hpp"
 #include "addon_manager.hpp"
 #include "addon_source_admissions.hpp"
 #include "addon_queue_transactions.hpp"
@@ -54,12 +57,14 @@ struct AddonDiscoverySourceOwner::NativeStop {
     std::mutex mutex;
     std::condition_variable ended;
     std::shared_ptr<const std::function<void()>> retire;
+    std::function<void()> wake;
     void close() noexcept {
         open.store(false,std::memory_order_release);
         std::shared_ptr<const std::function<void()>> cancel;
         { std::lock_guard<std::mutex> lock(mutex); cancel=retire; }
         try { if(cancel && *cancel) (*cancel)(); } catch(...) {}
         ended.notify_all();
+        try { if(wake) wake(); } catch(...) {}
     }
     bool install(std::function<void()> cancel) {
         auto value=std::make_shared<const std::function<void()>>(std::move(cancel));
@@ -74,6 +79,7 @@ struct AddonDiscoverySourceOwner::Shared {
     std::shared_ptr<NativeStop> stop;
     std::shared_ptr<AddonSourceAdmissions> records;
     std::shared_ptr<AddonSourceConsent> consent;
+    AddonSourceConsent::DisplayChanges changes;
     std::function<void()> reset;
     std::mutex mutex;
     QHash<QString,Entry> entries;
@@ -120,7 +126,11 @@ struct AddonDiscoverySourceOwner::Review {
     std::shared_ptr<SourceCapture> capture;
     std::chrono::steady_clock::time_point expires=std::chrono::steady_clock::now()+std::chrono::seconds(30);
 };
-struct AddonDiscoverySourceOwner::Cache { std::shared_ptr<SourceCapture> capture; bool available=false; };
+struct AddonDiscoverySourceOwner::Cache {
+    std::shared_ptr<SourceCapture> capture;
+    AddonSourceConsent::DisplayChanges approvalChanges;
+    bool available=false;
+};
 struct AddonDiscoverySourceOwner::Resolve {
     Admission admission;
     Current current;
@@ -174,7 +184,17 @@ AddonDiscoverySourceOwner::AddonDiscoverySourceOwner(AddonManager* manager,vlc_o
 {
     m_shared->directory=manager?manager->storageDirectory():QString{}; m_shared->records=std::move(records); m_shared->stop=m_stop;
     m_gate->owner=this; m_gate->lifetime=m_lifetime; m_prepareTransport=prepareContainedSource;
-    m_poll.setInterval(20); connect(&m_poll,&QTimer::timeout,this,&AddonDiscoverySourceOwner::tick);
+    m_wake=std::make_unique<AddonNativeWake>([this] {
+        if(m_starting || m_closing) return;
+        const QPointer<AddonDiscoverySourceOwner> alive(this);
+        tick();
+        // A changed native subject must invalidate an open review even if
+        // its cached playback availability was already false.
+        if(alive && !m_closing) notify();
+    },this);
+    m_stop->wake=m_wake->nativeCallback();
+    m_poll.setSingleShot(true);
+    connect(&m_poll,&QTimer::timeout,this,&AddonDiscoverySourceOwner::tick);
     if(manager) {
         connect(manager,&AddonManager::retiring,this,&AddonDiscoverySourceOwner::close,Qt::DirectConnection);
         connect(manager,&QObject::destroyed,this,&AddonDiscoverySourceOwner::close);
@@ -186,24 +206,37 @@ bool AddonDiscoverySourceOwner::active() const {
     return !m_closing && m_lifetime.current() && m_stop->open.load(std::memory_order_acquire) && m_resolver && m_resolver->bound();
 }
 void AddonDiscoverySourceOwner::notify() {
+    scheduleMaintenance();
     if(m_noticeQueued) return; m_noticeQueued=true;
     QTimer::singleShot(0,this,[this] { m_noticeQueued=false; emit changed(); });
 }
 bool AddonDiscoverySourceOwner::activate() {
     Q_ASSERT(QThread::currentThread()==thread());
     if(m_closing || m_starting || active() || !m_manager || !m_instance || !m_shared->records || !m_lifetime.current()) return false;
-    if(!QSslSocket::supportsSsl()) { m_error=tr("The app cannot use secure media connections."); notify(); return false; }
+    if(!m_wake->valid()) { m_error=tr("The app cannot receive source playback changes."); notify(); return false; }
     m_starting=true; const auto shared=m_shared; const auto gate=m_gate; const auto stop=m_stop;
     const bool accepted=m_lifetime.startQtWork([shared,gate,stop] {
         std::shared_ptr<AddonSourceConsent> consent;
         try {
+            // The platform TLS probe can load a backend. Keep it on joined work.
+            if(!QSslSocket::supportsSsl()) {
+                post(gate,[](auto* owner) { owner->initialized(false,tr("The app cannot use secure media connections.")); });
+                stop->close(); return;
+            }
             const std::weak_ptr<Shared> weak=shared;
             AddonSourceConsent::Options options; options.ticketLifetimeMs=30000;
             consent=std::make_shared<AddonSourceConsent>(shared->directory,AddonSourceConsent::Checks{
                 [weak](const auto& binding) { const auto state=weak.lock(); return state && state->current(binding); },
                 [records=shared->records](const auto& binding,const auto& uri) { return admitted(records,binding,uri); }},options);
+            // Shared package/owner/profile display notifications are retained
+            // once. Each cache entry adds only its own binding/receipt wake.
+            const auto changes=consent->displayChanges(stop->wake);
+            if(!changes) {
+                post(gate,[](auto* owner) { owner->initialized(false,tr("The app cannot watch source playback changes.")); });
+                stop->close(); return;
+            }
             if(stop->install(consent->nativeOwnerRevoker())) {
-                { std::lock_guard<std::mutex> lock(shared->mutex); shared->consent=consent; shared->reset=consent->nativeProfileRevoker(); }
+                { std::lock_guard<std::mutex> lock(shared->mutex); shared->consent=consent; shared->changes=changes; shared->reset=consent->nativeProfileRevoker(); }
                 if(!post(gate,[](auto* owner) { owner->initialized(true,{}); })) stop->close();
             } else consent->retire();
         } catch(...) {
@@ -214,8 +247,8 @@ bool AddonDiscoverySourceOwner::activate() {
             std::unique_lock<std::mutex> lock(stop->mutex);
             stop->ended.wait(lock,[&] { return !stop->open.load(std::memory_order_acquire); });
         }
-        QHash<QString,Shared::Entry> entries; std::shared_ptr<AddonSourceConsent> retired; std::function<void()> reset;
-        { std::lock_guard<std::mutex> lock(shared->mutex); entries.swap(shared->entries); retired.swap(shared->consent); reset.swap(shared->reset); }
+        QHash<QString,Shared::Entry> entries; std::shared_ptr<AddonSourceConsent> retired; AddonSourceConsent::DisplayChanges changes; std::function<void()> reset;
+        { std::lock_guard<std::mutex> lock(shared->mutex); entries.swap(shared->entries); retired.swap(shared->consent); changes=std::move(shared->changes); shared->changes={}; reset.swap(shared->reset); }
         if(consent) consent->close();
     },[stop] { stop->close(); });
     if(!accepted) { m_starting=false; m_error=tr("The app cannot start source playback."); notify(); }
@@ -223,9 +256,12 @@ bool AddonDiscoverySourceOwner::activate() {
 }
 void AddonDiscoverySourceOwner::initialized(bool success,const QString& error) {
     m_starting=false;
-    if(m_closing || !m_lifetime.current()) return;
-    if(!success) { m_error=error; notify(); return; }
-    if(!m_stop->open.load(std::memory_order_acquire)) return;
+    if(m_closing) return;
+    if(!m_lifetime.current()) { close(); return; }
+    if(!success) { m_error=error; close(); return; }
+    if(!m_stop->open.load(std::memory_order_acquire)) {
+        m_error=tr("Source playback stopped."); close(); return;
+    }
     const QPointer<AddonDiscoverySourceOwner> owner(this);
     AddonNativeSourceResolver::Backend backend; backend.lifetime=m_lifetime;
     backend.captureAdmission=[owner](const auto& uri,quint64 generation) {
@@ -240,8 +276,8 @@ void AddonDiscoverySourceOwner::initialized(bool success,const QString& error) {
         return owner->resolve(admission,std::move(current),std::move(done));
     };
     m_resolver=std::make_unique<AddonNativeSourceResolver>(m_instance,std::move(backend));
-    if(!m_resolver->bound()) { m_error=tr("Another source playback owner is active."); m_stop->close(); }
-    m_poll.start(); notify();
+    if(!m_resolver->bound()) { m_error=tr("Another source playback owner is active."); close(); return; }
+    notify();
 }
 QString AddonDiscoverySourceOwner::refreshSource(const QString& contribution) {
     if(m_refreshes.contains(contribution)) return m_refreshes.value(contribution);
@@ -255,6 +291,7 @@ QString AddonDiscoverySourceOwner::captureSource(const QString& contribution,boo
     const auto reader=m_manager->nativeAuthorityReader(contribution); if(!reader) return {};
     const auto id=requestId(); const auto shared=m_shared; const auto gate=m_gate;
     if(review) m_reviews.insert(id,std::make_shared<Review>()); else m_refreshes.insert(contribution,id);
+    scheduleMaintenance();
     const bool accepted=m_lifetime.startQtWork([reader,shared,gate,id,contribution,review] {
         std::shared_ptr<SourceCapture> capture; QString error;
         try {
@@ -309,7 +346,17 @@ void AddonDiscoverySourceOwner::captured(const QString& id,const QString& source
     }
     if(m_cache.size()<128 || m_cache.contains(source)) {
         auto cache=std::make_shared<Cache>(); cache->capture=capture;
-        cache->available=capture->approved && capture->approved->current(); m_cache.insert(source,std::move(cache));
+        if(capture->approved) cache->approvalChanges=capture->approved->entryChanges(m_wake->nativeCallback());
+        // Cache entries use independent display subscriptions. They never take
+        // slots from the native lease cancellation quota. The cache bound is128.
+        cache->available=capture->approved && cache->approvalChanges
+            && capture->approved->current() && current(capture->authority.live);
+        if(capture->approved && !cache->approvalChanges) {
+            const auto error=tr("The app cannot watch this source approval. Try again.");
+            m_reviews.remove(id); m_error=error; notify();
+            emit actionFinished(id,false,error); return;
+        }
+        m_cache.insert(source,std::move(cache));
     }
     m_error.clear(); notify();
     if(review) emit approvalReady(id);
@@ -350,7 +397,7 @@ QVariantMap AddonDiscoverySourceOwner::approval(const QString& id) const {
     descriptor.insert(QStringLiteral("approved"),review->capture->approved && review->capture->approved->current());
     return descriptor;
 }
-void AddonDiscoverySourceOwner::discardApproval(const QString& id) { m_reviews.remove(id); }
+void AddonDiscoverySourceOwner::discardApproval(const QString& id) { m_reviews.remove(id); scheduleMaintenance(); }
 bool AddonDiscoverySourceOwner::approve(const QString& request) { return changeApproval(request,true); }
 bool AddonDiscoverySourceOwner::revoke(const QString& request) { return changeApproval(request,false); }
 bool AddonDiscoverySourceOwner::changeApproval(const QString& id,bool approve) {
@@ -444,7 +491,7 @@ AddonDiscoverySourceOwner::Cancel AddonDiscoverySourceOwner::resolve(const Admis
         || !admission.current(uri,generation)) { done({}); return {}; }
     const auto id=requestId(); const auto job=std::make_shared<Resolve>(); job->admission=admission;
     job->current=std::move(check); job->done=std::move(done); job->deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
-    m_resolves.insert(id,job); const QPointer<AddonDiscoverySourceOwner> owner(this);
+    m_resolves.insert(id,job); scheduleMaintenance(); const QPointer<AddonDiscoverySourceOwner> owner(this);
     const auto invocation=m_manager->invoke(binding.contribution,QStringLiteral("resolve"),
         {{"itemRef",reference.value("itemId")},{"intent",QStringLiteral("play")}},
         [check=job->current] { return current(check); });
@@ -497,7 +544,7 @@ void AddonDiscoverySourceOwner::resolved(const QString& invocation,const QString
                 auto payload=std::make_shared<std::unique_ptr<AddonNativeSourceResolver::Prepared>>(std::move(value));
                 if(!post(gate,[id,weak,payload](auto* owner) mutable {
                     const auto job=weak.lock(); if(!job || owner->m_resolves.value(id)!=job) return;
-                    owner->m_resolves.remove(id); auto done=std::move(job->done);
+                    owner->m_resolves.remove(id); owner->scheduleMaintenance(); auto done=std::move(job->done);
                     if(!current(job->current)) payload->reset();
                     if(done) done(std::move(*payload));
                 })) stop->close();
@@ -509,11 +556,29 @@ void AddonDiscoverySourceOwner::resolved(const QString& invocation,const QString
 }
 void AddonDiscoverySourceOwner::cancelResolve(const QString& id) {
     const auto job=m_resolves.take(id); if(!job) return;
+    scheduleMaintenance();
     m_invocations.remove(job->invocation); const auto manager=m_manager;
     const auto invocation=job->invocation; job->invocation.clear();
     const auto cancel=std::move(job->transport); const auto done=std::move(job->done);
     if(manager && !invocation.isEmpty()) manager->cancel(invocation);
     if(cancel) cancel(); if(done) done({});
+}
+void AddonDiscoverySourceOwner::scheduleMaintenance() {
+    if(m_closing) { m_poll.stop(); return; }
+    // Only active resolutions need frequent current checks. Reviews have exact
+    // deadlines. Cache invalidation arrives through bounded native watches.
+    auto delay=std::chrono::milliseconds::max();
+    const auto now=std::chrono::steady_clock::now();
+    if(!m_resolves.isEmpty()) delay=std::chrono::milliseconds(20);
+    for(const auto& review:m_reviews) {
+        const auto left=std::chrono::duration_cast<std::chrono::milliseconds>(review->expires-now);
+        delay=std::min(delay,std::max(std::chrono::milliseconds(1),left));
+    }
+    if(delay==std::chrono::milliseconds::max()) { m_poll.stop(); return; }
+    const auto next=int(std::min(delay,std::chrono::milliseconds(INT_MAX)).count());
+    // Repeated notices must not postpone a pending current or deadline check.
+    const auto remaining=m_poll.remainingTime();
+    if(!m_poll.isActive() || remaining<0 || next<remaining) m_poll.start(next);
 }
 void AddonDiscoverySourceOwner::tick() {
     if(m_closing) return;
@@ -524,20 +589,23 @@ void AddonDiscoverySourceOwner::tick() {
         if(!current(it.value()->current) || std::chrono::steady_clock::now()>=it.value()->deadline) cancelResolve(it.key());
         if(!owner) return;
     }
-    for(auto it=m_reviews.begin();it!=m_reviews.end();) {
-        if(std::chrono::steady_clock::now()>=it.value()->expires) it=m_reviews.erase(it); else ++it;
-    }
     bool changed=false;
+    for(auto it=m_reviews.begin();it!=m_reviews.end();) {
+        if(std::chrono::steady_clock::now()>=it.value()->expires) { it=m_reviews.erase(it); changed=true; }
+        else ++it;
+    }
     for(auto it=m_cache.begin();it!=m_cache.end();++it) {
         const auto available=canUseSource(it.key());
         if(it.value()->available!=available) { it.value()->available=available; changed=true; }
     }
     if(changed) notify();
+    scheduleMaintenance();
 }
 void AddonDiscoverySourceOwner::close() {
     Q_ASSERT(QThread::currentThread()==thread());
     if(m_closing) return;
     m_closing=true; m_starting=false; m_poll.stop(); m_instance=nullptr;
+    if(m_wake) m_wake->close();
     { std::lock_guard<std::mutex> lock(m_gate->mutex); m_gate->owner=nullptr; }
     const auto stop=m_stop; auto resolver=std::move(m_resolver); const auto manager=m_manager;
     auto jobs=std::move(m_resolves); m_resolves.clear(); m_invocations.clear(); m_reviews.clear(); m_cache.clear(); m_refreshes.clear(); m_controls=0;

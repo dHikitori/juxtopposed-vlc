@@ -17,6 +17,7 @@
 #include <cstring>
 #include <mutex>
 #include <thread>
+#include <vector>
 #include <vlc_source_owner.h>
 #include <vlc_source_backend.h>
 #include <vlc_input_policy.h>
@@ -26,6 +27,7 @@
 #include <vlc_player.h>
 #include "lib/libvlc_internal.h"
 #include "addons/addon_discovery_source_owner.hpp"
+#include "addons/addon_native_wake.hpp"
 #include "addons/addon_source_admissions.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_native_queue_store.hpp"
@@ -37,6 +39,10 @@ using namespace vlc::addons;
 namespace vlc::addons {
 struct DiscoverySourceTestAccess {
     static void prepare(AddonDiscoverySourceOwner& owner,AddonDiscoverySourceOwner::PrepareTransport value) { owner.m_prepareTransport=std::move(value); }
+    static bool polling(const AddonDiscoverySourceOwner& owner) { return owner.m_poll.isActive(); }
+    static void closeWake(AddonDiscoverySourceOwner& owner) { owner.m_wake->close(); }
+    static int remaining(const AddonDiscoverySourceOwner& owner) { return owner.m_poll.remainingTime(); }
+    static void notify(AddonDiscoverySourceOwner& owner) { owner.notify(); }
 
 };
 }
@@ -163,6 +169,70 @@ struct Fixture {
 class TestAddonDiscoverySourceOwner final:public QObject {
     Q_OBJECT
 private slots:
+    void subscriptionFailureEndsActivationAndCannotRetryAClosedInitializer() {
+        Fixture f; QVERIFY(f.valid); StoreAuthority authority(f.profile.path());
+        std::vector<StoreAuthorityChanges> occupied;
+        for(unsigned index=0;index<StoreAuthority::ChangeLimit;++index) {
+            auto change=authority.onChanged([] {}); QVERIFY(bool(change)); occupied.push_back(std::move(change));
+        }
+        QVERIFY(f.owner->activate());
+        QTRY_VERIFY(!f.owner->errorMessage().isEmpty());
+        QVERIFY(!f.owner->active()); QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
+        QTRY_COMPARE(f.lifetime.handle().qtWorkCount(),0u);
+        occupied.clear(); QVERIFY(!f.owner->activate());
+        QCoreApplication::processEvents(); QVERIFY(!f.owner->active());
+        QVERIFY(!vlc_source_owner_Hold(VLC_OBJECT(f.instance))); QCOMPARE(f.resolves(),0);
+    }
+    void repeatedNoticesDoNotPostponeThePendingReviewDeadline() {
+        Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
+        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
+        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1);
+        QVERIFY(DiscoverySourceTestAccess::polling(*f.owner));
+        const auto before=DiscoverySourceTestAccess::remaining(*f.owner); QVERIFY(before>0);
+        QTest::qWait(30);
+        for(unsigned index=0;index<100;++index) DiscoverySourceTestAccess::notify(*f.owner);
+        const auto after=DiscoverySourceTestAccess::remaining(*f.owner);
+        QVERIFY(after>=0); QVERIFY(after<before);
+        f.owner->discardApproval(id); QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
+    }
+    void anUnavailableWakeCannotStartTheSourceInitializer() {
+        Fixture f; QVERIFY(f.valid); DiscoverySourceTestAccess::closeWake(*f.owner);
+        QVERIFY(!f.owner->activate()); QVERIFY(!f.owner->active()); QVERIFY(!f.owner->errorMessage().isEmpty());
+        QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
+        QVERIFY(!vlc_source_owner_Hold(VLC_OBJECT(f.instance)));
+        QVERIFY(f.lifetime.handle().waitQt(std::chrono::seconds(1)));
+    }
+    void anEmptyExternalCoreCloseCannotAuthorizeACachedSource() {
+        Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
+        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
+        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1);
+        QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source)); f.owner->discardApproval(id);
+        QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner)); QCOMPARE(f.resolves(),0);
+        auto* backend=vlc_source_owner_Hold(VLC_OBJECT(f.instance)); QVERIFY(backend);
+        vlc_source_backend_Close(backend); vlc_source_backend_Release(backend);
+        // An empty arbitrary Core close has no notification hook. Explicit
+        // queries still reject immediately. Production retirement calls close.
+        QVERIFY(!f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
+        QVERIFY(f.owner->refreshSource(source).isEmpty()); QVERIFY(f.owner->requestApproval(source).isEmpty());
+        f.owner->close(); f.lifetime.close();
+        QVERIFY(f.lifetime.handle().waitQt(std::chrono::seconds(3))); QCOMPARE(f.resolves(),0);
+    }
+    void anActivatedEmptySourceOwnerHasNoRecurringTimer() {
+        Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
+        QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
+        QTest::qWait(80); QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner)); QCOMPARE(f.resolves(),0);
+    }
+    void cachedAvailabilityWakesOnStoreChangeWithoutRecurringTimer() {
+        Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
+        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
+        const auto id=f.owner->requestApproval(source); QVERIFY(!id.isEmpty()); QTRY_COMPARE(review.size(),1);
+        QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
+        f.owner->discardApproval(id); QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
+        QCoreApplication::processEvents(); QSignalSpy changed(f.owner.get(),&AddonDiscoverySourceOwner::changed);
+        const auto directory=f.profile.path(); std::thread writer([directory] { PackageStore(directory).invalidateAuthority(); }); writer.join();
+        QVERIFY(!f.owner->canUseSource(source));
+        QTRY_VERIFY(!changed.isEmpty()); QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner)); QCOMPARE(f.resolves(),0);
+    }
     void portableWorkerKeepsFramingAndOneResolveRecord() {
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const QString path=directory.filePath(QString::fromUtf8("Source \xe9\x9f\xb3\xe6\xa5\xbd"));

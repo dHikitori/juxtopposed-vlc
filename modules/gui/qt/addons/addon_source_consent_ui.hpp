@@ -8,6 +8,7 @@
 
 namespace vlc::addons {
 class AddonDiscoverySourceOwner;
+struct SourceConsentUiTestAccess;
 // Trusted host UI only. Guest commands cannot access source approval actions.
 class AddonSourceConsentUi final : public QObject {
     Q_OBJECT
@@ -47,6 +48,7 @@ public:
 signals:
     void changed();
 private:
+    friend struct SourceConsentUiTestAccess;
     bool change(bool approve);
     bool fail(const QString&);
     quint64 clearReview();

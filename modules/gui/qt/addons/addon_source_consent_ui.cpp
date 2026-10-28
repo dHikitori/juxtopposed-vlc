@@ -30,9 +30,9 @@ AddonSourceConsentUi::AddonSourceConsentUi(Backend backend,QObject* parent)
     m_closed=!m_owner || !m_backend.active || !m_backend.request || !m_backend.read
         || !m_backend.change || !m_backend.discard;
     if(m_owner) connect(m_owner,&QObject::destroyed,this,&AddonSourceConsentUi::close);
-    m_poll.setInterval(250);
+    m_poll.setSingleShot(true);
     connect(&m_poll,&QTimer::timeout,this,&AddonSourceConsentUi::refresh);
-    if(!m_closed) { m_poll.start(); refresh(); }
+    if(!m_closed) refresh();
 }
 AddonSourceConsentUi::~AddonSourceConsentUi() {
     m_destroying=true;
@@ -47,6 +47,7 @@ bool AddonSourceConsentUi::fail(const QString& message) {
 }
 quint64 AddonSourceConsentUi::clearReview() {
     const auto generation=++m_generation;
+    m_poll.stop();
     QString request;
     request.swap(m_request);
     m_source.clear(); m_review.clear(); m_preparing=false; m_acting=false;
@@ -90,6 +91,11 @@ void AddonSourceConsentUi::refresh() {
             }
         }
     }
+    if(!m_request.isEmpty() && !m_acting) {
+        const auto next=int(qMax<qint64>(1,m_expires-nowMs()));
+        const auto remaining=m_poll.remainingTime();
+        if(!m_poll.isActive() || remaining<0 || next<remaining) m_poll.start(next);
+    }
     if(changedAvailability) publish();
 }
 bool AddonSourceConsentUi::prepare(const QString& contribution) {
@@ -118,6 +124,7 @@ bool AddonSourceConsentUi::prepare(const QString& contribution) {
         return alive && !m_closed && m_generation==cleared && fail(tr("The app cannot prepare this source review."));
     }
     m_request=ticket;
+    m_poll.start(int(qMax<qint64>(1,m_expires-nowMs())));
     const auto ready=m_earlyReady;
     const auto action=m_earlyAction;
     m_earlyReady.clear(); m_earlyAction={};
@@ -158,6 +165,7 @@ bool AddonSourceConsentUi::change(bool approve) {
         const auto cleared=clearReview();
         return alive && !m_closed && m_generation==cleared && fail(tr("The source or account changed. Open the review again."));
     }
+    m_poll.stop();
     m_acting=true; m_changing=true; m_approving=approve; m_error.clear(); m_earlyAction={};
     const bool accepted=change(request,approve);
     if(!alive) return false;

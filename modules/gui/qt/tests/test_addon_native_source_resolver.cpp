@@ -22,6 +22,11 @@
 #include "addons/addon_package_store.hpp"
 
 using namespace vlc::addons;
+namespace vlc::addons {
+struct NativeSourceResolverTestAccess {
+    static bool polling(const AddonNativeSourceResolver& owner) { return owner.m_cancelPoll.isActive(); }
+};
+}
 namespace {
 using Resolver = AddonNativeSourceResolver;
 using Binding = AddonSourceConsent::Binding;
@@ -145,6 +150,31 @@ class TestAddonNativeSourceResolver : public QObject
 {
     Q_OBJECT
 private slots:
+    void anEmptyBoundResolverHasNoRecurringPoll() {
+        Fixture f; f.create(); QVERIFY(f.owner->bound());
+        QVERIFY(!NativeSourceResolverTestAccess::polling(*f.owner));
+        QTest::qWait(80); QVERIFY(!NativeSourceResolverTestAccess::polling(*f.owner));
+        QCOMPARE(f.admitted.load(),0); QCOMPARE(f.preparations.load(),0);
+    }
+    void nativeCancelWakesAnInitiallyIdleResolverBeforeItsDispatch() {
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); f.create();
+        QVERIFY(!NativeSourceResolverTestAccess::polling(*f.owner));
+        NativeJob job(f.root(),uri,41); QCOMPARE(job.start(),VLC_SUCCESS);
+        std::thread native([&] { vlc_source_job_Cancel(job.value); }); native.join();
+        QCOMPARE(job.ended.load(),1); QCOMPARE(job.status.load(),-EINTR);
+        QTest::qWait(50); QCOMPARE(f.owner->pendingCount(),0u);
+        QCOMPARE(f.admitted.load(),0); QCOMPARE(f.preparations.load(),0);
+        QVERIFY(!NativeSourceResolverTestAccess::polling(*f.owner));
+    }
+    void activeMaintenanceStopsAfterTheLastCanceledJob() {
+        Fixture f; const auto uri=f.uri(); QVERIFY(f.approve()); f.create();
+        NativeJob job(f.root(),uri,42); QCOMPARE(job.start(),VLC_SUCCESS);
+        QTRY_COMPARE(f.preparations.load(),1);
+        QVERIFY(NativeSourceResolverTestAccess::polling(*f.owner));
+        std::thread native([&] { vlc_source_job_Cancel(job.value); }); native.join();
+        QTRY_COMPARE(f.owner->pendingCount(),0u);
+        QVERIFY(!NativeSourceResolverTestAccess::polling(*f.owner));
+    }
     void cleanup() { QTRY_COMPARE_WITH_TIMEOUT(Resolver::admissionWorkCount(),0u,5000); }
     void consentChangesRevokeIssuedTransportWithoutOwnerEvents_data() {
         QTest::addColumn<int>("change"); QTest::newRow("binding-revoke")<<0; QTest::newRow("profile-reset")<<1;

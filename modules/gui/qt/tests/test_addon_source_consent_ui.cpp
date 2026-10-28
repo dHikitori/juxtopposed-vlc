@@ -3,9 +3,22 @@
 #include <QTest>
 #include <QScopeGuard>
 #include <memory>
+#include <chrono>
 #include <utility>
 
 using namespace vlc::addons;
+namespace vlc::addons {
+struct SourceConsentUiTestAccess {
+    static bool polling(const AddonSourceConsentUi& ui) { return ui.m_poll.isActive(); }
+    static bool singleShot(const AddonSourceConsentUi& ui) { return ui.m_poll.isSingleShot(); }
+    static void expire(AddonSourceConsentUi& ui) { ui.m_expires=0; ui.refresh(); }
+    static void earlyWake(AddonSourceConsentUi& ui) {
+        ui.m_poll.stop();
+        ui.m_expires=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()+80;
+        ui.refresh();
+    }
+};
+}
 namespace {
 const QString source=QStringLiteral("org.hakone.test/source");
 struct Fake {
@@ -62,6 +75,34 @@ struct Fake {
 class TestAddonSourceConsentUi : public QObject {
     Q_OBJECT
 private slots:
+    void anEarlySingleShotWakeRearmsUntilActualExpiry() {
+        Fake fake; AddonSourceConsentUi ui(fake.backend()); fake.ui=&ui;
+        QVERIFY(ui.prepare(source)); fake.ready(); QVERIFY(!ui.review().isEmpty());
+        SourceConsentUiTestAccess::earlyWake(ui);
+        QVERIFY(SourceConsentUiTestAccess::polling(ui)); QVERIFY(!ui.review().isEmpty());
+        QTRY_VERIFY(ui.review().isEmpty());
+        QVERIFY(!SourceConsentUiTestAccess::polling(ui)); QCOMPARE(fake.discarded,QStringList{fake.last});
+        QCOMPARE(fake.changes,0u); QVERIFY(!ui.errorMessage().isEmpty());
+    }
+    void anUnusedFacadeDoesNotPollItsBackend() {
+        Fake fake; unsigned reads=0;
+        fake.onActive=[&] { ++reads; };
+        AddonSourceConsentUi ui(fake.backend()); fake.ui=&ui;
+        QCOMPARE(reads,1u); QVERIFY(!SourceConsentUiTestAccess::polling(ui));
+        QTest::qWait(600); QCOMPARE(reads,1u);
+        QVERIFY(ui.prepare(source)); QVERIFY(SourceConsentUiTestAccess::polling(ui));
+        QVERIFY(SourceConsentUiTestAccess::singleShot(ui));
+        ui.viewClosed(); QVERIFY(!SourceConsentUiTestAccess::polling(ui));
+        const auto afterClose=reads; QTest::qWait(300); QCOMPARE(reads,afterClose);
+    }
+    void reviewExpiryUsesOneDeadlineAndDiscardsItsTicket() {
+        Fake fake; AddonSourceConsentUi ui(fake.backend()); fake.ui=&ui;
+        QVERIFY(ui.prepare(source)); fake.ready(); QVERIFY(!ui.review().isEmpty());
+        SourceConsentUiTestAccess::expire(ui);
+        QVERIFY(ui.review().isEmpty()); QVERIFY(!SourceConsentUiTestAccess::polling(ui));
+        QCOMPARE(fake.discarded,QStringList{fake.last}); QVERIFY(!ui.errorMessage().isEmpty());
+        QCOMPARE(fake.changes,0u);
+    }
     void reviewDoesNotGrantAndAnApprovalHasOneUse() {
         Fake fake; AddonSourceConsentUi ui(fake.backend()); fake.ui=&ui;
         QVERIFY(ui.available()); QVERIFY(ui.prepare(source)); QVERIFY(ui.preparing());
