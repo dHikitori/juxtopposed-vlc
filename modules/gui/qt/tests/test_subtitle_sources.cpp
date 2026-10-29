@@ -368,12 +368,12 @@ private slots:
         } translator;
         QSignalSpy changed(&client,&SubtitleSourceService::languagesChanged);
         QVERIFY(QCoreApplication::installTranslator(&translator));
-        QEvent language(QEvent::LanguageChange);QCoreApplication::sendEvent(qApp,&language);
+        QEvent language(QEvent::LanguageChange);QCoreApplication::sendEvent(QCoreApplication::instance(),&language);
         QVERIFY(!changed.isEmpty());
         QCOMPARE(client.languages().first().toMap().value("text").toString(),QStringLiteral("Anglais"));
         QCOMPARE(client.languages().first().toMap().value("code").toString(),QStringLiteral("en"));
         QVERIFY(QCoreApplication::removeTranslator(&translator));
-        QCoreApplication::sendEvent(qApp,&language);
+        QCoreApplication::sendEvent(QCoreApplication::instance(),&language);
         QCOMPARE(client.languages().first().toMap().value("text").toString(),QStringLiteral("English"));
         QVERIFY(server.requests.isEmpty());
     }
