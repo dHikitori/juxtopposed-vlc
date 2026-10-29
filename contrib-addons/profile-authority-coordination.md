@@ -11,7 +11,9 @@ package state and lifecycle methods now have tested guarded bindings. See
 [lifecycle writes](profile-lifecycle-writes.md). A
 [retained writer scope](profile-writer-scope.md) now holds the store lock
 during ticket negotiation. The [message format and coordinator
-policy](profile-control-protocol.md) are also implemented. Both socket roles,
+policy](profile-control-protocol.md) are also implemented. A
+[native peer readiness helper](profile-native-peer.md) now closes local
+admission and retains the fence through native drain. Both socket roles,
 same-user authentication, complete profile recovery and the production mount
 are not implemented yet.
 Native metadata owner activation stays off.
@@ -214,7 +216,8 @@ performance.
   connection and pending request.
 - Make mutation refusal explicit at every authority write entry point.
 - Mount the writer lease that stays held through outer store-lock release.
-- Attach peer readiness to the memory token and all native cancellation paths.
+- Connect the implemented native peer readiness helper to the socket owner
+  and verify all native cancellation and final Apply paths.
 - Mount startup, display refresh, reconnect, and app drain without a GUI wait.
 - Test crashes at each ticket, stamp, write, acknowledgement, and join boundary.
 - Test late messages, wrong generations, queue limits, and native final Apply.

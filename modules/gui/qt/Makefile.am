@@ -2588,6 +2588,17 @@ test_qt_addon_store_profile_protocol_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDO
 check_PROGRAMS += test_qt_addon_store_profile_protocol
 TESTS += test_qt_addon_store_profile_protocol
 
+test_qt_addon_store_profile_peer_SOURCES = tests/test_addon_store_profile_peer.cpp
+nodist_test_qt_addon_store_profile_peer_SOURCES = tests/test_addon_store_profile_peer.moc
+BUILT_SOURCES += tests/test_addon_store_profile_peer.moc
+CLEANFILES += tests/test_addon_store_profile_peer.moc
+test_qt_addon_store_profile_peer_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_profile_peer_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_peer_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_peer_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_peer
+TESTS += test_qt_addon_store_profile_peer
+
 test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.cpp
 nodist_test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.moc
 BUILT_SOURCES += tests/test_addon_catalogue_native.moc

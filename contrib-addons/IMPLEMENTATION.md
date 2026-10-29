@@ -131,6 +131,21 @@ app mount and full app performance remain open. See
 [the control protocol](profile-control-protocol.md). The Windows review
 package is unchanged.
 
+Native store tokens now include an opt-in peer readiness stamp. Immediate
+closure uses memory only; joined drain retains the shared fence through
+native callback and capture cleanup. Old tokens do not become current after
+rejoin, and weak close/join handles do not keep a peer alive. Local mutation
+and invalidation also require fresh readiness. The four-suite cohort passes
+193 normal, 193 ASAN/UBSAN and 193 native Windows checks. A real child process
+covers paused cancellation and next-epoch rejoin. Three broken control
+variants fail as expected. The Windows space guard requested a stop after
+the final targets completed; exit zero and all four native runs prove that
+build completed without a restart. Both socket owners, client protocol,
+approved write-entry-point refusal, full recovery, app mount and native
+Core/consumer checks remain open. See
+[the native peer record](profile-native-peer.md). The Windows review package
+is unchanged.
+
 ## Verified work
 
 | Area | Implementation and evidence |

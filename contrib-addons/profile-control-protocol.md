@@ -4,8 +4,10 @@
 message format and coordinator policy for profile authority. They are
 host-only code. They expose no add-on method and grant no native token.
 
-The socket owner, peer-side owner, same-user authentication, native readiness
-gate, complete profile recovery, and app mount remain open. Native metadata
+The [native readiness helper](profile-native-peer.md) now binds Store tokens
+to local readiness and joined cancellation. The socket owner, client protocol
+owner, same-user authentication, complete profile recovery, and app mount
+remain open. Native metadata
 owner activation stays off. These classes do not close the existing
 cross-process `StoreAuthority` gap by themselves. See
 [the complete protocol](profile-authority-coordination.md).
@@ -167,6 +169,8 @@ are removed after verification. The minimum free space was 7,548,899,328
 bytes. The final check left 7,584,313,344 bytes free. Protected Core and local
 Windows package hashes match. No Docker cache or user profile is changed.
 
-Same-user socket authentication, peer-side native readiness, cross-process
-Core Apply, macOS runtime, and full app performance checks remain required.
+The native readiness binding now has its own
+[checked component cohort](profile-native-peer.md). Same-user socket
+authentication, client protocol state, cross-process Core Apply, macOS
+runtime, and full app performance checks remain required.
 The local Windows review package is unchanged.

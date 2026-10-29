@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_store_authority.hpp"
 #include "addon_native_notifications.hpp"
+#include "addon_store_process_fence.hpp"
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -19,6 +20,11 @@ struct StoreAuthorityState {
     std::atomic<quint64> revision{0};
     std::atomic_uint writers{0};
     std::atomic_bool retired{false};
+    // Zero is the existing ungated mode. An odd stamp closes admission.
+    // A later even stamp admits a confirmed peer. Never return to zero.
+    std::atomic<quint64> peerStamp{0};
+    std::mutex peerMutex;
+    std::weak_ptr<StoreAuthorityPeerState> peer;
     struct PackageOrder {
         using is_transparent = void;
         bool operator()(std::string_view a, std::string_view b) const noexcept { return a < b; }
@@ -38,8 +44,8 @@ struct StoreAuthorityCallback {
         bool counted = false;
         ~Quota() { if (counted) state->callbackCount.fetch_sub(1, std::memory_order_release); }
     };
-    StoreAuthorityCallback(std::shared_ptr<const StoreAuthorityState> owner, quint64 epoch, std::function<void()> callback)
-        : quota{std::move(owner), false}, revision(epoch), cancel(std::move(callback)) {}
+    StoreAuthorityCallback(std::shared_ptr<const StoreAuthorityState> owner, quint64 epoch, quint64 peer, std::function<void()> callback)
+        : quota{std::move(owner), false}, revision(epoch), peerStamp(peer), cancel(std::move(callback)) {}
     void fire() noexcept {
         if (!fired.exchange(true, std::memory_order_acq_rel)) {
             try { cancel(); } catch (...) {}
@@ -48,6 +54,7 @@ struct StoreAuthorityCallback {
     // Destroy the native callback capture before its retiring quota is released.
     Quota quota;
     const quint64 revision;
+    const quint64 peerStamp;
     const std::function<void()> cancel;
     std::atomic_bool fired{false};
 };
@@ -57,7 +64,29 @@ struct StoreAuthorityChangeCallback {
     std::shared_ptr<const StoreAuthorityState> owner;
     NativeNotification subscription;
 };
+struct StoreAuthorityPeerState {
+    const std::shared_ptr<StoreAuthorityState> authority;
+    std::atomic_bool open{true};
+    // Only drain, admit and destruction use this mutex. No Store callback
+    // runs under peerMutex or the process registry lock.
+    std::mutex work;
+    std::shared_ptr<const StoreProcessFence> fence;
+    quint64 drained = 0;
+    explicit StoreAuthorityPeerState(std::shared_ptr<StoreAuthorityState> state) : authority(std::move(state)) {}
+};
 namespace {
+bool peerAdmits(quint64 stamp) noexcept { return (stamp & 1) == 0; }
+quint64 closePeerAuthority(const std::shared_ptr<StoreAuthorityState>& state) noexcept
+{
+    auto stamp = state->peerStamp.load(std::memory_order_acquire);
+    for (;;) {
+        if (stamp >= std::numeric_limits<quint64>::max() - 2) {
+            state->retired.store(true, std::memory_order_release); return 0;
+        }
+        const auto next = stamp + (peerAdmits(stamp) ? 1 : 2);
+        if (state->peerStamp.compare_exchange_weak(stamp, next, std::memory_order_acq_rel, std::memory_order_acquire)) return next;
+    }
+}
 void notifyChanged(const std::shared_ptr<StoreAuthorityState>& state) noexcept
 { state->changes.notify(); }
 void cancelNative(const std::function<void()>& cancel) noexcept
@@ -133,39 +162,111 @@ StoreAuthority::StoreAuthority(const QString& directory)
     m_state = shared.stores.value(key).lock();
     if (!m_state) { m_state = std::make_shared<StoreAuthorityState>(); shared.stores.insert(key, m_state); }
 }
+StoreAuthorityPeer::StoreAuthorityPeer(std::shared_ptr<StoreAuthorityPeerState> state) : m_state(std::move(state)) {}
+std::unique_ptr<StoreAuthorityPeer> StoreAuthority::attachPeer() const
+{
+    std::lock_guard<std::mutex> lock(m_state->peerMutex);
+    if (!m_state->peer.expired() || m_state->retired.load(std::memory_order_acquire)) return {};
+    auto state = std::make_shared<StoreAuthorityPeerState>(m_state);
+    if (!closePeerAuthority(m_state)) return {};
+    m_state->peer = state;
+    return std::unique_ptr<StoreAuthorityPeer>(new StoreAuthorityPeer(std::move(state)));
+}
+StoreAuthorityPeer::~StoreAuthorityPeer()
+{
+    const auto state = m_state;
+    state->open.store(false, std::memory_order_release);
+    closePeerAuthority(state->authority);
+    std::lock_guard<std::mutex> lock(state->work);
+    advance(state->authority);
+    state->fence.reset();
+}
+quint64 StoreAuthorityPeer::close() const noexcept
+{
+    const auto state = m_state;
+    return state->open.load(std::memory_order_acquire) ? closePeerAuthority(state->authority) : 0;
+}
+std::function<quint64()> StoreAuthorityPeer::closeHandle() const
+{
+    return [weak = std::weak_ptr<StoreAuthorityPeerState>(m_state)] {
+        const auto state = weak.lock();
+        return state && state->open.load(std::memory_order_acquire) ? closePeerAuthority(state->authority) : quint64(0);
+    };
+}
+std::function<bool()> StoreAuthorityPeer::pending(quint64 stamp) const
+{
+    return [weak = std::weak_ptr<StoreAuthorityPeerState>(m_state), stamp] {
+        const auto state = weak.lock();
+        return state && (stamp & 1) && state->open.load(std::memory_order_acquire)
+            && !state->authority->retired.load(std::memory_order_acquire)
+            && state->authority->peerStamp.load(std::memory_order_acquire) == stamp;
+    };
+}
+bool StoreAuthorityPeer::drain(quint64 stamp) const noexcept
+{
+    const auto state = m_state;
+    std::lock_guard<std::mutex> lock(state->work);
+    if (!(stamp & 1) || !state->open.load(std::memory_order_acquire)
+        || state->authority->peerStamp.load(std::memory_order_acquire) != stamp) return false;
+    advance(state->authority);
+    state->fence.reset();
+    if (!state->open.load(std::memory_order_acquire) || state->authority->peerStamp.load(std::memory_order_acquire) != stamp) return false;
+    state->drained = stamp; return true;
+}
+bool StoreAuthorityPeer::admit(quint64 stamp, std::shared_ptr<const StoreProcessFence> fence) const noexcept
+{
+    const auto state = m_state;
+    std::lock_guard<std::mutex> lock(state->work);
+    if (!fence || !(stamp & 1) || stamp == std::numeric_limits<quint64>::max()
+        || !state->open.load(std::memory_order_acquire) || state->drained != stamp || state->fence
+        || state->authority->retired.load(std::memory_order_acquire) || state->authority->writers.load(std::memory_order_acquire)) return false;
+    state->fence = std::move(fence);
+    auto expected = stamp;
+    if (!state->authority->peerStamp.compare_exchange_strong(expected, stamp + 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
+        state->fence.reset(); return false;
+    }
+    return state->open.load(std::memory_order_acquire)
+        && state->authority->peerStamp.load(std::memory_order_acquire) == stamp + 1;
+}
 StoreAuthorityToken StoreAuthority::capture() const noexcept
 {
     StoreAuthorityToken token;
-    if (m_state->writers.load(std::memory_order_acquire)) return token;
+    const auto peer = m_state->peerStamp.load(std::memory_order_acquire);
+    if (!peerAdmits(peer) || m_state->writers.load(std::memory_order_acquire)) return token;
     const auto revision = m_state->revision.load(std::memory_order_acquire);
     if (m_state->writers.load(std::memory_order_acquire)
-        || m_state->revision.load(std::memory_order_acquire) != revision) return token;
-    token.m_state = m_state; token.m_revision = revision; return token;
+        || m_state->revision.load(std::memory_order_acquire) != revision
+        || m_state->peerStamp.load(std::memory_order_acquire) != peer) return token;
+    token.m_state = m_state; token.m_revision = revision; token.m_peerStamp = peer; return token;
 }
 bool StoreAuthorityToken::current() const noexcept
 {
     return m_state && !m_state->retired.load(std::memory_order_acquire)
+        && peerAdmits(m_peerStamp) && m_state->peerStamp.load(std::memory_order_acquire) == m_peerStamp
         && !m_state->writers.load(std::memory_order_acquire)
         && m_state->revision.load(std::memory_order_acquire) == m_revision
         && !m_state->writers.load(std::memory_order_acquire)
-        && m_state->revision.load(std::memory_order_acquire) == m_revision;
+        && m_state->revision.load(std::memory_order_acquire) == m_revision
+        && m_state->peerStamp.load(std::memory_order_acquire) == m_peerStamp;
 }
 StoreAuthorityWatch::operator bool() const noexcept
 {
     if (!m_callback || m_callback->fired.load(std::memory_order_acquire)) return false;
     const auto& state = m_callback->quota.state;
     return !state->retired.load(std::memory_order_acquire)
+        && peerAdmits(m_callback->peerStamp) && state->peerStamp.load(std::memory_order_acquire) == m_callback->peerStamp
         && !state->writers.load(std::memory_order_acquire)
         && state->revision.load(std::memory_order_acquire) == m_callback->revision
         && !state->writers.load(std::memory_order_acquire)
-        && state->revision.load(std::memory_order_acquire) == m_callback->revision;
+        && state->revision.load(std::memory_order_acquire) == m_callback->revision
+        && state->peerStamp.load(std::memory_order_acquire) == m_callback->peerStamp;
 }
 StoreAuthorityWatch StoreAuthorityToken::onInvalidated(std::function<void()> cancel) const noexcept
 {
     if (!cancel) return {};
     if (!m_state) { cancelNative(cancel); return {}; }
     std::shared_ptr<StoreAuthorityCallback> callback;
-    try { callback = std::make_shared<StoreAuthorityCallback>(m_state, m_revision, std::move(cancel)); }
+    try { callback = std::make_shared<StoreAuthorityCallback>(m_state, m_revision, m_peerStamp, std::move(cancel)); }
     catch (...) { cancelRefused(m_state, cancel); return {}; }
     bool admitted = false;
     {
@@ -184,6 +285,7 @@ StoreAuthorityWatch StoreAuthorityToken::onInvalidated(std::function<void()> can
 }
 void StoreAuthority::invalidate() const noexcept
 {
+    if (m_state->peerStamp.load(std::memory_order_acquire)) closePeerAuthority(m_state);
     advance(m_state);
 }
 void StoreAuthority::displayUnlocked() const noexcept { notifyChanged(m_state); }
@@ -205,7 +307,11 @@ StoreAuthorityChanges StoreAuthority::onChanged(std::function<void()> nativeWake
 StoreAuthorityToken captureStoreAuthority(const QString& directory)
 { return StoreAuthority(directory).capture(); }
 StoreAuthorityMutation::StoreAuthorityMutation(std::shared_ptr<StoreAuthorityState> state) noexcept : m_state(std::move(state))
-{ m_state->writers.fetch_add(1, std::memory_order_acq_rel); advance(m_state); }
+{
+    m_state->writers.fetch_add(1, std::memory_order_acq_rel);
+    if (m_state->peerStamp.load(std::memory_order_acquire)) closePeerAuthority(m_state);
+    advance(m_state);
+}
 StoreAuthorityMutation::StoreAuthorityMutation(StoreAuthorityMutation&& other) noexcept : m_state(std::move(other.m_state)) {}
 StoreAuthorityMutation::~StoreAuthorityMutation()
 { if (m_state) {

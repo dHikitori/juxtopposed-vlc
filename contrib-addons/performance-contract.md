@@ -663,3 +663,16 @@ remain independent of GUI and store-write work. The component cohort passes
 [the profile control record](profile-control-protocol.md). This does not
 close full app performance, cursor or native readiness work, and does not
 change the local Windows review package.
+
+
+Native peer admission now closes through an atomic readiness stamp. Token
+capture and current checks still use memory only. They add fixed atomic
+stamp reads and no saved-state reader. Weak native handles do not keep a peer
+or fence alive. Drain and destruction can wait for native cancellation;
+they belong on joined background work, independent of the socket and GUI.
+The helper owns no timer, thread, or polling loop. Its four-suite cohort
+passes 193 normal, 193 ASAN/UBSAN and 193 native Windows checks, including a
+real child-process drain and rejoin. See
+[the native peer record](profile-native-peer.md). Full app impact, the actual
+socket owner, cursor behavior and native final Apply remain unverified by
+this component step. The Windows review package is unchanged.
