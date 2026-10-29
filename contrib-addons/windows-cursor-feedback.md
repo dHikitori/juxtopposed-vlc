@@ -11,7 +11,7 @@ that feedback. See the
 
 ## Current evidence
 
-- The current local Windows package is source `335ac989d0`. Its player has
+- The package checked for the initial report was source `335ac989d0`. Its player has
   PE subsystem 2, GUI. Its add-on worker has subsystem 3, console.
 - The source search found no add-on call that sets a busy or system cursor.
   Existing Qt view loaders use item-scoped busy cursors. Existing global Qt
@@ -24,6 +24,19 @@ that feedback. See the
 The worker is not yet established as the cause. An explicit background launch
 flag can prevent startup feedback for a helper, but that alone cannot prove
 that it fixes a cursor present for a full session.
+
+The Microsoft reference describes startup feedback as a short interval, with
+limited extensions during initial GUI work. One process launch does not
+explain feedback for a full session. Repeated process launches and an uncleared
+cursor state remain possible causes, without current evidence for either.
+High CPU load can delay input; it does not by itself identify this cursor's
+cause.
+
+The refreshed local review package is source `74ae4267fc`. Its package and
+worker checks pass. A new process query found no running player or worker,
+so no live CPU delta or launch-rate sample was available. The
+[build record](windows-artwork-build-2026-10-30.md) retains the exact package
+hashes. No cursor fix is claimed.
 
 ## Next live check
 

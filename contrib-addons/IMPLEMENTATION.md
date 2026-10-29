@@ -9,15 +9,15 @@ to synchronous execution-path package scans. Provider selection and portable
 invocation preparation now run on joined work. The six related suites pass
 349 normal and 349 ASAN/UBSAN checks, including a blocked-reader UI
 regression. See [the diagnosis and fix](subtitle-online-responsiveness.md).
-The [new Windows review package](windows-subtitle-build-2026-10-29.md) at
-clean source `335ac989d0` is published in the usual local folder. Restart the
+The [new Windows review package](windows-artwork-build-2026-10-30.md) at
+clean source `74ae4267fc` is published in the usual local folder. Restart the
 app before testing. Manual Windows GUI confirmation remains open.
 
 The earlier published build repeated
 synchronous package scans during basic UI work. The new local Windows build
 at clean source `11adca2a52` first mounted the shared display path. See
 [that build record](windows-performance-build-2026-10-29.md). The current
-`335ac989d0` package also includes asynchronous metadata selection and
+`74ae4267fc` package also includes asynchronous metadata selection and
 invocation preparation.
 Focused session host and session UI idle
 timer fixes pass. The mounted source owner, resolver, and consent UI also have
@@ -51,7 +51,7 @@ shutdown. See [portable artwork background work](portable-artwork-background.md)
 for the final verification record and its limits. The Store memory token
 covers one process. Profile ownership or cross-process revocation remains a
 gate. Native owner activation, preserved-provider checks, and full app cutover
-remain open. The current Windows package does not contain these changes.
+remain open. The current Windows review package includes these changes.
 See [the serial runner](artwork-serial-runner.md),
 [the aggregate](artwork-attempt-aggregate.md),
 [positive Core authority](artwork-positive-source-authority.md),
@@ -62,8 +62,9 @@ A real two-process control confirms that Store authority invalidation is local
 to one process. The native profile fence now has shared peer and exclusive
 replacement modes. The cohort passes 36 normal and 36 ASAN/UBSAN checks
 on Linux, plus 32 native Windows checks. The helper inheritance and native
-cancellation barriers pass. The cross-process control channel, stamped writer transaction, and
-production mount remain open. See [profile coordination](profile-authority-coordination.md).
+cancellation barriers pass. The stamped writer helper described below is
+implemented. The cross-process control channel and production mount remain
+open. See [profile coordination](profile-authority-coordination.md).
 
 The durable profile generation and guarded writer helper now pass 70 normal
 and 70 ASAN/UBSAN checks on Linux, plus 66 native Windows checks. Real process
