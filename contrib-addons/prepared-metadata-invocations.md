@@ -84,5 +84,6 @@ The proof is `/tmp/hakone-prepared-metadata-current/final-proof.json`, SHA-256
 Completed binary and object outputs are retained as verified compressed
 archives. Their raw copies are removed after their consumers end.
 
-The Windows review build remains the separately verified `11adca2a52`
-checkpoint. See [its build record](windows-performance-build-2026-10-29.md).
+The initial Windows checkpoint was `11adca2a52`. The current local package
+at `335ac989d0` includes prepared invocations and asynchronous provider
+selection. See [its build record](windows-subtitle-build-2026-10-29.md).

@@ -53,8 +53,8 @@ window from processing input.
 
 ## Evidence
 
-WSL Linux with Qt 6.8.3 passes 349 normal checks, with no failures, skips or
-runtime warnings:
+WSL Linux with Qt 6.8.3 passes all 349 checks both normally and with
+ASAN/UBSAN, with no failures, skips or runtime warnings:
 
 | Suite | Cases |
 | --- | --- |
@@ -74,5 +74,13 @@ The subtitle test uses the shared service and the actual native subtitle adapter
 
 The normal proof has 87 fresh producer objects and pins 1,564 input files.
 Its record is `/tmp/hakone-subtitle-online-proof/normal-proof.json`.
-Memory-check results and the Windows rebuild are being verified separately.
-App GUI responsiveness still requires a test with the rebuilt Windows package.
+The sanitizer dependency closure has 38 fresh producer objects and pins
+1,481 inputs. Its record is `/tmp/hakone-subtitle-online-proof/san-proof.json`.
+An existing translation test used a GUI application cast with a core-only
+application. Both event calls now use `QCoreApplication::instance()`; the
+corrected suite passes normally and under sanitizers. The other 87 normal
+producer object hashes are unchanged.
+
+The [new Windows build](windows-subtitle-build-2026-10-29.md) is published in
+the usual local folder. Restart the app before testing. Manual Windows GUI
+confirmation and the full app performance comparison remain open.

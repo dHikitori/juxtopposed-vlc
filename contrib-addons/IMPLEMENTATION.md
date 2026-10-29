@@ -7,14 +7,18 @@ The full scope in this directory remains the objective. SDK v1 still has open co
 Performance is the current priority. The **Online providers** freeze is traced
 to synchronous execution-path package scans. Provider selection and portable
 invocation preparation now run on joined work. The six related suites pass
-349 normal checks, including a blocked-reader UI regression. See
-[the diagnosis and fix](subtitle-online-responsiveness.md). The new Windows
-package and memory checks are in progress.
+349 normal and 349 ASAN/UBSAN checks, including a blocked-reader UI
+regression. See [the diagnosis and fix](subtitle-online-responsiveness.md).
+The [new Windows review package](windows-subtitle-build-2026-10-29.md) at
+clean source `335ac989d0` is published in the usual local folder. Restart the
+app before testing. Manual Windows GUI confirmation remains open.
 
 The earlier published build repeated
 synchronous package scans during basic UI work. The new local Windows build
-at clean source `11adca2a52` includes the shared display path. See
-[the current build record](windows-performance-build-2026-10-29.md).
+at clean source `11adca2a52` first mounted the shared display path. See
+[that build record](windows-performance-build-2026-10-29.md). The current
+`335ac989d0` package also includes asynchronous metadata selection and
+invocation preparation.
 Focused session host and session UI idle
 timer fixes pass. The mounted source owner, resolver, and consent UI also have
 verified idle timer fixes. Source TLS initialization is deferred until explicit
