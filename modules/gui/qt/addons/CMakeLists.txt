@@ -178,7 +178,8 @@ if(VLC_BUILD_DIR)
         addon_native_metadata_owner.cpp addon_native_metadata_owner.hpp)
     target_sources(vlc_addon_native_metadata PRIVATE
         addon_core_metadata_admission.cpp addon_core_metadata_admission.hpp
-        addon_artwork_attempt_keeper.cpp addon_artwork_attempt_keeper.hpp)
+        addon_artwork_attempt_keeper.cpp addon_artwork_attempt_keeper.hpp
+        addon_artwork_attempt_aggregate.cpp addon_artwork_attempt_aggregate.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")
@@ -239,6 +240,22 @@ if(VLC_BUILD_DIR)
         target_link_options(test_addon_native_provider_context PRIVATE "-Wl,--wrap=vlc_metadata_native_claim_AdmitOutcome")
         add_test(NAME addon_native_provider_context COMMAND test_addon_native_provider_context)
         set_tests_properties(addon_native_provider_context PROPERTIES TIMEOUT 90)
+        if(TARGET addon_metadata_attempt_process)
+            add_executable(test_addon_artwork_attempt_aggregate
+                "../tests/test_addon_artwork_attempt_aggregate.cpp"
+                "../tests/fixtures/addon_artwork_attempt_keeper.c"
+                "../tests/fixtures/addon_native_provider_fixture.c"
+                "${VLC_SOURCE_ROOT}/src/preparser/metadata_native_provider.c")
+            target_include_directories(test_addon_artwork_attempt_aggregate PRIVATE "${VLC_SOURCE_ROOT}/src" "${VLC_SOURCE_ROOT}")
+            target_link_libraries(test_addon_artwork_attempt_aggregate PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
+            target_compile_definitions(test_addon_artwork_attempt_aggregate PRIVATE
+                HAKONE_AGGREGATE_PROCESS_FIXTURE="$<TARGET_FILE:addon_metadata_attempt_process>"
+                HAKONE_AGGREGATE_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
+                HAKONE_AGGREGATE_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm")
+            add_dependencies(test_addon_artwork_attempt_aggregate addon_metadata_attempt_process)
+            add_test(NAME addon_artwork_attempt_aggregate COMMAND test_addon_artwork_attempt_aggregate)
+            set_tests_properties(addon_artwork_attempt_aggregate PROPERTIES TIMEOUT 180)
+        endif()
         add_executable(test_addon_native_metadata_owner "../tests/test_addon_native_metadata_owner.cpp"
             "../tests/fixtures/addon_native_provider_fixture.c"
             "${VLC_SOURCE_ROOT}/src/preparser/metadata_native_provider.c")

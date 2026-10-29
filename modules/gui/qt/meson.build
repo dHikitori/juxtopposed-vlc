@@ -64,6 +64,8 @@ addon_host_sources = files(
     'addons/addon_core_metadata_admission.hpp',
     'addons/addon_artwork_attempt_keeper.cpp',
     'addons/addon_artwork_attempt_keeper.hpp',
+    'addons/addon_artwork_attempt_aggregate.cpp',
+    'addons/addon_artwork_attempt_aggregate.hpp',
     'addons/addon_native_provider_artwork_assets.cpp',
     'addons/addon_native_provider_artwork_assets.hpp',
     'addons/addon_native_metadata_owner.cpp',
@@ -2060,6 +2062,26 @@ if qt6_dep.found()
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
                 'link_args': qt_link_args,
             }
+            if addon_worker_dependencies != [] and not meson.is_cross_build()
+                vlc_tests += {
+                    'name': 'test_qt_addon_artwork_attempt_aggregate',
+                    'sources': files('tests/test_addon_artwork_attempt_aggregate.cpp', 'tests/fixtures/addon_artwork_attempt_keeper.c', 'tests/fixtures/addon_native_provider_fixture.c', '../../../src/preparser/metadata_native_provider.c'),
+                    'moc_sources': files('tests/test_addon_artwork_attempt_aggregate.cpp'),
+                    'link_with': [addon_host_library, libvlccore, libvlc],
+                    'suite': ['qt', 'addons'],
+                    'timeout': 180,
+                    'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
+                    'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                    'cpp_args': [
+                        '-DHAKONE_AGGREGATE_PROCESS_FIXTURE="' + addon_metadata_attempt_process.full_path() + '"',
+                        '-DHAKONE_AGGREGATE_RUST_WORKER="' + addon_worker_target.full_path() + '"',
+                        '-DHAKONE_AGGREGATE_FRENCH_TV_WASM="' + meson.project_source_root() / 'contrib-addons/examples/french-tv/dist/addon.wasm' + '"',
+                    ],
+                    'link_args': qt_link_args,
+                    'depends': [addon_worker_dependencies, addon_metadata_attempt_process],
+                    'env': addon_worker_environment,
+                }
+            endif
             foreach addon_test : ['native_provider_context', 'native_metadata_owner']
                 vlc_tests += {
                     'name': 'test_qt_addon_' + addon_test,

@@ -170,6 +170,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_core_metadata_admission.hpp \
 	addons/addon_artwork_attempt_keeper.cpp \
 	addons/addon_artwork_attempt_keeper.hpp \
+	addons/addon_artwork_attempt_aggregate.cpp \
+	addons/addon_artwork_attempt_aggregate.hpp \
 	addons/addon_native_provider_artwork_assets.cpp \
 	addons/addon_native_provider_artwork_assets.hpp \
 	addons/addon_native_metadata_owner.cpp \
@@ -3024,6 +3026,27 @@ test_qt_addon_artwork_attempt_keeper_LDADD = libqt_addon_host.la $(QT_QTEST_COMM
 test_qt_addon_artwork_attempt_keeper_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_artwork_attempt_keeper
 TESTS += test_qt_addon_artwork_attempt_keeper
+
+if BUILD_ADDON_RUNTIME
+# Use the same offline process as the metadata receipt tests.
+test_qt_addon_artwork_attempt_aggregate_SOURCES = tests/test_addon_artwork_attempt_aggregate.cpp \
+    tests/fixtures/addon_artwork_attempt_keeper.c tests/fixtures/addon_native_provider_fixture.c \
+    $(top_srcdir)/src/preparser/metadata_native_provider.c
+nodist_test_qt_addon_artwork_attempt_aggregate_SOURCES = tests/test_addon_artwork_attempt_aggregate.moc
+BUILT_SOURCES += tests/test_addon_artwork_attempt_aggregate.moc
+CLEANFILES += tests/test_addon_artwork_attempt_aggregate.moc
+test_qt_addon_artwork_attempt_aggregate_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src \
+    -DHAKONE_AGGREGATE_PROCESS_FIXTURE='"$(abs_builddir)/addon_metadata_attempt_process$(EXEEXT)"' \
+    -DHAKONE_AGGREGATE_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
+    -DHAKONE_AGGREGATE_FRENCH_TV_WASM='"$(abs_top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm"'
+test_qt_addon_artwork_attempt_aggregate_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_artwork_attempt_aggregate_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS) $(top_builddir)/lib/libvlc.la
+test_qt_addon_artwork_attempt_aggregate_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+test_qt_addon_artwork_attempt_aggregate$(EXEEXT): addon_metadata_attempt_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
+check_PROGRAMS += test_qt_addon_artwork_attempt_aggregate
+TESTS += test_qt_addon_artwork_attempt_aggregate
+endif
+
 
 test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider_context.cpp tests/fixtures/addon_native_provider_fixture.c $(top_srcdir)/src/preparser/metadata_native_provider.c
 nodist_test_qt_addon_native_provider_context_SOURCES = tests/test_addon_native_provider_context.moc

@@ -40,6 +40,12 @@ manual GUI checks and full app performance comparison remain open.
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 
+The typed artwork result aggregate is now in application source and all three
+build definitions. It passes 38 normal and 38 ASAN/UBSAN checks with prepared
+portable receipts and real Core not-found Apply. The serial Service runner,
+positive source authority and native owner activation remain open. See
+[the contract and evidence](artwork-attempt-aggregate.md).
+
 ## Verified work
 
 | Area | Implementation and evidence |
