@@ -618,3 +618,13 @@ loop, thread or worker process is added. See
 [guarded settings](profile-store-settings.md). The peer channel and remaining
 store bindings are still required before application activation. These checks
 do not measure app startup, idle CPU, cursor behavior or UI response.
+
+The package enable, rollback, settings and recovery methods now have guarded
+entry points. They share the ordinary state commit path. Package, schema and
+state reads stay inside explicit joined work. The cohort passes 124 normal,
+124 ASAN/UBSAN and 117 native Windows checks. It includes cancellation after
+the real backup commit and before primary publication. No new idle timer,
+polling loop, thread or worker process is added. See
+[package state writes](profile-package-writes.md). The peer channel and
+application mount remain open. Full app performance is not established by
+these component checks.

@@ -2,8 +2,9 @@
 
 `StoreProfileGeneration` now owns coordinator election and the saved profile
 generation. It prepares peer joins and runs guarded store callbacks. All
-operations run on joined background work. Four policy-write bindings now use
-these callbacks. See [guarded settings](profile-store-settings.md). The control
+operations run on joined background work. Four policy and four package-write
+bindings now use these callbacks. See [guarded settings](profile-store-settings.md)
+and [package state writes](profile-package-writes.md). The control
 channel, remaining store bindings and production mount remain open. Native
 metadata cutover stays off.
 
@@ -140,8 +141,9 @@ No Windows player package is replaced by this component check.
 
 - Add the strict control protocol, peer owner, and connection-bound ticket.
 - Bind the prepared peer fence to local token readiness and native revocation.
-- Connect the remaining locked package mutations and complete store recovery
-  to these callbacks. Four policy-write bindings are implemented.
+- Connect install, uninstall, distribution bootstrap and complete store
+  recovery to these callbacks. Four policy and four package-write bindings
+  are implemented.
 - Mount startup, reconnect, display refresh, and app drain without a GUI wait.
 - Test control-channel loss and late replies at every publication boundary.
 - Verify native final Apply, supported app targets, and full app idle performance.

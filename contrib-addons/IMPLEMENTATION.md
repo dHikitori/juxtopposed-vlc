@@ -84,6 +84,16 @@ expected. The peer channel, remaining package-state writes and application
 mount remain open. See [guarded settings](profile-store-settings.md). This
 component step does not replace the current Windows review package.
 
+Enable, disable, rollback, settings save and package recovery now share guarded
+state commit paths with the ordinary methods. The latest cohort passes 124
+normal, 124 ASAN/UBSAN and 117 native Windows checks. It covers real installed
+releases, stale settings stamps, bundled approval, recovery and cancellation
+between backup and primary publication. The corrupt-digest regression fails
+against the exact earlier store object and passes after repair. Guarded
+install, uninstall, bootstrap, full profile recovery and the peer channel
+remain open. See [package state writes](profile-package-writes.md). The
+Windows review package is unchanged.
+
 ## Verified work
 
 | Area | Implementation and evidence |

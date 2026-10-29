@@ -103,6 +103,10 @@ bool writeJson(const QString& path, const QJsonObject& value, QString* error,
     return true;
 }
 using ProfileChange = StoreProfileGeneration::Change;
+bool ownedRemovalPath(const QString&, const QString&, bool, QString*);
+ProfileChange refuseProfile(QString* error, const QString& message,
+                            ProfileChange change = ProfileChange::RolledBack)
+{ fail(error, message); return change; }
 bool profileWriteRoot(const QString& root, const StoreProfileWriteContext* context,
                       QString* output, QString* error)
 {
@@ -119,6 +123,18 @@ bool profileWriteRoot(const QString& root, const StoreProfileWriteContext* conte
         return fail(error, QStringLiteral("The add-on store does not match the guarded profile."));
     *output = context->directory();
     return true;
+}
+template<class Work> ProfileChange withProfilePackage(const QString& directory,
+    const StoreProfileWriteContext& context, const QString& id, QString* error, Work work)
+{
+    QString root;
+    if (!packageId(id)) return refuseProfile(error, QStringLiteral("The package ID is not correct."));
+    if (!profileWriteRoot(directory, &context, &root, error)) return ProfileChange::RolledBack;
+    if (!ownedRemovalPath(root, QStringLiteral("packages/") + id, false, error)) return ProfileChange::NeedsRecovery;
+    if (!QFileInfo::exists(QDir(root).filePath(QStringLiteral("packages/") + id)))
+        return refuseProfile(error, QStringLiteral("The package is not installed."));
+    PackageStore store(root);
+    return work(store);
 }
 ProfileChange commitProfileJson(const QString& root, const StoreAuthority& authority,
     const QString& name, const QJsonObject& value, QString* error,
@@ -304,6 +320,22 @@ bool catalogueInteger(const QJsonValue& value, quint64* output, bool positive = 
     if (!value.isDouble() || !std::isfinite(number) || number < (positive ? 1 : 0)
         || number > 9007199254740991. || std::floor(number) != number) return false;
     *output = quint64(number); return true;
+}
+bool nextPackageGeneration(QJsonObject* state, QString* error,
+    const StoreProfileWriteContext* context, ProfileChange* failure)
+{
+    if (!context) { state->insert("generation", state->value("generation").toDouble() + 1); return true; }
+    quint64 generation = 0;
+    if (!catalogueInteger(state->value("generation"), &generation, true)) {
+        *failure = refuseProfile(error, QStringLiteral("The package generation is not correct."), ProfileChange::NeedsRecovery);
+        return false;
+    }
+    if (generation == 9007199254740991ULL) {
+        *failure = refuseProfile(error, QStringLiteral("The package generation limit was reached."));
+        return false;
+    }
+    state->insert("generation", double(generation + 1));
+    return true;
 }
 bool catalogueDirectory(const QString& path, bool missing, QString* error)
 {
@@ -841,16 +873,24 @@ bool PackageStore::fetchRepositoryUpdate(const QString& id, const QString& range
     return true;
 }
 
-bool PackageStore::loadState(const QString& id, QJsonObject* output, QString* error) const
+bool PackageStore::loadState(const QString& id, QJsonObject* output, QString* error,
+                             const StoreProfileWriteContext* context) const
 {
     if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
     const auto path = QDir(m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
     QJsonObject state;
-    const auto valid = [&id](const QJsonObject& value) {
-        return value.value("formatVersion") == 1 && value.value("id") == id && value.value("current").isObject();
+    const auto valid = [&id, context](const QJsonObject& value) {
+        quint64 generation = 0;
+        return value.value("formatVersion") == 1 && value.value("id") == id && value.value("current").isObject()
+            && (!context || (value.value("enabled").isBool()
+                && (!value.contains("recoveryRequired") || value.value("recoveryRequired").isBool())
+                && catalogueInteger(value.value("generation"), &generation, true)));
     };
-    if (!readJson(path, &state, nullptr) || !valid(state)) {
-        if (!readJson(path + QStringLiteral(".backup"), &state, error) || !valid(state))
+    const auto read = [context](const QString& file, QJsonObject* state, QString* error) {
+        return context ? catalogueObject(file, 4 * 1024 * 1024, state, error) : readJson(file, state, error);
+    };
+    if (!read(path, &state, nullptr) || !valid(state)) {
+        if (!read(path + QStringLiteral(".backup"), &state, error) || !valid(state))
             return fail(error, QStringLiteral("The package state and backup are not correct."));
         state.insert("recoveryRequired", true);
         state.insert("enabled", false);
@@ -860,18 +900,29 @@ bool PackageStore::loadState(const QString& id, QJsonObject* output, QString* er
 }
 bool PackageStore::saveState(const QString& id, const QJsonObject& state, QString* error, bool authority) const
 {
-    if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
+    return saveStateLocked(id, state, error, authority, nullptr) == ProfileChange::Applied;
+}
+ProfileChange PackageStore::saveStateLocked(const QString& id, const QJsonObject& state,
+    QString* error, bool authority, const StoreProfileWriteContext* context) const
+{
+    if (!packageId(id)) return refuseProfile(error, QStringLiteral("The package ID is not correct."));
+    if (context && !context->current())
+        return refuseProfile(error, QStringLiteral("The add-on profile request is no longer current."));
     const auto folder = QDir(m_root).filePath(QStringLiteral("packages/") + id);
-    if (!QDir().mkpath(folder)) return fail(error, QStringLiteral("The app cannot create the package state directory."));
+    if (!QDir().mkpath(folder)) return refuseProfile(error, QStringLiteral("The app cannot create the package state directory."), ProfileChange::NeedsRecovery);
     if (QJsonDocument(state).toJson(QJsonDocument::Compact).size() > 4 * 1024 * 1024)
-        return fail(error, QStringLiteral("The retained package state is too large."));
+        return refuseProfile(error, QStringLiteral("The retained package state is too large."));
     const auto path = QDir(folder).filePath(QStringLiteral("state.json"));
     auto mutation = authority ? std::optional<StoreAuthorityMutation>(m_authority.mutation()) : std::nullopt;
+    if (context && !context->current())
+        return refuseProfile(error, QStringLiteral("The add-on profile request is no longer current."));
     QJsonObject previous;
-    if (QFileInfo::exists(path) && readJson(path, &previous, nullptr)
+    const bool primary = QFileInfo::exists(path)
+        && (context ? catalogueObject(path, 4 * 1024 * 1024, &previous, nullptr) : readJson(path, &previous, nullptr));
+    if (primary
         && previous.value("id") == id && previous.value("current").isObject()
-        && !writeJson(path + QStringLiteral(".backup"), previous, error)) return false;
-    return writeJson(path, state, error);
+        && !writeJson(path + QStringLiteral(".backup"), previous, error, context)) return ProfileChange::NeedsRecovery;
+    return writeJson(path, state, error, context) ? ProfileChange::Applied : ProfileChange::NeedsRecovery;
 }
 QString PackageStore::privateStorageDirectory(const QString& id) const
 { return QDir(m_root).filePath(QStringLiteral("private-storage/") + id + QStringLiteral("/objects")); }
@@ -1176,7 +1227,8 @@ bool PackageStore::ensureDistributionPackage(const QString& directory,const Mani
     if(RepositoryCancellation::requested())return fail(error,QStringLiteral("The app canceled the startup package check."));
     // Once this entry commits, finish its enable under the same lock even if
     // cancellation arrives. The next entry will not start after cancellation.
-    if(!installLocked(candidate,offer.requiredPermissions,error,false,true) || !setEnabledLocked(id,true,error))return false;
+    if(!installLocked(candidate,offer.requiredPermissions,error,false,true)
+        || setEnabledLocked(id,true,error) != ProfileChange::Applied)return false;
     if(output)output->state=DistributionInstallResult::State::Installed;
     return true;
 }
@@ -1226,39 +1278,72 @@ bool PackageStore::setEnabled(const QString& id, bool enabled, QString* error)
 {
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
-    return setEnabledLocked(id,enabled,error);
+    return setEnabledLocked(id, enabled, error) == ProfileChange::Applied;
 }
-bool PackageStore::setEnabledLocked(const QString& id,bool enabled,QString* error)
+ProfileChange PackageStore::setEnabled(const StoreProfileWriteContext& context,
+    const QString& id, bool enabled, QString* error)
+{
+    return withProfilePackage(m_root, context, id, error, [&](PackageStore& store) {
+        return store.setEnabledLocked(id, enabled, error, &context);
+    });
+}
+ProfileChange PackageStore::setEnabledLocked(const QString& id, bool enabled, QString* error,
+    const StoreProfileWriteContext* context)
 {
     QJsonObject state;
-    if (!loadState(id, &state, error)) return false;
-    if (enabled) {
+    if (!loadState(id, &state, error, context)) return ProfileChange::NeedsRecovery;
+    if (context) {
+        if (state.value("recoveryRequired").toBool())
+            return refuseProfile(error, QStringLiteral("Restore the package state before a change."), ProfileChange::NeedsRecovery);
+        MetadataCatalogueSnapshot policy; MetadataCataloguePackage package;
+        if (!cataloguePolicy(&policy, error)
+            || !catalogueStatePackage(id, state, policy.safeMode, policy.distributionPolicy, &package, nullptr, error))
+            return ProfileChange::NeedsRecovery;
+        if (enabled && package.package.identity.distributionSource
+            && policy.distributionPolicy.value("removed").toObject().value(id).toBool()
+            && state.value("distributionApproval").toString() != QString::fromLatin1(package.package.digest))
+            return refuseProfile(error, QStringLiteral("Review and approve the app package before it can be enabled."));
+    } else if (enabled) {
         InstalledPackage verified;
-        if (!installed(id, &verified, error)) return false;
+        if (!installed(id, &verified, error)) return ProfileChange::NeedsRecovery;
         if (verified.identity.distributionSource && distributionSuppressed(id))
-            return fail(error, QStringLiteral("Review and approve the app package before it can be enabled."));
+            return refuseProfile(error, QStringLiteral("Review and approve the app package before it can be enabled."));
     }
+    ProfileChange failure;
+    if (!nextPackageGeneration(&state, error, context, &failure)) return failure;
     state.insert("enabled", enabled);
-    state.insert("generation", state.value("generation").toDouble() + 1);
-    return saveState(id, state, error);
+    return saveStateLocked(id, state, error, true, context);
 }
 bool PackageStore::rollback(const QString& id, QString* error)
 {
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    return rollbackLocked(id, error, nullptr) == ProfileChange::Applied;
+}
+ProfileChange PackageStore::rollback(const StoreProfileWriteContext& context, const QString& id, QString* error)
+{
+    return withProfilePackage(m_root, context, id, error, [&](PackageStore& store) {
+        return store.rollbackLocked(id, error, &context);
+    });
+}
+ProfileChange PackageStore::rollbackLocked(const QString& id, QString* error, const StoreProfileWriteContext* context)
+{
     QJsonObject state;
-    if (!loadState(id, &state, error)) return false;
+    if (!loadState(id, &state, error, context)) return ProfileChange::NeedsRecovery;
+    if (context && state.value("recoveryRequired").toBool())
+        return refuseProfile(error, QStringLiteral("Restore the package state before a change."), ProfileChange::NeedsRecovery);
     const auto previous = state.value("previous").toObject();
     const auto digest = previous.value("digest").toString();
-    if (!digestId(digest)) return fail(error, QStringLiteral("A retained rollback release is not available."));
+    if (!digestId(digest)) return refuseProfile(error, QStringLiteral("A retained rollback release is not available."));
     if (!validateSnapshot(id, previous, error))
-        return fail(error, QStringLiteral("The rollback release failed its check."));
+        return refuseProfile(error, QStringLiteral("The rollback release failed its check."), ProfileChange::NeedsRecovery);
+    ProfileChange failure;
+    if (!nextPackageGeneration(&state, error, context, &failure)) return failure;
     state.insert("retained", retainSnapshot(state.value("retained").toArray(), state.value("current").toObject()));
     state.insert("previous", state.value("current"));
     state.insert("current", previous);
     state.remove("distributionApproval");
-    state.insert("generation", state.value("generation").toDouble() + 1);
-    return saveState(id, state, error);
+    return saveStateLocked(id, state, error, true, context);
 }
 namespace {
 bool ownedRemovalPath(const QString& root, const QString& relative, bool tree, QString* error)
@@ -1419,30 +1504,67 @@ bool PackageStore::saveSettings(const QString& id,const QJsonObject& settings,qu
         return fail(error, QStringLiteral("The settings are too large."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    return saveSettingsLocked(id, settings, revision, expectedStamp, error, nullptr) == ProfileChange::Applied;
+}
+ProfileChange PackageStore::saveSettings(const StoreProfileWriteContext& context, const QString& id,
+    const QJsonObject& settings, quint64 revision, const QString& expectedStamp, QString* error)
+{
+    if (expectedStamp.isEmpty()) return refuseProfile(error, QStringLiteral("Read the current settings before a save."));
+    return withProfilePackage(m_root, context, id, error, [&](PackageStore& store) {
+        return store.saveSettingsLocked(id, settings, revision, expectedStamp, error, &context);
+    });
+}
+ProfileChange PackageStore::saveSettingsLocked(const QString& id, const QJsonObject& settings,
+    quint64 revision, const QString& expectedStamp, QString* error, const StoreProfileWriteContext* context)
+{
+    if (QJsonDocument(settings).toJson(QJsonDocument::Compact).size() > 256 * 1024)
+        return refuseProfile(error, QStringLiteral("The settings are too large."));
     QJsonObject state;
-    if (!loadState(id, &state, error)) return false;
+    if (!loadState(id, &state, error, context)) return ProfileChange::NeedsRecovery;
+    if (context && state.value("recoveryRequired").toBool())
+        return refuseProfile(error, QStringLiteral("Restore the package state before a change."), ProfileChange::NeedsRecovery);
     auto current = state.value("current").toObject();
     quint64 actualRevision=0;
     const auto revisionValue=current.contains("settingsRevision")?current.value("settingsRevision"):QJsonValue(0);
-    if(!catalogueInteger(revisionValue,&actualRevision) || actualRevision!=revision || revision>=9007199254740991ULL)
-        return fail(error,QStringLiteral("The settings changed or their revision is full. Read the settings again before a save."));
+    if (!catalogueInteger(revisionValue, &actualRevision))
+        return refuseProfile(error, QStringLiteral("The settings revision is not correct."), ProfileChange::NeedsRecovery);
+    if(actualRevision!=revision || revision>=9007199254740991ULL)
+        return refuseProfile(error,QStringLiteral("The settings changed or their revision is full. Read the settings again before a save."));
     if(!expectedStamp.isEmpty()) {
         quint64 generation=0;const auto digest=current.value(QStringLiteral("digest")).toString();
-        if(expectedStamp.size()>128 || state.value(QStringLiteral("recoveryRequired")).toBool()
+        if(expectedStamp.size()>128)
+            return refuseProfile(error,QStringLiteral("The package changed. Read the current settings before a save."));
+        if(state.value(QStringLiteral("recoveryRequired")).toBool()
             || !digestId(digest) || !catalogueInteger(state.value(QStringLiteral("generation")),&generation,true))
-            return fail(error,QStringLiteral("The package changed. Read the current settings before a save."));
+            return refuseProfile(error,QStringLiteral("The package changed. Read the current settings before a save."),
+                context ? ProfileChange::NeedsRecovery : ProfileChange::RolledBack);
         const QString actualStamp=digest+QLatin1Char(':')+QString::number(generation)+QLatin1Char(':')+QString::number(actualRevision);
-        if(actualStamp!=expectedStamp)return fail(error,QStringLiteral("The package or settings changed. Read the current settings before a save."));
+        if(actualStamp!=expectedStamp)return refuseProfile(error,QStringLiteral("The package or settings changed. Read the current settings before a save."));
     }
     InstalledPackage package;
-    if (!installed(id, &package, error)) return false;
     QJsonObject settingsSchema;
-    if (!package.manifest.settingsSchema.isEmpty()) {
-        QFile schema(QDir(package.directory).filePath(package.manifest.settingsSchema));
-        if (!schema.open(QIODevice::ReadOnly)) return fail(error, QStringLiteral("The app cannot examine the protected settings fields."));
-        settingsSchema = QJsonDocument::fromJson(schema.readAll()).object();
+    QMap<QString, QByteArray> contents;
+    if (context) {
+        MetadataCatalogueSnapshot policy; MetadataCataloguePackage captured;
+        if (!cataloguePolicy(&policy, error)
+            || !catalogueStatePackage(id, state, policy.safeMode, policy.distributionPolicy, &captured, &contents, error))
+            return ProfileChange::NeedsRecovery;
+        package = std::move(captured.package); settingsSchema = std::move(captured.schema);
+    } else {
+        if (!installed(id, &package, error)) return ProfileChange::NeedsRecovery;
+        if (!package.manifest.settingsSchema.isEmpty()) {
+            QFile schema(QDir(package.directory).filePath(package.manifest.settingsSchema));
+            if (!schema.open(QIODevice::ReadOnly))
+                return refuseProfile(error, QStringLiteral("The app cannot examine the protected settings fields."));
+            settingsSchema = QJsonDocument::fromJson(schema.readAll()).object();
+        }
     }
-    if (!credentialSettingsValid(package.manifest, settingsSchema, settings, error)) return false;
+    if (!credentialSettingsValid(package.manifest, settingsSchema, settings, error)) return ProfileChange::RolledBack;
+    if (context) {
+        QJsonObject checked;
+        if (!migrateSettings(package.manifest, contents, &package.manifest, settings, package.grants, &checked, error))
+            return ProfileChange::RolledBack;
+    }
     current.insert("settings", settings);
     current.insert("settingsRevision", double(revision) + 1);
     state.insert("current", current);
@@ -1454,9 +1576,9 @@ bool PackageStore::saveSettings(const QString& id,const QJsonObject& settings,qu
         referenceIndex.insert(it.key(), values);
     }
     if (QJsonDocument(referenceIndex).toJson(QJsonDocument::Compact).size() > 256 * 1024)
-        return fail(error, QStringLiteral("The credential reference history is full. Disconnect the account before a new credential update."));
+        return refuseProfile(error, QStringLiteral("The credential reference history is full. Disconnect the account before a new credential update."));
     state.insert("credentialReferences", referenceIndex);
-    return saveState(id, state, error);
+    return saveStateLocked(id, state, error, true, context);
 }
 
 bool PackageStore::validateSnapshot(const QString& id, const QJsonObject& snapshot, QString* error) const
@@ -1498,24 +1620,35 @@ bool PackageStore::recover(const QString& id, QString* error)
 {
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    return recoverLocked(id, error, nullptr) == ProfileChange::Applied;
+}
+ProfileChange PackageStore::recover(const StoreProfileWriteContext& context, const QString& id, QString* error)
+{
+    return withProfilePackage(m_root, context, id, error, [&](PackageStore& store) {
+        return store.recoverLocked(id, error, &context);
+    });
+}
+ProfileChange PackageStore::recoverLocked(const QString& id, QString* error, const StoreProfileWriteContext* context)
+{
     QJsonObject state;
-    if (!loadState(id, &state, error)) return false;
+    if (!loadState(id, &state, error, context)) return ProfileChange::NeedsRecovery;
     QJsonArray candidates{state.value("current"), state.value("previous")};
     const auto retained = state.value("retained").toArray();
     for (qsizetype index = retained.size(); index > 0; --index) candidates.append(retained.at(index - 1));
     for (const auto& entry : candidates) {
         const auto snapshot = entry.toObject();
         if (!validateSnapshot(id, snapshot, nullptr)) continue;
+        ProfileChange failure;
+        if (!nextPackageGeneration(&state, error, context, &failure)) return failure;
         state.insert("retained", retainSnapshot(retained, state.value("current").toObject()));
         if (snapshot != state.value("current").toObject()) state.insert("previous", state.value("current"));
         state.insert("current", snapshot);
         state.insert("enabled", false);
         state.insert("recoveryRequired", false);
-        state.insert("generation", state.value("generation").toDouble() + 1);
         state.remove("distributionApproval");
-        return saveState(id, state, error);
+        return saveStateLocked(id, state, error, true, context);
     }
-    return fail(error, QStringLiteral("A correct retained release is not available. Keep safe mode active and restore a verified package."));
+    return refuseProfile(error, QStringLiteral("A correct retained release is not available. Keep safe mode active and restore a verified package."), ProfileChange::NeedsRecovery);
 }
 
 bool PackageStore::safeMode() const

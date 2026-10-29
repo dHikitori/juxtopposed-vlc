@@ -95,9 +95,11 @@ The guarded entry points are ready for the peer owner; they do not mount that
 owner or establish cross-process invalidation by themselves. Native metadata
 owner activation remains off.
 
-The remaining store work includes install, enable, rollback, uninstall,
-package settings, distribution bootstrap and complete profile recovery.
-These paths need explicit locked entry points and coherent outcome handling.
+Enable, rollback, package settings and package recovery now have guarded
+bindings. See [package state writes](profile-package-writes.md). The remaining
+store work includes install, uninstall, distribution bootstrap and complete
+profile recovery. These paths need explicit locked entry points and coherent
+outcome handling.
 Guest data-only storage keeps its separate policy. The control channel must
 bind each ticket to its connection and operation, revoke all joined and
 joining peers, and close local readiness on channel loss. The application

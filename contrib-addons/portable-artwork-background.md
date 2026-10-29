@@ -129,11 +129,19 @@ byte for byte; its redundant container was removed. Later space guards also
 stopped a link and a focused build. Both resumed from the same graph after
 verified cleanup. Their stopped and resumed records remain available. The preserved Core libraries and Windows baseline were not replaced.
 
+Five completed sanitizer executables were later retired to keep the disk
+reserve. Their 530 matching source files, all 54 unique object hashes, link
+recipes and test records remain. The replacement records are
+`/tmp/hakone-prepared-images-host/completed-program-retirement-2026-10-30.json`
+and `completed-program-retirement-2026-10-30-extra.json`. Normal programs are
+retained. This changes artifact retention, not the recorded test results.
+
 ## Remaining gates
 
 Native owner activation is still off. Preserved provider, local metadata,
 subtitle, status, complete app, and supported-platform checks remain required.
-The usual Windows package does not contain this change yet. Full app idle
+The current Windows review package includes this work. See
+[the build record](windows-artwork-build-2026-10-30.md). Full app idle
 CPU, startup, UI response, and quit measurements remain open.
 
 The [Windows cursor report](windows-cursor-feedback.md) is a separate open

@@ -5,8 +5,9 @@ to that profile must revoke old native write authority in every process.
 The full gate remains open. The native fence below is implemented and tested.
 The saved generation and guarded writer helper are now implemented. See
 [guarded generations](profile-generation-transactions.md). Four store policy
-writes now have tested guarded bindings. See
-[guarded settings](profile-store-settings.md). The coordinator transport,
+and four package-write methods now have tested guarded bindings. See
+[guarded settings](profile-store-settings.md) and
+[package state writes](profile-package-writes.md). The coordinator transport,
 remaining store bindings and production mount are not implemented yet.
 Native metadata owner activation stays off.
 

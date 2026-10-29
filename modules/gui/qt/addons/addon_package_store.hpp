@@ -108,6 +108,8 @@ public:
     // These IDs permit saved-data cleanup only. They grant no package authority.
     QStringList savedDataIds() const;
     bool setEnabled(const QString& id, bool enabled, QString* error = nullptr);
+    StoreProfileGeneration::Change setEnabled(const StoreProfileWriteContext&,
+        const QString& id, bool enabled, QString* error = nullptr);
     // These operations use store.lock. Capture on joined background work for
     // native metadata plans. Retain authority watches through final Apply.
     bool providerPreferences(ProviderPreferences*, QString* error = nullptr) const;
@@ -131,6 +133,8 @@ public:
     StoreProfileGeneration::Change saveBuiltinProviderEnabled(const StoreProfileWriteContext&,
         const QString& id, bool enabled, QJsonObject* saved = nullptr, QString* error = nullptr);
     bool rollback(const QString& id, QString* error = nullptr);
+    StoreProfileGeneration::Change rollback(const StoreProfileWriteContext&,
+        const QString& id, QString* error = nullptr);
     bool uninstall(const QString& id, bool removeData, QString* error = nullptr);
     bool canUninstall(const QString& id, bool removeData, QString* error = nullptr) const;
     // Versioned nonsecret settings live in the same state pointer as the release.
@@ -139,11 +143,18 @@ public:
     bool networkConfigurationMatches(const InstalledPackage&, const QJsonObject&, quint64 revision) const;
     bool saveSettings(const QString& id, const QJsonObject&, quint64 expectedRevision, QString* error = nullptr);
     bool saveSettings(const QString& id,const QJsonObject&,quint64 expectedRevision,const QString& expectedStamp,QString* error=nullptr);
+    // A guarded save requires the exact release, generation and settings stamp.
+    StoreProfileGeneration::Change saveSettings(const StoreProfileWriteContext&,
+        const QString& id, const QJsonObject&, quint64 expectedRevision,
+        const QString& expectedStamp, QString* error = nullptr);
     bool privateStorage(const PrivateStorageContext&, const QString& operation, const QJsonObject& request,
                         QJsonObject* response, const std::function<bool()>& pending,
                         const std::function<bool()>& beginCommit, QString* error = nullptr) const;
     QJsonArray retainedGenerations(const QString& id, QString* error = nullptr) const;
     bool recover(const QString& id, QString* error = nullptr);
+    // This repairs one package. It does not validate the whole profile.
+    StoreProfileGeneration::Change recover(const StoreProfileWriteContext&,
+        const QString& id, QString* error = nullptr);
     bool safeMode() const;
     bool setSafeMode(bool enabled, QString* error = nullptr);
     StoreProfileGeneration::Change setSafeMode(const StoreProfileWriteContext&,
@@ -158,15 +169,23 @@ private:
     QString m_root;
     StoreAuthority m_authority;
     bool installLocked(const PackageCandidate&,const QJsonObject& grants,QString* error,bool distributionApproval,bool cancelBeforeCommit=false);
-    bool setEnabledLocked(const QString&,bool,QString* error);
+    StoreProfileGeneration::Change setEnabledLocked(const QString&, bool, QString* error,
+        const StoreProfileWriteContext* = nullptr);
+    StoreProfileGeneration::Change rollbackLocked(const QString&, QString*, const StoreProfileWriteContext*);
+    StoreProfileGeneration::Change saveSettingsLocked(const QString&, const QJsonObject&, quint64,
+        const QString&, QString*, const StoreProfileWriteContext*);
+    StoreProfileGeneration::Change recoverLocked(const QString&, QString*, const StoreProfileWriteContext*);
     bool cataloguePackage(const QString&,bool,const QJsonObject&,MetadataCataloguePackage*,QMap<QString,QByteArray>*,QString*) const;
     bool catalogueStatePackage(const QString&,const QJsonObject&,bool,const QJsonObject&,
         MetadataCataloguePackage*,QMap<QString,QByteArray>*,QString*) const;
     bool cataloguePolicy(MetadataCatalogueSnapshot*,QString*) const;
     bool readDisplayCatalogue(const StoreAuthorityToken&,const QString&,const DisplayCatalogueRequest&,DisplayCatalogueSnapshot*,QString*) const;
     bool readMetadataCatalogue(const StoreAuthorityToken&, MetadataCatalogueSnapshot*, QString*) const;
-    bool loadState(const QString& id, QJsonObject*, QString* error) const;
+    bool loadState(const QString& id, QJsonObject*, QString* error,
+        const StoreProfileWriteContext* = nullptr) const;
     bool saveState(const QString& id, const QJsonObject&, QString* error, bool authority = true) const;
+    StoreProfileGeneration::Change saveStateLocked(const QString&, const QJsonObject&, QString*,
+        bool authority, const StoreProfileWriteContext*) const;
     QString releaseDirectory(const QString& id, const QString& digest) const;
     bool validateSnapshot(const QString& id, const QJsonObject&, QString* error) const;
     QString privateStorageDirectory(const QString& id) const;
