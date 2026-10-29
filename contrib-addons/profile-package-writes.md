@@ -99,8 +99,9 @@ are in the same proof directory. The minimum recorded free space is
 
 ## Remaining integration
 
-Guarded install, uninstall and distribution bootstrap remain open. Complete
-profile recovery must also validate policy documents and all package state.
+Guarded install, uninstall and distribution bootstrap are now implemented.
+See [lifecycle writes](profile-lifecycle-writes.md). Complete profile recovery
+must still validate policy documents, all package state and transaction remnants.
 The peer channel must bind a ticket to its connection and operation, revoke
 joined and joining peers, and keep readiness closed through channel loss.
 Then mount startup, reconnect, refresh and drain on joined work.

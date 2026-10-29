@@ -99,10 +99,16 @@ public:
                                bool developerLocalSource = false, int timeoutMs = 30000) const;
     // Distribution approval is host-only and commits with the current release pointer.
     bool install(const PackageCandidate&, const QJsonObject& approvedGrants, QString* error = nullptr, bool distributionApproval = false);
+    StoreProfileGeneration::Change install(const StoreProfileWriteContext&,
+        const PackageCandidate&, const QJsonObject& approvedGrants,
+        QString* error = nullptr, bool distributionApproval = false);
     // Host distribution bootstrap. This retains one Store lock across the
     // suppression/current-state decision and an absent install plus enable.
     bool ensureDistributionPackage(const QString& directory,const Manifest& verifiedOffer,
         DistributionInstallResult*,QString* error=nullptr);
+    StoreProfileGeneration::Change ensureDistributionPackage(const StoreProfileWriteContext&,
+        const QString& directory, const Manifest& verifiedOffer,
+        DistributionInstallResult*, QString* error = nullptr);
     bool installed(const QString& id, InstalledPackage*, QString* error = nullptr) const;
     QStringList installedIds() const;
     // These IDs permit saved-data cleanup only. They grant no package authority.
@@ -136,6 +142,8 @@ public:
     StoreProfileGeneration::Change rollback(const StoreProfileWriteContext&,
         const QString& id, QString* error = nullptr);
     bool uninstall(const QString& id, bool removeData, QString* error = nullptr);
+    StoreProfileGeneration::Change uninstall(const StoreProfileWriteContext&,
+        const QString& id, bool removeData, QString* error = nullptr);
     bool canUninstall(const QString& id, bool removeData, QString* error = nullptr) const;
     // Versioned nonsecret settings live in the same state pointer as the release.
     bool settings(const QString& id, QJsonObject*, quint64* revision = nullptr, QString* error = nullptr) const;
@@ -168,7 +176,10 @@ public:
 private:
     QString m_root;
     StoreAuthority m_authority;
-    bool installLocked(const PackageCandidate&,const QJsonObject& grants,QString* error,bool distributionApproval,bool cancelBeforeCommit=false);
+    StoreProfileGeneration::Change installLocked(const PackageCandidate&, const QJsonObject& grants,
+        QString* error, bool distributionApproval, bool cancelBeforeCommit = false,
+        const StoreProfileWriteContext* = nullptr, bool initiallyEnabled = false);
+    StoreProfileGeneration::Change uninstallLocked(const QString&, bool, QString*, const StoreProfileWriteContext*);
     StoreProfileGeneration::Change setEnabledLocked(const QString&, bool, QString* error,
         const StoreProfileWriteContext* = nullptr);
     StoreProfileGeneration::Change rollbackLocked(const QString&, QString*, const StoreProfileWriteContext*);

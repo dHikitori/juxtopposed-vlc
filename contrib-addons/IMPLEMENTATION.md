@@ -94,6 +94,16 @@ install, uninstall, bootstrap, full profile recovery and the peer channel
 remain open. See [package state writes](profile-package-writes.md). The
 Windows review package is unchanged.
 
+Install, uninstall and bundled setup now have guarded entry points. The
+latest cohort passes 155 normal, 155 ASAN/UBSAN and 147 native Windows checks.
+It covers real private data across removal and reinstall, damaged-state
+retention, archive failure, staging failure, Windows junctions and a single
+enabled-state commit for a new bundle. The same-release permission shortcut
+now applies reduced grants; restoring the old shortcut fails both control
+rows. The retained writer scope, peer channel, complete profile recovery and
+application mount remain open. See [lifecycle writes](profile-lifecycle-writes.md).
+The Windows review package is unchanged.
+
 ## Verified work
 
 | Area | Implementation and evidence |

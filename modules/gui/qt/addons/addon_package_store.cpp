@@ -125,16 +125,22 @@ bool profileWriteRoot(const QString& root, const StoreProfileWriteContext* conte
     return true;
 }
 template<class Work> ProfileChange withProfilePackage(const QString& directory,
-    const StoreProfileWriteContext& context, const QString& id, QString* error, Work work)
+    const StoreProfileWriteContext& context, const QString& id, QString* error, Work work,
+    bool allowAbsent = false)
 {
     QString root;
     if (!packageId(id)) return refuseProfile(error, QStringLiteral("The package ID is not correct."));
     if (!profileWriteRoot(directory, &context, &root, error)) return ProfileChange::RolledBack;
     if (!ownedRemovalPath(root, QStringLiteral("packages/") + id, false, error)) return ProfileChange::NeedsRecovery;
-    if (!QFileInfo::exists(QDir(root).filePath(QStringLiteral("packages/") + id)))
+    if (!allowAbsent && !QFileInfo::exists(QDir(root).filePath(QStringLiteral("packages/") + id)))
         return refuseProfile(error, QStringLiteral("The package is not installed."));
     PackageStore store(root);
     return work(store);
+}
+bool profileCurrent(const StoreProfileWriteContext* context, QString* error)
+{
+    return !context || context->current()
+        || fail(error, QStringLiteral("The add-on profile request is no longer current."));
 }
 ProfileChange commitProfileJson(const QString& root, const StoreAuthority& authority,
     const QString& name, const QJsonObject& value, QString* error,
@@ -1036,20 +1042,45 @@ bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject&
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The app cannot create the add-on store."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
-    return installLocked(candidate,grants,error,distributionApproval);
+    return installLocked(candidate, grants, error, distributionApproval) == ProfileChange::Applied;
 }
-bool PackageStore::installLocked(const PackageCandidate& candidate,const QJsonObject& grants,QString* error,bool distributionApproval,bool cancelBeforeCommit)
+ProfileChange PackageStore::install(const StoreProfileWriteContext& context, const PackageCandidate& candidate,
+    const QJsonObject& grants, QString* error, bool distributionApproval)
 {
+    if (!validateCandidate(candidate, error) || !validateGrants(candidate.manifest, grants, error)) return ProfileChange::RolledBack;
+    return withProfilePackage(m_root, context, candidate.manifest.id, error, [&](PackageStore& store) {
+        return store.installLocked(candidate, grants, error, distributionApproval, false, &context);
+    }, true);
+}
+ProfileChange PackageStore::installLocked(const PackageCandidate& candidate, const QJsonObject& grants,
+    QString* error, bool distributionApproval, bool cancelBeforeCommit,
+    const StoreProfileWriteContext* context, bool initiallyEnabled)
+{
+    ProfileChange failure = ProfileChange::RolledBack;
+    const auto refuse = [&](const QString& message, std::optional<ProfileChange> reason = {}) {
+        return refuseProfile(error, message, reason.value_or(failure));
+    };
     const auto id = candidate.manifest.id;
+    if (context) {
+        const QString releases = QStringLiteral("packages/") + id + QStringLiteral("/releases");
+        const QString destination = releases + QLatin1Char('/') + QString::fromLatin1(candidate.digest);
+        const QString privateData = QStringLiteral("private-storage/") + id;
+        const QStringList paths{QStringLiteral("retained-settings/") + id + QStringLiteral(".json"), privateData, releases, destination};
+        for (const auto& path : paths)
+            if (!ownedRemovalPath(m_root, path, path == privateData || path == destination, error))
+                return ProfileChange::NeedsRecovery;
+    }
     if (distributionApproval && (!candidate.identity.distributionSource || candidate.identity.developerSource))
-        return fail(error, QStringLiteral("Only an app distribution package can use this approval."));
+        return refuse(QStringLiteral("Only an app distribution package can use this approval."));
     QJsonObject state;
     const auto statePath = QDir(m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
     if ((QFileInfo::exists(statePath) || QFileInfo::exists(statePath + QStringLiteral(".backup")))
-        && !loadState(id, &state, error)) return false;
+        && !loadState(id, &state, error, context)) return ProfileChange::NeedsRecovery;
+    if (context && state.isEmpty() && QFileInfo::exists(QDir(m_root).filePath(QStringLiteral("packages/") + id)))
+        return refuse(QStringLiteral("Recover or remove the incomplete package before an install."), ProfileChange::NeedsRecovery);
     const auto old = state.value("current").toObject();
     if (state.value("recoveryRequired").toBool())
-        return fail(error, QStringLiteral("Restore the package state before an update."));
+        return refuse(QStringLiteral("Restore the package state before an update."), ProfileChange::NeedsRecovery);
     Manifest oldManifest;
     QJsonObject nextSettings;
     auto versions = state.value("lockedVersions").toObject();
@@ -1057,26 +1088,33 @@ bool PackageStore::installLocked(const PackageCandidate& candidate,const QJsonOb
         versions.insert(old.value("version").toString(), old.value("digest"));
     const auto lockedVersion = versions.value(candidate.manifest.version).toString();
     if (!lockedVersion.isEmpty() && lockedVersion != QString::fromLatin1(candidate.digest))
-        return fail(error, QStringLiteral("This package version already has different locked contents."));
+        return refuse(QStringLiteral("This package version already has different locked contents."));
     if (!old.isEmpty()) {
         const auto identity = readIdentity(old.value("identity").toObject());
         if (identity.source != candidate.identity.source || identity.developerSource != candidate.identity.developerSource
             || (!identity.distributionSource && candidate.identity.distributionSource))
-            return fail(error, QStringLiteral("The package source changed. Approve the new source before an update."));
+            return refuse(QStringLiteral("The package source changed. Approve the new source before an update."));
         const QString historyTag = (candidate.identity.distributionSource ? QStringLiteral("distribution:") : QString{}) + candidate.identity.tag;
         const auto locked = state.value("lockedTags").toObject().value(historyTag).toObject();
         if (!locked.isEmpty() && (locked.value("commitId") != candidate.identity.commitId
             || locked.value("tagObjectId") != candidate.identity.tagObjectId
             || locked.value("digest") != QString::fromLatin1(candidate.digest)))
-            return fail(error, QStringLiteral("A previously locked tag changed."));
+            return refuse(QStringLiteral("A previously locked tag changed."));
         InstalledPackage verified;
-        if (!installed(id, &verified, error)) return false;
+        if (context) {
+            MetadataCatalogueSnapshot policy; MetadataCataloguePackage captured;
+            if (!cataloguePolicy(&policy, error)
+                || !catalogueStatePackage(id, state, policy.safeMode, policy.distributionPolicy, &captured, nullptr, error))
+                return ProfileChange::NeedsRecovery;
+            verified = std::move(captured.package);
+        } else if (!installed(id, &verified, error)) return ProfileChange::NeedsRecovery;
         oldManifest = verified.manifest;
         if (old.value("digest") == QString::fromLatin1(candidate.digest)
-            && old.value("identity").toObject() == identityJson(candidate.identity)) {
-            if (!distributionApproval) return true;
+            && old.value("identity").toObject() == identityJson(candidate.identity)
+            && old.value("grants").toObject() == grants) {
+            if (!distributionApproval) return ProfileChange::Applied;
             state.insert("distributionApproval", QString::fromLatin1(candidate.digest));
-            return saveState(id, state, error);
+            return saveStateLocked(id, state, error, true, context);
         }
     }
     QJsonObject priorSettings = old.value("settings").toObject();
@@ -1084,84 +1122,105 @@ bool PackageStore::installLocked(const PackageCandidate& candidate,const QJsonOb
     const auto savedPath = QDir(m_root).filePath(QStringLiteral("retained-settings/") + id + QStringLiteral(".json"));
     if (old.isEmpty() && QFileInfo::exists(savedPath)) {
         QJsonObject archive;
-        if (!readJson(savedPath, &archive, error)) return false;
+        if (!(context ? catalogueObject(savedPath, 4 * 1024 * 1024, &archive, error) : readJson(savedPath, &archive, error))) return failure;
         if (archive.value("formatVersion") == 2 && archive.value("id") == id) {
             const auto identity = readIdentity(archive.value("identity").toObject());
             if (identity.source == candidate.identity.source && identity.developerSource == candidate.identity.developerSource
                 && identity.distributionSource == candidate.identity.distributionSource) {
                 if (!Manifest::parse(QJsonDocument(archive.value("manifest").toObject()).toJson(), &oldManifest, error)
-                    || oldManifest.id != id) return fail(error, QStringLiteral("The saved settings manifest is not correct."));
+                    || oldManifest.id != id) return refuse(QStringLiteral("The saved settings manifest is not correct."));
                 priorSettings = archive.value("settings").toObject(); retainedSettings = true;
             }
         }
     }
     if (!migrateSettings(candidate.manifest, candidate.contents, old.isEmpty() && !retainedSettings ? nullptr : &oldManifest,
-                         priorSettings, grants, &nextSettings, error)) return false;
-    if (!collectPrivateStorage(id, state, error)) return false;
+                         priorSettings, grants, &nextSettings, error)) return failure;
     QJsonObject priorDataRelease = old;
     if (old.isEmpty()) {
         const auto archivePath = QDir(privateStorageDirectory(id)).filePath(QStringLiteral("../archive.json"));
         if (QFileInfo::exists(archivePath)) {
             QJsonObject archive;
-            if (!readJson(archivePath, &archive, error) || archive.value("formatVersion") != 1 || archive.value("id") != id)
-                return fail(error, QStringLiteral("The saved private storage archive is not correct."));
+            if (!(context ? catalogueObject(archivePath, 4 * 1024 * 1024, &archive, error) : readJson(archivePath, &archive, error)) || archive.value("formatVersion") != 1 || archive.value("id") != id)
+                return refuse(QStringLiteral("The saved private storage archive is not correct."));
             const auto identity = readIdentity(archive.value("identity").toObject());
             if (identity.source == candidate.identity.source && identity.developerSource == candidate.identity.developerSource
                 && identity.distributionSource == candidate.identity.distributionSource) priorDataRelease = archive;
         }
     }
+    QJsonObject generation = state;
+    if (old.isEmpty()) generation.insert("generation", 1);
+    else if (!nextPackageGeneration(&generation, error, context, &failure)) return failure;
+    const bool settingsChanged = !old.isEmpty() && (nextSettings != old.value("settings").toObject()
+        || old.value("settingsVersion").toInt() != candidate.manifest.settingsVersion);
+    const double oldSettingsRevision = old.value("settingsRevision").toDouble(0);
+    if (context && settingsChanged && oldSettingsRevision >= 9007199254740991.)
+        return refuse(QStringLiteral("The settings revision limit was reached."));
+    auto history = state.value("lockedTags").toObject();
+    const QString historyTag = (candidate.identity.distributionSource ? QStringLiteral("distribution:") : QString{}) + candidate.identity.tag;
+    history.insert(historyTag, QJsonObject{{"commitId", candidate.identity.commitId},
+        {"tagObjectId", candidate.identity.tagObjectId}, {"digest", QString::fromLatin1(candidate.digest)}});
+    versions.insert(candidate.manifest.version, QString::fromLatin1(candidate.digest));
+    if (history.size() > 1024 || versions.size() > 1024)
+        return refuse(QStringLiteral("The package release history is full. The installed release stays active."));
+    auto mutation = context ? std::optional<StoreAuthorityMutation>(m_authority.mutation()) : std::nullopt;
+    if (!profileCurrent(context, error)) return ProfileChange::RolledBack;
+    failure = ProfileChange::NeedsRecovery;
+    if (!collectPrivateStorage(id, state, error) || !profileCurrent(context, error)) return failure;
     QJsonObject nextStorage;
     if (candidate.manifest.permissionDeclared(QStringLiteral("storage.private")) || priorDataRelease.contains("storage")) {
         QJsonObject data;
         if (priorDataRelease.contains("storage")) {
-            if (!storageSnapshot(privateStorageDirectory(id), priorDataRelease, oldManifest, &data, error)) return false;
+            if (!storageSnapshot(privateStorageDirectory(id), priorDataRelease, oldManifest, &data, error)) return failure;
             if (candidate.manifest.permissionDeclared(QStringLiteral("storage.private"))) {
                 auto quota = storageQuota(candidate.manifest, grants);
                 if (quota < 0) quota = PrivateStorageLimits::MaximumBytes;
                 QJsonObject migrated;
-                if (!migratePrivateStorage(candidate.manifest, candidate.contents, data.value("schemaVersion").toInt(), data, quota, &migrated, error)) return false;
+                if (!migratePrivateStorage(candidate.manifest, candidate.contents, data.value("schemaVersion").toInt(), data, quota, &migrated, error)) return failure;
                 data = migrated;
             }
         } else data = emptyPrivateStorage(privateStorageVersion(candidate.manifest));
         QString hash;
-        if (!writePrivateStorage(privateStorageDirectory(id), data, &hash, error)) return false;
+        if (!profileCurrent(context, error) || !writePrivateStorage(privateStorageDirectory(id), data, &hash, error)) return failure;
         const auto prior = priorDataRelease.value("storage").toObject();
         auto revision = prior.value("revision").toDouble(0);
         if (!prior.isEmpty() && prior.value("digest").toString() != hash) {
             if (revision >= 9007199254740991.0)
-                return fail(error, QStringLiteral("The private storage revision limit was reached."));
+                return refuse(QStringLiteral("The private storage revision limit was reached."));
             ++revision;
         }
         nextStorage = {{"version", data.value("schemaVersion")}, {"digest", hash},
             {"revision", revision}};
     }
+    if (!profileCurrent(context, error)) return failure;
     const auto destination = releaseDirectory(id, QString::fromLatin1(candidate.digest));
     if (QFileInfo::exists(destination)) {
         Manifest verified;
         QMap<QString, QByteArray> files;
         if (!Manifest::loadDirectory(destination, &verified, &files, error) || packageDigest(files) != candidate.digest)
-            return fail(error, QStringLiteral("The installed immutable release failed its integrity check."));
+            return refuse(QStringLiteral("The installed immutable release failed its integrity check."));
     } else {
         const auto releaseParent = QFileInfo(destination).absolutePath();
-        if (!QDir().mkpath(releaseParent)) return fail(error, QStringLiteral("The app cannot create the release directory."));
+        if (!QDir().mkpath(releaseParent)) return refuse(QStringLiteral("The app cannot create the release directory."));
         QTemporaryDir staging(QDir(releaseParent).filePath(QStringLiteral(".staging-XXXXXX")));
-        if (!staging.isValid()) return fail(error, QStringLiteral("The app cannot stage the release."));
+        if (!staging.isValid()) return refuse(QStringLiteral("The app cannot stage the release."));
         for (auto it = candidate.contents.begin(); it != candidate.contents.end(); ++it) {
+            if (!profileCurrent(context, error)) return failure;
             const auto path = QDir(staging.path()).filePath(it.key());
             if (!QDir().mkpath(QFileInfo(path).absolutePath()))
-                return fail(error, QStringLiteral("The app cannot stage the resource directory."));
+                return refuse(QStringLiteral("The app cannot stage the resource directory."));
             QFile file(path);
             if (!file.open(QIODevice::WriteOnly) || file.write(it.value()) != it.value().size())
-                return fail(error, QStringLiteral("The app cannot stage the package resource."));
+                return refuse(QStringLiteral("The app cannot stage the package resource."));
             file.close();
             file.setPermissions(QFile::ReadOwner);
         }
         Manifest verified;
         QMap<QString, QByteArray> files;
         if (!Manifest::loadDirectory(staging.path(), &verified, &files, error) || packageDigest(files) != candidate.digest)
-            return fail(error, QStringLiteral("The staged release failed its integrity check."));
+            return refuse(QStringLiteral("The staged release failed its integrity check."));
+        if (!profileCurrent(context, error)) return failure;
         if (!QDir().rename(staging.path(), destination))
-            return fail(error, QStringLiteral("The app cannot activate the immutable release directory."));
+            return refuse(QStringLiteral("The app cannot activate the immutable release directory."));
         staging.setAutoRemove(false);
     }
     QJsonObject current{
@@ -1169,31 +1228,23 @@ bool PackageStore::installLocked(const PackageCandidate& candidate,const QJsonOb
         {"version", candidate.manifest.version}, {"grants", grants},
         {"settingsVersion", candidate.manifest.settingsVersion}, {"settings", nextSettings},
         {"storageGeneration", QUuid::createUuid().toString(QUuid::WithoutBraces)},
-        {"settingsRevision", old.value("settingsRevision").toDouble(0)
-            + (!old.isEmpty() && (nextSettings != old.value("settings").toObject()
-                || old.value("settingsVersion").toInt() != candidate.manifest.settingsVersion) ? 1 : 0)}
+        {"settingsRevision", oldSettingsRevision + (settingsChanged ? 1 : 0)}
     };
     if (!nextStorage.isEmpty()) current.insert(QStringLiteral("storage"), nextStorage);
-    auto history = state.value("lockedTags").toObject();
-    const QString historyTag = (candidate.identity.distributionSource ? QStringLiteral("distribution:") : QString{}) + candidate.identity.tag;
-    history.insert(historyTag, QJsonObject{{"commitId", candidate.identity.commitId},
-        {"tagObjectId", candidate.identity.tagObjectId}, {"digest", QString::fromLatin1(candidate.digest)}});
-    versions.insert(candidate.manifest.version, QString::fromLatin1(candidate.digest));
-    if (history.size() > 1024 || versions.size() > 1024)
-        return fail(error, QStringLiteral("The package release history is full. The installed release stays active."));
     QJsonObject next{
-        {"formatVersion", 1}, {"id", id}, {"generation", state.value("generation").toDouble(0) + 1},
-        {"enabled", old.isEmpty() ? false : state.value("enabled").toBool()},
+        {"formatVersion", 1}, {"id", id}, {"generation", generation.value("generation")},
+        {"enabled", old.isEmpty() ? initiallyEnabled : state.value("enabled").toBool()},
         {"current", current}, {"previous", old}, {"lockedTags", history}, {"lockedVersions", versions},
         {"retained", retainSnapshot(state.value("retained").toArray(), old)},
         {"credentialReferences", state.value("credentialReferences").toObject()}
     };
     if (distributionApproval) next.insert("distributionApproval", QString::fromLatin1(candidate.digest));
     // Startup cancellation can discard staged immutable bytes before activation.
-    // Passing this last check admits the state commit and its paired enable.
+    // Guarded bootstrap includes enable in this state commit. Ordinary
+    // bootstrap pairs this commit with enable under its existing outer lock.
     if(cancelBeforeCommit && RepositoryCancellation::requested())
-        return fail(error,QStringLiteral("The app canceled the startup package check."));
-    return saveState(id, next, error);
+        return refuse(QStringLiteral("The app canceled the startup package check."));
+    return saveStateLocked(id, next, error, !context, context);
 }
 bool PackageStore::ensureDistributionPackage(const QString& directory,const Manifest& offer,
     DistributionInstallResult* output,QString* error)
@@ -1227,10 +1278,55 @@ bool PackageStore::ensureDistributionPackage(const QString& directory,const Mani
     if(RepositoryCancellation::requested())return fail(error,QStringLiteral("The app canceled the startup package check."));
     // Once this entry commits, finish its enable under the same lock even if
     // cancellation arrives. The next entry will not start after cancellation.
-    if(!installLocked(candidate,offer.requiredPermissions,error,false,true)
+    if(installLocked(candidate,offer.requiredPermissions,error,false,true) != ProfileChange::Applied
         || setEnabledLocked(id,true,error) != ProfileChange::Applied)return false;
     if(output)output->state=DistributionInstallResult::State::Installed;
     return true;
+}
+ProfileChange PackageStore::ensureDistributionPackage(const StoreProfileWriteContext& context,
+    const QString& directory, const Manifest& offer, DistributionInstallResult* output, QString* error)
+{
+    if (output) *output = {};
+    return withProfilePackage(m_root, context, offer.id, error, [&](PackageStore& store) {
+        const auto id = offer.id;
+        if (RepositoryCancellation::requested())
+            return refuseProfile(error, QStringLiteral("The app canceled the startup package check."));
+        if (store.packageRetiring(id))
+            return refuseProfile(error, QStringLiteral("The add-on is being removed."));
+        MetadataCatalogueSnapshot policy;
+        if (!store.cataloguePolicy(&policy, error)) return ProfileChange::NeedsRecovery;
+        const auto statePath = QDir(store.m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
+        const bool present = QFileInfo::exists(statePath) || QFileInfo(statePath).isSymLink()
+            || QFileInfo::exists(statePath + QStringLiteral(".backup")) || QFileInfo(statePath + QStringLiteral(".backup")).isSymLink();
+        if (!present && QFileInfo::exists(QFileInfo(statePath).absolutePath()))
+            return refuseProfile(error, QStringLiteral("Recover or remove the incomplete package before an install."), ProfileChange::NeedsRecovery);
+        QJsonObject state; MetadataCataloguePackage existing;
+        if (present && (!store.loadState(id, &state, error, &context) || state.value("recoveryRequired").toBool()
+            || !store.catalogueStatePackage(id, state, policy.safeMode, policy.distributionPolicy, &existing, nullptr, error)))
+            return ProfileChange::NeedsRecovery;
+        const bool approved = present && existing.package.identity.distributionSource
+            && !existing.package.identity.developerSource
+            && state.value("distributionApproval").toString() == QString::fromLatin1(existing.package.digest);
+        if (policy.distributionPolicy.value("removed").toObject().value(id).toBool() && !approved) {
+            if (output) output->state = DistributionInstallResult::State::Suppressed;
+            return ProfileChange::Applied;
+        }
+        if (present) {
+            if (output) output->state = DistributionInstallResult::State::Existing;
+            return ProfileChange::Applied;
+        }
+        ReleaseIdentity identity; identity.source = offer.source.toString();
+        identity.tag = QStringLiteral("v") + offer.version; identity.distributionSource = true;
+        PackageCandidate candidate;
+        if (!inspectDirectory(directory, identity, &candidate, error)
+            || !validateGrants(candidate.manifest, offer.requiredPermissions, error)) return ProfileChange::RolledBack;
+        if (candidate.manifest.document != offer.document)
+            return refuseProfile(error, QStringLiteral("The app package changed. Start the app again before a package review."));
+        if (!profileCurrent(&context, error) || RepositoryCancellation::requested()) return ProfileChange::RolledBack;
+        const auto installed = store.installLocked(candidate, offer.requiredPermissions, error, false, true, &context, true);
+        if (installed == ProfileChange::Applied && output) output->state = DistributionInstallResult::State::Installed;
+        return installed;
+    }, true);
 }
 bool PackageStore::installed(const QString& id, InstalledPackage* output, QString* error) const
 {
@@ -1410,7 +1506,20 @@ bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
     if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
-    const auto retirement = m_authority.retirePackage(id);
+    return uninstallLocked(id, removeData, error, nullptr) == ProfileChange::Applied;
+}
+ProfileChange PackageStore::uninstall(const StoreProfileWriteContext& context,
+    const QString& id, bool removeData, QString* error)
+{
+    return withProfilePackage(m_root, context, id, error, [&](PackageStore& store) {
+        return store.uninstallLocked(id, removeData, error, &context);
+    }, removeData);
+}
+ProfileChange PackageStore::uninstallLocked(const QString& id, bool removeData, QString* error,
+    const StoreProfileWriteContext* context)
+{
+    ProfileChange failure = ProfileChange::RolledBack;
+    const auto refuse = [&](const QString& message) { return refuseProfile(error, message, failure); };
     const QString packagePath = QStringLiteral("packages/") + id;
     const QString savedPath = QStringLiteral("retained-settings/") + id + QStringLiteral(".json");
     const QString privatePath = QStringLiteral("private-storage/") + id;
@@ -1418,50 +1527,64 @@ bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
     if (!ownedRemovalPath(m_root, packagePath, true, error)
         || !ownedRemovalPath(m_root, savedPath, false, error)
         || !ownedRemovalPath(m_root, privatePath, true, error)
-        || !ownedRemovalPath(m_root, corruptPath, true, error)) return false;
+        || !ownedRemovalPath(m_root, corruptPath, true, error)) return context ? ProfileChange::NeedsRecovery : failure;
     const auto folder = QDir(m_root).filePath(packagePath);
     if (!QFileInfo::exists(folder) && (!removeData || (!QFileInfo::exists(QDir(m_root).filePath(corruptPath))
             && !QFileInfo::exists(QDir(m_root).filePath(privatePath)) && !QFileInfo::exists(QDir(m_root).filePath(savedPath)))))
-        return fail(error, QStringLiteral("The package is not installed."));
-    QJsonObject state;
-    InstalledPackage verified;
-    const bool valid = loadState(id, &state, nullptr) && installed(id, &verified, nullptr);
+        return refuse(QStringLiteral("The package is not installed."));
+    if (!profileCurrent(context, error)) return ProfileChange::RolledBack;
     const auto mutation = m_authority.mutation();
+    if (!profileCurrent(context, error)) return ProfileChange::RolledBack;
+    const auto retirement = m_authority.retirePackage(id);
+    if (!profileCurrent(context, error)) return ProfileChange::RolledBack;
+    QJsonObject state; InstalledPackage verified; bool valid = false;
+    if (context) {
+        MetadataCataloguePackage captured;
+        valid = loadState(id, &state, nullptr, context) && !state.value("recoveryRequired").toBool()
+            && catalogueStatePackage(id, state, false, {}, &captured, nullptr, nullptr);
+        if (valid) verified = std::move(captured.package);
+    } else valid = loadState(id, &state, nullptr) && installed(id, &verified, nullptr);
+    failure = ProfileChange::NeedsRecovery;
     if (!removeData && valid) {
         const auto retained = QDir(m_root).filePath(QStringLiteral("retained-settings"));
         const auto current = state.value("current").toObject();
         const QJsonObject archive{{"formatVersion", 2}, {"id", id}, {"identity", current.value("identity")},
             {"manifest", verified.manifest.document}, {"settings", current.value("settings")}};
-        if (!QDir().mkpath(retained) || !writeJson(QDir(m_root).filePath(savedPath), archive, error)) return false;
+        if (!QDir().mkpath(retained) || !writeJson(QDir(m_root).filePath(savedPath), archive, error, context)) return failure;
         if (current.contains("storage")) {
             const auto parent = QFileInfo(privateStorageDirectory(id)).absolutePath();
             if (!QDir().mkpath(parent) || !writeJson(QDir(parent).filePath(QStringLiteral("archive.json")),
-                {{"formatVersion", 1}, {"id", id}, {"identity", current.value("identity")}, {"storage", current.value("storage")}}, error)) return false;
+                {{"formatVersion", 1}, {"id", id}, {"identity", current.value("identity")}, {"storage", current.value("storage")}}, error, context)) return failure;
         }
     }
     if (!removeData && !valid) {
         const auto retained = QDir(m_root).filePath(corruptPath);
-        if (!QDir().mkpath(retained) || !QDir().rename(folder, QDir(retained).filePath(QUuid::createUuid().toString(QUuid::Id128))))
-            return fail(error, QStringLiteral("The app cannot retain the damaged package files."));
-        return true;
+        if (!profileCurrent(context, error) || !QDir().mkpath(retained) || !QDir().rename(folder, QDir(retained).filePath(QUuid::createUuid().toString(QUuid::Id128))))
+            return refuse(QStringLiteral("The app cannot retain the damaged package files."));
+        return ProfileChange::Applied;
     }
     if (removeData) {
-        const auto saved = QDir(m_root).filePath(savedPath);
-        if ((QFileInfo::exists(saved) && !QFile::remove(saved))
-            || (QFileInfo::exists(QDir(m_root).filePath(privatePath)) && !QDir(QDir(m_root).filePath(privatePath)).removeRecursively())
-            || (QFileInfo::exists(QDir(m_root).filePath(corruptPath)) && !QDir(QDir(m_root).filePath(corruptPath)).removeRecursively()))
-            return fail(error, QStringLiteral("The app cannot delete all saved package data. The add-on stays withdrawn. Try deletion again."));
+        for (const auto& path : {savedPath, privatePath, corruptPath}) {
+            if (!profileCurrent(context, error)) return failure;
+            const auto absolute = QDir(m_root).filePath(path);
+            if (QFileInfo::exists(absolute)
+                && !(path == savedPath ? QFile::remove(absolute) : QDir(absolute).removeRecursively()))
+                return refuse(QStringLiteral("The app cannot delete all saved package data. The add-on stays withdrawn. Try deletion again."));
+        }
     }
-    if (!QFileInfo::exists(folder)) return true;
+    if (!QFileInfo::exists(folder)) return ProfileChange::Applied;
     const QString tombstone = folder + QStringLiteral(".removing-") + QUuid::createUuid().toString(QUuid::Id128);
-    if (!QDir().rename(folder, tombstone)) return fail(error, QStringLiteral("The app cannot withdraw the installed package."));
+    if (!profileCurrent(context, error)) return failure;
+    if (!QDir().rename(folder, tombstone)) return refuse(QStringLiteral("The app cannot withdraw the installed package."));
+    if (!profileCurrent(context, error)) return failure;
     if (!QDir(tombstone).removeRecursively()) {
-        if (QDir().rename(tombstone, folder) && !QFileInfo::exists(QDir(folder).filePath(QStringLiteral("state.json"))))
+        if (!context && QDir().rename(tombstone, folder) && !QFileInfo::exists(QDir(folder).filePath(QStringLiteral("state.json"))))
             writeJson(QDir(folder).filePath(QStringLiteral("state.json")), {}, nullptr);
-        return fail(error, QStringLiteral("The package cleanup did not finish. Try deletion again."));
+        return refuse(QStringLiteral("The package cleanup did not finish. Try deletion again."));
     }
-    return true;
+    return ProfileChange::Applied;
 }
+
 bool PackageStore::settings(const QString& id, QJsonObject* output, quint64* revision, QString* error) const
 {
     InstalledPackage package;

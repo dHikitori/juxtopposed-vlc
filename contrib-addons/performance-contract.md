@@ -628,3 +628,12 @@ polling loop, thread or worker process is added. See
 [package state writes](profile-package-writes.md). The peer channel and
 application mount remain open. Full app performance is not established by
 these component checks.
+
+Install, removal and bundled setup now use guarded lifecycle paths. File
+checks and staging stay on explicit joined work. The cohort passes 155
+normal, 155 ASAN/UBSAN and 147 native Windows checks. It covers private data
+retention, real publication failure, junction refusal, native cancellation
+and initial bundle enable in one state commit. No idle task, timer, polling
+loop, thread or worker process is added. See
+[lifecycle writes](profile-lifecycle-writes.md). The application has not mounted
+the peer flow. Full app idle CPU, response, cursor and shutdown checks remain open.

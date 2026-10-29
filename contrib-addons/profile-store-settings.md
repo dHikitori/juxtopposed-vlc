@@ -97,9 +97,9 @@ owner activation remains off.
 
 Enable, rollback, package settings and package recovery now have guarded
 bindings. See [package state writes](profile-package-writes.md). The remaining
-store work includes install, uninstall, distribution bootstrap and complete
-profile recovery. These paths need explicit locked entry points and coherent
-outcome handling.
+store work now has [guarded lifecycle entry points](profile-lifecycle-writes.md)
+for install, uninstall and distribution bootstrap. Complete profile recovery,
+the retained writer scope, peer negotiation and the application mount remain open.
 Guest data-only storage keeps its separate policy. The control channel must
 bind each ticket to its connection and operation, revoke all joined and
 joining peers, and close local readiness on channel loss. The application
