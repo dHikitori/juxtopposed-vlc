@@ -65,6 +65,15 @@ on Linux, plus 32 native Windows checks. The helper inheritance and native
 cancellation barriers pass. The cross-process control channel, stamped writer transaction, and
 production mount remain open. See [profile coordination](profile-authority-coordination.md).
 
+The durable profile generation and guarded writer helper now pass 70 normal
+and 70 ASAN/UBSAN checks on Linux, plus 66 native Windows checks. Real process
+replacement refuses old tickets. A killed writer leaves a recovery marker.
+Recovery validates the store before a new ready generation. The callback
+retirement control exposed a use-after-free in the initial helper; retained
+state and a closed guard repair it. The peer control channel and locked
+production store bindings remain open. See
+[guarded profile generations](profile-generation-transactions.md).
+
 ## Verified work
 
 | Area | Implementation and evidence |

@@ -3,7 +3,9 @@
 Multiple app processes must be able to use one local add-on profile. A change
 to that profile must revoke old native write authority in every process.
 The full gate remains open. The native fence below is implemented and tested.
-The coordinator transport and production mount are not implemented yet.
+The saved generation and guarded writer helper are now implemented. See
+[guarded generations](profile-generation-transactions.md). The coordinator
+transport and production mount are not implemented yet.
 Native metadata owner activation stays off.
 
 A peer is one app process. A fence lease is one held OS lock. An epoch is a
@@ -198,7 +200,8 @@ performance.
 ## Remaining implementation gates
 
 - Add the strict control protocol and independent joined owner.
-- Add the stamped generation and bounded writer ticket.
+- Bind the implemented generation and writer guard to an authenticated
+  connection and pending request.
 - Make mutation refusal explicit at every authority write entry point.
 - Retain the exclusive writer lease through outer store-lock release.
 - Attach peer readiness to the memory token and all native cancellation paths.

@@ -599,3 +599,12 @@ checks and the real cross-process token gap. The coordinator transport,
 stamped writer transaction, startup mount, and app drain remain open. This
 component does not establish full app idle CPU or UI response. The Windows
 player package is unchanged.
+
+
+The [generation and writer layer](profile-generation-transactions.md) now
+keeps profile election, saved stamps, and transaction callbacks on joined
+work. Its guard checks native/memory state and a monotonic deadline. A
+callback can retire the owner without leaving a live guard or freed state.
+The actual peer control channel and production store mount remain open.
+There is no new idle timer or polling loop in this layer. Its component
+checks do not establish full app performance.
