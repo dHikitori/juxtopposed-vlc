@@ -39,6 +39,13 @@ public:
     // Reserve before invoking a backend. A completion can arrive inline.
     bool reserve(unsigned ordinal);
     bool acceptPortable(unsigned ordinal, std::optional<AddonMetadataCompletionReceipt>&&);
+    // Transport completion only. The runner must pass these SAME result bytes
+    // through shared consumer acceptance, then approve the resulting image.
+    // The slot remains active during image resolution; failure must call block.
+    bool acceptPortablePositive(unsigned ordinal, std::optional<AddonMetadataCompletionReceipt>&&,
+                                const QJsonObject& exactResult);
+    int trySealPositive(unsigned ordinal, vlc_metadata_job_t* exactPendingChild,
+                        input_item_t* approved, const char* imageUri);
     // This method obtains authority from Context itself. No raw enum, JSON
     // result, or caller-constructed NegativeOutcome can enter the ledger.
     bool acceptNativeClaim(unsigned ordinal, AddonNativeProviderContext&, const QString& opaqueClaim);

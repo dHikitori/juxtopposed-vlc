@@ -8,6 +8,7 @@
 #include <vlc_input_item.h>
 #include <vlc_input.h>
 #include <vlc_meta.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_threads.h>
 #include "../../../../../src/preparser/metadata_local.h"
 #include "../../../../../src/preparser/metadata_artwork_outcome.c"
@@ -53,6 +54,20 @@ int keeper_fixture_prepare_anchor(struct keeper_fixture *f)
     input_item_Release(result); if (!completed) return VLC_EGENERIC;
     int status = vlc_metadata_job_Apply(f->child, f->working, 0, NULL);
     if (status == VLC_SUCCESS) status = vlc_metadata_job_PrepareNotFoundArtwork(f->anchor, f->child, f->working);
+    if (status != VLC_SUCCESS) return status;
+    return vlc_metadata_job_Complete(f->anchor, VLC_SUCCESS, f->working, NULL, 0) ? VLC_SUCCESS : VLC_EGENERIC;
+}
+input_item_t *keeper_fixture_approved(struct keeper_fixture *f, const char *uri)
+{
+    input_item_t *result = input_item_Copy(vlc_metadata_job_GetRequest(f->child)->item);
+    if (result && vlc_artwork_item_SetApprovedURI(result, uri) != VLC_SUCCESS) { input_item_Release(result); return NULL; }
+    return result;
+}
+int keeper_fixture_prepare_fetched(struct keeper_fixture *f, input_item_t *approved)
+{
+    if (!vlc_metadata_job_Complete(f->child, VLC_SUCCESS, approved, NULL, 0)) return VLC_EGENERIC;
+    int status = vlc_metadata_job_Apply(f->child, f->working, 0, NULL);
+    if (status == VLC_SUCCESS) status = vlc_metadata_job_PrepareFetchedArtwork(f->anchor, f->child, f->working, false);
     if (status != VLC_SUCCESS) return status;
     return vlc_metadata_job_Complete(f->anchor, VLC_SUCCESS, f->working, NULL, 0) ? VLC_SUCCESS : VLC_EGENERIC;
 }

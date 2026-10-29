@@ -62,4 +62,18 @@ int NativeArtworkAttemptKeeper::sealPending(vlc_metadata_job_t* child,
     else owner->revoke();
     return status;
 }
+int NativeArtworkAttemptKeeper::sealSource(vlc_metadata_job_t* child, input_item_t* approved,
+    const char* imageUri, std::unique_ptr<NativeArtworkAttemptKeeper>& owner) noexcept
+{
+    if (!owner || !owner->current()) {
+        if (owner) owner->revoke();
+        return VLC_EINVAL;
+    }
+    const auto status = vlc_metadata_job_SealArtworkSource(child, approved, imageUri,
+        owner->m_admission->nativeHandle(), owner.get(), release);
+    if (status == VLC_SUCCESS) owner.release();
+    else owner->revoke();
+    return status;
+}
+
 }

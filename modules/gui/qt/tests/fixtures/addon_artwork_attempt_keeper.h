@@ -11,6 +11,8 @@ struct keeper_fixture *keeper_fixture_new(void);
 void keeper_fixture_delete(struct keeper_fixture *);
 vlc_metadata_job_t *keeper_fixture_child(struct keeper_fixture *);
 int keeper_fixture_prepare_anchor(struct keeper_fixture *);
+input_item_t *keeper_fixture_approved(struct keeper_fixture *, const char *uri);
+int keeper_fixture_prepare_fetched(struct keeper_fixture *, input_item_t *approved);
 int keeper_fixture_apply(struct keeper_fixture *);
 void keeper_fixture_lock_target(struct keeper_fixture *);
 void keeper_fixture_unlock_target(struct keeper_fixture *);

@@ -2,9 +2,10 @@
 
 This guide defines the complete `no_match` path for `metadata@1`. The provider
 keeps the normal message protocol. Only the host can create a completion receipt.
-The current receipt code supports `no_match` only. Other result statuses do not
-create this receipt. Native aggregate and final metadata writes have separate
-authority gates.
+The host supports strict `no_match` receipts and positive completion receipts
+for `match` and `partial`. A positive receipt binds the completed result object;
+the consumer still must accept its identities and fields. Native aggregate,
+image approval and final metadata writes have separate authority gates.
 
 ## NoMatch result
 
@@ -34,6 +35,25 @@ failed, timed-out, malformed, and incomplete calls prevent a receipt.
 
 A guest `complete` flag or claim object cannot create host evidence. A guest
 `unsupported` result cannot create an applicability receipt.
+
+## Positive completion
+
+A `match` or `partial` result can supply a positive receipt only for an actual
+current invocation with complete host observations and no error. The data must
+be a nonempty bounded object. The host binds a digest of its compact JSON
+encoding to the exact invocation and context. It can compare the same object
+before consumer acceptance. Native-plan preparation publishes the receipt only
+after a clean worker exit.
+
+The receipt does not establish that the returned identity or fields are
+acceptable. The shared consumer must check them before image resolution or a
+metadata write. A positive receipt cannot certify NoMatch. An image failure
+can permit a later provider but cannot become a negative lookup result.
+
+The current portable artwork aggregate keeps the slot reserved during consumer
+acceptance and image work. It can transfer native Store watches and admission
+into Core after the caller has an approved local image. No receipt grants that
+image approval. See [the host transfer contract](../artwork-positive-host-transfer.md).
 
 ## HTTP status policy
 
@@ -108,9 +128,15 @@ providers before it can use an aggregate result. The final native field and
 revision admission remains required. A NoMatch receipt alone cannot write the
 artwork status or metadata.
 
-The copied host fixture passed 74 completion cases and 79 shared identity cases
+The earlier copied host fixture passed 74 completion cases and 79 shared identity cases
 in normal and sanitizer modes. It includes a real Rust worker, the committed
 French-TV Wasm table, adversarial native protocol frames, and actual local Qt TLS
 responses. This evidence does not prove a live service, the final native
 aggregate, or a mounted owner path. The current combined build passes all 200 completion, identity, catalogue, and
 store-authority cases after the explicit worker and Wasm path change.
+
+The current receipt and artwork aggregate group passes 86 and 58 cases,
+respectively, both normally and with sanitizers. It verifies portable positive
+source transfer through final Core Apply. The serial Service runner, native
+positive path and mounted owner remain separate integration gates. See
+[the current evidence](../artwork-positive-host-transfer.md).

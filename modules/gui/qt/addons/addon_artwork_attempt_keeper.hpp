@@ -37,6 +37,10 @@ public:
         const std::array<unsigned char, 32>& planDigest,
         const std::vector<meta_fetcher_outcome_t>& outcomes,
         std::unique_ptr<NativeArtworkAttemptKeeper>& owner) noexcept;
+    // Bind an image that already passed consumer and native image approval.
+    // This grants no image approval. Failure revokes and keeps owner intact.
+    static int sealSource(vlc_metadata_job_t* exactPendingChild, input_item_t* approved,
+        const char* imageUri, std::unique_ptr<NativeArtworkAttemptKeeper>& owner) noexcept;
 private:
     explicit NativeArtworkAttemptKeeper(Parts) noexcept;
     static void release(void*) noexcept;

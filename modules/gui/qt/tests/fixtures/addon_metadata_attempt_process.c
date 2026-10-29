@@ -145,10 +145,12 @@ int main(int argc, char **argv)
             for (unsigned i = 0; i < 32; ++i) {
                 struct pending *call = &pending[i];
                 if (!call->active || !equals(owner, call->id)) continue;
-                if (!strcmp(call->mode, "\"host-retry\"") && call->step++ == 1) {
+                if ((!strcmp(call->mode, "\"host-retry\"") || !strcmp(call->mode, "\"host-positive-retry\"")) && call->step++ == 1) {
                     if (emit_host(call, 0, NULL)) { free(line); return 8; }
                 } else {
-                    if (emit_result(call, "no_match", "{}", NULL, NULL)) { free(line); return 8; }
+                    const int positive = strstr(call->mode, "positive") != NULL;
+                    if (emit_result(call, positive ? "match" : "no_match",
+                        positive ? "{\"fields\":{\"artwork\":{\"id\":\"fixture-image\"}}}" : "{}", NULL, NULL)) { free(line); return 8; }
                     call->active = 0;
                 }
                 break;
@@ -162,21 +164,33 @@ int main(int argc, char **argv)
         if (!call || !copy_text(call->id, sizeof(call->id), id)) { free(line); return 9; }
         strcpy(call->mode, "\"zero\""); call->step = 1; call->active = 1;
         struct text context = {0}, mode, identity, request;
-        if (field(root, "context", &context) && field(context, "fixture", &mode)
+        if (field(root, "context", &context) && (field(context, "fixture", &mode) || field(context, "query", &mode))
             && !copy_text(call->mode, sizeof(call->mode), mode)) { free(line); return 10; }
         if (!strcmp(call->mode, "\"hold\"")) continue;
         if (!strcmp(call->mode, "\"host\"") || !strcmp(call->mode, "\"host-retry\"")
-            || !strcmp(call->mode, "\"pending\"")) {
+            || !strcmp(call->mode, "\"pending\"") || !strcmp(call->mode, "\"pending-positive\"")
+            || !strcmp(call->mode, "\"host-positive\"") || !strcmp(call->mode, "\"host-positive-retry\"")) {
             if (emit_host(call, 0, NULL)) { free(line); return 8; }
-            if (strcmp(call->mode, "\"pending\"")) continue;
-        } else if (!strcmp(call->mode, "\"network\"")) {
+            if (strcmp(call->mode, "\"pending\"") && strcmp(call->mode, "\"pending-positive\"")) continue;
+        } else if (!strcmp(call->mode, "\"network\"") || !strcmp(call->mode, "\"network-positive\"")) {
             if (!field(context, "fixtureRequest", &request) || *request.begin != '{'
                 || request.end - request.begin > 8192 || emit_host(call, 1, &request)) { free(line); return 11; }
             continue;
         }
         const char *status = "no_match", *data = "{}", *extra = NULL;
         struct text *echo = NULL;
-        if (!strcmp(call->mode, "\"echo\"")) {
+        char *owned_data = NULL;
+        if (!strncmp(call->mode, "\"positive", 9) || !strcmp(call->mode, "\"pending-positive\"")) {
+            struct text media = {0}, payload;
+            field(context, "media", &media);
+            if ((!field(context, "fixtureData", &payload) && (!media.begin || !field(media, "fixtureData", &payload)))
+                || *payload.begin != '{') { free(line); return 12; }
+            const size_t size = (size_t)(payload.end - payload.begin);
+            owned_data = malloc(size + 1); if (!owned_data) { free(line); return 4; }
+            memcpy(owned_data, payload.begin, size); owned_data[size] = 0; data = owned_data;
+            status = !strcmp(call->mode, "\"positive-partial\"") ? "partial" : "match";
+            if (!strcmp(call->mode, "\"positive-error\"")) extra = ",\"error\":\"The fixture failed.\"";
+        } else if (!strcmp(call->mode, "\"echo\"")) {
             if (!field(context, "identity", &identity)) { free(line); return 12; }
             echo = &identity;
         } else if (!strcmp(call->mode, "\"returned\"")) {
@@ -198,8 +212,8 @@ int main(int argc, char **argv)
                 printf("{\"type\":\"result\",\"id\":%s,\"status\":\"no_match\",\"data\":{}}]}\n", call->id);
             else printf("{\"type\":\"host-call\",\"id\":\"late\",\"invocation\":%s,\"operation\":\"playback.observe\",\"request\":{}}]}\n", call->id);
             if (fflush(stdout)) { free(line); return 8; }
-        } else if (emit_result(call, status, data, echo, extra)) { free(line); return 8; }
-        call->active = 0;
+        } else if (emit_result(call, status, data, echo, extra)) { free(owned_data); free(line); return 8; }
+        free(owned_data); call->active = 0;
     }
     const int failed = ferror(stdin); free(line); return failed ? 13 : 0;
 }

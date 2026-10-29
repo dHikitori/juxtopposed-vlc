@@ -147,6 +147,63 @@ private slots:
         QVERIFY(!receipt->matches(capture.nativeSubject,0,contributionId,hash(QJsonObject::fromVariantMap(context)),QStringLiteral("other")));
         QCOMPARE(receipt->resultDigest(),hash({})); QVERIFY(!attempt->take().has_value());
     }
+    void positiveReceiptBindsTheExactResult_data() {
+        QTest::addColumn<QString>("mode");
+        QTest::newRow("match") << QStringLiteral("positive");
+        QTest::newRow("partial") << QStringLiteral("positive-partial");
+    }
+    void positiveReceiptBindsTheExactResult() {
+        QFETCH(QString,mode); Fixture fixture; QVERIFY(fixture.valid);
+        auto gate=std::make_shared<NativeGate>(); auto attempt=fixture.attempt(gate); QVERIFY(attempt);
+        const QJsonObject record{{"identity",QJsonObject{{"kind","movie"},{"title","Fixture"}}},
+            {"fields",QJsonObject{{"artwork",QJsonObject{{"id","opaque-image"}}}}}};
+        const QJsonObject data{{"records",QJsonArray{record}}};
+        auto context=fixture.context(mode); context["fixtureData"]=data.toVariantMap();
+        QSignalSpy result(fixture.manager.get(),&AddonManager::operationFinished);
+        fixture.manager->invoke(contributionId,"enrich",context,{},attempt); QTRY_COMPARE(result.size(),1);
+        auto receipt=attempt->take(); QVERIFY(receipt);
+        QCOMPARE(receipt->outcome(),mode=="positive" ? AddonMetadataCompletionReceipt::Outcome::Match : AddonMetadataCompletionReceipt::Outcome::Partial);
+        QVERIFY(receipt->matchesResult(data)); QCOMPARE(receipt->resultDigest(),hash(data));
+        auto changed=data; changed["identity"]=QJsonObject{{"title","Other"}}; QVERIFY(!receipt->matchesResult(changed));
+        const auto capture=fixture.capture(gate);
+        QVERIFY(receipt->matches(capture.nativeSubject,0,contributionId,hash(QJsonObject::fromVariantMap(context)),capture.partition));
+        QVERIFY(!attempt->take()); gate->revoke(); QVERIFY(!receipt->matchesResult(data));
+    }
+    void positiveReceiptRequiresCompleteHostWork_data() {
+        QTest::addColumn<QString>("mode"); QTest::addColumn<QString>("host"); QTest::addColumn<bool>("expected");
+        QTest::newRow("local result") << QStringLiteral("positive") << QString() << true;
+        QTest::newRow("explicit error") << QStringLiteral("positive-error") << QString() << false;
+        QTest::newRow("pending call") << QStringLiteral("pending-positive") << QStringLiteral("pending") << false;
+        QTest::newRow("complete call") << QStringLiteral("host-positive") << QStringLiteral("success") << true;
+        QTest::newRow("failed call") << QStringLiteral("host-positive") << QStringLiteral("fail") << false;
+        QTest::newRow("retry does not erase failure") << QStringLiteral("host-positive-retry") << QStringLiteral("retry") << false;
+    }
+    void positiveReceiptRequiresCompleteHostWork() {
+        QFETCH(QString,mode); QFETCH(QString,host); QFETCH(bool,expected);
+        Fixture fixture; QVERIFY(fixture.valid); if(!host.isEmpty()) QVERIFY(fixture.host(host));
+        auto gate=std::make_shared<NativeGate>(); auto attempt=fixture.attempt(gate); QVERIFY(attempt);
+        auto context=fixture.context(mode); context["fixtureData"]=QVariantMap{{"fields",QVariantMap{{"artwork",QVariantMap{{"id","image"}}}}}};
+        QSignalSpy result(fixture.manager.get(),&AddonManager::operationFinished);
+        fixture.manager->invoke(contributionId,"enrich",context,{},attempt); QTRY_COMPARE(result.size(),1);
+        QCOMPARE(attempt->take().has_value(),expected);
+    }
+    void positiveReceiptBoundsTheResult_data() {
+        QTest::addColumn<QJsonObject>("data");
+        QTest::newRow("empty") << QJsonObject{};
+        QTest::newRow("oversized field") << QJsonObject{{"fields",QString(65537,QLatin1Char('x'))}};
+        QJsonObject deep{{"field","value"}}; for(unsigned i=0;i<18;++i) deep=QJsonObject{{"nested",deep}};
+        QTest::newRow("depth") << deep;
+        QJsonArray many; for(unsigned i=0;i<1025;++i) many.append(int(i));
+        QTest::newRow("array count") << QJsonObject{{"records",many}};
+    }
+    void positiveReceiptBoundsTheResult() {
+        QFETCH(QJsonObject,data); Fixture fixture; QVERIFY(fixture.valid);
+        auto gate=std::make_shared<NativeGate>(); auto attempt=fixture.attempt(gate); QVERIFY(attempt);
+        auto context=fixture.context("positive"); context["fixtureData"]=data.toVariantMap();
+        QSignalSpy result(fixture.manager.get(),&AddonManager::operationFinished);
+        fixture.manager->invoke(contributionId,"enrich",context,{},attempt); QTRY_COMPARE(result.size(),1);
+        QVERIFY(!attempt->take());
+    }
     void actualRustWorkerAndCommittedWasmMintAPureNoMatch() {
         Fixture fixture({},nullptr,{QStringLiteral("https://8.8.8.8")},false,
             QStringLiteral(HAKONE_ATTEMPT_FRENCH_TV_WASM),

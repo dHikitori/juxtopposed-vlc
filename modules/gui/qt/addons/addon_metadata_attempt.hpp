@@ -39,6 +39,8 @@ struct AddonMetadataHostObservation {
 
 class AddonMetadataCompletionReceipt final {
 public:
+    // Match/Partial certify the exact completed invocation and result bytes.
+    // The consumer must still validate identity, fields and image authority.
     enum class Outcome { Invalid, Match, Partial, NoMatch };
     AddonMetadataCompletionReceipt(AddonMetadataCompletionReceipt&&) noexcept;
     AddonMetadataCompletionReceipt& operator=(AddonMetadataCompletionReceipt&&) noexcept;
@@ -51,6 +53,7 @@ public:
     bool matches(const QByteArray& subject, unsigned ordinal, const QString& contribution,
                  const QByteArray& contextDigest, const QString& partition) const;
     QByteArray resultDigest() const;
+    bool matchesResult(const QJsonObject&) const;
     // This returns only the native gate, not the Qt/job-rich receipt data.
     std::shared_ptr<AddonMetadataNativeAdmission> nativeAdmission() const;
 private:

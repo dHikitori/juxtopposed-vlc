@@ -68,11 +68,14 @@ archives. Free space after retention was 7,736,356,864 bytes.
 The host aggregate and serial Service runner must supply typed positive
 identity evidence, fresh configuration checks and native Store watches to this
 seal. They must retain the same gate through image resolution and final Apply.
-The portable completion receipt currently certifies only no-match results;
-positive receipts and their exact result binding still need implementation.
-The [typed aggregate](artwork-attempt-aggregate.md) therefore cannot yet claim
-successful source transfer. Native owner activation remains off until the
-preserved provider, consumer, cancellation and legacy-bypass checks pass.
+The portable completion receipt now also certifies the exact completed
+`match` or `partial` result object. Portable source transfer through the
+[typed aggregate](artwork-attempt-aggregate.md) passes 144 normal and 144
+sanitizer checks with receipt and final Core tests. See
+[the host transfer evidence](artwork-positive-host-transfer.md). Native positive
+claims, the serial Service runner and actual image broker integration remain
+open. Native owner activation stays off until the preserved provider, consumer,
+cancellation and legacy-bypass checks pass.
 
 The local Windows review package remains clean source `335ac989d0`. This Core
 change is not in that package. See the [subtitle build record](windows-subtitle-build-2026-10-29.md).

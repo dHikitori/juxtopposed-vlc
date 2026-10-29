@@ -34,6 +34,12 @@ holds on the owner thread. The caller completes the child through the ordinary
 Core path. Core prepares the status change and applies it under its final
 admission and item locks. JSON status or provenance cannot set the bit.
 
+Portable `match` and `partial` receipts can now enter `acceptPortablePositive`.
+The aggregate compares the exact result object and keeps the slot reserved
+during consumer acceptance and image resolution. `trySealPositive` transfers
+native source authority only after the caller has a native image approval.
+See [positive completion and source transfer](artwork-positive-host-transfer.md).
+
 A separate cancellation control holds only native admission. It can revoke
 that admission after the aggregate and Qt application are gone. Normal sealed
 cleanup does not revoke the transferred admission. An unfinished aggregate
@@ -41,27 +47,19 @@ cancels on retirement.
 
 ## Evidence
 
-Current source passes 38 normal and 38 ASAN/UBSAN checks on WSL with Qt 6.8.3.
-There are no failures, skipped cases or runtime warnings. Each build has 42
-fresh compiled objects, including the test and C fixtures, and pins 1,464
-input files. The Core libraries are unchanged.
+Current source passes 58 aggregate checks and 86 completion checks normally
+and with ASAN/UBSAN. Each build has 44 fresh objects. Valid portable aggregate
+receipts use joined preparation and the actual prepared Manager path. Both
+negative and positive transactions run through real Core Apply. Positive
+image approval comes from the Core fixture. Native lookup execution uses the
+existing deterministic fixture. The Rust/French TV cases exercise no-match.
 
-Valid portable receipt tests run `metadataInvocationPreparer` on a joined
-test thread, then call `invokePreparedMetadata` on the owner thread. The adversarial tests retain the legacy host
-path only to produce otherwise valid receipts with the wrong binding, or for
-a blocked slot. Production preparation refuses a blocked slot before dispatch;
-the aggregate also refuses a receipt obtained through that older path.
-
-Tests use the real Rust worker and French TV Wasm module, the actual native
-context and current native bridge source, and real Core jobs through child
-completion, Apply, PrepareNotFound and final Apply. Native lookup execution
-uses the existing deterministic fixture. This does not verify each shipped
-provider's network parser or the full app runner.
-
-The record is `/tmp/hakone-artwork-aggregate-current/final-proof.json`, SHA-256
-`bf7f9ee92d2b54b179f1a0ec0357d1b538097a3f8bb85977c0bb9b10a56c7a17`.
-Completed test objects and binaries are retained in verified compressed
-archives. Free space after retention was 7,762,964,480 bytes.
+The [current positive transfer record](artwork-positive-host-transfer.md)
+describes the inputs, source pins, retained outputs and limits. It does not
+verify each shipped provider's network parser or the full app runner. The
+earlier 38-case aggregate proof remains in
+`/tmp/hakone-artwork-aggregate-current/final-proof.json`; its completed source
+and build trees are now also in verified compressed archives.
 
 ## Remaining integration
 
@@ -74,8 +72,9 @@ result. Image failure must permit later providers without permitting a false
 not-found result.
 
 Core now has a [positive source seal](artwork-positive-source-authority.md).
-It passes 13 normal and 13 focused sanitizer suites. The aggregate still needs
-typed positive receipts and the host transfer into that seal.
+It passes 13 normal and 13 focused sanitizer suites. Portable positive receipts
+and their host transfer now pass the combined 144-case group. Native positive
+claims, actual image broker integration and the serial runner remain open.
 
 Native owner activation remains off. Before activation, verify every retained
 provider, local metadata work, cancellation, status bits and the rule that an

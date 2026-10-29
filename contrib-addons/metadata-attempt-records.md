@@ -1,7 +1,7 @@
 # Host metadata completion records
 
-The host can record one complete `no_match` result from an exact provider
-invocation. A guest result, cached value, or public media reference cannot
+The host can record a complete `no_match`, `match` or `partial` result from an
+exact provider invocation. A guest result, cached value, or public media reference cannot
 create this record. The native provider runner and owner activation remain open.
 
 The admission binds the private child subject, ordinal, contribution, contract,
@@ -31,10 +31,13 @@ HTTP 404 or 410 as an empty lookup for an exact feature and operation. An absent
 policy permits neither status. Guest output cannot change that policy. See
 [the SDK guide and schema](sdk/metadata-completion.md).
 
-Only strict `NoMatch` records are implemented. The C++ enum reserves positive
-outcomes; those outcomes cannot currently create a record. A guest `unsupported`
-result is not trusted applicability evidence. An unavailable or failed provider
-cannot become a negative result through this interface.
+`NoMatch` records use strict negative validation. Positive `Match` and `Partial`
+records bind the exact nonempty bounded result object after completed host work.
+They establish execution, not consumer identity, field or image approval.
+`matchesResult` compares the compact host JSON digest under current authority.
+A guest `unsupported` result is not trusted applicability evidence. An
+unavailable or failed provider cannot become a negative result through this
+interface.
 
 ## Authority and lifetime
 
@@ -77,3 +80,10 @@ normal build, source pins, and test reports are in
 retained separately; they are not successful builds. The focused proof does not
 replace a full app link, native aggregate proof, Windows runtime check, or
 owner activation check.
+
+The current group passes 86 completion and 58 artwork aggregate cases normally
+and with ASAN/UBSAN. Portable positive receipts use the prepared Manager path
+and can retain native source authority through final Core Apply. The fixture
+runs the shared consumer and supplies a Core image approval. Actual image
+resolution, the serial Service runner, native positive claims and owner
+activation remain open. See [the current proof](artwork-positive-host-transfer.md).

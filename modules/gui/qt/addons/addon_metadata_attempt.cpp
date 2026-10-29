@@ -219,7 +219,7 @@ struct AddonMetadataCompletionReceipt::Data {
     const AddonMetadataAttemptAdmission::Capture capture;
     const QString worker, invocation;
     const QByteArray contextDigest, resultDigest;
-    const Outcome outcome = Outcome::NoMatch;
+    const Outcome outcome;
 };
 AddonMetadataCompletionReceipt::AddonMetadataCompletionReceipt(std::unique_ptr<Data> data) : m_data(std::move(data)) {}
 AddonMetadataCompletionReceipt::AddonMetadataCompletionReceipt(AddonMetadataCompletionReceipt&&) noexcept = default;
@@ -235,6 +235,13 @@ bool AddonMetadataCompletionReceipt::matches(const QByteArray& subject, unsigned
 { return current() && m_data->capture.nativeSubject == subject && m_data->capture.ordinal == ordinal
     && m_data->capture.contribution == contribution && m_data->contextDigest == context && m_data->capture.partition == partition; }
 QByteArray AddonMetadataCompletionReceipt::resultDigest() const { return m_data ? m_data->resultDigest : QByteArray{}; }
+bool AddonMetadataCompletionReceipt::matchesResult(const QJsonObject& data) const
+{
+    unsigned nodes = 0; qsizetype bytes = 0;
+    return current() && bounded(data, nodes, bytes)
+        && QJsonDocument(data).toJson(QJsonDocument::Compact).size() <= MaxResult
+        && m_data->resultDigest == digest(data);
+}
 std::shared_ptr<AddonMetadataNativeAdmission> AddonMetadataCompletionReceipt::nativeAdmission() const
 { return current() ? m_data->capture.admission : nullptr; }
 
@@ -314,11 +321,23 @@ void AddonMetadataAttemptAdmission::terminal(const QString& invocation, const QS
     const QJsonObject& data, const QString& error)
 {
     if (!ownerThread() || m_phase != Phase::Dispatched || !m_scope || m_scope->invocation != invocation
-        || !current() || !error.isEmpty() || status != QLatin1String("no_match")
-        || std::any_of(m_calls.cbegin(), m_calls.cend(), [](bool done) { return !done; })
-        || !completeNoMatch(data, m_scope->manager.context.value(QStringLiteral("identity")).toObject())) { blocked(); return; }
+        || !current() || !error.isEmpty()
+        || std::any_of(m_calls.cbegin(), m_calls.cend(), [](bool done) { return !done; })) { blocked(); return; }
+    using Outcome = AddonMetadataCompletionReceipt::Outcome;
+    Outcome outcome = Outcome::Invalid;
+    if (status == QLatin1String("no_match")) {
+        if (!completeNoMatch(data, m_scope->manager.context.value(QStringLiteral("identity")).toObject())) { blocked(); return; }
+        outcome = Outcome::NoMatch;
+    } else if (status == QLatin1String("match") || status == QLatin1String("partial")) {
+        // This certifies execution and exact bytes only. Shared consumer
+        // acceptance still checks identity and fields before image resolution.
+        unsigned nodes = 0; qsizetype bytes = 0;
+        if (data.isEmpty() || !bounded(data, nodes, bytes)
+            || QJsonDocument(data).toJson(QJsonDocument::Compact).size() > MaxResult) { blocked(); return; }
+        outcome = status == QLatin1String("match") ? Outcome::Match : Outcome::Partial;
+    } else { blocked(); return; }
     m_receipt.reset(new AddonMetadataCompletionReceipt::Data{m_budget, m_capture, m_scope->worker, invocation,
-        digest(m_scope->manager.context), digest(data)});
+        digest(m_scope->manager.context), digest(data), outcome});
     m_calls.clear();
     m_phase = Phase::Terminal;
 }

@@ -140,6 +140,7 @@ bool ArtworkAttemptAggregate::binding(unsigned ordinal, Plan::Implementation imp
 bool ArtworkAttemptAggregate::acceptPortable(unsigned ordinal, std::optional<AddonMetadataCompletionReceipt>&& receipt)
 {
     if (!binding(ordinal, Plan::Implementation::Portable)) return false;
+    if (m_receipts[ordinal]) return fail(ordinal, BlockReason::Duplicate);
     if (!receipt) return fail(ordinal, BlockReason::Absent);
     const auto& slot = m_plan->attempts.at(ordinal);
     if (receipt->outcome() != AddonMetadataCompletionReceipt::Outcome::NoMatch || !receipt->current()
@@ -151,6 +152,51 @@ bool ArtworkAttemptAggregate::acceptPortable(unsigned ordinal, std::optional<Add
     m_active.reset(); ++m_next;
     return true;
 }
+bool ArtworkAttemptAggregate::acceptPortablePositive(unsigned ordinal,
+    std::optional<AddonMetadataCompletionReceipt>&& receipt, const QJsonObject& data)
+{
+    if (!binding(ordinal, Plan::Implementation::Portable)) return false;
+    if (m_receipts[ordinal]) return fail(ordinal, BlockReason::Duplicate);
+    if (!receipt) return fail(ordinal, BlockReason::Absent);
+    const auto& slot = m_plan->attempts.at(ordinal);
+    using Outcome = AddonMetadataCompletionReceipt::Outcome;
+    if ((receipt->outcome() != Outcome::Match && receipt->outcome() != Outcome::Partial)
+        || !receipt->current() || !receipt->matchesResult(data)
+        || !receipt->matches(m_plan->subject, ordinal, slot.contribution, slot.projectedContextDigest, slot.partition)
+        || receipt->nativeAdmission().get() != m_admission.get()) return fail(ordinal, BlockReason::Binding);
+    m_receipts[ordinal].emplace(std::move(*receipt));
+    m_forbidden.store(true, std::memory_order_release);
+    return true;
+}
+int ArtworkAttemptAggregate::trySealPositive(unsigned ordinal, vlc_metadata_job_t* child,
+    input_item_t* approved, const char* imageUri)
+{
+    if (!binding(ordinal, Plan::Implementation::Portable)) return VLC_EGENERIC;
+    if (child != m_child.get()) { fail(ordinal, BlockReason::Binding, true); return VLC_EGENERIC; }
+    const auto& slot = m_plan->attempts.at(ordinal);
+    const auto& receipt = m_receipts[ordinal];
+    using Outcome = AddonMetadataCompletionReceipt::Outcome;
+    if (!receipt || (receipt->outcome() != Outcome::Match && receipt->outcome() != Outcome::Partial)
+        || !receipt->current()
+        || !receipt->matches(m_plan->subject, ordinal, slot.contribution, slot.projectedContextDigest, slot.partition)
+        || receipt->nativeAdmission().get() != m_admission.get()) {
+        fail(ordinal, BlockReason::Binding, true); return VLC_EGENERIC;
+    }
+    try {
+        NativeArtworkAttemptKeeper::Parts parts; parts.admission = m_admission;
+        for (auto& authority : m_nativeAuthorities) if (authority) parts.outcomes.push_back(std::move(authority));
+        parts.watches = std::move(m_watches);
+        auto keeper = NativeArtworkAttemptKeeper::create(std::move(parts));
+        if (!keeper) { fail(ordinal, BlockReason::SealFailure, true); return VLC_EGENERIC; }
+        const auto status = NativeArtworkAttemptKeeper::sealSource(child, approved, imageUri, keeper);
+        if (status != VLC_SUCCESS) { fail(ordinal, BlockReason::SealFailure, true); return status; }
+        m_forbidden.store(true, std::memory_order_release);
+        m_terminals[ordinal] = Terminal::Positive; ++m_next;
+        m_sealed = true; m_phase = Phase::Sealed; clearQtData();
+        return VLC_SUCCESS;
+    } catch (...) { fail(ordinal, BlockReason::SealFailure, true); return VLC_ENOMEM; }
+}
+
 bool ArtworkAttemptAggregate::acceptNativeClaim(unsigned ordinal, AddonNativeProviderContext& context, const QString& claim)
 {
     if (!binding(ordinal, Plan::Implementation::Native)) return false;

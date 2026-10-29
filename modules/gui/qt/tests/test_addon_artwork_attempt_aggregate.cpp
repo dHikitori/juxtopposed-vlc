@@ -25,6 +25,8 @@
 #include "addons/addon_metadata_registry_epoch.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_metadata_family_plan.hpp"
+#include "addons/addon_metadata_coordinator.hpp"
+#include <vlc_input_item.h>
 #include "fixtures/addon_artwork_attempt_keeper.h"
 #include "fixtures/addon_native_provider_fixture.h"
 using namespace vlc::addons;
@@ -61,7 +63,8 @@ struct Fixture {
     std::unique_ptr<Aggregate> aggregate;
     QList<ArtworkBuiltinRegistration> builtins;
     std::shared_ptr<std::atomic<qint64>> clock;
-    QString error;
+    QString error, returnedStatus;
+    QJsonObject returnedData;
     bool realWorker = false, registered = false;
     Fixture() {
         registered = AddonStreamLifetime::registerApplication(lifetime.handle());
@@ -110,7 +113,8 @@ struct Fixture {
         if (!manager->installLocalPackage(directory, true) || !manager->setEnabled(id, true)) { error = manager->errorMessage(); return false; }
         return true;
     }
-    bool prepare(const QStringList& families = {}, const QStringList& order = {}, bool workerAvailable = true) {
+    bool prepare(const QStringList& families = {}, const QStringList& order = {}, bool workerAvailable = true,
+                 const QJsonObject& extraContext = {}) {
         builtins.clear(); for (const auto& family : families) builtins.append(builtin(family));
         if (!order.isEmpty() && !manager->setProviderOrder(QStringLiteral("artwork"), order)) return false;
         auto source = manager->metadataCatalogueSource(); if (!source) return false;
@@ -126,6 +130,7 @@ struct Fixture {
         capture.privateScope = QStringLiteral("aggregate-private-scope"); capture.deadline = deadline;
         capture.requestContext = {{QStringLiteral("identity"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("movie")},
             {QStringLiteral("title"), QStringLiteral("Exact subject")}}}, {QStringLiteral("media"), QStringLiteral("opaque-media")}};
+        for (auto it = extraContext.begin(); it != extraContext.end(); ++it) capture.requestContext.insert(it.key(), it.value());
         clock = std::make_shared<std::atomic<qint64>>(vlc_tick_now());
         capture.clock = [clock = clock] { return clock->load(); };
         capture.live = [token, gate = gate, app = lifetime.handle()] { return token.current() && gate->current() && app.current(); };
@@ -169,8 +174,38 @@ struct Fixture {
         }
         if (invocation.isEmpty()) return {};
         if (result.isEmpty() && !result.wait(5000)) return {};
-        if (result.size() != 1 || result.first()[2].toString() != QLatin1String("no_match")) { error = QStringLiteral("The receipt fixture did not return no_match."); return {}; }
+        if (result.size() != 1) return {};
+        returnedStatus = result.first()[2].toString(); returnedData = QJsonObject::fromVariantMap(result.first()[3].toMap());
+        if (returnedStatus != QLatin1String("no_match") && returnedStatus != QLatin1String("match")
+            && returnedStatus != QLatin1String("partial")) { error = QStringLiteral("The receipt fixture did not complete."); return {}; }
         return attempt->take();
+    }
+    static QJsonObject positiveContext(const QString& mode = QStringLiteral("positive")) {
+        const QJsonObject record{
+            {QStringLiteral("identity"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("movie")}, {QStringLiteral("title"), QStringLiteral("Exact subject")}}},
+            {QStringLiteral("fields"), QJsonObject{{QStringLiteral("artwork"), QJsonObject{{QStringLiteral("id"), QStringLiteral("opaque-image")}}}}}};
+        const QJsonObject result{{QStringLiteral("records"), QJsonArray{record}}};
+        return {{QStringLiteral("query"), mode}, {QStringLiteral("media"), QJsonObject{{QStringLiteral("fixtureData"), result}}}};
+    }
+    bool consumerAccepts(unsigned ordinal) {
+        const auto provider = plan->attempts.at(ordinal).contribution;
+        AddonMetadataCoordinator* owner = nullptr;
+        AddonMetadataCoordinator::Backend backend;
+        backend.providersForFeature = [provider](const auto&) { return QVariantList{QVariantMap{
+            {QStringLiteral("id"), provider}, {QStringLiteral("enabled"), true}, {QStringLiteral("configured"), true},
+            {QStringLiteral("features"), QStringList{QStringLiteral("artwork")}}, {QStringLiteral("operations"), QStringList{QStringLiteral("enrich")}}}}; };
+        backend.invoke = [&](const auto& contribution, const auto&, const auto&) {
+            QTimer::singleShot(0, owner, [&, contribution] { owner->operationFinished(QStringLiteral("accepted-result"), contribution,
+                returnedStatus, returnedData.toVariantMap(), {}); });
+            return QStringLiteral("accepted-result");
+        };
+        AddonMetadataCoordinator consumer(std::move(backend)); owner = &consumer;
+        QSignalSpy done(&consumer, &AddonMetadataCoordinator::finished);
+        consumer.enrichNative(QStringLiteral("artwork"), plan->attempts.at(ordinal).projectedContext.toVariantMap(),
+            {QStringLiteral("artwork")}, plan->privateScope);
+        if (done.isEmpty() && !done.wait(5000)) return false;
+        return done.size() == 1 && done.first()[1].toString() == QLatin1String("match")
+            && done.first()[2].toMap().value(QStringLiteral("fields")).toMap().contains(QStringLiteral("artwork"));
     }
     bool nativeContext() {
         if (context) return true;
@@ -201,6 +236,126 @@ class AggregateTests : public QObject {
 private slots:
     void init() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
     void cleanup() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
+    void portablePositiveTransfersThroughActualCoreApply_data() {
+        QTest::addColumn<QString>("mode");
+        QTest::newRow("match") << QStringLiteral("positive");
+        QTest::newRow("partial") << QStringLiteral("positive-partial");
+    }
+    void portablePositiveTransfersThroughActualCoreApply() {
+        QFETCH(QString,mode); Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate")));
+        QVERIFY2(f.prepare({}, {}, true, Fixture::positiveContext(mode)), qPrintable(f.error));
+        QVERIFY(f.aggregate->reserve(0)); auto receipt=f.receipt(0); QVERIFY2(receipt,qPrintable(f.error));
+        QVERIFY(f.aggregate->acceptPortablePositive(0,std::move(receipt),f.returnedData));
+        QVERIFY(f.aggregate->negativeForbidden()); QVERIFY(!f.aggregate->nextOrdinal());
+        QCOMPARE(f.aggregate->terminal(0),Aggregate::Terminal::Reserved); QVERIFY(f.consumerAccepts(0));
+        const auto image="file:///cache/aggregate-positive.png";
+        std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),image),input_item_Release); QVERIFY(approved);
+        QCOMPARE(f.aggregate->trySealPositive(0,f.child(),approved.get(),image),VLC_SUCCESS);
+        QVERIFY(f.aggregate->sealed()); f.aggregate.reset(); QVERIFY(f.gate->current());
+        QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),approved.get()),VLC_SUCCESS);
+        QCOMPARE(keeper_fixture_apply(f.native.get()),VLC_SUCCESS);
+        QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED);
+        QVERIFY(keeper_fixture_status(f.native.get())&ITEM_PREPARSED);
+        QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_NOTFOUND));
+    }
+    void portablePositiveRejectsChangedBytesAndNegativeReceipts_data() {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("changed result") << 0; QTest::newRow("negative receipt") << 1; QTest::newRow("positive in negative slot") << 2;
+        QTest::newRow("duplicate positive delivery") << 3;
+    }
+    void portablePositiveRejectsChangedBytesAndNegativeReceipts() {
+        QFETCH(int,mode); Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate")));
+        QVERIFY(f.prepare({}, {}, true, mode==1 ? QJsonObject{} : Fixture::positiveContext()));
+        QVERIFY(f.aggregate->reserve(0)); auto receipt=f.receipt(0); QVERIFY(receipt);
+        if(mode==0) { auto data=f.returnedData; data.insert(QStringLiteral("foreign"),true); QVERIFY(!f.aggregate->acceptPortablePositive(0,std::move(receipt),data)); }
+        if(mode==1) QVERIFY(!f.aggregate->acceptPortablePositive(0,std::move(receipt),f.returnedData));
+        if(mode==2) QVERIFY(!f.aggregate->acceptPortable(0,std::move(receipt)));
+        if(mode==3) {
+            QVERIFY(f.aggregate->acceptPortablePositive(0,std::move(receipt),f.returnedData));
+            auto duplicate=f.receipt(0); QVERIFY(duplicate); QVERIFY(!f.aggregate->acceptPortablePositive(0,std::move(duplicate),f.returnedData));
+        }
+        QVERIFY(f.aggregate->negativeForbidden()); QVERIFY(f.aggregate->trySeal(f.child())!=VLC_SUCCESS);
+        QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED));
+    }
+    void positiveReceiptRequiresTheExactAttempt_data() {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("subject") << 1; QTest::newRow("ordinal") << 2;
+        QTest::newRow("context") << 3; QTest::newRow("admission") << 4; QTest::newRow("contribution") << 5;
+    }
+    void positiveReceiptRequiresTheExactAttempt() {
+        QFETCH(int,mode); Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate-a")));
+        if(mode==5) QVERIFY(f.install(QStringLiteral("org.hakone.aggregate-b")));
+        QVERIFY(f.prepare({}, {}, true, Fixture::positiveContext())); QVERIFY(f.aggregate->reserve(0));
+        auto other=mode==4 ? CoreMetadataAdmission::create(vlc_tick_now()+VLC_TICK_FROM_SEC(5)) : std::shared_ptr<CoreMetadataAdmission>{};
+        auto receipt=f.receipt(mode==5 ? 1 : 0,mode<4 ? mode : 0,other); QVERIFY2(receipt,qPrintable(f.error));
+        QVERIFY(!f.aggregate->acceptPortablePositive(0,std::move(receipt),f.returnedData));
+        QVERIFY(f.aggregate->negativeForbidden()); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED));
+    }
+    void positiveSealRequiresItsReceiptAndNativeImage_data() {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("no receipt") << 0; QTest::newRow("raw artwork text") << 1; QTest::newRow("foreign child") << 2;
+    }
+    void positiveSealRequiresItsReceiptAndNativeImage() {
+        QFETCH(int,mode); Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate")));
+        QVERIFY(f.prepare({}, {}, true, Fixture::positiveContext())); QVERIFY(f.aggregate->reserve(0));
+        if(mode) { auto receipt=f.receipt(0); QVERIFY(receipt); QVERIFY(f.aggregate->acceptPortablePositive(0,std::move(receipt),f.returnedData)); }
+        const auto image="file:///cache/aggregate-positive.png";
+        std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),image),input_item_Release); QVERIFY(approved);
+        if(mode==1) input_item_SetArtURL(approved.get(),image);
+        Native other{mode==2 ? keeper_fixture_new() : nullptr,keeper_fixture_delete};
+        QVERIFY(f.aggregate->trySealPositive(0,other ? keeper_fixture_child(other.get()) : f.child(),approved.get(),image)!=VLC_SUCCESS);
+        QVERIFY(!f.gate->current()); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED));
+    }
+    void positiveAuthorityLivesPastAggregateAndRefusesChangedConfig_data() {
+        QTest::addColumn<bool>("prepared"); QTest::newRow("before fetched preparation") << false; QTest::newRow("before final apply") << true;
+    }
+    void positiveAuthorityLivesPastAggregateAndRefusesChangedConfig() {
+        QFETCH(bool,prepared); Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate")));
+        QVERIFY(f.prepare({}, {}, true, Fixture::positiveContext())); QVERIFY(f.aggregate->reserve(0));
+        auto receipt=f.receipt(0); QVERIFY(receipt); QVERIFY(f.aggregate->acceptPortablePositive(0,std::move(receipt),f.returnedData));
+        const auto image="file:///cache/aggregate-positive.png";
+        std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),image),input_item_Release); QVERIFY(approved);
+        QCOMPARE(f.aggregate->trySealPositive(0,f.child(),approved.get(),image),VLC_SUCCESS); f.aggregate.reset(); QVERIFY(f.gate->current());
+        if(prepared) QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),approved.get()),VLC_SUCCESS);
+        QVERIFY(f.manager->setEnabled(QStringLiteral("org.hakone.aggregate"),false)); QVERIFY(!f.gate->current());
+        if(prepared) QVERIFY(keeper_fixture_apply(f.native.get())!=VLC_SUCCESS);
+        else QVERIFY(keeper_fixture_prepare_fetched(f.native.get(),approved.get())!=VLC_SUCCESS);
+        QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED));
+    }
+    void positiveSealRetainsCancellationAndDeadline_data() {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("cancel after seal") << 0; QTest::newRow("late result after seal") << 1; QTest::newRow("deadline during image work") << 2;
+    }
+    void positiveSealRetainsCancellationAndDeadline() {
+        QFETCH(int,mode); Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate")));
+        QVERIFY(f.prepare({}, {}, true, Fixture::positiveContext())); QVERIFY(f.aggregate->reserve(0));
+        auto receipt=f.receipt(0); QVERIFY(receipt); QVERIFY(f.aggregate->acceptPortablePositive(0,std::move(receipt),f.returnedData));
+        const auto image="file:///cache/aggregate-positive.png";
+        std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),image),input_item_Release); QVERIFY(approved);
+        auto cancel=f.aggregate->cancellationControl();
+        if(mode==2) {
+            f.clock->store(f.plan->deadline); QVERIFY(f.aggregate->trySealPositive(0,f.child(),approved.get(),image)!=VLC_SUCCESS);
+        } else {
+            QCOMPARE(f.aggregate->trySealPositive(0,f.child(),approved.get(),image),VLC_SUCCESS);
+            QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),approved.get()),VLC_SUCCESS);
+            if(mode==0) { f.aggregate.reset(); cancel(); }
+            else f.aggregate->block(0,Aggregate::BlockReason::Duplicate);
+            QVERIFY(keeper_fixture_apply(f.native.get())!=VLC_SUCCESS);
+        }
+        QVERIFY(!f.gate->current()); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED));
+    }
+    void failedImageAllowsALaterPositiveWithNativeAuthority() {
+        Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate-a"))); QVERIFY(f.install(QStringLiteral("org.hakone.aggregate-b")));
+        QVERIFY(f.prepare({}, {}, true, Fixture::positiveContext())); QVERIFY(f.aggregate->reserve(0));
+        auto first=f.receipt(0); QVERIFY(first); QVERIFY(f.aggregate->acceptPortablePositive(0,std::move(first),f.returnedData));
+        f.aggregate->block(0,Aggregate::BlockReason::ImageFailure); QVERIFY(f.aggregate->reserve(1));
+        auto second=f.receipt(1); QVERIFY(second); QVERIFY(f.aggregate->acceptPortablePositive(1,std::move(second),f.returnedData));
+        const auto image="file:///cache/aggregate-positive.png";
+        std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),image),input_item_Release); QVERIFY(approved);
+        QCOMPARE(f.aggregate->trySealPositive(1,f.child(),approved.get(),image),VLC_SUCCESS);
+        QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),approved.get()),VLC_SUCCESS); QCOMPARE(keeper_fixture_apply(f.native.get()),VLC_SUCCESS);
+        QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_NOTFOUND));
+    }
     void portableReceiptSealsTheActualNativeTransaction() {
         Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.aggregate"))); QVERIFY2(f.prepare(), qPrintable(f.error));
         QVERIFY(f.aggregate->reserve(0)); auto receipt = f.receipt(0); QVERIFY(receipt); QVERIFY(f.aggregate->acceptPortable(0, std::move(receipt)));
