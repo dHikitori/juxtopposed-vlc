@@ -166,6 +166,7 @@ signals:
     void operationFinished(const QString& invocation, const QString& contribution, const QString& status,
                            const QVariantMap& data, const QString& error);
 private:
+    friend class ArtworkLookupRunner;
     AddonManager(const QString&, std::unique_ptr<QNetworkAccessManager>, QObject*);
     QJsonObject schema(const InstalledPackage&) const;
     QJsonObject savedSettings(const QString&) const;

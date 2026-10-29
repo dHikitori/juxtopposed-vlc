@@ -20,11 +20,16 @@
 #include <vlc_common.h>
 #include <vlc_meta.h>
 #include <vlc_input_item.h>
+#include <vlc_artwork_policy.h>
 #include <QBuffer>
 #include <QImage>
 #include "addons/addon_native_provider_artwork_assets.hpp"
 #include "lib/libvlc_internal.h"
 #include "addons/addon_artwork_attempt_aggregate.hpp"
+#include "addons/addon_artwork_lookup_runner.hpp"
+#include "addons/addon_metadata_service.hpp"
+#include "addons/addon_native_metadata_owner.hpp"
+#include "addons/addon_artwork_assets.hpp"
 #include "addons/addon_metadata_registry_epoch.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_metadata_family_plan.hpp"
@@ -230,6 +235,19 @@ struct Fixture {
         if (!done) cancel();
         return reference;
     }
+    ArtworkLookupRunner::Options runnerOptions(QJsonObject extra = {}) {
+        ArtworkLookupRunner::Options options;
+        options.child = {vlc_metadata_job_Hold(child()),vlc_metadata_job_Release};
+        options.privateScope = QStringLiteral("runner-private-scope");
+        options.context = {{QStringLiteral("identity"), QJsonObject{{QStringLiteral("kind"),QStringLiteral("movie")},
+            {QStringLiteral("title"),QStringLiteral("Exact subject")}}}, {QStringLiteral("media"),QStringLiteral("opaque-media")}};
+        for (auto it=extra.begin();it!=extra.end();++it) options.context.insert(it.key(),it.value());
+        options.lifetime = lifetime.handle();
+        options.registry = std::shared_ptr<const MetadataRegistryEpoch>(&registry,[](const auto*) {});
+        options.registryToken = registry.capture(); options.builtins = builtins;
+        options.nativeContext = context.get(); options.live = [] { return true; };
+        return options;
+    }
     bool sealAndApply() {
         if (aggregate->trySeal(child()) != VLC_SUCCESS) return false;
         if (keeper_fixture_prepare_anchor(native.get()) != VLC_SUCCESS) return false;
@@ -242,6 +260,187 @@ class AggregateTests : public QObject {
 private slots:
     void init() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
     void cleanup() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
+    void mountedServiceUsesTypedRunnerAndRetainsRevocation_data() {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("portable no-match")<<0; QTest::newRow("native no-match")<<1;
+        QTest::newRow("revoke after child completion")<<2; QTest::newRow("cancel pending native from Core")<<3;
+        QTest::newRow("native image match")<<4;
+    }
+    void mountedServiceUsesTypedRunnerAndRetainsRevocation() {
+        QFETCH(int,mode); Fixture f;
+        if(mode==0 || mode==2) QVERIFY(f.install(QStringLiteral("org.hakone.mounted")));
+        auto service=std::make_unique<AddonMetadataService>(f.manager.get());
+        QVERIFY(service->bindApplicationLifetime(f.lifetime.handle())); service->setAutomaticNetworkAllowed(true);
+        std::unique_ptr<AddonNativeMetadataOwner> owner;
+        if(mode==1 || mode==3 || mode==4) {
+            const char* args[]{"--ignore-config","--no-plugins-scan","--no-plugins-cache"};
+            f.instance=libvlc_new(3,args); QVERIFY(f.instance);
+            addon_test_native_provider_outcome(true,mode==4 ? META_FETCHER_OUTCOME_MATCH : META_FETCHER_OUTCOME_NO_MATCH);
+            addon_test_native_provider_queued(mode==3);
+            AddonNativeMetadataOwner::Options options; options.cacheDirectory=f.profile.filePath(QStringLiteral("mounted-images"));
+            if(mode==4) {
+                QImage pixels(4,4,QImage::Format_RGB32);pixels.fill(Qt::blue);QByteArray bytes;QBuffer output(&bytes);output.open(QIODevice::WriteOnly);QVERIFY(pixels.save(&output,"PNG"));
+                options.imageReader.read=[bytes](const auto&,qint64,const auto&) { return AddonNativeArtworkAssets::ReadResult{bytes,{}}; };
+            }
+            owner=AddonNativeMetadataOwner::create(service.get(),f.manager.get(),VLC_OBJECT(f.instance->p_libvlc_int),options);
+            QVERIFY(owner); QVERIFY(owner->ready());
+        }
+        const auto backend=std::shared_ptr<vlc_metadata_backend_t>(service->holdCoreBackend(),vlc_metadata_backend_Release);
+        Native mounted(keeper_fixture_new_backend(backend.get(),nullptr),keeper_fixture_delete); QVERIFY(mounted);
+        if(mode==3) {
+            QTRY_COMPARE(addon_test_native_provider_pending(),1u);
+            std::thread stop([&] { vlc_metadata_job_Cancel(keeper_fixture_child(mounted.get())); });stop.join();
+            QTRY_VERIFY(keeper_fixture_child_done(mounted.get())); QTRY_COMPARE(addon_test_native_provider_pending(),0u);
+            QVERIFY(keeper_fixture_child_status(mounted.get())!=VLC_SUCCESS); addon_test_native_provider_queued(false);
+        } else {
+            QTRY_VERIFY(keeper_fixture_child_done(mounted.get())); QCOMPARE(keeper_fixture_child_status(mounted.get()),VLC_SUCCESS);
+            QCOMPARE(keeper_fixture_prepare_completed(mounted.get(),mode==4),VLC_SUCCESS);
+            if(mode==2) service->setAutomaticNetworkAllowed(false);
+            const auto status=keeper_fixture_apply(mounted.get());
+            if(mode==2) { QVERIFY(status!=VLC_SUCCESS); QVERIFY(!(keeper_fixture_status(mounted.get())&ITEM_ART_NOTFOUND)); }
+            else { QCOMPARE(status,VLC_SUCCESS); QVERIFY(keeper_fixture_status(mounted.get())&(mode==4 ? ITEM_ART_FETCHED : ITEM_ART_NOTFOUND)); }
+        }
+        QCOMPARE(service->nativeJobCount(),0); QTRY_COMPARE(service->mediaCount(),0);
+        owner.reset(); service.reset();
+    }
+    void runnerNativeNegativeRequiresEverySelectedOutcome_data() {
+        QTest::addColumn<int>("outcome");QTest::addColumn<bool>("success");
+        QTest::newRow("all four no-match")<<int(META_FETCHER_OUTCOME_NO_MATCH)<<true;
+        QTest::newRow("all not-applicable")<<int(META_FETCHER_OUTCOME_NOT_APPLICABLE)<<false;
+        QTest::newRow("unknown")<<int(META_FETCHER_OUTCOME_UNKNOWN)<<false;
+    }
+    void runnerNativeNegativeRequiresEverySelectedOutcome() {
+        QFETCH(int,outcome);QFETCH(bool,success);Fixture f;QVERIFY(f.nativeContext());
+        for(const auto& name : {QStringLiteral("musicbrainz"),QStringLiteral("google-images"),QStringLiteral("french-tv"),QStringLiteral("lastfm")}) f.builtins.append(builtin(name));
+        addon_test_native_provider_outcome(true,static_cast<meta_fetcher_outcome_t>(outcome));
+        int completed=0;ArtworkLookupRunner::Result result;
+        ArtworkLookupRunner runner(f.manager.get(),f.runnerOptions(),[&](auto value) { result=std::move(value);++completed; });
+        QVERIFY(runner.start());QTRY_COMPARE(completed,1);
+        QCOMPARE(result.status==VLC_SUCCESS,success);
+        if(success) {
+            QCOMPARE(keeper_fixture_prepare_anchor(f.native.get()),VLC_SUCCESS);QCOMPARE(keeper_fixture_apply(f.native.get()),VLC_SUCCESS);
+            QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_NOTFOUND);
+        } else QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_NOTFOUND));
+    }
+    void runnerPortableImageBrokerDecodesAndPublishes() {
+        Fixture f;QVERIFY(f.install(QStringLiteral("org.hakone.image")));
+        QImage pixels(4,4,QImage::Format_RGB32);pixels.fill(Qt::blue);QByteArray bytes;QBuffer output(&bytes);output.open(QIODevice::WriteOnly);QVERIFY(pixels.save(&output,"PNG"));
+        int fetches=0;
+        AddonArtworkAssets::Backend backend;
+        backend.registration=[](const auto&) { return QVariantMap{{QStringLiteral("enabled"),true},{QStringLiteral("configured"),true},
+            {QStringLiteral("cachePartition"),QStringLiteral("controlled-image-partition")}}; };
+        backend.fetch=[&](const auto&,const auto&,auto complete) {
+            ++fetches;NetworkBroker::Response response;response.status=200;response.body=bytes;
+            QTimer::singleShot(0,QCoreApplication::instance(),[complete,response] { complete(response); });return quint64(1);
+        };
+        AddonArtworkAssets assets(std::move(backend),f.profile.filePath(QStringLiteral("portable-images")),{});
+        auto extra=Fixture::positiveContext();
+        auto media=extra.value(QStringLiteral("media")).toObject();auto payload=media.value(QStringLiteral("fixtureData")).toObject();
+        auto records=payload.value(QStringLiteral("records")).toArray();auto record=records.at(0).toObject();
+        record.insert(QStringLiteral("fields"),QJsonObject{{QStringLiteral("artwork"),QJsonObject{{QStringLiteral("url"),QStringLiteral("https://images.example.org/art.png")}}}});
+        payload.insert(QStringLiteral("records"),QJsonArray{record});media.insert(QStringLiteral("fixtureData"),payload);extra.insert(QStringLiteral("media"),media);
+        auto options=f.runnerOptions(extra);
+        options.resolvePortable=[&](const auto& id,const auto& descriptor,auto complete) { return assets.resolve(id,descriptor,std::move(complete)); };
+        options.cancelPortable=[&](const auto& id) { assets.cancel(id); };
+        ArtworkLookupRunner::Result result;int completed=0;
+        ArtworkLookupRunner runner(f.manager.get(),std::move(options),[&](auto value) { result=std::move(value);++completed; });
+        QVERIFY(runner.start());QTRY_COMPARE(completed,1);QCOMPARE(result.status,VLC_SUCCESS);QCOMPARE(fetches,1);QVERIFY(result.item);
+        char* uri=vlc_artwork_item_GetURI(result.item.get());QVERIFY(uri);const auto file=QUrl(QString::fromUtf8(uri));free(uri);
+        QVERIFY(file.isLocalFile());QVERIFY(QFileInfo::exists(file.toLocalFile()));QVERIFY(!QImage(file.toLocalFile()).isNull());
+        QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),result.item.get()),VLC_SUCCESS);QCOMPARE(keeper_fixture_apply(f.native.get()),VLC_SUCCESS);
+        QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED);
+    }
+    void mountedServiceCannotUseLegacyAfterManagerRetires() {
+        Fixture f;auto service=std::make_unique<AddonMetadataService>(f.manager.get());
+        QVERIFY(service->bindApplicationLifetime(f.lifetime.handle()));service->setAutomaticNetworkAllowed(true);
+        f.manager.reset();
+        const auto backend=std::shared_ptr<vlc_metadata_backend_t>(service->holdCoreBackend(),vlc_metadata_backend_Release);
+        Native mounted(keeper_fixture_new_backend(backend.get(),nullptr),keeper_fixture_delete);
+        QTRY_VERIFY(keeper_fixture_child_done(mounted.get()));QVERIFY(keeper_fixture_child_status(mounted.get())!=VLC_SUCCESS);
+        QTRY_COMPARE(service->mediaCount(),0);QCOMPARE(service->nativeJobCount(),0);
+    }
+    void runnerSerialPortableNoMatchPublishesNativeStatus() {
+        Fixture f; QVERIFY(f.install(QStringLiteral("org.hakone.first"))); QVERIFY(f.install(QStringLiteral("org.hakone.second")));
+        const QStringList order{QStringLiteral("org.hakone.second/artwork"),QStringLiteral("org.hakone.first/artwork")};
+        QVERIFY(f.manager->setProviderOrder(QStringLiteral("artwork"),order));
+        QStringList calls;
+        connect(f.manager.get(),&AddonManager::operationFinished,this,[&](const auto&,const auto& provider,const auto&,const auto&,const auto&) { calls.append(provider); });
+        ArtworkLookupRunner::Result result; int completed=0;
+        ArtworkLookupRunner runner(f.manager.get(),f.runnerOptions(),[&](auto value) { result=std::move(value);++completed; });
+        QElapsedTimer elapsed;elapsed.start(); QVERIFY(runner.start()); QVERIFY(elapsed.elapsed()<100);
+        QTRY_COMPARE(completed,1); QCOMPARE(result.status,VLC_SUCCESS); QCOMPARE(calls,order);
+        QCOMPARE(keeper_fixture_prepare_anchor(f.native.get()),VLC_SUCCESS);
+        QCOMPARE(keeper_fixture_apply(f.native.get()),VLC_SUCCESS);
+        QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_NOTFOUND);
+    }
+    void runnerPortablePositiveUsesAcceptanceAndFreshRecheck_data() {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("inline image")<<0; QTest::newRow("queued image")<<1;
+        QTest::newRow("config changes before seal")<<2; QTest::newRow("registry changes after seal")<<3;
+        QTest::newRow("inline callback deletes runner")<<4;
+    }
+    void runnerPortablePositiveUsesAcceptanceAndFreshRecheck() {
+        QFETCH(int,mode); Fixture f; const auto id=QStringLiteral("org.hakone.positive"); QVERIFY(f.install(id));
+        auto options=f.runnerOptions(Fixture::positiveContext());
+        ArtworkLookupRunner::Result result; int completed=0,images=0,cancels=0;
+        std::unique_ptr<ArtworkLookupRunner> runner;
+        options.resolvePortable=[&](const auto&,const auto&,auto complete) {
+            ++images;
+            if(mode==2 && !f.manager->setEnabled(id,false)) return QString{};
+            if(mode==1) QTimer::singleShot(0,QCoreApplication::instance(),[complete] { complete(QUrl(QStringLiteral("file:///runner/image.png")),{}); });
+            else complete(QUrl(QStringLiteral("file:///runner/image.png")),{});
+            return QStringLiteral("runner-image");
+        };
+        options.cancelPortable=[&](const auto&) { ++cancels; };
+        runner=std::make_unique<ArtworkLookupRunner>(f.manager.get(),std::move(options),[&](auto value) {
+            result=std::move(value);++completed; if(mode==4) runner.reset();
+        });
+        QVERIFY(runner->start()); QTRY_COMPARE(completed,1); QCOMPARE(images,1); QCOMPARE(cancels,0);
+        if(mode==2) { QVERIFY(result.status!=VLC_SUCCESS); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED)); return; }
+        QCOMPARE(result.status,VLC_SUCCESS); QVERIFY(result.item);
+        QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),result.item.get()),VLC_SUCCESS);
+        if(mode==3) { const auto mutation=f.registry.mutation(); QVERIFY(mutation); }
+        const auto applied=keeper_fixture_apply(f.native.get());
+        if(mode==3) { QVERIFY(applied!=VLC_SUCCESS); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED)); }
+        else { QCOMPARE(applied,VLC_SUCCESS); QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED); }
+    }
+    void runnerCancellationDiscardsQueuedWork_data() {
+        QTest::addColumn<bool>("native"); QTest::newRow("portable")<<false; QTest::newRow("native")<<true;
+    }
+    void runnerCancellationDiscardsQueuedWork() {
+        QFETCH(bool,native); Fixture f;
+        if(native) { QVERIFY(f.nativeContext()); f.builtins={builtin(QStringLiteral("lastfm"))}; addon_test_native_provider_outcome(true,META_FETCHER_OUTCOME_NO_MATCH); addon_test_native_provider_queued(true); }
+        else QVERIFY(f.install(QStringLiteral("org.hakone.cancel")));
+        auto options=f.runnerOptions({{QStringLiteral("query"),QStringLiteral("hold")}});
+        int completed=0; ArtworkLookupRunner::Result result;
+        ArtworkLookupRunner runner(f.manager.get(),std::move(options),[&](auto value) { result=std::move(value);++completed; });
+        const auto cancel=runner.nativeCancellation(); QVERIFY(runner.start());
+        if(native) QTRY_COMPARE(addon_test_native_provider_pending(),1u);
+        std::thread stop(cancel);stop.join(); runner.cancel();
+        QTRY_COMPARE(completed,1); QVERIFY(result.status!=VLC_SUCCESS);
+        if(native) { addon_test_native_provider_complete(); addon_test_native_provider_queued(false); }
+        QTest::qWait(25); QCOMPARE(completed,1); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_NOTFOUND));
+    }
+    void runnerNativePositiveUsesActualImageAndCore_data() {
+        QTest::addColumn<bool>("revoke"); QTest::newRow("current")<<false; QTest::newRow("revoke image before Apply")<<true;
+    }
+    void runnerNativePositiveUsesActualImageAndCore() {
+        QFETCH(bool,revoke); Fixture f; QVERIFY(f.nativeContext()); f.builtins={builtin(QStringLiteral("lastfm"))};
+        addon_test_native_provider_outcome(true,META_FETCHER_OUTCOME_MATCH);
+        QImage pixels(4,4,QImage::Format_RGB32);pixels.fill(Qt::blue);QByteArray bytes;QBuffer output(&bytes);output.open(QIODevice::WriteOnly);QVERIFY(pixels.save(&output,"PNG"));
+        AddonNativeArtworkAssets assets(f.lifetime.handle(),AddonNativeArtworkAssets::Backend{
+            [bytes](const auto&,qint64,const auto&) { return AddonNativeArtworkAssets::ReadResult{bytes,{}}; }},f.profile.filePath(QStringLiteral("runner-cache")),{});
+        assets.setNetworkAllowed(true); AddonNativeProviderArtworkAssets images(&assets,f.context.get());
+        auto options=f.runnerOptions();options.nativeImages=&images;
+        ArtworkLookupRunner::Result result;int completed=0;
+        ArtworkLookupRunner runner(f.manager.get(),std::move(options),[&](auto value) { result=std::move(value);++completed; });
+        QVERIFY(runner.start());QTRY_COMPARE(completed,1);QCOMPARE(result.status,VLC_SUCCESS);QVERIFY(result.item);
+        QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),result.item.get()),VLC_SUCCESS);
+        if(revoke) assets.setNetworkAllowed(false);
+        const auto applied=keeper_fixture_apply(f.native.get());
+        if(revoke) { QVERIFY(applied!=VLC_SUCCESS);QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED)); }
+        else { QCOMPARE(applied,VLC_SUCCESS);QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED); }
+    }
     void nativePositiveKeepsClaimThroughImageAndFinalApply_data() {
         QTest::addColumn<QString>("family"); QTest::addColumn<int>("provider");
         QTest::newRow("musicbrainz") << QStringLiteral("musicbrainz") << int(META_FETCHER_PROVIDER_MUSICBRAINZ);

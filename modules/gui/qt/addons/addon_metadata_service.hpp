@@ -11,10 +11,12 @@
 typedef struct vlc_metadata_backend vlc_metadata_backend_t;
 typedef struct vlc_metadata_job vlc_metadata_job_t;
 class AddonNativeArtworkAssets;
+class AddonNativeProviderContext;
+class AddonNativeProviderArtworkAssets;
 class AddonMetadataChoices;
 struct input_item_t;
 
-namespace vlc::addons { class AddonManager; }
+namespace vlc::addons { class AddonManager; class ArtworkLookupRunner; }
 
 /** One metadata owner for a host. Call the Qt API on the owner thread.
  * The native backend API can receive a request from a different thread.
@@ -112,6 +114,7 @@ public:
     // It never sends the original native artwork address to a provider.
     void setNativeArtworkAdapter(AddonNativeArtworkAssets*);
     void clearNativeArtworkAdapterIf(AddonNativeArtworkAssets* exactAdapter);
+    bool setTypedArtworkSources(QObject* exactOwner, AddonNativeProviderContext*, AddonNativeProviderArtworkAssets*);
     bool reserveNativeOwner(QObject*);
     bool nativeOwnerIs(QObject*) const;
     void releaseNativeOwnerFor(QObject*);
@@ -183,6 +186,7 @@ private:
     void deliver(const QString&, const QString&, const QVariantMap&, const QString&);
     void startCore(quint64 key);
     void startNativeArtwork(quint64 key);
+    void startArtworkLookup(quint64 key, const QVariantMap& context, const QString& media);
     void cancelCore(quint64 key);
     void finishCore(quint64 key, const QString&, const QVariantMap&);
     bool holdMedia(const QString&);
@@ -192,6 +196,11 @@ private:
     bool applicationCurrent() const;
     static Backend managerBackend(vlc::addons::AddonManager*);
 
+    bool m_managerBacked = false;
+    QPointer<vlc::addons::AddonManager> m_manager;
+    QHash<quint64, QPointer<vlc::addons::ArtworkLookupRunner>> m_artworkRunners;
+    QPointer<AddonNativeProviderContext> m_artworkContext;
+    QPointer<AddonNativeProviderArtworkAssets> m_providerImages;
     Backend m_backend;
     AddonMetadataCoordinator m_coordinator;
     QHash<QString, Media> m_media;

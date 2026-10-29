@@ -13,18 +13,27 @@
 #include "../../../../../src/preparser/metadata_local.h"
 #include "../../../../../src/preparser/metadata_artwork_outcome.c"
 #include <assert.h>
+#include <stdatomic.h>
 struct keeper_fixture {
     input_item_t *target, *working;
     vlc_metadata_backend_t *local_backend, *remote_backend;
     vlc_metadata_job_t *anchor, *child;
+    atomic_bool done;
+    atomic_int status;
 };
 static int dispatched(void *opaque, vlc_metadata_job_t *job)
 { (void)opaque; (void)job; return VLC_SUCCESS; }
 static void ended(vlc_metadata_job_t *job, int status, void *opaque)
 { (void)job; (void)status; (void)opaque; }
-struct keeper_fixture *keeper_fixture_new(void)
+static void child_ended(vlc_metadata_job_t *job, int status, void *opaque)
+{
+    (void)job; struct keeper_fixture *f = opaque;
+    atomic_store(&f->status, status); atomic_store(&f->done, true);
+}
+struct keeper_fixture *keeper_fixture_new_backend(vlc_metadata_backend_t *backend, const char *context)
 {
     struct keeper_fixture *f = calloc(1, sizeof(*f)); assert(f);
+    atomic_init(&f->done, false); atomic_init(&f->status, VLC_EGENERIC);
     const struct vlc_metadata_backend_operations operations = {.dispatch=dispatched};
     f->target = input_item_New("file:///keeper-fixture.flac", "Keeper fixture"); assert(f->target);
     input_item_SetTitle(f->target, "Exact subject");
@@ -32,7 +41,7 @@ struct keeper_fixture *keeper_fixture_new(void)
     vlc_meta_SetStatus(f->target->p_meta, vlc_meta_GetStatus(f->target->p_meta) | ITEM_PREPARSED);
     vlc_mutex_unlock(&f->target->lock);
     f->local_backend = vlc_metadata_backend_New(&operations, NULL); assert(f->local_backend);
-    f->remote_backend = vlc_metadata_backend_New(&operations, NULL); assert(f->remote_backend);
+    f->remote_backend = backend ? vlc_metadata_backend_Hold(backend) : vlc_metadata_backend_New(&operations, NULL); assert(f->remote_backend);
     const struct vlc_metadata_request local = {.feature="music.details", .operation="enrich", .item=f->target,
         .flags=VLC_METADATA_REQUEST_AUTOMATIC};
     f->anchor = vlc_metadata_job_New(f->local_backend, &local, ended, NULL); assert(f->anchor);
@@ -41,9 +50,23 @@ struct keeper_fixture *keeper_fixture_new(void)
     assert(vlc_metadata_job_PrepareLocal(f->anchor, f->working, NULL) == VLC_SUCCESS);
     const char *fields[] = {"artwork"};
     const struct vlc_metadata_request remote = {.feature="artwork", .operation="enrich", .item=f->working,
-        .fields=fields, .field_count=1, .flags=VLC_METADATA_REQUEST_NETWORK};
-    f->child = vlc_metadata_job_New(f->remote_backend, &remote, ended, NULL); assert(f->child);
+        .fields=fields, .field_count=1, .flags=VLC_METADATA_REQUEST_NETWORK | (backend ? VLC_METADATA_REQUEST_AUTOMATIC : 0),
+        .context_json=context, .context_size=context ? strlen(context) : 0};
+    f->child = vlc_metadata_job_New(f->remote_backend, &remote, child_ended, f); assert(f->child);
     assert(vlc_metadata_job_Start(f->child) == VLC_SUCCESS); return f;
+}
+struct keeper_fixture *keeper_fixture_new(void) { return keeper_fixture_new_backend(NULL, NULL); }
+bool keeper_fixture_child_done(struct keeper_fixture *f) { return atomic_load(&f->done); }
+int keeper_fixture_child_status(struct keeper_fixture *f) { return atomic_load(&f->status); }
+int keeper_fixture_prepare_completed(struct keeper_fixture *f, bool fetched)
+{
+    if (!atomic_load(&f->done) || atomic_load(&f->status) != VLC_SUCCESS) return VLC_EGENERIC;
+    int status = vlc_metadata_job_Apply(f->child, f->working, 0, NULL);
+    if (status == VLC_SUCCESS) status = fetched
+        ? vlc_metadata_job_PrepareFetchedArtwork(f->anchor, f->child, f->working, false)
+        : vlc_metadata_job_PrepareNotFoundArtwork(f->anchor, f->child, f->working);
+    if (status != VLC_SUCCESS) return status;
+    return vlc_metadata_job_Complete(f->anchor, VLC_SUCCESS, f->working, NULL, 0) ? VLC_SUCCESS : VLC_EGENERIC;
 }
 vlc_metadata_job_t *keeper_fixture_child(struct keeper_fixture *f) { return f->child; }
 int keeper_fixture_prepare_anchor(struct keeper_fixture *f)

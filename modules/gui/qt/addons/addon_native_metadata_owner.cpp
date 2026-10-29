@@ -108,6 +108,7 @@ bool AddonNativeMetadataOwner::initialize(vlc_object_t* parent, const Options& o
             manager ? manager->providerOrder(feature) : QStringList{}, nativeAllowed);
     });
     if (!m_service || !m_service->nativeOwnerIs(this) || !m_context->available() || !m_images->available()) return false;
+    if (!m_service->setTypedArtworkSources(this, m_context, m_materializer)) return false;
     m_ready = true;
     if (options.activateCoreOwner) {
         const auto status = vlc_metadata_owner_Set(parent, m_backend.get());

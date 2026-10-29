@@ -172,6 +172,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_artwork_attempt_keeper.hpp \
 	addons/addon_artwork_attempt_aggregate.cpp \
 	addons/addon_artwork_attempt_aggregate.hpp \
+	addons/addon_artwork_lookup_runner.cpp \
+	addons/addon_artwork_lookup_runner.hpp \
 	addons/addon_native_provider_artwork_assets.cpp \
 	addons/addon_native_provider_artwork_assets.hpp \
 	addons/addon_native_metadata_owner.cpp \

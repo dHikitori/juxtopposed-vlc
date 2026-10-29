@@ -179,7 +179,8 @@ if(VLC_BUILD_DIR)
     target_sources(vlc_addon_native_metadata PRIVATE
         addon_core_metadata_admission.cpp addon_core_metadata_admission.hpp
         addon_artwork_attempt_keeper.cpp addon_artwork_attempt_keeper.hpp
-        addon_artwork_attempt_aggregate.cpp addon_artwork_attempt_aggregate.hpp)
+        addon_artwork_attempt_aggregate.cpp addon_artwork_attempt_aggregate.hpp
+        addon_artwork_lookup_runner.cpp addon_artwork_lookup_runner.hpp)
     target_link_libraries(vlc_addon_native_metadata PUBLIC vlc_addon_host vlc_addon_core)
     target_include_directories(vlc_addon_native_metadata PUBLIC
         "${VLC_SOURCE_ROOT}/include" "${VLC_BUILD_DIR}/include" "${VLC_BUILD_DIR}")

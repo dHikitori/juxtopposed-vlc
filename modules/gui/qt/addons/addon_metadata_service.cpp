@@ -10,6 +10,7 @@
 #include "addon_manager.hpp"
 #include "addon_artwork_assets.hpp"
 #include "addon_native_artwork_assets.hpp"
+#include "addon_artwork_lookup_runner.hpp"
 #include "util/media_identity_vlc.hpp"
 #include <QCryptographicHash>
 #include <QFileInfo>
@@ -217,6 +218,7 @@ AddonMetadataService::Backend AddonMetadataService::managerBackend(vlc::addons::
 AddonMetadataService::AddonMetadataService(vlc::addons::AddonManager* manager, QObject* parent)
     : AddonMetadataService(managerBackend(manager), parent)
 {
+    m_managerBacked = true; m_manager = manager;
     if (manager) {
         connect(manager, &vlc::addons::AddonManager::operationFinished, this, &AddonMetadataService::operationFinished);
         connect(manager, &vlc::addons::AddonManager::revisionChanged, this, &AddonMetadataService::invalidate);
@@ -730,6 +732,8 @@ void AddonMetadataService::invalidate()
         vlc_metadata_backend_CancelAutomatic(backend.get());
         if (!guard) return;
     }
+    const auto runners = m_artworkRunners.values();
+    for (const auto& runner : runners) { if (runner) runner->cancel(); if (!guard) return; }
     const auto consumers = m_consumers.keys();
     for (const auto& consumer : consumers) { cancel(consumer); if (!guard) return; }
     m_coordinator.invalidate();
@@ -767,6 +771,17 @@ void AddonMetadataService::setNativeArtworkAdapter(AddonNativeArtworkAssets* ada
 }
 void AddonMetadataService::clearNativeArtworkAdapterIf(AddonNativeArtworkAssets* exact)
 { if (m_nativeArtwork == exact) setNativeArtworkAdapter(nullptr); }
+bool AddonMetadataService::setTypedArtworkSources(QObject* owner, AddonNativeProviderContext* context,
+    AddonNativeProviderArtworkAssets* images)
+{
+    if (QThread::currentThread() != thread() || m_closed || !nativeOwnerIs(owner)
+        || !context || !images || context->parent() != owner || images->parent() != owner
+        || !context->available() || !images->available()) return false;
+    const auto mutation = m_artworkRegistry->mutation();
+    if (!mutation) return false;
+    m_artworkContext = context; m_providerImages = images;
+    return true;
+}
 bool AddonMetadataService::reserveNativeOwner(QObject* owner)
 {
     if (!owner || m_closed || m_nativeOwner || !applicationLifetime().current()
@@ -781,7 +796,7 @@ void AddonMetadataService::releaseNativeOwnerFor(QObject* owner)
 {
     if (!owner || m_nativeOwner != owner) return;
     const auto mutation = m_artworkRegistry->mutation();
-    m_nativeOwner.clear();
+    m_nativeOwner.clear(); m_artworkContext.clear(); m_providerImages.clear();
 }
 bool AddonMetadataService::bindApplicationLifetime(vlc::addons::AddonStreamLifetime::Handle lifetime)
 {
@@ -830,7 +845,7 @@ void AddonMetadataService::shutdown()
     retireIdentityTargets();
     if (!guard) return;
     const auto retiredPlan = std::move(m_providerPlan);
-    m_planOwner.clear(); m_nativeOwner.clear();
+    m_planOwner.clear(); m_nativeOwner.clear(); m_artworkContext.clear(); m_providerImages.clear();
     { std::lock_guard<std::mutex> guard(m_core->lock); m_core->owner = nullptr; }
     if (m_coreBackend) vlc_metadata_backend_Close(m_coreBackend);
     if (!guard) return;
@@ -876,7 +891,8 @@ void AddonMetadataService::coordinatorFinished(const QString& consumer, const QS
             deliver(consumer, status, result, error); return;
         }
         if (selectedIdentity(identityRequest.target, identityRequest.selection).isEmpty()) {
-            if (owner) cancel(consumer); return;
+            if (owner) cancel(consumer);
+            return;
         }
         if (!owner) return;
     }
@@ -1001,6 +1017,7 @@ void AddonMetadataService::startCore(quint64 key)
             auto owned = m_core->take(key); if (owned) vlc_metadata_job_Complete(owned.get(), VLC_EINVAL, nullptr, nullptr, 0); return;
         }
         context.insert(QStringLiteral("media"), media);
+        context.insert(QStringLiteral("identity"), identity);
         auto existing = context.value(QStringLiteral("existingFields")).toMap();
         for (auto it = nativeFields().cbegin(); it != nativeFields().cend(); ++it) {
             char* raw = it.value() == vlc_meta_ArtworkURL ? vlc_artwork_item_GetURI(request->item)
@@ -1017,6 +1034,13 @@ void AddonMetadataService::startCore(quint64 key)
     QStringList fields;
     for (size_t i = 0; i < request->field_count; ++i) fields.append(QString::fromUtf8(request->fields[i]));
     const auto operation = QString::fromUtf8(request->operation);
+    // The production automatic artwork route must not fall through to the
+    // ordinary coordinator. Only the typed runner can seal source outcomes.
+    if (m_managerBacked && (request->flags & VLC_METADATA_REQUEST_AUTOMATIC)
+        && !strcmp(request->feature, "artwork") && operation == QStringLiteral("enrich")) {
+        startArtworkLookup(key, context, media);
+        return;
+    }
     QString consumer;
     const QPointer<AddonMetadataService> owner(this);
     if (operation == QStringLiteral("enrich"))
@@ -1030,6 +1054,48 @@ void AddonMetadataService::startCore(quint64 key)
     releaseMedia(media);
     m_consumers[consumer].core = key; m_coreConsumers.insert(key, consumer);
     if (!vlc_metadata_job_IsPending(job.get())) cancelCore(key);
+}
+void AddonMetadataService::startArtworkLookup(quint64 key, const QVariantMap& context, const QString& media)
+{
+    using Runner = vlc::addons::ArtworkLookupRunner;
+    const auto job = m_core->find(key);
+    const auto registrations = captureArtworkRegistrations();
+    const auto* request = job ? vlc_metadata_job_GetRequest(job.get()) : nullptr;
+    if (!request || !registrations || !automaticNativeArtwork(job.get())
+        || request->field_count != 1 || strcmp(request->fields[0], "artwork")) {
+        releaseMedia(media);
+        const auto owned = m_core->take(key);
+        if (owned) vlc_metadata_job_Complete(owned.get(), VLC_EACCES, nullptr, nullptr, 0);
+        return;
+    }
+    Runner::Options options;
+    options.child = job; options.privateScope = m_core->issueScope(key);
+    options.context = QJsonObject::fromVariantMap(context);
+    options.lifetime = applicationLifetime(); options.registry = registrations->registry;
+    options.registryToken = registrations->token; options.builtins = registrations->builtins;
+    options.nativeContext = m_artworkContext; options.nativeImages = m_providerImages;
+    const auto state = m_core;
+    options.live = [state, job] {
+        return state->automaticAllowed.load() && vlc_metadata_job_IsPending(job.get());
+    };
+    options.resolvePortable = m_backend.resolveArtwork; options.cancelPortable = m_backend.cancelArtwork;
+    const QPointer<AddonMetadataService> owner(this);
+    auto* runner = new Runner(m_manager, std::move(options), [owner, state, key, media](Runner::Result result) {
+        // Complete can destroy both Service and Runner. Retire Qt state first.
+        if (owner) {
+            const auto runner = owner->m_artworkRunners.take(key);
+            if (runner) runner->deleteLater();
+            owner->releaseMedia(media);
+        }
+        const auto owned = state->take(key);
+        if (owned && vlc_metadata_job_IsPending(owned.get()))
+            vlc_metadata_job_Complete(owned.get(), result.status, result.item.get(),
+                result.provenance.constData(), result.provenance.size());
+    }, this);
+    m_artworkRunners.insert(key, runner);
+    // Register before start: cancellation can win while the runner is queued.
+    state->setNativeCancel(key, runner->nativeCancellation());
+    if (!runner->start()) runner->cancel();
 }
 void AddonMetadataService::startNativeArtwork(quint64 key)
 {
@@ -1070,6 +1136,7 @@ void AddonMetadataService::startNativeArtwork(quint64 key)
 }
 void AddonMetadataService::cancelCore(quint64 key)
 {
+    if (const auto runner = m_artworkRunners.value(key)) { runner->cancel(); return; }
     const auto consumer = m_coreConsumers.take(key);
     if (!consumer.isEmpty()) cancel(consumer);
 }

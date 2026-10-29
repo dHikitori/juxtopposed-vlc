@@ -9,6 +9,10 @@ extern "C" {
 struct keeper_fixture;
 struct keeper_fixture *keeper_fixture_new(void);
 void keeper_fixture_delete(struct keeper_fixture *);
+struct keeper_fixture *keeper_fixture_new_backend(vlc_metadata_backend_t *, const char *context);
+bool keeper_fixture_child_done(struct keeper_fixture *);
+int keeper_fixture_child_status(struct keeper_fixture *);
+int keeper_fixture_prepare_completed(struct keeper_fixture *, bool fetched);
 vlc_metadata_job_t *keeper_fixture_child(struct keeper_fixture *);
 int keeper_fixture_prepare_anchor(struct keeper_fixture *);
 input_item_t *keeper_fixture_approved(struct keeper_fixture *, const char *uri);

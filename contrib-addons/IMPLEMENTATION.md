@@ -1,6 +1,6 @@
 # Implementation status
 
-This file records implementation progress and test evidence. Updated 29 October 2026.
+This file records implementation progress and test evidence. Updated 30 October 2026.
 
 The full scope in this directory remains the objective. SDK v1 still has open completion gates. The earlier effort estimate was about 80–85% complete, with about 15–20% left. That estimate came before the measured UI performance findings. It does not establish current readiness. The [completion backlog](completion-backlog.md) records the remaining requirements and the evidence for each gap. The open gates below determine release readiness.
 
@@ -40,15 +40,16 @@ manual GUI checks and full app performance comparison remain open.
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 
-The typed artwork result aggregate is now in application source and all three
-build definitions. It passes 69 normal and 69 ASAN/UBSAN aggregate checks. The
-native image suite adds 36 checks in each build, including real Core HTTP.
-Native positive claims now keep provider authority and image consent through
-image decoding/cache and final Core Apply. The earlier portable completion
-suite passes 86 checks in each build. Core positive source authority passes
-its earlier 13-suite group; the three affected native Core suites also pass
-with the new source admission. The serial Service runner, portable image broker
-integration and native owner activation remain open. See
+The typed artwork aggregate and serial Service runner are now in application
+source and all three build definitions. The current aggregate, runner, and
+mounted-Service matrix passes 89 normal and 89 ASAN/UBSAN checks. The shared
+Service regressions add 70 checks in each build. Native claims, image consent,
+and exact portable receipts reach final Core Apply. The portable image case
+uses the actual decoder and cache with a controlled network response. The
+production portable image adapter still needs background registration,
+package/key preparation, and image/cache work. Native owner activation and
+full app cutover checks remain open. This change is not in the current Windows
+package. See [the serial runner](artwork-serial-runner.md),
 [the aggregate](artwork-attempt-aggregate.md),
 [positive Core authority](artwork-positive-source-authority.md),
 [portable positive transfer](artwork-positive-host-transfer.md) and
