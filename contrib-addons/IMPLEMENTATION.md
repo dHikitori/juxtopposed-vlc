@@ -58,6 +58,13 @@ See [the serial runner](artwork-serial-runner.md),
 [portable positive transfer](artwork-positive-host-transfer.md) and
 [native positive authority](artwork-native-positive-authority.md).
 
+A real two-process control confirms that Store authority invalidation is local
+to one process. The native profile fence now has shared peer and exclusive
+replacement modes. The cohort passes 36 normal and 36 ASAN/UBSAN checks
+on Linux, plus 32 native Windows checks. The helper inheritance and native
+cancellation barriers pass. The cross-process control channel, stamped writer transaction, and
+production mount remain open. See [profile coordination](profile-authority-coordination.md).
+
 ## Verified work
 
 | Area | Implementation and evidence |

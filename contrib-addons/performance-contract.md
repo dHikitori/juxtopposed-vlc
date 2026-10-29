@@ -585,3 +585,17 @@ The current Windows package predates this change. Startup, idle CPU, ordinary
 UI response, and quit comparisons remain open. The persistent
 [Windows cursor report](windows-cursor-feedback.md) also remains open; no
 CPU or helper-launch sample establishes its cause yet.
+
+
+## Profile fence foundation
+
+The native profile fence has no QObject, timer, thread, or polling loop.
+Acquire it on joined work because file open and validation use the filesystem.
+A retained lease holds only an OS handle. Native cancellation and helper
+inheritance checks pass on Linux and Windows.
+
+See [profile coordination](profile-authority-coordination.md) for the exact
+checks and the real cross-process token gap. The coordinator transport,
+stamped writer transaction, startup mount, and app drain remain open. This
+component does not establish full app idle CPU or UI response. The Windows
+player package is unchanged.
