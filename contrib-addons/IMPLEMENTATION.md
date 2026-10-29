@@ -75,6 +75,15 @@ state and a closed guard repair it. The peer control channel and locked
 production store bindings remain open. See
 [guarded profile generations](profile-generation-transactions.md).
 
+Provider order, built-in provider switches, safe mode and bundled suppression
+now have guarded `PackageStore` entry points. They use the outer lock and
+fence, check the context before commit, and send a refresh notice after store
+unlock. The four-suite cohort passes 103 normal, 103 ASAN/UBSAN and 94 native
+Windows checks. The previous lock code fails the new refresh regression as
+expected. The peer channel, remaining package-state writes and application
+mount remain open. See [guarded settings](profile-store-settings.md). This
+component step does not replace the current Windows review package.
+
 ## Verified work
 
 | Area | Implementation and evidence |

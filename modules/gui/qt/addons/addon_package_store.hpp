@@ -4,6 +4,7 @@
 
 #include "addon_manifest.hpp"
 #include "addon_store_authority.hpp"
+#include "addon_store_profile_generation.hpp"
 #include <QJsonArray>
 #include <QVariantMap>
 #include <functional>
@@ -121,6 +122,14 @@ public:
                            QJsonObject* saved = nullptr, QString* error = nullptr);
     bool saveBuiltinProviderEnabled(const QString& id, bool enabled,
                                    QJsonObject* saved = nullptr, QString* error = nullptr);
+    // Host only. These paths use the callback's existing lock and fence.
+    // Run them only inside StoreProfileGeneration::write on joined work.
+    // An uncertain write requires recovery before peer admission.
+    StoreProfileGeneration::Change saveProviderOrder(const StoreProfileWriteContext&,
+        const QString& feature, const QStringList& ids,
+        QJsonObject* saved = nullptr, QString* error = nullptr);
+    StoreProfileGeneration::Change saveBuiltinProviderEnabled(const StoreProfileWriteContext&,
+        const QString& id, bool enabled, QJsonObject* saved = nullptr, QString* error = nullptr);
     bool rollback(const QString& id, QString* error = nullptr);
     bool uninstall(const QString& id, bool removeData, QString* error = nullptr);
     bool canUninstall(const QString& id, bool removeData, QString* error = nullptr) const;
@@ -137,9 +146,13 @@ public:
     bool recover(const QString& id, QString* error = nullptr);
     bool safeMode() const;
     bool setSafeMode(bool enabled, QString* error = nullptr);
+    StoreProfileGeneration::Change setSafeMode(const StoreProfileWriteContext&,
+        bool enabled, QString* error = nullptr);
     QStringList credentialReferences(const QString& id, const QString& field = {}) const;
     bool distributionSuppressed(const QString& id) const;
     bool setDistributionSuppressed(const QString& id, bool suppressed, QString* error = nullptr);
+    StoreProfileGeneration::Change setDistributionSuppressed(const StoreProfileWriteContext&,
+        const QString& id, bool suppressed, QString* error = nullptr);
 
 private:
     QString m_root;
@@ -160,6 +173,11 @@ private:
     bool collectPrivateStorage(const QString& id, const QJsonObject& state, QString* error) const;
     bool saveProviderPreference(const QString&, const QJsonValue&, bool builtin,
                                 QJsonObject* saved, QString* error);
+    StoreProfileGeneration::Change saveProviderPreferenceLocked(const QString&, const QJsonValue&,
+        bool builtin, QJsonObject* saved, QString* error, const StoreProfileWriteContext*);
+    StoreProfileGeneration::Change setSafeModeLocked(bool, QString* error, const StoreProfileWriteContext*);
+    StoreProfileGeneration::Change setDistributionSuppressedLocked(const QString&, bool,
+        QString* error, const StoreProfileWriteContext*);
 };
 
 } // namespace vlc::addons

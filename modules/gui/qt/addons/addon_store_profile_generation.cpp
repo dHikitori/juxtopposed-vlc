@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_store_profile_generation.hpp"
+#include "addon_catalogue_store_lock.hpp"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -92,8 +93,10 @@ struct Guard {
 // Destruction order releases store.lock before the exclusive native fence.
 struct Locks {
     std::shared_ptr<const StoreProcessFence> fence;
-    QLockFile store;
-    explicit Locks(const QString& root) : store(QDir(root).filePath(QStringLiteral("store.lock"))) { store.setStaleLockTime(0); }
+    CatalogueStoreLock store;
+    explicit Locks(const QString& root)
+        : store(QDir(root).filePath(QStringLiteral("store.lock")), StoreAuthority(root))
+    { store.setStaleLockTime(0); }
     Status acquire(const QString& root, QString* error) {
         if (!store.tryLock(0)) {
             if (store.error() == QLockFile::LockFailedError) return Status::Busy;

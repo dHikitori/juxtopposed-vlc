@@ -596,7 +596,7 @@ inheritance checks pass on Linux and Windows.
 
 See [profile coordination](profile-authority-coordination.md) for the exact
 checks and the real cross-process token gap. The coordinator transport,
-stamped writer transaction, startup mount, and app drain remain open. This
+startup mount, and app drain remain open. The stamped writer is implemented. This
 component does not establish full app idle CPU or UI response. The Windows
 player package is unchanged.
 
@@ -608,3 +608,13 @@ callback can retire the owner without leaving a live guard or freed state.
 The actual peer control channel and production store mount remain open.
 There is no new idle timer or polling loop in this layer. Its component
 checks do not establish full app performance.
+
+Four policy writes now use the guarded store context without a second lock.
+Native cancellation ends before publication. A display notice runs after the
+store lock is released and before the exclusive fence ends. The previous
+lock code fails that refresh regression. The current cohort passes 103
+normal, 103 ASAN/UBSAN and 94 native Windows cases. No idle timer, polling
+loop, thread or worker process is added. See
+[guarded settings](profile-store-settings.md). The peer channel and remaining
+store bindings are still required before application activation. These checks
+do not measure app startup, idle CPU, cursor behavior or UI response.

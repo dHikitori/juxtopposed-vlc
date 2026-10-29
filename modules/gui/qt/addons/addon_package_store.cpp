@@ -82,15 +82,56 @@ ReleaseIdentity readIdentity(const QJsonObject& value)
     result.distributionSource = value.value("distributionSource").toBool();
     return result;
 }
-bool writeJson(const QString& path, const QJsonObject& value, QString* error)
+bool writeJson(const QString& path, const QJsonObject& value, QString* error,
+               const StoreProfileWriteContext* context = nullptr)
 {
+    const QFileInfo info(path);
+    if (context && (info.isSymLink() || (info.exists() && !info.isFile())))
+        return fail(error, QStringLiteral("The add-on state path is not a regular file."));
     QSaveFile file(path);
+    file.setDirectWriteFallback(false);
     if (!file.open(QIODevice::WriteOnly)) return fail(error, QStringLiteral("The app cannot create the add-on state file."));
     file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
     const auto bytes = QJsonDocument(value).toJson(QJsonDocument::Compact);
-    if (file.write(bytes) != bytes.size() || !file.commit())
+    if (file.write(bytes) != bytes.size())
         return fail(error, QStringLiteral("The app cannot save the add-on state."));
+    if (context && !context->current()) {
+        file.cancelWriting();
+        return fail(error, QStringLiteral("The add-on profile request is no longer current."));
+    }
+    if (!file.commit()) return fail(error, QStringLiteral("The app cannot save the add-on state."));
     return true;
+}
+using ProfileChange = StoreProfileGeneration::Change;
+bool profileWriteRoot(const QString& root, const StoreProfileWriteContext* context,
+                      QString* output, QString* error)
+{
+    if (!context) { *output = root; return true; }
+    if (!context->current())
+        return fail(error, QStringLiteral("The add-on profile request is no longer current."));
+    const auto canonical = QFileInfo(root).canonicalFilePath();
+#ifdef Q_OS_WIN
+    const bool matches = canonical.compare(context->directory(), Qt::CaseInsensitive) == 0;
+#else
+    const bool matches = canonical == context->directory();
+#endif
+    if (canonical.isEmpty() || !matches)
+        return fail(error, QStringLiteral("The add-on store does not match the guarded profile."));
+    *output = context->directory();
+    return true;
+}
+ProfileChange commitProfileJson(const QString& root, const StoreAuthority& authority,
+    const QString& name, const QJsonObject& value, QString* error,
+    const StoreProfileWriteContext* context)
+{
+    // Native cancellation ends before the guarded final commit check.
+    const auto mutation = authority.mutation();
+    if (context && !context->current()) {
+        fail(error, QStringLiteral("The add-on profile request is no longer current."));
+        return ProfileChange::RolledBack;
+    }
+    return writeJson(QDir(root).filePath(name), value, error, context)
+        ? ProfileChange::Applied : ProfileChange::NeedsRecovery;
 }
 bool readJson(const QString& path, QJsonObject* value, QString* error)
 {
@@ -1816,21 +1857,27 @@ bool PackageStore::saveProviderPreference(const QString& key, const QJsonValue& 
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    return saveProviderPreferenceLocked(key, value, builtin, saved, error, nullptr) == ProfileChange::Applied;
+}
+
+ProfileChange PackageStore::saveProviderPreferenceLocked(const QString& key, const QJsonValue& value,
+    bool builtin, QJsonObject* saved, QString* error, const StoreProfileWriteContext* context)
+{
+    if (saved) *saved = {};
+    QString root;
+    if (!profileWriteRoot(m_root, context, &root, error)) return ProfileChange::RolledBack;
+    const auto authority = m_authority;
     QJsonObject values;
-    if (!readProviderPreferences(m_root, &values, error)) return false;
+    if (!readProviderPreferences(root, &values, error)) return ProfileChange::NeedsRecovery;
     if (builtin) {
         auto enabled = values.value(QStringLiteral("_builtinEnabled")).toObject();
         enabled.insert(key, value); values.insert(QStringLiteral("_builtinEnabled"), enabled);
     } else values.insert(key, value);
-    if (!providerPreferencesValid(values, error)) return false;
-    {
-        // Native watches finish before writeJson can publish the new file.
-        // The mutation remains active through commit and any failed write.
-        const auto mutation = m_authority.mutation();
-        if (!writeJson(QDir(m_root).filePath(QStringLiteral("provider-order.json")), values, error)) return false;
-    }
+    if (!providerPreferencesValid(values, error)) return ProfileChange::RolledBack;
+    const auto changed = commitProfileJson(root, authority, QStringLiteral("provider-order.json"), values, error, context);
+    if (changed != ProfileChange::Applied) return changed;
     if (saved) *saved = std::move(values);
-    return true;
+    return ProfileChange::Applied;
 }
 
 bool PackageStore::saveProviderOrder(const QString& feature, const QStringList& ids,
@@ -1850,13 +1897,46 @@ bool PackageStore::saveBuiltinProviderEnabled(const QString& id, bool enabled,
     return saveProviderPreference(id, enabled, true, saved, error);
 }
 
+ProfileChange PackageStore::saveProviderOrder(const StoreProfileWriteContext& context,
+    const QString& feature, const QStringList& ids, QJsonObject* saved, QString* error)
+{
+    if (saved) *saved = {};
+    const auto order = QJsonArray::fromStringList(ids);
+    if (!providerFeature(feature) || !providerIds(order)) {
+        fail(error, QStringLiteral("The provider order is not correct."));
+        return ProfileChange::RolledBack;
+    }
+    return saveProviderPreferenceLocked(feature, order, false, saved, error, &context);
+}
+
+ProfileChange PackageStore::saveBuiltinProviderEnabled(const StoreProfileWriteContext& context,
+    const QString& id, bool enabled, QJsonObject* saved, QString* error)
+{
+    if (saved) *saved = {};
+    if (!packageId(id) || !id.startsWith(QLatin1String("hakone.builtin."))) {
+        fail(error, QStringLiteral("The provider ID is not correct."));
+        return ProfileChange::RolledBack;
+    }
+    return saveProviderPreferenceLocked(id, enabled, true, saved, error, &context);
+}
+
 bool PackageStore::setSafeMode(bool enabled, QString* error)
 {
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
-    const auto mutation = m_authority.mutation();
-    return writeJson(QDir(m_root).filePath(QStringLiteral("recovery.json")), QJsonObject{{"safeMode", enabled}}, error);
+    return setSafeModeLocked(enabled, error, nullptr) == ProfileChange::Applied;
+}
+
+ProfileChange PackageStore::setSafeMode(const StoreProfileWriteContext& context, bool enabled, QString* error)
+{ return setSafeModeLocked(enabled, error, &context); }
+
+ProfileChange PackageStore::setSafeModeLocked(bool enabled, QString* error, const StoreProfileWriteContext* context)
+{
+    QString root;
+    if (!profileWriteRoot(m_root, context, &root, error)) return ProfileChange::RolledBack;
+    const auto authority = m_authority;
+    return commitProfileJson(root, authority, QStringLiteral("recovery.json"), QJsonObject{{"safeMode", enabled}}, error, context);
 }
 
 QStringList PackageStore::credentialReferences(const QString& id, const QString& field) const
@@ -1908,13 +1988,42 @@ bool PackageStore::setDistributionSuppressed(const QString& id, bool suppressed,
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
-    const auto path = QDir(m_root).filePath(QStringLiteral("distribution-policy.json"));
+    return setDistributionSuppressedLocked(id, suppressed, error, nullptr) == ProfileChange::Applied;
+}
+
+ProfileChange PackageStore::setDistributionSuppressed(const StoreProfileWriteContext& context,
+    const QString& id, bool suppressed, QString* error)
+{
+    if (!packageId(id)) {
+        fail(error, QStringLiteral("The distribution package ID is not correct."));
+        return ProfileChange::RolledBack;
+    }
+    return setDistributionSuppressedLocked(id, suppressed, error, &context);
+}
+
+ProfileChange PackageStore::setDistributionSuppressedLocked(const QString& id, bool suppressed,
+    QString* error, const StoreProfileWriteContext* context)
+{
+    QString root;
+    if (!profileWriteRoot(m_root, context, &root, error)) return ProfileChange::RolledBack;
+    const auto authority = m_authority;
+    const auto path = QDir(root).filePath(QStringLiteral("distribution-policy.json"));
     QJsonObject policy;
-    if (QFileInfo::exists(path) && !readJson(path, &policy, error)) return false;
+    const QFileInfo info(path);
+    if (context && (info.exists() || info.isSymLink())) {
+        QByteArray bytes;
+        if (!catalogueFile(path, 4 * 1024 * 1024, &bytes, error)) return ProfileChange::NeedsRecovery;
+        QJsonParseError parse;
+        const auto document = QJsonDocument::fromJson(bytes, &parse);
+        if (parse.error != QJsonParseError::NoError || !document.isObject()) {
+            fail(error, QStringLiteral("The distribution policy is not correct."));
+            return ProfileChange::NeedsRecovery;
+        }
+        policy = document.object();
+    } else if (!context && info.exists() && !readJson(path, &policy, error)) return ProfileChange::NeedsRecovery;
     auto removed = policy.value("removed").toObject();
     if (suppressed) removed.insert(id, true); else removed.remove(id);
     policy.insert("formatVersion", 1); policy.insert("removed", removed);
-    const auto mutation = m_authority.mutation();
-    return writeJson(path, policy, error);
+    return commitProfileJson(root, authority, QStringLiteral("distribution-policy.json"), policy, error, context);
 }
 } // namespace vlc::addons

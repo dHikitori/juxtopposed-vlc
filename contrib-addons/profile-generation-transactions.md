@@ -2,8 +2,10 @@
 
 `StoreProfileGeneration` now owns coordinator election and the saved profile
 generation. It prepares peer joins and runs guarded store callbacks. All
-operations run on joined background work. The control channel and production
-store bindings remain open. Native metadata cutover stays off.
+operations run on joined background work. Four policy-write bindings now use
+these callbacks. See [guarded settings](profile-store-settings.md). The control
+channel, remaining store bindings and production mount remain open. Native
+metadata cutover stays off.
 
 A ready record proves that the saved transaction is coherent. It does not
 grant local runtime authority. A prepared peer must still complete the
@@ -127,9 +129,10 @@ archive. Raw completed outputs and superseded probes were removed. The
 protected Core libraries and Windows player package remain unchanged.
 Free space is above 7.5 GB.
 
-The tests exercise this layer's actual callbacks and file publication. They
-do not yet exercise a production `PackageStore` write inside the guarded
-callback, the peer control channel, or native Core final Apply. The existing
+These 70 Linux cases exercise this layer's actual callbacks and file
+publication. The later [settings cohort](profile-store-settings.md) also
+exercises four production `PackageStore` writes inside guarded callbacks.
+Neither cohort proves the peer control channel or native Core final Apply. The existing
 cross-process Store-authority control still reports its missing invalidation.
 No Windows player package is replaced by this component check.
 
@@ -137,7 +140,8 @@ No Windows player package is replaced by this component check.
 
 - Add the strict control protocol, peer owner, and connection-bound ticket.
 - Bind the prepared peer fence to local token readiness and native revocation.
-- Connect locked package mutations and complete store recovery to these callbacks.
+- Connect the remaining locked package mutations and complete store recovery
+  to these callbacks. Four policy-write bindings are implemented.
 - Mount startup, reconnect, display refresh, and app drain without a GUI wait.
 - Test control-channel loss and late replies at every publication boundary.
 - Verify native final Apply, supported app targets, and full app idle performance.
