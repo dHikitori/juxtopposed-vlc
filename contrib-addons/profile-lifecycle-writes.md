@@ -111,9 +111,9 @@ profile recovery still needs to validate policy, package state, private data
 and transaction remnants.
 
 The runtime writer must hold `store.lock` before it requests a ticket. The
-file helper currently acquires that lock inside `write`. Add a retained writer
-scope for ticket negotiation, then keep its exclusive fence through store
-unlock and completion. Test coordinator loss and late grants at that boundary.
+[retained writer scope](profile-writer-scope.md) now holds that lock through
+ticket negotiation. Connect it to the peer channel, then test coordinator
+loss and late grants at that boundary.
 
 The peer channel must close local readiness, cancel native leases and retain
 shared fences until cancellation ends. Mount startup, reconnect, refresh and

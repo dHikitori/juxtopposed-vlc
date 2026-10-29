@@ -100,9 +100,23 @@ It covers real private data across removal and reinstall, damaged-state
 retention, archive failure, staging failure, Windows junctions and a single
 enabled-state commit for a new bundle. The same-release permission shortcut
 now applies reduced grants; restoring the old shortcut fails both control
-rows. The retained writer scope, peer channel, complete profile recovery and
-application mount remain open. See [lifecycle writes](profile-lifecycle-writes.md).
+rows. The peer channel, complete profile recovery and application mount
+remain open. See [lifecycle writes](profile-lifecycle-writes.md).
 The Windows review package is unchanged.
+
+
+A single-use writer scope now holds the store lock before ticket negotiation.
+It releases its locks before return and keeps the preparation deadline through
+negotiation and commit. The initial full store cohort passes 184 normal, 184
+ASAN/UBSAN and 176 native Windows checks. Further review exposed a retirement
+gap inside control checks; both new rows fail before repair. After repair,
+the complete generation and package suites pass 122 normal, 122 ASAN/UBSAN
+and 120 native Windows checks with the current 13-unit producer. The earlier
+policy and lifecycle checkpoint is retained separately. The peer channel,
+complete profile recovery, app mount, full app performance and cursor checks
+remain open. No idle timer or polling is added. See
+[the prepared writer record](profile-writer-scope.md). The local Windows
+review package is unchanged.
 
 ## Verified work
 

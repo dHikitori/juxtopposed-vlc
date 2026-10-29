@@ -59,6 +59,29 @@ public:
     using Recovery = std::function<bool(const StoreProfileWriteContext&, QString*)>;
     using Work = std::function<Change(const StoreProfileWriteContext&, QString*)>;
 
+    // Host only. Keep this on joined work while the control channel obtains a
+    // ticket. It owns store.lock, but does not yet own the exclusive fence.
+    // The first write attempt consumes this scope and releases both locks
+    // before it returns. Destruction also releases a scope that has no ticket.
+    // Acquire, use, and destroy on the same joined background task. Both
+    // controls use one monotonic clock domain; the ticket cannot extend the
+    // preparation deadline. current() does not release an expired scope.
+    class Writer final {
+    public:
+        ~Writer();
+        Writer(const Writer&) = delete;
+        Writer& operator=(const Writer&) = delete;
+        bool current() const noexcept;
+        Result write(const Ticket&, Work);
+    private:
+        friend class StoreProfileGeneration;
+        struct State;
+        explicit Writer(std::shared_ptr<State>);
+        const std::shared_ptr<State> m_state;
+    };
+    static std::unique_ptr<Writer> prepareWriter(const QString& directory,
+        const Control&, Status*, QString* error = nullptr);
+
     static std::unique_ptr<StoreProfileGeneration> acquireCoordinator(
         const QString& directory, Status*, QString* error = nullptr);
     ~StoreProfileGeneration();

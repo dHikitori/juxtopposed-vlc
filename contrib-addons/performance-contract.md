@@ -637,3 +637,16 @@ and initial bundle enable in one state commit. No idle task, timer, polling
 loop, thread or worker process is added. See
 [lifecycle writes](profile-lifecycle-writes.md). The application has not mounted
 the peer flow. Full app idle CPU, response, cursor and shutdown checks remain open.
+
+
+The prepared writer holds the store lock while active ticket negotiation
+runs on an independent control channel. It adds no idle timer, polling loop,
+thread, or worker process. Scope acquisition, write, and cleanup belong on
+one joined background task. Expiry does not release the scope by itself;
+its owner must still cancel or finish work and destroy it. The initial full
+store cohort passes 184/184/176 normal, sanitizer, and native Windows checks.
+A control-check retirement repair then passes 122/122/120 current generation
+and package checks. See [the writer record](profile-writer-scope.md). These
+component checks do not establish full app performance or resolve the Windows
+cursor report. The native owner remains unmounted and the Windows review
+package is unchanged.

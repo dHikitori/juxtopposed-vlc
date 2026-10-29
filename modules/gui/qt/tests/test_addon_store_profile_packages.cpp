@@ -117,6 +117,25 @@ struct Fixture {
 class TestAddonStoreProfilePackages : public QObject {
     Q_OBJECT
 private slots:
+    void preparedWritersCommitRealPackageChanges_data() { operations(); }
+    void preparedWritersCommitRealPackageChanges() {
+        QFETCH(int, operation); Fixture fixture(operation != Enable); QVERIFY(fixture.valid); Status status;
+        const auto before = fixture.state(); const auto ticket = fixture.ticket();
+        auto writer = Generation::prepareWriter(fixture.root, ticket.control, &status); QVERIFY(writer);
+        QLockFile lock(QDir(fixture.root).filePath(QStringLiteral("store.lock"))); QVERIFY(!lock.tryLock(0));
+        auto peer = Generation::prepareJoin(fixture.root, fixture.epoch, control(), &status); QVERIFY(peer.fence); peer.fence.reset();
+        const auto token = fixture.store.authorityToken();
+        const auto result = writer->write(ticket, [&](const auto& context, auto* message) { return fixture.apply(fixture.store, context, operation, message); });
+        QCOMPARE(result.status, Status::Ready); QVERIFY(result.applied && !writer->current() && !token.current());
+        QVERIFY(lock.tryLock(0)); lock.unlock();
+        const auto state = fixture.state(), current = state.value("current").toObject();
+        QCOMPARE(state.value("generation").toDouble(), before.value("generation").toDouble() + (operation == Settings ? 0 : 1));
+        QCOMPARE(state.value("enabled").toBool(), operation != Disable && operation != Recovery);
+        QCOMPARE(current.value("version").toString(), operation == Rollback ? QStringLiteral("1.0.0") : QStringLiteral("2.0.0"));
+        QCOMPARE(current.value("settings").toObject().value("label").toString(), operation == Settings ? QStringLiteral("After") : QStringLiteral("Before"));
+        QCOMPARE(QJsonDocument::fromJson(read(fixture.statePath() + QStringLiteral(".backup"))).object(), before);
+        QCOMPARE(result.epoch.revision, quint64(1)); QVERIFY(Generation::prepareJoin(fixture.root, result.epoch, control(), &status).fence);
+    }
     void ordinaryPackageMethodsKeepTheirBehavior_data() { operations(); }
     void ordinaryPackageMethodsKeepTheirBehavior() {
         QFETCH(int, operation); Fixture fixture(operation != Enable); QVERIFY(fixture.valid);

@@ -97,14 +97,21 @@ struct Locks {
     explicit Locks(const QString& root)
         : store(QDir(root).filePath(QStringLiteral("store.lock")), StoreAuthority(root))
     { store.setStaleLockTime(0); }
-    Status acquire(const QString& root, QString* error) {
+    Status acquireStore(QString* error) {
         if (!store.tryLock(0)) {
             if (store.error() == QLockFile::LockFailedError) return Status::Busy;
             fail(error, "The app cannot lock the add-on profile."); return Status::Error;
         }
+        return Status::Ready;
+    }
+    Status acquireFence(const QString& root, QString* error) {
         StoreProcessFence::Status status;
         fence = StoreProcessFence::acquire(fencePath(root), StoreProcessFence::Mode::Replacement, &status, error);
         return fence ? Status::Ready : status == StoreProcessFence::Status::Busy ? Status::Busy : Status::Error;
+    }
+    Status acquire(const QString& root, QString* error) {
+        const auto status = acquireStore(error);
+        return status == Status::Ready ? acquireFence(root, error) : status;
     }
 };
 Generation::Result result(Status status, const QString& error = {}) { Generation::Result value; value.status = status; value.error = error; return value; }
@@ -117,6 +124,40 @@ struct StoreProfileGeneration::State {
         owner.setStaleLockTime(0);
     }
 };
+struct StoreProfileGeneration::Writer::State {
+    std::atomic_bool open{true}, used{false};
+    const QString root;
+    const Guard prepared;
+    std::unique_ptr<Locks> locks;
+    State(QString directory, Guard guard)
+        : root(std::move(directory)), prepared(std::move(guard)), locks(std::make_unique<Locks>(root)) {}
+};
+StoreProfileGeneration::Writer::Writer(std::shared_ptr<State> state) : m_state(std::move(state)) {}
+StoreProfileGeneration::Writer::~Writer() { m_state->open.store(false, std::memory_order_release); }
+bool StoreProfileGeneration::Writer::current() const noexcept
+{
+    const auto state = m_state;
+    return state->open.load(std::memory_order_acquire) && !state->used.load(std::memory_order_acquire)
+        && state->prepared.current() && state->open.load(std::memory_order_acquire)
+        && !state->used.load(std::memory_order_acquire);
+}
+std::unique_ptr<StoreProfileGeneration::Writer> StoreProfileGeneration::prepareWriter(
+    const QString& directory, const Control& control, Status* status, QString* error)
+{
+    if (status) *status = Status::Error;
+    if (error) error->clear();
+    Guard guard(control);
+    if (!guard.valid()) { fail(error, "The add-on profile preparation request is not correct."); return {}; }
+    if (!guard.current()) { if (status) *status = Status::Stale; return {}; }
+    const auto root = rootPath(directory);
+    if (root.isEmpty()) { fail(error, "The add-on profile directory is not correct."); return {}; }
+    auto state = std::make_shared<Writer::State>(root, std::move(guard));
+    const auto acquired = state->locks->acquireStore(error);
+    if (acquired != Status::Ready) { if (status) *status = acquired; return {}; }
+    if (!state->prepared.current()) { if (status) *status = Status::Stale; return {}; }
+    if (status) *status = Status::Ready;
+    return std::unique_ptr<Writer>(new Writer(std::move(state)));
+}
 StoreProfileWriteContext::StoreProfileWriteContext(QString directory, std::function<bool()> current)
     : m_directory(std::move(directory)), m_current(std::move(current)) {}
 bool StoreProfileWriteContext::current() const noexcept
@@ -173,6 +214,57 @@ StoreProfileGeneration::Result StoreProfileGeneration::recover(const Control& co
     if (!context.current()) return result(Status::NeedsRecovery);
     auto value = result(Status::Ready); value.epoch = record.epoch; return value;
 }
+StoreProfileGeneration::Result StoreProfileGeneration::Writer::write(const Ticket& ticket, Work work)
+{
+    const auto state = m_state;
+    if (state->used.exchange(true, std::memory_order_acq_rel))
+        return result(Status::Error, QStringLiteral("The add-on profile writer was already used."));
+    struct Drain {
+        std::shared_ptr<State> state;
+        bool released = false;
+        void release() noexcept { if (!released) { released = true; state->locks.reset(); } }
+        ~Drain() { release(); }
+    } drain{state};
+    const Guard guard(ticket.control);
+    const auto current = [&]() noexcept {
+        return state->open.load(std::memory_order_acquire) && state->prepared.current()
+            && guard.current() && state->open.load(std::memory_order_acquire);
+    };
+    const auto perform = [&]() -> Result {
+        if (!work || !nonce(ticket.expected.generation) || !nonce(ticket.request) || !guard.valid()
+            || ticket.expected.revision == std::numeric_limits<quint64>::max()
+            || ticket.control.deadline > state->prepared.control.deadline)
+            return result(Status::Error, QStringLiteral("The add-on profile write request is not correct."));
+        if (!current()) return result(Status::Stale);
+        QString error;
+        const auto acquired = state->locks->acquireFence(state->root, &error);
+        if (acquired != Status::Ready) return result(acquired, error);
+        Record record;
+        if (!read(state->root, &record, &error)) return result(Status::NeedsRecovery, error);
+        if (record.epoch != ticket.expected) return result(Status::Stale);
+        if (record.phase != Phase::Ready) return result(Status::NeedsRecovery);
+        if (!current()) return result(Status::Stale);
+        ++record.epoch.revision; record.phase = Phase::Writing; record.request = ticket.request;
+        if (!save(state->root, record, &error)) return result(Status::NeedsRecovery, error);
+        const StoreProfileWriteContext context(state->root, [&] {
+            return current() && state->locks->store.isLocked();
+        });
+        Change change = Change::NeedsRecovery;
+        try { if (context.current()) change = work(context, &error); }
+        catch (...) { error = QStringLiteral("The add-on profile change did not complete."); }
+        if (change == Change::NeedsRecovery || !context.current()) return result(Status::NeedsRecovery, error);
+        if (change != Change::Applied && change != Change::RolledBack) return result(Status::NeedsRecovery);
+        record.phase = Phase::Ready; record.request.clear();
+        if (!save(state->root, record, &error)) return result(Status::NeedsRecovery, error);
+        if (!context.current()) return result(Status::NeedsRecovery);
+        auto value = result(Status::Ready, change == Change::RolledBack ? error : QString{});
+        value.epoch = record.epoch; value.applied = change == Change::Applied; return value;
+    };
+    auto value = perform();
+    drain.release();
+    if (value.status == Status::Ready && !current()) return result(Status::NeedsRecovery, value.error);
+    return value;
+}
 StoreProfileGeneration::Result StoreProfileGeneration::write(const QString& directory, const Ticket& ticket, Work work)
 {
     const Guard guard(ticket.control);
@@ -180,29 +272,9 @@ StoreProfileGeneration::Result StoreProfileGeneration::write(const QString& dire
         || ticket.expected.revision == std::numeric_limits<quint64>::max())
         return result(Status::Error, QStringLiteral("The add-on profile write request is not correct."));
     if (!guard.current()) return result(Status::Stale);
-    const auto root = rootPath(directory);
-    if (root.isEmpty()) return result(Status::Error, QStringLiteral("The add-on profile directory is not correct."));
-    Locks locks(root); QString error;
-    const auto acquired = locks.acquire(root, &error);
-    if (acquired != Status::Ready) return result(acquired, error);
-    Record record;
-    if (!read(root, &record, &error)) return result(Status::NeedsRecovery, error);
-    if (record.epoch != ticket.expected) return result(Status::Stale);
-    if (record.phase != Phase::Ready) return result(Status::NeedsRecovery);
-    if (!guard.current()) return result(Status::Stale);
-    ++record.epoch.revision; record.phase = Phase::Writing; record.request = ticket.request;
-    if (!save(root, record, &error)) return result(Status::NeedsRecovery, error);
-    const StoreProfileWriteContext context(root, [&] { return guard.current() && locks.store.isLocked(); });
-    Change change = Change::NeedsRecovery;
-    try { if (context.current()) change = work(context, &error); }
-    catch (...) { error = QStringLiteral("The add-on profile change did not complete."); }
-    if (change == Change::NeedsRecovery || !context.current()) return result(Status::NeedsRecovery, error);
-    if (change != Change::Applied && change != Change::RolledBack) return result(Status::NeedsRecovery);
-    record.phase = Phase::Ready; record.request.clear();
-    if (!save(root, record, &error)) return result(Status::NeedsRecovery, error);
-    if (!context.current()) return result(Status::NeedsRecovery);
-    auto value = result(Status::Ready, change == Change::RolledBack ? error : QString{});
-    value.epoch = record.epoch; value.applied = change == Change::Applied; return value;
+    Status status; QString error;
+    auto writer = prepareWriter(directory, ticket.control, &status, &error);
+    return writer ? writer->write(ticket, std::move(work)) : result(status, error);
 }
 StoreProfileGeneration::PreparedPeer StoreProfileGeneration::prepareJoin(const QString& directory, const Epoch& expected,
     const Control& control, Status* status, QString* error)

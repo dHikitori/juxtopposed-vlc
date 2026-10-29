@@ -15,6 +15,7 @@
 #include <limits>
 #include <stdexcept>
 #include "addons/addon_store_profile_generation.hpp"
+#include "addons/addon_store_authority.hpp"
 
 using namespace vlc::addons;
 using Generation = StoreProfileGeneration;
@@ -74,7 +75,11 @@ int child(const QStringList& arguments) {
     const auto root = arguments.at(2), operation = arguments.at(3);
     const Generation::Epoch expected{QByteArray::fromHex(arguments.at(4).toLatin1()), arguments.at(5).toULongLong()};
     Generation::Result value; std::unique_ptr<Generation> owner;
-    if (operation == QLatin1String("recover")) {
+    if (operation == QLatin1String("prepare")) {
+        Status status; auto writer = Generation::prepareWriter(root, control(), &status);
+        std::puts(statusName(status).constData()); std::fflush(stdout);
+        return writer && std::getc(stdin) == EOF ? 2 : 0;
+    } else if (operation == QLatin1String("recover")) {
         Status status; owner = Generation::acquireCoordinator(root, &status);
         value.status = status;
         if (owner) value = owner->recover(control(), [](const auto& context, auto*) { return context.current() && save(dataPath(context.directory()), "recovered"); });
@@ -96,6 +101,163 @@ int child(const QStringList& arguments) {
 class TestAddonStoreProfileGeneration : public QObject {
     Q_OBJECT
 private slots:
+    void invalidPreparationDoesNotKeepALock_data() {
+        QTest::addColumn<QString>("kind");
+        for (const auto* kind : {"relative path", "missing path", "no current", "no clock", "expired", "too long", "clock error"}) QTest::newRow(kind) << QString::fromLatin1(kind);
+    }
+    void invalidPreparationDoesNotKeepALock() {
+        QFETCH(QString, kind); Fixture fixture; QVERIFY(fixture.valid); Status status; auto request = control(); auto root = fixture.root.path();
+        if (kind == QLatin1String("relative path")) root = QStringLiteral("relative");
+        if (kind == QLatin1String("missing path")) root += QStringLiteral("/missing");
+        if (kind == QLatin1String("no current")) request.current = {};
+        if (kind == QLatin1String("no clock")) request.clock = {};
+        if (kind == QLatin1String("expired")) request.deadline = Generation::now() - 1;
+        if (kind == QLatin1String("too long")) request.deadline = Generation::now() + Generation::MaximumDuration * 2;
+        if (kind == QLatin1String("clock error")) request.clock = []() -> qint64 { throw std::runtime_error("unit"); };
+        const auto before = read(stampPath(fixture.root.path()));
+        QVERIFY(!Generation::prepareWriter(root, request, &status)); QCOMPARE(status, kind == QLatin1String("expired") ? Status::Stale : Status::Error);
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0)); lock.unlock();
+        QCOMPARE(read(stampPath(fixture.root.path())), before);
+    }
+    void preparationHoldsTheStoreWhilePeersCanJoin() {
+        Fixture fixture; QVERIFY(fixture.valid); Status status;
+        const auto before = read(stampPath(fixture.root.path()));
+        auto oldPeer = Generation::prepareJoin(fixture.root.path(), fixture.epoch, control(), &status); QVERIFY(oldPeer.fence);
+        auto writer = Generation::prepareWriter(fixture.root.path(), control(), &status); QVERIFY(writer); QCOMPARE(status, Status::Ready); QVERIFY(writer->current());
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(!lock.tryLock(0));
+        auto newPeer = Generation::prepareJoin(fixture.root.path(), fixture.epoch, control(), &status); QVERIFY(newPeer.fence); QCOMPARE(status, Status::Ready);
+        QVERIFY(!Generation::prepareWriter(fixture.root.path(), control(), &status)); QCOMPARE(status, Status::Busy);
+        bool called = false;
+        QCOMPARE(fixture.owner->recover(control(), [&](const auto&, auto*) { called = true; return true; }).status, Status::Busy); QVERIFY(!called);
+        Child remote; QCOMPARE(remote.start(fixture.root.path(), QStringLiteral("prepare")), QByteArray("busy")); QVERIFY(remote.release());
+        QCOMPARE(read(stampPath(fixture.root.path())), before);
+        writer.reset(); QVERIFY(lock.tryLock(0)); lock.unlock();
+        QCOMPARE(read(stampPath(fixture.root.path())), before); QCOMPARE(read(dataPath(fixture.root.path())), QByteArray("old"));
+    }
+    void preparedCommitReleasesLocksBeforeItReturns() {
+        Fixture fixture; QVERIFY(fixture.valid); Status status; const auto ticket = fixture.ticket();
+        auto writer = Generation::prepareWriter(fixture.root.path(), ticket.control, &status); QVERIFY(writer);
+        bool guarded = false, nestedRefused = false;
+        const auto result = writer->write(ticket, [&](const auto& context, auto*) {
+            QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock")));
+            StoreProcessFence::Status fenceStatus;
+            const auto peer = StoreProcessFence::acquire(fixture.root.filePath(QStringLiteral("hakone-authority.fence")), StoreProcessFence::Mode::Peer, &fenceStatus);
+            const auto nested = writer->write(ticket, [](const auto&, auto*) { return Generation::Change::Applied; });
+            nestedRefused = nested.status == Status::Error && context.current();
+            guarded = context.current() && !lock.tryLock(0) && !peer && fenceStatus == StoreProcessFence::Status::Busy;
+            return save(dataPath(context.directory()), "prepared") ? Generation::Change::Applied : Generation::Change::NeedsRecovery;
+        });
+        QCOMPARE(result.status, Status::Ready); QVERIFY(result.applied && guarded && nestedRefused); QVERIFY(!writer->current());
+        QCOMPARE(result.epoch.revision, fixture.epoch.revision + 1); QCOMPARE(read(dataPath(fixture.root.path())), QByteArray("prepared"));
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0)); lock.unlock();
+        QVERIFY(Generation::prepareJoin(fixture.root.path(), result.epoch, control(), &status).fence);
+        bool called = false;
+        QCOMPARE(writer->write(ticket, [&](const auto&, auto*) { called = true; return Generation::Change::Applied; }).status, Status::Error); QVERIFY(!called);
+    }
+    void refusedPreparedWritesConsumeTheirScope_data() {
+        QTest::addColumn<QString>("kind");
+        for (const auto* kind : {"busy fence", "closed preparation", "expired preparation", "clock reversed", "extended ticket", "closed ticket", "expired ticket", "bad request", "old epoch", "no work"})
+            QTest::newRow(kind) << QString::fromLatin1(kind);
+    }
+    void refusedPreparedWritesConsumeTheirScope() {
+        QFETCH(QString, kind); Fixture fixture; QVERIFY(fixture.valid); Status status;
+        qint64 tick = 100; bool live = true;
+        Generation::Control prepared{[&] { return live; }, [&] { return tick; }, 1000};
+        auto writer = Generation::prepareWriter(fixture.root.path(), prepared, &status); QVERIFY(writer);
+        Generation::Ticket ticket{fixture.epoch, QByteArray(16, 'p'), {[] { return true; }, [&] { return tick; }, 1000}};
+        Generation::PreparedPeer peer;
+        if (kind == QLatin1String("busy fence")) { peer = Generation::prepareJoin(fixture.root.path(), fixture.epoch, control(), &status); QVERIFY(peer.fence); }
+        if (kind == QLatin1String("closed preparation")) live = false;
+        if (kind == QLatin1String("expired preparation")) tick = 1000;
+        if (kind == QLatin1String("clock reversed")) tick = 99;
+        if (kind == QLatin1String("extended ticket")) ticket.control.deadline = 1001;
+        if (kind == QLatin1String("closed ticket")) ticket.control.current = [] { return false; };
+        if (kind == QLatin1String("expired ticket")) ticket.control.deadline = 100;
+        if (kind == QLatin1String("bad request")) ticket.request = {};
+        if (kind == QLatin1String("old epoch")) ++ticket.expected.revision;
+        const auto before = read(stampPath(fixture.root.path())); bool called = false;
+        Generation::Work work = [&](const auto&, auto*) { called = true; return Generation::Change::Applied; };
+        if (kind == QLatin1String("no work")) work = {};
+        const auto result = writer->write(ticket, std::move(work));
+        const auto expected = kind == QLatin1String("busy fence") ? Status::Busy
+            : kind == QLatin1String("extended ticket") || kind == QLatin1String("bad request") || kind == QLatin1String("no work") ? Status::Error : Status::Stale;
+        QCOMPARE(result.status, expected); QVERIFY(!called && !writer->current());
+        QCOMPARE(read(stampPath(fixture.root.path())), before); QCOMPARE(read(dataPath(fixture.root.path())), QByteArray("old"));
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0)); lock.unlock();
+        QVERIFY(Generation::prepareJoin(fixture.root.path(), fixture.epoch, control(), &status).fence);
+    }
+    void aTicketCannotRestartThePreparationBudget() {
+        Fixture fixture; QVERIFY(fixture.valid); Status status; qint64 tick = 100;
+        Generation::Control prepared{[] { return true; }, [&] { return tick; }, 1000};
+        auto writer = Generation::prepareWriter(fixture.root.path(), prepared, &status); QVERIFY(writer);
+        tick = 900;
+        Generation::Ticket ticket{fixture.epoch, QByteArray(16, 'p'), {[] { return true; }, [&] { return tick; }, 1000}};
+        bool expired = false;
+        const auto result = writer->write(ticket, [&](const auto& context, auto*) { tick = 1000; expired = !context.current(); return Generation::Change::Applied; });
+        QCOMPARE(result.status, Status::NeedsRecovery); QVERIFY(expired && !writer->current());
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0)); lock.unlock();
+        QCOMPARE(fixture.owner->recover(control(), [](const auto&, auto*) { return true; }).status, Status::Ready);
+    }
+    void callbackCanRetireItsPreparedWriter() {
+        Fixture fixture; QVERIFY(fixture.valid); Status status; const auto ticket = fixture.ticket();
+        auto writer = Generation::prepareWriter(fixture.root.path(), ticket.control, &status); QVERIFY(writer);
+        bool closed = false, held = false;
+        const auto result = writer->write(ticket, [&](const auto& context, auto*) {
+            writer.reset(); closed = !context.current();
+            QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock")));
+            held = !lock.tryLock(0) && fixture.owner->recover(control(), [](const auto&, auto*) { return true; }).status == Status::Busy;
+            return Generation::Change::Applied;
+        });
+        QCOMPARE(result.status, Status::NeedsRecovery); QVERIFY(closed && held && !writer);
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0)); lock.unlock();
+        QCOMPARE(fixture.owner->recover(control(), [](const auto&, auto*) { return true; }).status, Status::Ready);
+    }
+    void releaseNoticeCanCloseTheWriter_data() {
+        QTest::addColumn<bool>("retire"); QTest::newRow("retire writer") << true; QTest::newRow("cancel control") << false;
+    }
+    void releaseNoticeCanCloseTheWriter() {
+        QFETCH(bool, retire); Fixture fixture; QVERIFY(fixture.valid); Status status;
+        bool live = true, noticed = false; auto ticket = fixture.ticket(); ticket.control.current = [&] { return live; };
+        auto writer = Generation::prepareWriter(fixture.root.path(), ticket.control, &status); QVERIFY(writer);
+        StoreAuthority authority(fixture.root.path());
+        const auto watch = authority.onChanged([&] { noticed = true; if (retire) writer.reset(); else live = false; }); QVERIFY(watch);
+        const auto result = writer->write(ticket, [](const auto&, auto*) { return Generation::Change::Applied; });
+        QCOMPARE(result.status, Status::NeedsRecovery); QVERIFY(noticed); QVERIFY(retire ? !writer : !writer->current());
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0)); lock.unlock();
+        const Generation::Epoch next{fixture.epoch.generation, fixture.epoch.revision + 1};
+        QVERIFY(Generation::prepareJoin(fixture.root.path(), next, control(), &status).fence);
+    }
+    void controlCheckCanRetireItsWriter_data() {
+        QTest::addColumn<bool>("afterRelease"); QTest::newRow("callback") << false; QTest::newRow("after release") << true;
+    }
+    void controlCheckCanRetireItsWriter() {
+        QFETCH(bool, afterRelease); Fixture fixture; QVERIFY(fixture.valid); Status status;
+        bool armed = false, revoked = false; std::unique_ptr<Generation::Writer> writer;
+        auto ticket = fixture.ticket(); ticket.control.current = [&] { if (armed) writer.reset(); return true; };
+        writer = Generation::prepareWriter(fixture.root.path(), ticket.control, &status); QVERIFY(writer);
+        StoreAuthority authority(fixture.root.path());
+        const auto watch = authority.onChanged([&] { if (afterRelease) armed = true; }); QVERIFY(watch);
+        const auto result = writer->write(ticket, [&](const auto& context, auto*) {
+            if (!afterRelease) { armed = true; revoked = !context.current(); }
+            return Generation::Change::Applied;
+        });
+        QCOMPARE(result.status, Status::NeedsRecovery); QVERIFY(!writer); QVERIFY(afterRelease || revoked);
+        QLockFile lock(fixture.root.filePath(QStringLiteral("store.lock"))); QVERIFY(lock.tryLock(0)); lock.unlock();
+        const Generation::Epoch next{fixture.epoch.generation, fixture.epoch.revision + 1};
+        const auto peer = Generation::prepareJoin(fixture.root.path(), next, control(), &status);
+        QCOMPARE(bool(peer.fence), afterRelease); QCOMPARE(status, afterRelease ? Status::Ready : Status::NeedsRecovery);
+    }
+    void aCrashedPreparationCannotStrandTheStore() {
+        Fixture fixture; QVERIFY(fixture.valid); const auto before = read(stampPath(fixture.root.path()));
+        Child remote; QCOMPARE(remote.start(fixture.root.path(), QStringLiteral("prepare")), QByteArray("ready"));
+        fixture.owner.reset(); Status status; fixture.owner = Generation::acquireCoordinator(fixture.root.path(), &status); QVERIFY(fixture.owner);
+        bool called = false;
+        QCOMPARE(fixture.owner->recover(control(), [&](const auto&, auto*) { called = true; return true; }).status, Status::Busy); QVERIFY(!called);
+        remote.process.kill(); QVERIFY(remote.process.waitForFinished(3000));
+        QCOMPARE(read(stampPath(fixture.root.path())), before); QCOMPARE(read(dataPath(fixture.root.path())), QByteArray("old"));
+        const auto recovered = fixture.owner->recover(control(), [](const auto&, auto*) { return true; });
+        QCOMPARE(recovered.status, Status::Ready); QVERIFY(recovered.epoch.generation != fixture.epoch.generation);
+    }
     void recoveryOwnsTheStoreAndExclusiveFence() {
         QTemporaryDir root; Status status; auto owner = Generation::acquireCoordinator(root.path(), &status); QVERIFY(owner);
         bool guarded = false, closed = false;

@@ -142,7 +142,7 @@ No Windows player package is replaced by this component check.
 
 - Add the strict control protocol, peer owner, and connection-bound ticket.
 - Bind the prepared peer fence to local token readiness and native revocation.
-- Add a retained writer scope that can hold the store lock during ticket
+- Connect the [retained writer scope](profile-writer-scope.md) to ticket
   negotiation. Guarded policy, package state and lifecycle bindings are implemented.
 - Connect complete store recovery, including transaction remnants.
 - Mount startup, reconnect, display refresh, and app drain without a GUI wait.

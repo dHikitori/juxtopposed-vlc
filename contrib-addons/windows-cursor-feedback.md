@@ -48,3 +48,9 @@ Do not replace the user's profile or the preserved build.
 
 The portable image background-work tests address UI blocking. They do not
 close this Windows cursor report.
+
+
+The 2026-10-30 follow-up process query also found no player or add-on worker.
+Thus it provides no live CPU delta while the reported cursor is present.
+The record is `/tmp/hakone-profile-writer-scope/cursor-live-query.json`.
+The new writer component checks do not change or close this report.

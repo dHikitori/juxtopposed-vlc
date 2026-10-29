@@ -8,9 +8,10 @@ The saved generation and guarded writer helper are now implemented. See
 package state and lifecycle methods now have tested guarded bindings. See
 [guarded settings](profile-store-settings.md) and
 [package state writes](profile-package-writes.md), plus
-[lifecycle writes](profile-lifecycle-writes.md). The retained writer scope,
-coordinator transport, complete profile recovery and production mount are
-not implemented yet.
+[lifecycle writes](profile-lifecycle-writes.md). A
+[retained writer scope](profile-writer-scope.md) now holds the store lock
+during ticket negotiation. Coordinator transport, complete profile recovery
+and the production mount are not implemented yet.
 Native metadata owner activation stays off.
 
 A peer is one app process. A fence lease is one held OS lock. An epoch is a
