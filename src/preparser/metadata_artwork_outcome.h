@@ -51,6 +51,20 @@ VLC_API int vlc_metadata_job_SealArtworkNotFound(vlc_metadata_job_t *,
     const struct vlc_metadata_artwork_exhaustion_summary *,
     void *keeper, void (*keeper_release)(void *));
 
+/* Bind current provider/account authority to an already approved artwork
+ * result. Only the native host may call this function. approved must carry a
+ * native approval for this exact child's URI and policy. This function grants
+ * no image approval and completes no job. The pending network child must ask
+ * for artwork/enrich with exactly one artwork field. Bind once, before Complete.
+ * A successful child Apply and PrepareFetchedArtwork carry the same authority
+ * into final native Apply. Cancellation/revocation refuses new admission and
+ * joins an admitted commit. The keeper contains native/std values only and
+ * owns no job/claim or Qt value. Ownership transfers only on success. The
+ * release callback runs once, outside all native locks, at final destruction. */
+VLC_API int vlc_metadata_job_SealArtworkSource(vlc_metadata_job_t *child,
+    input_item_t *approved, const char *image_uri, vlc_metadata_artwork_admission_t *,
+    void *keeper, void (*keeper_release)(void *));
+
 #ifdef __cplusplus
 }
 #endif

@@ -42,9 +42,12 @@ The user approved code edits, fixes, builds, staging, commits, and the native pl
 
 The typed artwork result aggregate is now in application source and all three
 build definitions. It passes 38 normal and 38 ASAN/UBSAN checks with prepared
-portable receipts and real Core not-found Apply. The serial Service runner,
-positive source authority and native owner activation remain open. See
-[the contract and evidence](artwork-attempt-aggregate.md).
+portable receipts and real Core not-found Apply. Core now retains native source
+authority through positive child and final Apply; all 13 related Core suites
+pass normally and with focused ASAN/UBSAN coverage. The serial Service runner,
+typed positive host transfer and native owner activation remain open. See
+[the aggregate](artwork-attempt-aggregate.md) and
+[positive Core authority](artwork-positive-source-authority.md).
 
 ## Verified work
 

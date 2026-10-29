@@ -73,6 +73,10 @@ final Core commit. It must then use this aggregate for a final not-found
 result. Image failure must permit later providers without permitting a false
 not-found result.
 
+Core now has a [positive source seal](artwork-positive-source-authority.md).
+It passes 13 normal and 13 focused sanitizer suites. The aggregate still needs
+typed positive receipts and the host transfer into that seal.
+
 Native owner activation remains off. Before activation, verify every retained
 provider, local metadata work, cancellation, status bits and the rule that an
 owned lookup cannot bypass this path through legacy fetching. The current

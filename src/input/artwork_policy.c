@@ -86,6 +86,14 @@ int vlc_artwork_item_SetApprovedURI(input_item_t *item, const char *uri)
     vlc_mutex_unlock(&item->lock);
     free(old_uri); free(old_source); vlc_input_policy_Release(old_policy); free(record); free(source); free(value); return status;
 }
+bool vlc_artwork_item_ApprovalMatchesLocked(input_item_t *item, const char *source_uri,
+    vlc_input_policy_t *policy, const char *uri)
+{
+    vlc_mutex_assert(&item->lock);
+    const input_item_owner_t *owner = item_owner(item);
+    return uri != NULL && current_locked(item) && owner->artwork_policy == policy
+        && same_string(source_uri, owner->artwork_source_uri) && !strcmp(owner->artwork_uri, uri);
+}
 int vlc_artwork_item_PrepareApproval(input_item_t *item, const char *source_uri,
     vlc_input_policy_t *policy, const char *uri, struct vlc_artwork_approval *approval)
 {
@@ -94,8 +102,7 @@ int vlc_artwork_item_PrepareApproval(input_item_t *item, const char *source_uri,
     vlc_mutex_lock(&item->lock);
     const input_item_owner_t *owner = item_owner(item);
     int status = VLC_SUCCESS;
-    if (!current_locked(item) || owner->artwork_policy != policy
-        || !same_string(source_uri, owner->artwork_source_uri) || strcmp(owner->artwork_uri, uri)) status = -EACCES;
+    if (!vlc_artwork_item_ApprovalMatchesLocked(item, source_uri, policy, uri)) status = -EACCES;
     else {
         approval->uri = strdup(owner->artwork_uri);
         if (owner->artwork_source_uri != NULL) approval->source_uri = strdup(owner->artwork_source_uri);

@@ -13,6 +13,10 @@ bool vlc_artwork_item_HasMissingDisplay(input_item_t *);
 /* Allocate proof from a current native result. Text metadata is not proof. */
 int vlc_artwork_item_PrepareApproval(input_item_t *result, const char *source_uri,
     vlc_input_policy_t *, const char *artwork_uri, struct vlc_artwork_approval *);
+/* Query one exact native approval with the item lock held. This function
+ * does no allocation, I/O or callback and grants no write authority. */
+bool vlc_artwork_item_ApprovalMatchesLocked(input_item_t *, const char *source_uri,
+    vlc_input_policy_t *, const char *artwork_uri);
 /* The item lock is held. No allocation or callback occurs. Swap takes the
  * prepared proof and returns the old proof for cleanup after unlock.
  */

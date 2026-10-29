@@ -770,6 +770,171 @@ static void notfound_current_query_is_atomic_and_observes_revocation(void)
     notfound_no_target_writes(&f, &before); clean(&f); assert(keeper.releases == 1);
     vlc_metadata_artwork_admission_Release(keeper.gate);
 }
+
+static const char source_image[] = "file:///cache/source-approved.png";
+static input_item_t *source_fixture(struct fixture *f, struct artwork_child *child,
+                                    struct exhaustion_keeper *keeper)
+{
+    memset(keeper, 0, sizeof(*keeper)); keeper->reenter = true;
+    keeper->gate = vlc_metadata_artwork_admission_New(vlc_tick_now() + VLC_TICK_FROM_SEC(5)); assert(keeper->gate);
+    init(f); start(f); local_facts(f->parsed); artwork_status(f->parsed, ITEM_ART_NOTFOUND | 0x100, 0);
+    assert(vlc_metadata_job_PrepareLocal(f->job, f->parsed, NULL) == VLC_SUCCESS);
+    notfound_child_start(child, f);
+    input_item_t *result = input_item_Copy(vlc_metadata_job_GetRequest(child->job)->item); assert(result);
+    assert(vlc_artwork_item_SetApprovedURI(result, source_image) == VLC_SUCCESS); return result;
+}
+static int source_seal(struct artwork_child *child, input_item_t *result, struct exhaustion_keeper *keeper)
+{
+    return vlc_metadata_job_SealArtworkSource(child->job, result, source_image,
+        keeper->gate, keeper, exhaustion_keeper_release);
+}
+static void source_complete(struct fixture *f, struct artwork_child *child, input_item_t *result)
+{
+    assert(vlc_metadata_job_Complete(child->job, VLC_SUCCESS, result, NULL, 0)); assert(child->ended == 1);
+    assert(vlc_metadata_job_Apply(child->job, f->parsed, 0, NULL) == VLC_SUCCESS);
+}
+static void positive_source_reaches_final_apply_and_releases_outside_locks(void)
+{
+    struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+    input_item_t *result = source_fixture(&f, &child, &keeper); assert(source_seal(&child, result, &keeper) == VLC_SUCCESS);
+    source_complete(&f, &child, result);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+    input_item_Release(result); artwork_child_clear(&child); assert(keeper.releases == 0); complete(&f);
+    field(f.item, vlc_meta_ArtworkURL, NULL); assert(!input_item_IsArtFetched(f.item));
+    assert(vlc_metadata_artwork_admission_Enter(keeper.gate));
+    assert(vlc_metadata_job_IsCurrentFor(f.job, f.item)); vlc_metadata_artwork_admission_Leave(keeper.gate);
+    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == VLC_SUCCESS);
+    field(f.item, vlc_meta_ArtworkURL, source_image); assert(input_item_IsArtFetched(f.item));
+    assert(vlc_meta_GetStatus(f.item->p_meta) & ITEM_ART_NOTFOUND); assert(vlc_meta_GetStatus(f.item->p_meta) & 0x100);
+    assert(input_item_IsPreparsed(f.item) && f.item->i_duration == VLC_TICK_FROM_SEC(123));
+    clean(&f); assert(keeper.releases == 1); assert(!vlc_metadata_artwork_admission_IsCurrent(keeper.gate));
+    vlc_metadata_artwork_admission_Release(keeper.gate);
+}
+static void positive_source_rejects_raw_foreign_duplicate_and_mixed_claims(void)
+{
+    for (unsigned mode = 0; mode < 7; ++mode) {
+        struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+        input_item_t *result = source_fixture(&f, &child, &keeper);
+        if (mode == 0) input_item_SetArtURL(result, source_image); /* The same text loses native approval. */
+        if (mode == 1) {
+            input_item_SetURI(result, "file:///foreign.flac");
+            assert(vlc_artwork_item_SetApprovedURI(result, source_image) == VLC_SUCCESS);
+        }
+        if (mode < 2) assert(source_seal(&child, result, &keeper) != VLC_SUCCESS);
+        else if (mode == 2) {
+            assert(vlc_metadata_job_SealArtworkSource(child.job, result, "file:///cache/other.png",
+                keeper.gate, &keeper, exhaustion_keeper_release) != VLC_SUCCESS);
+        } else if (mode == 3) {
+            const struct vlc_metadata_artwork_exhaustion_summary summary = exhaustion_summary();
+            assert(vlc_metadata_job_SealArtworkNotFound(child.job, keeper.gate, &summary, &keeper, exhaustion_keeper_release) == VLC_SUCCESS);
+            assert(source_seal(&child, result, &keeper) != VLC_SUCCESS);
+        } else {
+            assert(source_seal(&child, result, &keeper) == VLC_SUCCESS);
+            if (mode == 4) assert(source_seal(&child, result, &keeper) != VLC_SUCCESS);
+            if (mode == 5) {
+                const struct vlc_metadata_artwork_exhaustion_summary summary = exhaustion_summary();
+                assert(vlc_metadata_job_SealArtworkNotFound(child.job, keeper.gate, &summary, &keeper, exhaustion_keeper_release) != VLC_SUCCESS);
+            }
+            if (mode == 6) {
+                assert(vlc_metadata_job_Complete(child.job, VLC_SUCCESS, result, NULL, 0));
+                assert(source_seal(&child, result, &keeper) != VLC_SUCCESS);
+            }
+        }
+        const struct notfound_target_tokens before = notfound_tokens(f.item);
+        notfound_no_target_writes(&f, &before);
+        input_item_Release(result); artwork_child_clear(&child); clean(&f);
+        assert(keeper.releases == (mode >= 3)); vlc_metadata_artwork_admission_Release(keeper.gate);
+    }
+}
+static void positive_source_rejects_a_different_completed_result(void)
+{
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+        input_item_t *result = source_fixture(&f, &child, &keeper); assert(source_seal(&child, result, &keeper) == VLC_SUCCESS);
+        if (mode == 0) assert(vlc_artwork_item_SetApprovedURI(result, "file:///cache/replaced.png") == VLC_SUCCESS);
+        if (mode == 1) input_item_SetTitle(result, "Other identity");
+        if (mode == 2) { input_item_Release(result); result = input_item_Copy(vlc_metadata_job_GetRequest(child.job)->item); assert(result); }
+        assert(vlc_metadata_job_Complete(child.job, VLC_SUCCESS, result, NULL, 0));
+        const struct notfound_target_tokens before = notfound_tokens(f.item);
+        assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) != VLC_SUCCESS);
+        assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) != VLC_SUCCESS);
+        notfound_no_target_writes(&f, &before); field(f.parsed, vlc_meta_ArtworkURL, NULL);
+        input_item_Release(result); artwork_child_clear(&child); clean(&f); assert(keeper.releases == 1);
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+    }
+}
+static void positive_source_revocation_refuses_each_handoff(void)
+{
+    for (unsigned stage = 0; stage < 5; ++stage) {
+        struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+        input_item_t *result = source_fixture(&f, &child, &keeper);
+        if (stage == 0) { vlc_metadata_artwork_admission_Revoke(keeper.gate); assert(source_seal(&child, result, &keeper) != VLC_SUCCESS); }
+        else {
+            assert(source_seal(&child, result, &keeper) == VLC_SUCCESS);
+            if (stage == 1) vlc_metadata_artwork_admission_Revoke(keeper.gate);
+            assert(vlc_metadata_job_Complete(child.job, VLC_SUCCESS, result, NULL, 0));
+            if (stage == 1) assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) != VLC_SUCCESS);
+            else {
+                assert(vlc_metadata_job_Apply(child.job, f.parsed, 0, NULL) == VLC_SUCCESS);
+                if (stage == 2) vlc_metadata_artwork_admission_Revoke(keeper.gate);
+                const int prepared = vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false);
+                if (stage == 2) assert(prepared != VLC_SUCCESS);
+                else {
+                    assert(prepared == VLC_SUCCESS);
+                    if (stage == 3) vlc_metadata_artwork_admission_Revoke(keeper.gate);
+                    complete(&f);
+                    if (stage == 4) vlc_metadata_artwork_admission_Revoke(keeper.gate);
+                    assert(!vlc_metadata_job_IsCurrentFor(f.job, f.item));
+                    assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) != VLC_SUCCESS);
+                }
+            }
+        }
+        const struct notfound_target_tokens before = notfound_tokens(f.item); notfound_no_target_writes(&f, &before);
+        input_item_Release(result); artwork_child_clear(&child); clean(&f); assert(keeper.releases == (stage != 0));
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+    }
+}
+static void positive_source_compares_private_execution_and_effective_identity(void)
+{
+    for (unsigned mode = 0; mode < 12; ++mode) for (unsigned staged = 0; staged < 2; ++staged) {
+        struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+        input_item_t *result = source_fixture(&f, &child, &keeper); assert(source_seal(&child, result, &keeper) == VLC_SUCCESS);
+        source_complete(&f, &child, result);
+        if (staged) assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+        if (mode < 6) notfound_mutate_private_execution(f.parsed, mode);
+        if (mode == 6) input_item_SetTitle(f.parsed, "Wrong title");
+        if (mode == 7) { char *title = input_item_GetTitle(f.parsed); assert(title); input_item_SetTitle(f.parsed, title); free(title); }
+        if (mode == 8) input_item_SetMetaExtra(f.parsed, "Foreign identity", "Changed");
+        if (mode == 9) input_item_SetArtURL(f.parsed, source_image);
+        if (mode == 10) assert(vlc_artwork_item_SetApprovedURI(f.parsed, source_image) == VLC_SUCCESS);
+        if (mode == 11) artwork_status(f.parsed, 0x200, 0);
+        const struct notfound_target_tokens before = notfound_tokens(f.item);
+        if (!staged) assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) != VLC_SUCCESS);
+        else { complete(&f); assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) != VLC_SUCCESS); }
+        notfound_no_target_writes(&f, &before);
+        input_item_Release(result); artwork_child_clear(&child); clean(&f); assert(keeper.releases == 1);
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+    }
+    for (unsigned replace = 0; replace < 2; ++replace) {
+        struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+        input_item_t *result = source_fixture(&f, &child, &keeper); assert(source_seal(&child, result, &keeper) == VLC_SUCCESS);
+        source_complete(&f, &child, result); assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+        input_item_t *remote = input_item_Copy(f.parsed); assert(remote); input_item_SetTitle(remote, "Wrong final identity");
+        assert(vlc_metadata_job_Complete(f.job, VLC_SUCCESS, remote, NULL, 0)); input_item_Release(remote);
+        const struct notfound_target_tokens before = notfound_tokens(f.item);
+        const int status = vlc_metadata_job_Apply(f.job, f.item, replace ? UINT32_C(1) << vlc_meta_Title : 0, NULL);
+        if (replace) { assert(status != VLC_SUCCESS); notfound_no_target_writes(&f, &before); }
+        else {
+            /* Fill keeps the existing title. Compare the identity Core will publish. */
+            assert(status == VLC_SUCCESS); field(f.item, vlc_meta_Title, "Original title");
+            field(f.item, vlc_meta_ArtworkURL, source_image); assert(input_item_IsArtFetched(f.item));
+        }
+        input_item_Release(result); artwork_child_clear(&child); clean(&f); assert(keeper.releases == 1);
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+    }
+}
+
 int main(void)
 {
     full_native_parity_and_seal(); sideband_waits_for_admission(); stale_native_same_value_and_aba();
@@ -788,5 +953,10 @@ int main(void)
     notfound_compares_the_identity_actually_published(); notfound_compares_effective_native_work_ids();
     notfound_private_uri_name_options_same_value_and_aba();
     notfound_current_query_is_atomic_and_observes_revocation();
+    positive_source_reaches_final_apply_and_releases_outside_locks();
+    positive_source_rejects_raw_foreign_duplicate_and_mixed_claims();
+    positive_source_rejects_a_different_completed_result();
+    positive_source_revocation_refuses_each_handoff();
+    positive_source_compares_private_execution_and_effective_identity();
     return 0;
 }

@@ -366,8 +366,92 @@ static void notfound_final_publication_serializes_a_working_mutation(void)
     assert(input_item_IsPreparsed(f.item) && f.item->i_duration == VLC_TICK_FROM_SEC(123));
     clean(&f); assert(keeper.releases == 1); vlc_metadata_artwork_admission_Release(keeper.gate);
 }
+static void positive_source_allocation_failures_keep_caller_ownership(void)
+{
+    unsigned refused = 0;
+    for (size_t index = 0; index < 256; ++index) {
+        struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+        input_item_t *result = source_fixture(&f, &child, &keeper);
+        allocation_at = index; allocation_count = 0; allocation_fault = true;
+        const int status = source_seal(&child, result, &keeper); allocation_fault = false;
+        if (status != VLC_SUCCESS) {
+            ++refused; assert(status == VLC_ENOMEM); assert(child.job->artwork_source == NULL && keeper.releases == 0);
+            assert(source_seal(&child, result, &keeper) == VLC_SUCCESS);
+        }
+        source_complete(&f, &child, result);
+        assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+        input_item_Release(result); artwork_child_clear(&child); complete(&f);
+        assert(vlc_metadata_job_Apply(f.job, f.item, 0, NULL) == VLC_SUCCESS);
+        clean(&f); assert(keeper.releases == 1); vlc_metadata_artwork_admission_Release(keeper.gate);
+        if (status == VLC_SUCCESS) break;
+    }
+    assert(refused >= 10 && refused < 256);
+}
+
+static void positive_source_final_allocation_failures_leave_every_fact(void)
+{
+    unsigned refused = 0;
+    for (size_t index = 0; index < 256; ++index) {
+        struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+        input_item_t *result = source_fixture(&f, &child, &keeper);
+        assert(source_seal(&child, result, &keeper) == VLC_SUCCESS); source_complete(&f, &child, result);
+        assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS);
+        complete(&f);
+        const struct notfound_target_tokens before = notfound_tokens(f.item);
+        const unsigned calls = reservation_calls;
+        allocation_at = index; allocation_count = 0; allocation_fault = true;
+        const int status = vlc_metadata_job_Apply(f.job, f.item, 0, NULL); allocation_fault = false;
+        if (status != VLC_SUCCESS) {
+            ++refused; assert(status == VLC_ENOMEM && reservation_calls == calls);
+            notfound_no_target_writes(&f, &before);
+        } else {
+            field(f.item, vlc_meta_ArtworkURL, source_image); assert(input_item_IsArtFetched(f.item));
+        }
+        input_item_Release(result); artwork_child_clear(&child); clean(&f); assert(keeper.releases == 1);
+        vlc_metadata_artwork_admission_Release(keeper.gate);
+        if (status == VLC_SUCCESS) break;
+    }
+    assert(refused >= 4 && refused < 256);
+}
+static void *positive_source_revoke(void *opaque)
+{
+    struct notfound_revoke_call *call = opaque;
+    vlc_metadata_artwork_admission_Revoke(call->gate);
+    assert(input_item_IsArtFetched(call->item)); field(call->item, vlc_meta_ArtworkURL, source_image);
+    atomic_store(&call->done, true); return NULL;
+}
+static void positive_source_final_apply_joins_revocation_and_locks_working(void)
+{
+    struct fixture f; struct artwork_child child; struct exhaustion_keeper keeper;
+    input_item_t *result = source_fixture(&f, &child, &keeper);
+    assert(source_seal(&child, result, &keeper) == VLC_SUCCESS); source_complete(&f, &child, result);
+    assert(vlc_metadata_job_PrepareFetchedArtwork(f.job, child.job, f.parsed, false) == VLC_SUCCESS); complete(&f);
+    vlc_sem_t entered, proceed; vlc_sem_init(&entered, 0); vlc_sem_init(&proceed, 0);
+    reserve_entered = &entered; reserve_continue = &proceed;
+    struct notfound_apply_call apply = {.fixture=&f}; vlc_thread_t writer;
+    assert(vlc_clone(&writer, notfound_apply, &apply) == 0); vlc_sem_wait(&entered);
+    struct notfound_working_mutation mutation = {.working=f.parsed};
+    vlc_sem_init(&mutation.attempted, 0); atomic_init(&mutation.writer_holds_working, false); atomic_init(&mutation.done, false);
+    vlc_thread_t mutator; assert(vlc_clone(&mutator, notfound_change_working_at_reservation, &mutation) == 0);
+    vlc_sem_wait(&mutation.attempted); assert(atomic_load(&mutation.writer_holds_working) && !atomic_load(&mutation.done));
+    struct notfound_revoke_call revoke = {.gate=keeper.gate, .item=f.item}; atomic_init(&revoke.done, false);
+    vlc_thread_t invalidator; assert(vlc_clone(&invalidator, positive_source_revoke, &revoke) == 0);
+    const vlc_tick_t deadline = vlc_tick_now() + VLC_TICK_FROM_SEC(2);
+    while (vlc_metadata_artwork_admission_IsCurrent(keeper.gate) && vlc_tick_now() < deadline)
+        vlc_tick_wait(vlc_tick_now() + VLC_TICK_FROM_MS(100));
+    assert(!vlc_metadata_artwork_admission_IsCurrent(keeper.gate) && !atomic_load(&revoke.done));
+    vlc_sem_post(&proceed); vlc_join(writer, NULL); vlc_join(invalidator, NULL); vlc_join(mutator, NULL);
+    reserve_entered = reserve_continue = NULL;
+    assert(apply.status == VLC_SUCCESS && atomic_load(&revoke.done) && atomic_load(&mutation.done));
+    input_item_Release(result); artwork_child_clear(&child); clean(&f); assert(keeper.releases == 1);
+    vlc_metadata_artwork_admission_Release(keeper.gate);
+}
+
 int main(void)
 {
+    positive_source_allocation_failures_keep_caller_ownership();
+    positive_source_final_allocation_failures_leave_every_fact();
+    positive_source_final_apply_joins_revocation_and_locks_working();
     allocation_failures_leave_every_fact(); failed_local_snapshot_can_retry();
     failed_extra_and_status_reservation_has_no_native_writes();
     fetched_artwork_reserves_one_combined_status_token();
