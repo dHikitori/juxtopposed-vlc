@@ -47,8 +47,9 @@ cancels on retirement.
 
 ## Evidence
 
-Current source passes 58 aggregate checks and 86 completion checks normally
-and with ASAN/UBSAN. Each build has 44 fresh objects. Valid portable aggregate
+Current source passes 69 aggregate checks and 36 native image checks normally
+and with ASAN/UBSAN. The preceding portable group passes 86 completion checks
+and 58 aggregate checks in each build. The current native group has 47 fresh objects per build. Valid portable aggregate
 receipts use joined preparation and the actual prepared Manager path. Both
 negative and positive transactions run through real Core Apply. Positive
 image approval comes from the Core fixture. Native lookup execution uses the
@@ -69,12 +70,16 @@ joined work, obtain native outcomes, validate positive identity evidence,
 approve the image and retain current provider/account authority through the
 final Core commit. It must then use this aggregate for a final not-found
 result. Image failure must permit later providers without permitting a false
-not-found result.
+not-found result. Native positive claims now use `acceptNativePositive`, the
+actual native image adapter and `trySealNativePositive`. The latter requires
+an image permit that arms the same native gate. See
+[native source and consent authority](artwork-native-positive-authority.md).
 
 Core now has a [positive source seal](artwork-positive-source-authority.md).
 It passes 13 normal and 13 focused sanitizer suites. Portable positive receipts
 and their host transfer now pass the combined 144-case group. Native positive
-claims, actual image broker integration and the serial runner remain open.
+claim and image consent transfer now pass the 105-case normal/sanitizer group.
+Portable image broker integration and the serial runner remain open.
 
 Native owner activation remains off. Before activation, verify every retained
 provider, local metadata work, cancellation, status bits and the rule that an

@@ -202,12 +202,13 @@ void vlc_metadata_native_outcome_authority_Release(vlc_metadata_native_outcome_a
     reservation_release(authority->reservation); free(authority);
     vlc_metadata_native_provider_Release(provider);
 }
-vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitOutcome(
+static vlc_metadata_native_outcome_authority_t *admit_authority(
     vlc_metadata_native_claim_t *claim, vlc_metadata_job_t *job,
-    meta_fetcher_provider_t expected_family, vlc_metadata_artwork_admission_t *admission)
+    meta_fetcher_provider_t expected_family, vlc_metadata_artwork_admission_t *admission, bool positive)
 {
     if (claim == NULL || job == NULL || claim->family != expected_family
-        || (claim->outcome != META_FETCHER_OUTCOME_NO_MATCH && claim->outcome != META_FETCHER_OUTCOME_NOT_APPLICABLE)
+        || (positive ? claim->outcome != META_FETCHER_OUTCOME_MATCH || claim->artwork == NULL || claim->artwork[0] == '\0'
+                     : claim->outcome != META_FETCHER_OUTCOME_NO_MATCH && claim->outcome != META_FETCHER_OUTCOME_NOT_APPLICABLE)
         || !vlc_metadata_artwork_admission_IsCurrent(admission) || !snapshot_current(&claim->snapshot, job)) {
         vlc_metadata_artwork_admission_Revoke(admission); return NULL;
     }
@@ -231,6 +232,15 @@ vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitOutcome(
     }
     return authority;
 }
+
+vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitOutcome(
+    vlc_metadata_native_claim_t *claim, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t expected_family, vlc_metadata_artwork_admission_t *admission)
+{ return admit_authority(claim, job, expected_family, admission, false); }
+vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitSource(
+    vlc_metadata_native_claim_t *claim, vlc_metadata_job_t *job,
+    meta_fetcher_provider_t expected_family, vlc_metadata_artwork_admission_t *admission)
+{ return admit_authority(claim, job, expected_family, admission, true); }
 
 vlc_metadata_native_provider_t *vlc_metadata_native_provider_Hold(vlc_metadata_native_provider_t *provider)
 { vlc_atomic_rc_inc(&provider->refs); return provider; }

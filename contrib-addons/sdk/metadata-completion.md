@@ -135,8 +135,10 @@ responses. This evidence does not prove a live service, the final native
 aggregate, or a mounted owner path. The current combined build passes all 200 completion, identity, catalogue, and
 store-authority cases after the explicit worker and Wasm path change.
 
-The current receipt and artwork aggregate group passes 86 and 58 cases,
+The portable receipt and artwork aggregate group passes 86 and 58 cases,
 respectively, both normally and with sanitizers. It verifies portable positive
-source transfer through final Core Apply. The serial Service runner, native
-positive path and mounted owner remain separate integration gates. See
-[the current evidence](../artwork-positive-host-transfer.md).
+source transfer through final Core Apply. Native source and image consent
+transfer now pass 69 aggregate and 36 native image checks in each build.
+The serial Service runner and mounted owner remain integration gates. See
+[portable evidence](../artwork-positive-host-transfer.md) and
+[native evidence](../artwork-native-positive-authority.md).

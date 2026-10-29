@@ -259,6 +259,32 @@ AddonNativeProviderContext::NegativeOutcome AddonNativeProviderContext::takeOutc
     if (!authority || !current) { vlc_metadata_artwork_admission_Revoke(admission); return {}; }
     return {value, authority};
 }
+std::shared_ptr<vlc_metadata_native_outcome_authority_t> AddonNativeProviderContext::admitPositive(
+    const QString& reference, vlc_metadata_job_t* job, meta_fetcher_provider_t family,
+    vlc_metadata_artwork_admission_t* admission)
+{
+    const auto state = m_state; auto call = state->begin();
+    const auto reject = [&] { vlc_metadata_artwork_admission_Revoke(admission);
+        return std::shared_ptr<vlc_metadata_native_outcome_authority_t>{}; };
+    if (!call || reference.isEmpty() || reference.size() > 128 || !job
+        || !vlc_metadata_artwork_admission_IsCurrent(admission)) return reject();
+    const auto found = state->findClaim(reference.toStdString(), job, family);
+    if (!found.pending || !found.pending->outcome || !found.claim
+        || vlc_metadata_native_claim_GetOutcome(found.claim.get()) != META_FETCHER_OUTCOME_MATCH) return reject();
+    const auto authority = std::shared_ptr<vlc_metadata_native_outcome_authority_t>(
+        vlc_metadata_native_claim_AdmitSource(found.claim.get(), job, family, admission),
+        vlc_metadata_native_outcome_authority_Release);
+    bool current;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        const auto row = state->pending.find(found.pending->id);
+        current = !state->closed && state->lifetime.current() && row != state->pending.end()
+            && row->second == found.pending && found.pending->claim == found.claim;
+    }
+    if (!authority || !current || !vlc_metadata_artwork_admission_IsCurrent(admission)) return reject();
+    return authority;
+}
+
 void AddonNativeProviderContext::poll()
 {
     const auto state = m_state; auto call = state->begin();

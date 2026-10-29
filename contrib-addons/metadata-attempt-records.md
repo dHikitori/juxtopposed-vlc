@@ -81,9 +81,12 @@ retained separately; they are not successful builds. The focused proof does not
 replace a full app link, native aggregate proof, Windows runtime check, or
 owner activation check.
 
-The current group passes 86 completion and 58 artwork aggregate cases normally
+The portable group passes 86 completion and 58 artwork aggregate cases normally
 and with ASAN/UBSAN. Portable positive receipts use the prepared Manager path
 and can retain native source authority through final Core Apply. The fixture
 runs the shared consumer and supplies a Core image approval. Actual image
-resolution, the serial Service runner, native positive claims and owner
-activation remain open. See [the current proof](artwork-positive-host-transfer.md).
+resolution for portable results, the serial Service runner and owner activation
+remain open. The native source and image consent path now passes 69 aggregate
+and 36 native image checks in each build. See
+[the portable proof](artwork-positive-host-transfer.md) and
+[the native proof](artwork-native-positive-authority.md).

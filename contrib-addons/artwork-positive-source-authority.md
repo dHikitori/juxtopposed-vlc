@@ -73,8 +73,8 @@ The portable completion receipt now also certifies the exact completed
 [typed aggregate](artwork-attempt-aggregate.md) passes 144 normal and 144
 sanitizer checks with receipt and final Core tests. See
 [the host transfer evidence](artwork-positive-host-transfer.md). Native positive
-claims, the serial Service runner and actual image broker integration remain
-open. Native owner activation stays off until the preserved provider, consumer,
+claims and image consent now pass their [native group](artwork-native-positive-authority.md).
+The serial Service runner and portable image broker integration remain open. Native owner activation stays off until the preserved provider, consumer,
 cancellation and legacy-bypass checks pass.
 
 The local Windows review package remains clean source `335ac989d0`. This Core

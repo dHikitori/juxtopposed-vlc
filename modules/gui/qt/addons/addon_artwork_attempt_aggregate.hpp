@@ -3,6 +3,7 @@
 #include "addon_artwork_attempt_plan.hpp"
 #include "addon_artwork_attempt_keeper.hpp"
 #include "addon_native_provider_context.hpp"
+#include "addon_native_artwork_assets.hpp"
 #include <atomic>
 #include <optional>
 #include <vector>
@@ -49,6 +50,9 @@ public:
     // This method obtains authority from Context itself. No raw enum, JSON
     // result, or caller-constructed NegativeOutcome can enter the ledger.
     bool acceptNativeClaim(unsigned ordinal, AddonNativeProviderContext&, const QString& opaqueClaim);
+    bool acceptNativePositive(unsigned ordinal, AddonNativeProviderContext&, const QString& opaqueClaim);
+    int trySealNativePositive(unsigned ordinal, vlc_metadata_job_t* exactPendingChild,
+        input_item_t* approved, const char* imageUri, const AddonNativeArtworkAssets::Permit&);
     void block(unsigned ordinal, BlockReason);
     // Call only after the existing positive image approval path has succeeded.
     // This grants no image authority; it permanently ends negative admission.
@@ -74,6 +78,7 @@ private:
     bool ownerThread() const noexcept;
     bool binding(unsigned ordinal, ArtworkAttemptPlan::Implementation);
     bool fail(unsigned ordinal, BlockReason, bool revoke = false);
+    int sealPositiveSource(unsigned ordinal, vlc_metadata_job_t*, input_item_t*, const char*);
     void clearQtData();
     static bool childPending(vlc_metadata_job_t*) noexcept;
     const std::shared_ptr<CoreMetadataAdmission> m_admission;

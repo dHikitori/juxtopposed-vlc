@@ -12,6 +12,7 @@
 #include <vlc_metadata_backend.h>
 typedef struct vlc_metadata_native_claim vlc_metadata_native_claim_t;
 class AddonNativeProviderArtworkAssets;
+namespace vlc::addons { class AddonMetadataNativeAdmission; }
 
 /** This adapter accepts native job snapshots only. It has no guest or QML API.
  * Call the Qt API on the owner thread. Construction requires the app lifetime.
@@ -42,6 +43,9 @@ public:
     class Permit {
     public:
         bool current() const;
+        // Bind only the native gate. Consent change/close revokes and joins it.
+        // No Permit, app lifetime, job or Qt value enters the final keeper.
+        bool arm(const std::shared_ptr<vlc::addons::AddonMetadataNativeAdmission>&) const noexcept;
         // Use only for a native, callback-free commit such as job_Apply.
         // The function must not call this adapter or change network consent.
         int admit(const std::function<int()>& commit) const;

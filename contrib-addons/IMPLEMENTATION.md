@@ -41,15 +41,18 @@ manual GUI checks and full app performance comparison remain open.
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 
 The typed artwork result aggregate is now in application source and all three
-build definitions. It passes 58 normal and 58 ASAN/UBSAN checks with prepared
-portable receipts and real positive/negative Core Apply. The related completion
-suite passes 86 checks in each build. Core retains native source authority
-through positive child and final Apply; all 13 related Core suites pass normally
-and with focused ASAN/UBSAN coverage. Native positive claims, the serial Service
-runner, actual image broker integration and native owner activation remain open.
-See [the aggregate](artwork-attempt-aggregate.md),
-[positive Core authority](artwork-positive-source-authority.md) and
-[portable positive transfer](artwork-positive-host-transfer.md).
+build definitions. It passes 69 normal and 69 ASAN/UBSAN aggregate checks. The
+native image suite adds 36 checks in each build, including real Core HTTP.
+Native positive claims now keep provider authority and image consent through
+image decoding/cache and final Core Apply. The earlier portable completion
+suite passes 86 checks in each build. Core positive source authority passes
+its earlier 13-suite group; the three affected native Core suites also pass
+with the new source admission. The serial Service runner, portable image broker
+integration and native owner activation remain open. See
+[the aggregate](artwork-attempt-aggregate.md),
+[positive Core authority](artwork-positive-source-authority.md),
+[portable positive transfer](artwork-positive-host-transfer.md) and
+[native positive authority](artwork-native-positive-authority.md).
 
 ## Verified work
 

@@ -4,6 +4,8 @@
 #endif
 #include "addon_native_artwork_assets.hpp"
 #include "addon_artwork_image.hpp"
+#include "addon_metadata_registry_epoch.hpp"
+#include "addon_metadata_attempt.hpp"
 #include "../../../../src/preparser/metadata_native_provider.h"
 #include <vlc_artwork_policy.h>
 #include <vlc_input_item.h>
@@ -70,12 +72,26 @@ struct AddonNativeArtworkAssets::Permit::Consent {
     bool allowed = false, closed = false;
     quint64 epoch = 1;
     vlc::addons::AddonStreamLifetime::Handle lifetime;
+    vlc::addons::MetadataRegistryEpoch publication;
 };
 bool AddonNativeArtworkAssets::Permit::current() const
 {
     if (!m_consent || !m_epoch) return false;
     std::lock_guard<std::mutex> lock(m_consent->mutex);
     return m_consent->lifetime.current() && m_consent->allowed && !m_consent->closed && m_consent->epoch == m_epoch;
+}
+bool AddonNativeArtworkAssets::Permit::arm(
+    const std::shared_ptr<vlc::addons::AddonMetadataNativeAdmission>& gate) const noexcept
+{
+    if (!gate) return false;
+    try {
+        if (!m_consent || !current() || !gate->current()) { gate->revoke(); return false; }
+        const auto token = m_consent->publication.capture();
+        if (!m_consent->publication.arm(token, gate) || !current() || !token.current()) {
+            gate->revoke(); return false;
+        }
+        return true;
+    } catch (...) { gate->revoke(); return false; }
 }
 int AddonNativeArtworkAssets::Permit::admit(const std::function<int()>& commit) const
 {
@@ -250,6 +266,9 @@ struct AddonNativeArtworkAssets::State {
     }
     void retire()
     {
+        // Join final source publication without the consent or owner lock.
+        // Repeated retirement must join the same pending native revocation.
+        consent->publication.close();
         {
             std::lock_guard<std::mutex> lock(consent->mutex);
             consent->closed = true; consent->allowed = false; ++consent->epoch;
@@ -453,6 +472,12 @@ void AddonNativeArtworkAssets::deliver(const std::shared_ptr<State>& state, cons
 void AddonNativeArtworkAssets::setNetworkAllowed(bool allowed)
 {
     const auto state = m_state;
+    {
+        std::lock_guard<std::mutex> lock(state->consent->mutex);
+        if (state->consent->closed || state->consent->allowed == allowed) return;
+    }
+    auto change = state->consent->publication.mutation();
+    if (!change) return;
     {
         std::lock_guard<std::mutex> lock(state->consent->mutex);
         if (state->consent->closed || state->consent->allowed == allowed) return;

@@ -182,6 +182,12 @@ int ArtworkAttemptAggregate::trySealPositive(unsigned ordinal, vlc_metadata_job_
         || receipt->nativeAdmission().get() != m_admission.get()) {
         fail(ordinal, BlockReason::Binding, true); return VLC_EGENERIC;
     }
+    return sealPositiveSource(ordinal, child, approved, imageUri);
+}
+int ArtworkAttemptAggregate::sealPositiveSource(unsigned ordinal, vlc_metadata_job_t* child,
+    input_item_t* approved, const char* imageUri)
+{
+    if (child != m_child.get()) { fail(ordinal, BlockReason::Binding, true); return VLC_EGENERIC; }
     try {
         NativeArtworkAttemptKeeper::Parts parts; parts.admission = m_admission;
         for (auto& authority : m_nativeAuthorities) if (authority) parts.outcomes.push_back(std::move(authority));
@@ -212,6 +218,27 @@ bool ArtworkAttemptAggregate::acceptNativeClaim(unsigned ordinal, AddonNativePro
     m_active.reset(); ++m_next;
     return true;
 }
+bool ArtworkAttemptAggregate::acceptNativePositive(unsigned ordinal, AddonNativeProviderContext& context, const QString& claim)
+{
+    if (!binding(ordinal, Plan::Implementation::Native)) return false;
+    if (m_nativeAuthorities[ordinal]) return fail(ordinal, BlockReason::Duplicate);
+    const auto family = nativeFamily(m_plan->attempts.at(ordinal));
+    if (claim.isEmpty() || family == META_FETCHER_PROVIDER_NONE) return fail(ordinal, BlockReason::Absent);
+    auto authority = context.admitPositive(claim, m_child.get(), family, m_admission->nativeHandle());
+    if (!authority || !current()) return fail(ordinal, BlockReason::Binding, true);
+    m_nativeAuthorities[ordinal] = std::move(authority); m_results[ordinal] = META_FETCHER_OUTCOME_MATCH;
+    m_forbidden.store(true, std::memory_order_release); return true;
+}
+int ArtworkAttemptAggregate::trySealNativePositive(unsigned ordinal, vlc_metadata_job_t* child,
+    input_item_t* approved, const char* imageUri, const AddonNativeArtworkAssets::Permit& permit)
+{
+    if (!binding(ordinal, Plan::Implementation::Native)) return VLC_EGENERIC;
+    if (child != m_child.get() || !m_nativeAuthorities[ordinal] || m_results[ordinal] != META_FETCHER_OUTCOME_MATCH
+        || !permit.arm(m_admission)) { fail(ordinal, BlockReason::Binding, true); return VLC_EGENERIC; }
+    if (!current()) { fail(ordinal, BlockReason::Stale, true); return VLC_EGENERIC; }
+    return sealPositiveSource(ordinal, child, approved, imageUri);
+}
+
 void ArtworkAttemptAggregate::block(unsigned ordinal, BlockReason reason) { fail(ordinal, reason); }
 bool ArtworkAttemptAggregate::positive(unsigned ordinal)
 {

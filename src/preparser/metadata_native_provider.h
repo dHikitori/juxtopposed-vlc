@@ -74,6 +74,14 @@ typedef struct vlc_metadata_native_outcome_authority vlc_metadata_native_outcome
 VLC_API vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitOutcome(
     vlc_metadata_native_claim_t *, vlc_metadata_job_t *, meta_fetcher_provider_t expected_family,
     vlc_metadata_artwork_admission_t *);
+/* Retain provider authority for one exact MATCH with an artwork address.
+ * This shares the same once-only admission and bounded reservation as the
+ * negative API. It grants no image approval or target write. The trusted
+ * image adapter must still consume the claim and approve a local image.
+ * Retain the returned native-only authority through final Apply. */
+VLC_API vlc_metadata_native_outcome_authority_t *vlc_metadata_native_claim_AdmitSource(
+    vlc_metadata_native_claim_t *, vlc_metadata_job_t *, meta_fetcher_provider_t expected_family,
+    vlc_metadata_artwork_admission_t *);
 VLC_API void vlc_metadata_native_outcome_authority_Release(vlc_metadata_native_outcome_authority_t *);
 
 #ifdef __cplusplus

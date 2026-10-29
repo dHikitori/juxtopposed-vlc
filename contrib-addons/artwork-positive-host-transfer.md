@@ -2,8 +2,9 @@
 
 The typed host path can now carry current portable provider and account
 authority into the [Core positive source seal](artwork-positive-source-authority.md).
-The serial Service runner and native positive claim path remain open. Native
-owner activation remains off.
+The serial Service runner remains open. Native positive claims and image
+consent now have their own [tested source path](artwork-native-positive-authority.md).
+Native owner activation remains off.
 
 ## Receipt and acceptance
 
@@ -85,7 +86,7 @@ bytes. No baseline or Windows package was replaced.
 
 ## Remaining work
 
-Connect native positive claims and image permits to the same source gate.
+Native positive claims and image permits now bind to the same source gate.
 Build the serial Service runner with fresh saved configuration checks on joined
 work, actual image resolution and all typed outcomes. Keep every provider and
 local path until the cutover, cancellation, status and legacy-bypass checks pass.

@@ -20,6 +20,9 @@
 #include <vlc_common.h>
 #include <vlc_meta.h>
 #include <vlc_input_item.h>
+#include <QBuffer>
+#include <QImage>
+#include "addons/addon_native_provider_artwork_assets.hpp"
 #include "lib/libvlc_internal.h"
 #include "addons/addon_artwork_attempt_aggregate.hpp"
 #include "addons/addon_metadata_registry_epoch.hpp"
@@ -27,6 +30,9 @@
 #include "addons/addon_metadata_family_plan.hpp"
 #include "addons/addon_metadata_coordinator.hpp"
 #include <vlc_input_item.h>
+#include <QBuffer>
+#include <QImage>
+#include "addons/addon_native_provider_artwork_assets.hpp"
 #include "fixtures/addon_artwork_attempt_keeper.h"
 #include "fixtures/addon_native_provider_fixture.h"
 using namespace vlc::addons;
@@ -236,6 +242,67 @@ class AggregateTests : public QObject {
 private slots:
     void init() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
     void cleanup() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
+    void nativePositiveKeepsClaimThroughImageAndFinalApply_data() {
+        QTest::addColumn<QString>("family"); QTest::addColumn<int>("provider");
+        QTest::newRow("musicbrainz") << QStringLiteral("musicbrainz") << int(META_FETCHER_PROVIDER_MUSICBRAINZ);
+        QTest::newRow("google-images") << QStringLiteral("google-images") << int(META_FETCHER_PROVIDER_GOOGLE_IMAGES);
+        QTest::newRow("french-tv") << QStringLiteral("french-tv") << int(META_FETCHER_PROVIDER_FRENCH_TV);
+        QTest::newRow("lastfm") << QStringLiteral("lastfm") << int(META_FETCHER_PROVIDER_LASTFM);
+    }
+    void nativePositiveKeepsClaimThroughImageAndFinalApply() {
+        QFETCH(QString,family); QFETCH(int,provider); Fixture f; QVERIFY(f.prepare({family})); QVERIFY(f.aggregate->reserve(0));
+        const auto nativeFamily=static_cast<meta_fetcher_provider_t>(provider); const auto reference=f.claim(nativeFamily,META_FETCHER_OUTCOME_MATCH);
+        QVERIFY(!reference.isEmpty()); QVERIFY(f.aggregate->acceptNativePositive(0,*f.context,reference));
+        QVERIFY(f.context->validates(reference,f.child(),nativeFamily));
+        QImage pixels(4,4,QImage::Format_RGB32); pixels.fill(Qt::blue); QByteArray bytes; QBuffer output(&bytes); output.open(QIODevice::WriteOnly); QVERIFY(pixels.save(&output,"PNG"));
+        unsigned reads=0; AddonNativeArtworkAssets assets(f.lifetime.handle(),AddonNativeArtworkAssets::Backend{
+            [&](const auto&,qint64,const auto&) { ++reads; return AddonNativeArtworkAssets::ReadResult{bytes,{}}; }},f.profile.filePath(QStringLiteral("image-cache")),{});
+        assets.setNetworkAllowed(true); AddonNativeProviderArtworkAssets images(&assets,f.context.get());
+        AddonNativeProviderArtworkAssets::Result image; bool done=false;
+        QVERIFY(images.resolve(reference,f.child(),nativeFamily,[&](const auto& value) { image=value; done=true; })); QTRY_VERIFY(done);
+        QCOMPARE(reads,1u); QVERIFY(!image.file.isEmpty()); QVERIFY(!f.context->validates(reference,f.child(),nativeFamily));
+        const auto uri=image.file.toEncoded(); std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),uri.constData()),input_item_Release); QVERIFY(approved);
+        QCOMPARE(f.aggregate->trySealNativePositive(0,f.child(),approved.get(),uri.constData(),image.permit),VLC_SUCCESS);
+        f.aggregate.reset(); QVERIFY(f.gate->current()); QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),approved.get()),VLC_SUCCESS);
+        QCOMPARE(keeper_fixture_apply(f.native.get()),VLC_SUCCESS); QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED);
+        QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_NOTFOUND)); assets.close(); QVERIFY(!f.gate->current());
+    }
+    void nativePositiveRefusesRevokedProviderOrImageConsent_data() {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("network revoked after seal") << 0; QTest::newRow("provider closed after seal") << 1;
+        QTest::newRow("image owner closed after seal") << 2; QTest::newRow("consent toggled") << 3;
+        QTest::newRow("consent revoked before seal") << 4; QTest::newRow("same consent stays valid") << 5;
+    }
+    void nativePositiveRefusesRevokedProviderOrImageConsent() {
+        QFETCH(int,mode); Fixture f; QVERIFY(f.prepare({QStringLiteral("lastfm")})); QVERIFY(f.aggregate->reserve(0));
+        const auto reference=f.claim(META_FETCHER_PROVIDER_LASTFM,META_FETCHER_OUTCOME_MATCH); QVERIFY(!reference.isEmpty());
+        QVERIFY(f.aggregate->acceptNativePositive(0,*f.context,reference));
+        QImage pixels(4,4,QImage::Format_RGB32); pixels.fill(Qt::blue); QByteArray bytes; QBuffer output(&bytes); output.open(QIODevice::WriteOnly); QVERIFY(pixels.save(&output,"PNG"));
+        AddonNativeArtworkAssets assets(f.lifetime.handle(),AddonNativeArtworkAssets::Backend{
+            [bytes](const auto&,qint64,const auto&) { return AddonNativeArtworkAssets::ReadResult{bytes,{}}; }},f.profile.filePath(QStringLiteral("image-cache")),{});
+        assets.setNetworkAllowed(true); AddonNativeProviderArtworkAssets images(&assets,f.context.get());
+        AddonNativeProviderArtworkAssets::Result image; bool done=false;
+        QVERIFY(images.resolve(reference,f.child(),META_FETCHER_PROVIDER_LASTFM,[&](const auto& value) { image=value; done=true; })); QTRY_VERIFY(done); QVERIFY(!image.file.isEmpty());
+        const auto uri=image.file.toEncoded(); std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),uri.constData()),input_item_Release); QVERIFY(approved);
+        if(mode==4) assets.setNetworkAllowed(false);
+        const auto sealed=f.aggregate->trySealNativePositive(0,f.child(),approved.get(),uri.constData(),image.permit);
+        if(mode==4) { QVERIFY(sealed!=VLC_SUCCESS); QVERIFY(!f.gate->current()); return; }
+        QCOMPARE(sealed,VLC_SUCCESS); f.aggregate.reset(); QCOMPARE(keeper_fixture_prepare_fetched(f.native.get(),approved.get()),VLC_SUCCESS);
+        if(mode==0) assets.setNetworkAllowed(false);
+        if(mode==1) f.context->close();
+        if(mode==2) assets.close();
+        if(mode==3) { assets.setNetworkAllowed(false); assets.setNetworkAllowed(true); }
+        if(mode==5) assets.setNetworkAllowed(true);
+        const auto applied=keeper_fixture_apply(f.native.get());
+        if(mode==5) { QCOMPARE(applied,VLC_SUCCESS); QVERIFY(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED); }
+        else { QVERIFY(applied!=VLC_SUCCESS); QVERIFY(!f.gate->current()); QVERIFY(!(keeper_fixture_status(f.native.get())&ITEM_ART_FETCHED)); }
+    }
+    void nativePositiveCannotUseAnEmptyImagePermit() {
+        Fixture f; QVERIFY(f.prepare({QStringLiteral("lastfm")})); QVERIFY(f.aggregate->reserve(0));
+        const auto reference=f.claim(META_FETCHER_PROVIDER_LASTFM,META_FETCHER_OUTCOME_MATCH); QVERIFY(f.aggregate->acceptNativePositive(0,*f.context,reference));
+        const auto uri="file:///cache/unrelated.png"; std::unique_ptr<input_item_t,decltype(&input_item_Release)> approved(keeper_fixture_approved(f.native.get(),uri),input_item_Release); QVERIFY(approved);
+        QVERIFY(f.aggregate->trySealNativePositive(0,f.child(),approved.get(),uri,{})!=VLC_SUCCESS); QVERIFY(!f.gate->current());
+    }
     void portablePositiveTransfersThroughActualCoreApply_data() {
         QTest::addColumn<QString>("mode");
         QTest::newRow("match") << QStringLiteral("positive");

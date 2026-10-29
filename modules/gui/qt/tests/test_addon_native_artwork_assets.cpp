@@ -22,6 +22,7 @@
 #include <vlc_artwork_policy.h>
 #include <vlc_input_item.h>
 #include "addons/addon_native_artwork_assets.hpp"
+#include "addons/addon_metadata_attempt.hpp"
 #include "addon_native_artwork_test_owner.hpp"
 #include "addon_artwork_test_images.hpp"
 
@@ -69,6 +70,12 @@ struct Job {
         return result.permit.admit([this] { return vlc_metadata_job_Apply(job, item, uint32_t(1) << vlc_meta_ArtworkURL, nullptr); });
     }
 };
+struct ConsentGate final : vlc::addons::AddonMetadataNativeAdmission {
+    std::atomic_bool open{true};
+    bool current() const noexcept override { return open.load(); }
+    void revoke() noexcept override { open.store(false); }
+};
+
 struct Controlled {
     std::atomic_int calls{0}; std::atomic_bool release{false}; QByteArray bytes = image();
     Native::Backend backend() { return {[this](const QUrl&, qint64, const std::function<bool()>& live) {
@@ -81,6 +88,27 @@ class TestAddonNativeArtworkAssets : public QObject
 {
     Q_OBJECT
 private slots:
+    void imagePermitArmsOnlyCurrentConsent() {
+        Native::Permit empty; auto refused = std::make_shared<ConsentGate>();
+        QVERIFY(!empty.arm(refused)); QVERIFY(!refused->current());
+        QTemporaryDir cache; Controlled source; source.release = true;
+        Native assets(source.backend(),cache.path(),{}); assets.setNetworkAllowed(true); Job job;
+        Native::Result result; bool completed = false;
+        QVERIFY(assets.resolve(job.job,[&](const auto& value) { result=value; completed=true; })); QTRY_VERIFY(completed);
+        QVERIFY(!result.file.isEmpty()); auto gate = std::make_shared<ConsentGate>(); QVERIFY(result.permit.arm(gate));
+        assets.setNetworkAllowed(true); QVERIFY(gate->current());
+        assets.setNetworkAllowed(false); QVERIFY(!gate->current());
+        assets.setNetworkAllowed(true); auto stale = std::make_shared<ConsentGate>();
+        QVERIFY(!result.permit.arm(stale)); QVERIFY(!stale->current());
+    }
+    void imagePermitCloseRevokesItsNativeGate() {
+        QTemporaryDir cache; Controlled source; source.release = true;
+        Native assets(source.backend(),cache.path(),{}); assets.setNetworkAllowed(true); Job job;
+        Native::Result result; bool completed = false;
+        QVERIFY(assets.resolve(job.job,[&](const auto& value) { result=value; completed=true; })); QTRY_VERIFY(completed);
+        auto gate = std::make_shared<ConsentGate>(); QVERIFY(result.permit.arm(gate)); assets.close();
+        QVERIFY(!gate->current()); QVERIFY(!result.permit.current()); assets.close();
+    }
     void installedNativeFormatsKeepPixelsThroughCachePublication_data()
     {
         QTest::addColumn<QByteArray>("bytes");
@@ -379,9 +407,16 @@ private slots:
     }
     void actualNativeHTTPRetainsLoopbackAndLANAccess()
     {
-        qputenv("VLC_PLUGIN_PATH", VLC_ADDON_NATIVE_BUILD_ROOT "/modules");
-        const char* args[]{"--ignore-config", "--no-plugins-cache", "--no-media-library", "--quiet"};
-        auto* instance = libvlc_new(4, args); QVERIFY(instance);
+        const auto cachedPlugins = qgetenv("HAKONE_NATIVE_HTTP_TEST_PLUGIN_PATH");
+        if (!cachedPlugins.isEmpty()) {
+            QVERIFY(QFile::exists(QString::fromUtf8(cachedPlugins) + QStringLiteral("/plugins.dat")));
+            qputenv("VLC_PLUGIN_PATH", cachedPlugins);
+        } else qputenv("VLC_PLUGIN_PATH", VLC_ADDON_NATIVE_BUILD_ROOT "/modules");
+        // An explicit fresh test cache avoids unrelated plugin initializers.
+        const char* pluginMode = cachedPlugins.isEmpty() ? "--no-plugins-cache" : "--no-plugins-scan";
+        const char* args[]{"--ignore-config", pluginMode, "--no-media-library", "--quiet"};
+        const std::unique_ptr<libvlc_instance_t,decltype(&libvlc_release)> instance(libvlc_new(4,args),libvlc_release);
+        QVERIFY(instance);
         QTcpServer server; QVERIFY(server.listen(QHostAddress::AnyIPv4)); int requests = 0;
         connect(&server, &QTcpServer::newConnection, &server, [&] {
             while (auto* socket = server.nextPendingConnection()) {
@@ -411,7 +446,7 @@ private slots:
             QTRY_COMPARE_WITH_TIMEOUT(completed, 1, 5000); QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
             QVERIFY(result.file.isLocalFile()); QCOMPARE(job.publish(result), VLC_SUCCESS);
         }
-        QCOMPARE(requests, addresses.size()); libvlc_release(instance);
+        QCOMPARE(requests, addresses.size());
     }
 };
 QTEST_GUILESS_MAIN(TestAddonNativeArtworkAssets)

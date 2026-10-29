@@ -38,6 +38,11 @@ public:
     // Keep this native-only authority and admission through final Apply.
     NegativeOutcome takeOutcome(const QString&, vlc_metadata_job_t*, meta_fetcher_provider_t,
                                 vlc_metadata_artwork_admission_t*);
+    // Keep the positive claim on-map for the trusted image adapter. Return
+    // provider authority only; this value holds no claim, child or Qt state.
+    std::shared_ptr<vlc_metadata_native_outcome_authority_t> admitPositive(
+        const QString&, vlc_metadata_job_t*, meta_fetcher_provider_t,
+        vlc_metadata_artwork_admission_t*);
     // This query has no I/O or callback. A media URL cannot create a claim.
     bool validates(const QString& claim, vlc_metadata_job_t*, meta_fetcher_provider_t) const;
     void close();
