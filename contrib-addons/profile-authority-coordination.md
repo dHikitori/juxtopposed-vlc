@@ -10,8 +10,10 @@ package state and lifecycle methods now have tested guarded bindings. See
 [package state writes](profile-package-writes.md), plus
 [lifecycle writes](profile-lifecycle-writes.md). A
 [retained writer scope](profile-writer-scope.md) now holds the store lock
-during ticket negotiation. Coordinator transport, complete profile recovery
-and the production mount are not implemented yet.
+during ticket negotiation. The [message format and coordinator
+policy](profile-control-protocol.md) are also implemented. Both socket roles,
+same-user authentication, complete profile recovery and the production mount
+are not implemented yet.
 Native metadata owner activation stays off.
 
 A peer is one app process. A fence lease is one held OS lock. An epoch is a
@@ -205,13 +207,13 @@ performance.
 
 ## Remaining implementation gates
 
-- Add the strict control protocol and independent joined owner.
-- Retain the store lock during ticket negotiation. The current file helper
-  acquires it inside `write`; the runtime needs a prepared writer scope first.
+- Connect the tested control protocol to both authenticated socket owners.
+- Use the implemented prepared writer to retain the store lock during ticket
+  negotiation. Keep the control owner independent of that joined work.
 - Bind the implemented generation and writer guard to an authenticated
   connection and pending request.
 - Make mutation refusal explicit at every authority write entry point.
-- Retain the exclusive writer lease through outer store-lock release.
+- Mount the writer lease that stays held through outer store-lock release.
 - Attach peer readiness to the memory token and all native cancellation paths.
 - Mount startup, display refresh, reconnect, and app drain without a GUI wait.
 - Test crashes at each ticket, stamp, write, acknowledgement, and join boundary.

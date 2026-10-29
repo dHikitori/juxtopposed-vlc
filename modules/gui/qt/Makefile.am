@@ -137,6 +137,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_store_process_fence.hpp \
 	addons/addon_store_profile_generation.cpp \
 	addons/addon_store_profile_generation.hpp \
+	addons/addon_store_profile_protocol.cpp \
+	addons/addon_store_profile_protocol.hpp \
 	addons/addon_native_wake.cpp \
 	addons/addon_native_wake.hpp \
 	addons/addon_native_notifications.cpp \
@@ -2574,6 +2576,17 @@ test_qt_addon_store_profile_generation_LDADD = libqt_addon_host.la $(QT_QTEST_CO
 test_qt_addon_store_profile_generation_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_store_profile_generation
 TESTS += test_qt_addon_store_profile_generation
+
+test_qt_addon_store_profile_protocol_SOURCES = tests/test_addon_store_profile_protocol.cpp
+nodist_test_qt_addon_store_profile_protocol_SOURCES = tests/test_addon_store_profile_protocol.moc
+BUILT_SOURCES += tests/test_addon_store_profile_protocol.moc
+CLEANFILES += tests/test_addon_store_profile_protocol.moc
+test_qt_addon_store_profile_protocol_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_profile_protocol_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_protocol_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_protocol_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_protocol
+TESTS += test_qt_addon_store_profile_protocol
 
 test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.cpp
 nodist_test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.moc

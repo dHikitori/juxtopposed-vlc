@@ -650,3 +650,16 @@ and package checks. See [the writer record](profile-writer-scope.md). These
 component checks do not establish full app performance or resolve the Windows
 cursor report. The native owner remains unmounted and the Windows review
 package is unchanged.
+
+
+The profile protocol decoder accepts at most 3,072 input bytes per call and
+retains at most 95 incomplete bytes. A malformed batch is terminal and emits
+no messages from that batch. The coordinator limits connected peers to 64,
+keeps one pending mutation, and grants no native authority itself. Both
+classes are memory-only and add no timer, thread or polling loop. The actual
+socket owner must keep input and output bounded, use active deadlines and
+remain independent of GUI and store-write work. The component cohort passes
+164 normal, 164 ASAN/UBSAN and 164 native Windows checks. See
+[the profile control record](profile-control-protocol.md). This does not
+close full app performance, cursor or native readiness work, and does not
+change the local Windows review package.

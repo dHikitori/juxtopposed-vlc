@@ -118,6 +118,19 @@ remain open. No idle timer or polling is added. See
 [the prepared writer record](profile-writer-scope.md). The local Windows
 review package is unchanged.
 
+The host profile message format and coordinator policy are now implemented.
+Fixed frames, bounded decoding, assigned connections, join confirmation,
+joined and joining peer revocation, exact acknowledgements, guarded grants,
+saved-record check receipts and recovery rules pass 164 normal, 164
+ASAN/UBSAN and 164 native Windows checks. Three broken control variants fail
+their regressions. Native flows prove that a false acknowledgement cannot
+pass a retained fence and that recovery cannot pass a live writer. This is
+the five-unit coordinator component, not the socket or native admission
+owner. Both socket roles, same-user validation, complete profile recovery,
+app mount and full app performance remain open. See
+[the control protocol](profile-control-protocol.md). The Windows review
+package is unchanged.
+
 ## Verified work
 
 | Area | Implementation and evidence |
