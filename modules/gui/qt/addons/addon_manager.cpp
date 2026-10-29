@@ -1347,18 +1347,6 @@ quint64 AddonManager::fetchAsset(const QString& contributionId, const QJsonObjec
     return m_network.fetch(package.manifest, package.grants, descriptor,
         std::move(resolver), std::move(callback), 16 * 1024 * 1024, NetworkBroker::RequestKind::BinaryAsset, std::move(current));
 }
-quint64 AddonManager::fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback callback)
-{
-    const auto id = packagePart(contributionId); InstalledPackage package;
-    if (m_retiring || m_withdrawingPackages.contains(id) || m_removingPackages.contains(id) || m_store.packageRetiring(id)
-        || !m_store.installed(id, &package) || !package.enabled || !package.manifest.contribution(localPart(contributionId))) {
-        QTimer::singleShot(0, this, [callback] { NetworkBroker::Response response; response.error = tr("The add-on is not available."); callback(response); }); return 0;
-    }
-    auto request = descriptor; request.insert("method", "GET"); request.remove("body");
-    NetworkBroker::RequestGuard current; auto resolver = credentialResolver(package, &current);
-    return m_network.fetch(package.manifest, package.grants, request,
-        std::move(resolver), std::move(callback), 1024 * 1024, NetworkBroker::RequestKind::ImageAsset, std::move(current));
-}
 bool AddonManager::withdraw(const QString& packageId)
 {
     const QString id = packageId;

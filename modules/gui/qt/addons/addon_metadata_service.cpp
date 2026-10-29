@@ -222,6 +222,7 @@ AddonMetadataService::AddonMetadataService(vlc::addons::AddonManager* manager, Q
     if (manager) {
         connect(manager, &vlc::addons::AddonManager::operationFinished, this, &AddonMetadataService::operationFinished);
         connect(manager, &vlc::addons::AddonManager::revisionChanged, this, &AddonMetadataService::invalidate);
+        connect(manager, &vlc::addons::AddonManager::retiring, this, &AddonMetadataService::shutdown, Qt::DirectConnection);
         QPointer<AddonArtworkAssets> assets(new AddonArtworkAssets(manager,
             QDir(manager->storageDirectory()).filePath(QStringLiteral("artwork-cache")), this));
         setArtworkAdapter([assets](const QString& provider, const QVariant& descriptor, ArtworkCallback completed) {

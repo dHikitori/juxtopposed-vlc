@@ -162,6 +162,26 @@ bool PreparedMetadataInvocation::Data::stage(AddonNativeAuthority& authority,
         return refuse(QStringLiteral("The metadata preparation changed before completion."));
     return true;
 }
+struct PreparedArtworkAsset::Data {
+    const std::shared_ptr<RecipePermit> permit;
+    std::shared_ptr<const PreparedMetadataOwner> owner;
+    StoreAuthorityToken token;
+    AddonStreamLifetime::Handle lifetime;
+    Manifest manifest;
+    QJsonObject grants;
+    QVariantMap registration;
+    std::shared_ptr<Secrets> secrets = std::make_shared<Secrets>();
+    bool tlsAvailable = false;
+    explicit Data(std::shared_ptr<RecipePermit> value) : permit(std::move(value)) {}
+    ~Data() { secrets->wipe(); }
+    bool current() const noexcept {
+        return owner && owner->open.load(std::memory_order_acquire) && token.current() && lifetime.current();
+    }
+};
+PreparedArtworkAsset::PreparedArtworkAsset(std::shared_ptr<Data> data) : m_data(std::move(data)) {}
+PreparedArtworkAsset::~PreparedArtworkAsset() = default;
+bool PreparedArtworkAsset::current() const noexcept { return m_data && m_data->current(); }
+QVariantMap PreparedArtworkAsset::registration() const { return current() ? m_data->registration : QVariantMap{}; }
 struct PreparedMetadataRuntime {
     struct Entry {
         QPointer<AddonWorker> worker;
@@ -383,6 +403,80 @@ AddonMetadataCoordinator::SelectionCancel AddonManager::selectMetadataProviders(
     }
     return [owner, id] { if (owner && !id.isEmpty()) owner->cancelMetadataPreparation(id); };
 }
+QString AddonManager::prepareArtworkAsset(const QString& contribution, ArtworkPreparationComplete complete)
+{
+    if (!complete || QThread::currentThread() != thread() || m_retiring || !m_preparedMetadata) return {};
+    const auto reader = nativeAuthorityReader(contribution);
+    const auto token = storeAuthorityToken();
+    const auto owner = m_preparedMetadata->owner;
+    const auto lifetime = AddonStreamLifetime::applicationHandle();
+    struct Result { PreparedArtwork value; QString error; };
+    const auto result = std::make_shared<Result>();
+    return queueMetadataPreparation(contribution.section(QLatin1Char('/'),0,0),
+        [reader,token,owner,lifetime,result,contribution] {
+            result->error = QStringLiteral("The artwork provider is not available.");
+            const auto live = [&] {
+                return owner->open.load(std::memory_order_acquire) && token.current()
+                    && lifetime.current() && !RepositoryCancellation::requested();
+            };
+            if (!reader || !live()) return;
+            auto authority = reader();
+            if (!authority || !live() || !authority->current() || !authority->live()
+                || authority->globalId != contribution || authority->contribution.type != QLatin1String("metadata.provider")
+                || !authority->contribution.features.contains(QStringLiteral("artwork"))) return;
+            const auto permit = RecipePermit::acquire();
+            if (!permit) { result->error = QStringLiteral("Artwork preparation is busy. Try again."); return; }
+            auto data = std::make_shared<PreparedArtworkAsset::Data>(permit);
+            data->owner = owner; data->token = token; data->lifetime = lifetime;
+            data->manifest = authority->package.manifest; data->grants = authority->package.grants;
+            data->tlsAvailable = QSslSocket::supportsSsl();
+            const auto declared = data->manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray();
+            const auto approved = data->grants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
+            QSet<QString> fields;
+            for (const auto& binding : declared) if (approved.contains(binding)) {
+                const auto value = binding.toObject();
+                if (exactHttpsOrigin(value.value(QStringLiteral("origin")).toString()).isEmpty()) return;
+                fields.insert(value.value(QStringLiteral("field")).toString());
+            }
+            qsizetype bytes = 0;
+            for (const auto& field : fields) {
+                if (!live() || !authority->current()) return;
+                auto secret = authority->credentials(field);
+                const auto wipe = qScopeGuard([&] { secret.fill('\0'); });
+                if (!live() || !authority->current() || secret.size() > PreparedMetadataInvocation::MaximumFieldBytes
+                    || secret.size() > PreparedMetadataInvocation::MaximumSecretBytes - bytes || !permit->charge(secret.size())) return;
+                bytes += secret.size(); data->secrets->fields.insert(field,std::move(secret));
+            }
+            const QString partition = QString::fromLatin1(authority->package.digest) + QLatin1Char(':')
+                + QString::number(authority->package.generation) + QLatin1Char(':') + QString::number(authority->settingsRevision);
+            data->registration = {{QStringLiteral("id"),contribution},{QStringLiteral("enabled"),true},
+                {QStringLiteral("configured"),true},{QStringLiteral("cachePartition"),partition},
+                {QStringLiteral("accountReference"),authority->accountReference}};
+            if (!live() || !authority->current() || !data->current()) return;
+            result->value = PreparedArtwork(new PreparedArtworkAsset(std::move(data))); result->error.clear();
+        },[result,complete=std::move(complete)](bool ok) {
+            if (!ok || !result->value || !result->value->current()) {
+                complete({},result->error.isEmpty() ? QStringLiteral("The artwork provider configuration changed.") : result->error);
+                return;
+            }
+            complete(std::move(result->value),{});
+        });
+}
+quint64 AddonManager::fetchPreparedArtwork(const PreparedArtwork& prepared, const QJsonObject& descriptor,
+    NetworkBroker::Callback complete)
+{
+    if (QThread::currentThread() != thread() || m_retiring || !m_preparedMetadata || !prepared || !prepared->current()
+        || !prepared->m_data->tlsAvailable || prepared->m_data->owner != m_preparedMetadata->owner) return 0;
+    const auto data = prepared->m_data;
+    auto request = descriptor; request.insert(QStringLiteral("method"),QStringLiteral("GET")); request.remove(QStringLiteral("body"));
+    const auto current = [data] { return data->current(); };
+    const auto credentials = [data](const QString& field) {
+        return data->current() ? data->secrets->fields.value(field) : QByteArray{};
+    };
+    return m_network.fetch(data->manifest,data->grants,request,credentials,std::move(complete),
+        1024*1024,NetworkBroker::RequestKind::ImageAsset,current);
+}
+
 QString AddonManager::invokeMetadata(const QString& contribution, const QString& operation, const QVariantMap& context)
 {
     const auto prepare = metadataInvocationPreparer(contribution, operation, QJsonObject::fromVariantMap(context));
@@ -429,7 +523,8 @@ MetadataInvocationPreparer AddonManager::metadataInvocationPreparer(std::shared_
     return [plan = std::move(plan), ordinal, owner, queued, authorityReader, executable, lifetime, ownerThread]
         (QString* error) -> std::unique_ptr<PreparedMetadataInvocation> {
         const auto refuse = [error](const QString& text) -> std::unique_ptr<PreparedMetadataInvocation> {
-            if (error) *error = text; return {};
+            if (error) *error = text;
+            return {};
         };
         const auto current = [&] {
             return std::this_thread::get_id() != ownerThread && owner->open.load(std::memory_order_acquire)
@@ -476,7 +571,8 @@ MetadataInvocationPreparer AddonManager::metadataInvocationPreparer(const QStrin
     return [owner, queued, authorityReader, executable, lifetime, ownerThread, contribution, operation, context]
         (QString* error) -> std::unique_ptr<PreparedMetadataInvocation> {
         const auto refuse = [error](const QString& text) -> std::unique_ptr<PreparedMetadataInvocation> {
-            if (error) *error = text; return {};
+            if (error) *error = text;
+            return {};
         };
         const auto current = [&] {
             return std::this_thread::get_id() != ownerThread && owner->open.load(std::memory_order_acquire)
@@ -652,7 +748,8 @@ std::optional<bool> AddonManager::preparedStorageContext(const AddonHostServices
     const auto entry = m_preparedMetadata->requests.value(host.invocation);
     if (!entry) return std::nullopt;
     const auto refuse = [error] {
-        if (error) *error = QStringLiteral("The prepared storage invocation is no longer current."); return false;
+        if (error) *error = QStringLiteral("The prepared storage invocation is no longer current.");
+        return false;
     };
     if (!output || m_retiring || entry->canceled || !entry->data || !entry->data->current()
         || entry->package != host.package || entry->contribution != host.contribution

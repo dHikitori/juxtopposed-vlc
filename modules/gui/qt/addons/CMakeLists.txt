@@ -16,6 +16,7 @@ add_library(vlc_addon_host STATIC
     addon_distribution_bootstrap.cpp addon_distribution_bootstrap.hpp addon_package_summaries.cpp addon_package_summaries.hpp
     addon_metadata_attempt.cpp addon_metadata_attempt.hpp addon_metadata_completion_policy.cpp addon_metadata_completion_policy.hpp addon_metadata_identity.hpp
     addon_prepared_metadata_invocation.cpp addon_prepared_metadata_invocation.hpp
+    addon_prepared_artwork_asset.hpp
     addon_metadata_catalogue_source.hpp
     addon_metadata_registry_epoch.cpp addon_metadata_registry_epoch.hpp
     addon_artwork_attempt_plan.cpp addon_artwork_attempt_plan.hpp addon_package_configuration.hpp
@@ -96,14 +97,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND EXISTS "$
     add_executable(test_addon_prepared_metadata_invocation "../tests/test_addon_prepared_metadata_invocation.cpp")
     target_link_libraries(test_addon_prepared_metadata_invocation PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_prepared_metadata_invocation PRIVATE
-        HAKONE_PREPARED_OWNER_WRAP HAKONE_METADATA_PREPARATION_WRAP
+        HAKONE_PREPARED_OWNER_WRAP HAKONE_METADATA_PREPARATION_WRAP HAKONE_ARTWORK_READ_WRAP
         HAKONE_PREPARED_PROCESS_FIXTURE="$<TARGET_FILE:addon_prepared_metadata_process>"
         HAKONE_PREPARED_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
         HAKONE_PREPARED_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm"
         HAKONE_ATTEMPT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/metadata-attempt")
     target_link_options(test_addon_prepared_metadata_invocation PRIVATE "-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv"
         "-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv"
-        "-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString")
+        "-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString"
+        "-Wl,--wrap=_ZN12QImageReader4readEv")
     add_dependencies(test_addon_prepared_metadata_invocation addon_prepared_metadata_process)
     add_test(NAME addon_prepared_metadata_invocation COMMAND test_addon_prepared_metadata_invocation)
     set_tests_properties(addon_prepared_metadata_invocation PROPERTIES TIMEOUT 180)
@@ -251,6 +253,7 @@ if(VLC_BUILD_DIR)
             target_link_libraries(test_addon_artwork_attempt_aggregate PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
             target_compile_definitions(test_addon_artwork_attempt_aggregate PRIVATE
                 HAKONE_AGGREGATE_PROCESS_FIXTURE="$<TARGET_FILE:addon_metadata_attempt_process>"
+                HAKONE_ATTEMPT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/metadata-attempt"
                 HAKONE_AGGREGATE_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
                 HAKONE_AGGREGATE_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm")
             add_dependencies(test_addon_artwork_attempt_aggregate addon_metadata_attempt_process)

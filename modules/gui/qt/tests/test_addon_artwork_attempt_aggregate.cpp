@@ -40,6 +40,7 @@
 #include "addons/addon_native_provider_artwork_assets.hpp"
 #include "fixtures/addon_artwork_attempt_keeper.h"
 #include "fixtures/addon_native_provider_fixture.h"
+#include "fixtures/receipt_tls_fixture.hpp"
 using namespace vlc::addons;
 using Aggregate = ArtworkAttemptAggregate;
 using Plan = ArtworkAttemptPlan;
@@ -77,10 +78,10 @@ struct Fixture {
     QString error, returnedStatus;
     QJsonObject returnedData;
     bool realWorker = false, registered = false;
-    Fixture() {
+    explicit Fixture(std::unique_ptr<QNetworkAccessManager>* transport=nullptr) {
         registered = AddonStreamLifetime::registerApplication(lifetime.handle());
         if (!registered) qFatal("The aggregate fixture could not register its app lifetime.");
-        manager = std::make_unique<AddonManager>(profile.path());
+        manager = transport ? AddonManager::withNetworkTransport(profile.path(),*transport) : std::make_unique<AddonManager>(profile.path());
         manager->setWorkerExecutable(QStringLiteral(HAKONE_AGGREGATE_PROCESS_FIXTURE));
     }
     ~Fixture() {
@@ -98,14 +99,21 @@ struct Fixture {
         if (instance) libvlc_release(instance);
     }
     vlc_metadata_job_t* child() const { return keeper_fixture_child(native.get()); }
-    bool install(const QString& id, bool rust = false) {
+    bool install(const QString& id, bool rust = false, bool network = false) {
         const auto directory = packages.filePath(id); if (!QDir().mkpath(directory)) return false;
         const QJsonArray fields{QStringLiteral("kind"), QStringLiteral("type"), QStringLiteral("title"), QStringLiteral("artist"), QStringLiteral("ids")};
-        const QJsonObject permissions{{QStringLiteral("metadata.context"), QJsonObject{{QStringLiteral("fields"), fields}}}};
+        QJsonObject permissions{{QStringLiteral("metadata.context"), QJsonObject{{QStringLiteral("fields"), fields}}}};
+        if(network) {
+            permissions.insert(QStringLiteral("network.http"),QJsonObject{{QStringLiteral("origins"),QJsonArray{QStringLiteral("https://8.8.8.8")}},
+                {QStringLiteral("methods"),QJsonArray{QStringLiteral("GET")}}});
+            permissions.insert(QStringLiteral("credentials.use"),QJsonObject{{QStringLiteral("bindings"),QJsonArray{QJsonObject{
+                {QStringLiteral("field"),QStringLiteral("apiKey")},{QStringLiteral("origin"),QStringLiteral("https://8.8.8.8")},
+                {QStringLiteral("header"),QStringLiteral("X-Key")}}}}});
+        }
         const QJsonObject contribution{{QStringLiteral("id"), QStringLiteral("artwork")}, {QStringLiteral("type"), QStringLiteral("metadata.provider")},
             {QStringLiteral("contract"), QStringLiteral("metadata@1")}, {QStringLiteral("features"), QJsonArray{QStringLiteral("artwork")}},
             {QStringLiteral("operations"), QJsonArray{QStringLiteral("enrich")}}, {QStringLiteral("requires"), QJsonArray{QStringLiteral("metadata.context")}}};
-        const QJsonObject manifest{{QStringLiteral("formatVersion"), 1}, {QStringLiteral("id"), id},
+        QJsonObject manifest{{QStringLiteral("formatVersion"), 1}, {QStringLiteral("id"), id},
             {QStringLiteral("name"), QStringLiteral("Aggregate fixture")}, {QStringLiteral("version"), QStringLiteral("1.0.0")},
             {QStringLiteral("publisher"), QStringLiteral("Tests")}, {QStringLiteral("license"), QStringLiteral("GPL-2.0-or-later")},
             {QStringLiteral("source"), QStringLiteral("https://github.com/hakone-org/aggregate-fixture")},
@@ -115,13 +123,30 @@ struct Fixture {
             {QStringLiteral("files"), QJsonArray{QStringLiteral("addon.json"), QStringLiteral("LICENSE"), QStringLiteral("worker.wasm")}},
             {QStringLiteral("permissions"), QJsonObject{{QStringLiteral("required"), permissions}}},
             {QStringLiteral("contributions"), QJsonArray{contribution}}};
+        if(network) {
+            auto api=manifest.value(QStringLiteral("api")).toObject();auto contracts=api.value(QStringLiteral("contracts")).toObject();
+            contracts.insert(QStringLiteral("settings"),QStringLiteral("^1.0.0"));api.insert(QStringLiteral("contracts"),contracts);manifest.insert(QStringLiteral("api"),api);
+            manifest.insert(QStringLiteral("settings"),QJsonObject{{QStringLiteral("schema"),QStringLiteral("schema.json")},{QStringLiteral("version"),1}});
+            auto files=manifest.value(QStringLiteral("files")).toArray();files.append(QStringLiteral("schema.json"));manifest.insert(QStringLiteral("files"),files);
+            const QJsonObject keySchema{{QStringLiteral("type"),QStringLiteral("string")},{QStringLiteral("x-hakone-secret"),true}};
+            const QJsonObject properties{{QStringLiteral("apiKey"),keySchema}};
+            const QJsonObject schema{{QStringLiteral("type"),QStringLiteral("object")},{QStringLiteral("properties"),properties},
+                {QStringLiteral("required"),QJsonArray{QStringLiteral("apiKey")}},{QStringLiteral("additionalProperties"),false}};
+            if(!write(QDir(directory).filePath(QStringLiteral("schema.json")),QJsonDocument(schema).toJson())) return false;
+        }
         if (!write(QDir(directory).filePath(QStringLiteral("addon.json")), QJsonDocument(manifest).toJson())
             || !write(QDir(directory).filePath(QStringLiteral("LICENSE")), QByteArray("Fixture license.\n"))) return false;
         if (rust) {
             if (!QFile::copy(QStringLiteral(HAKONE_AGGREGATE_FRENCH_TV_WASM), QDir(directory).filePath(QStringLiteral("worker.wasm")))) return false;
             manager->setWorkerExecutable(QStringLiteral(HAKONE_AGGREGATE_RUST_WORKER)); realWorker = true;
         } else if (!write(QDir(directory).filePath(QStringLiteral("worker.wasm")), QByteArray::fromHex("0061736d01000000"))) return false;
-        if (!manager->installLocalPackage(directory, true) || !manager->setEnabled(id, true)) { error = manager->errorMessage(); return false; }
+        if (!manager->installLocalPackage(directory, true)) { error = manager->errorMessage(); return false; }
+        if(network) {
+            const QVariantMap operation{{QStringLiteral("operation"),QStringLiteral("replace")},
+                {QStringLiteral("value"),QStringLiteral("unit-image-key")},{QStringLiteral("sessionOnly"),true}};
+            if(!manager->saveAddonSettings(id,{},{{QStringLiteral("apiKey"),operation}})) return false;
+        }
+        if (!manager->setEnabled(id, true)) { error = manager->errorMessage(); return false; }
         return true;
     }
     bool prepare(const QStringList& families = {}, const QStringList& order = {}, bool workerAvailable = true,
@@ -260,6 +285,28 @@ class AggregateTests : public QObject {
 private slots:
     void init() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
     void cleanup() { QCOMPARE(CoreMetadataAdmission::processCount(), 0u); }
+    void portableServiceUsesRealImageBrokerThroughFinalCoreApply_data() {
+        QTest::addColumn<bool>("revoke");QTest::newRow("apply")<<false;QTest::newRow("revoke before final Apply")<<true;
+    }
+    void portableServiceUsesRealImageBrokerThroughFinalCoreApply() {
+        QFETCH(bool,revoke);QImage image(4,4,QImage::Format_RGB32);image.fill(Qt::blue);QByteArray bytes;QBuffer output(&bytes);output.open(QIODevice::WriteOnly);QVERIFY(image.save(&output,"PNG"));
+        ReceiptTlsServer server;server.response="HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: "+QByteArray::number(bytes.size())+"\r\nConnection: close\r\n\r\n"+bytes;
+        QVERIFY(server.start());const auto state=std::make_shared<ReceiptTransportState>();
+        std::unique_ptr<QNetworkAccessManager> network=std::make_unique<ReceiptRoutedNetwork>(server,state);
+        Fixture f(&network);const auto package=QStringLiteral("org.hakone.portable-image");QVERIFY2(f.install(package,false,true),qPrintable(f.error));
+        auto service=std::make_unique<AddonMetadataService>(f.manager.get());QVERIFY(service->bindApplicationLifetime(f.lifetime.handle()));service->setAutomaticNetworkAllowed(true);
+        const auto backend=std::shared_ptr<vlc_metadata_backend_t>(service->holdCoreBackend(),vlc_metadata_backend_Release);
+        const auto context=QJsonDocument(QJsonObject{{QStringLiteral("query"),QStringLiteral("image-broker-positive")},
+            {QStringLiteral("identity"),QJsonObject{{QStringLiteral("kind"),QStringLiteral("movie")},{QStringLiteral("title"),QStringLiteral("Exact subject")}}}}).toJson(QJsonDocument::Compact);
+        Native mounted(keeper_fixture_new_backend(backend.get(),context.constData()),keeper_fixture_delete);QVERIFY(mounted);
+        QTRY_VERIFY(keeper_fixture_child_done(mounted.get()));QCOMPARE(keeper_fixture_child_status(mounted.get()),VLC_SUCCESS);
+        QCOMPARE(server.requests,1u);QCOMPARE(state->admitted,1u);QCOMPARE(keeper_fixture_prepare_completed(mounted.get(),true),VLC_SUCCESS);
+        if(revoke) QVERIFY(f.manager->setEnabled(package,false));
+        const auto applied=keeper_fixture_apply(mounted.get());
+        if(revoke) { QVERIFY(applied!=VLC_SUCCESS);QVERIFY(!(keeper_fixture_status(mounted.get())&ITEM_ART_FETCHED)); }
+        else { QCOMPARE(applied,VLC_SUCCESS);QVERIFY(keeper_fixture_status(mounted.get())&ITEM_ART_FETCHED); }
+        QCOMPARE(service->nativeJobCount(),0);QCOMPARE(service->mediaCount(),0);service.reset();
+    }
     void mountedServiceUsesTypedRunnerAndRetainsRevocation_data() {
         QTest::addColumn<int>("mode");
         QTest::newRow("portable no-match")<<0; QTest::newRow("native no-match")<<1;
@@ -353,10 +400,13 @@ private slots:
     void mountedServiceCannotUseLegacyAfterManagerRetires() {
         Fixture f;auto service=std::make_unique<AddonMetadataService>(f.manager.get());
         QVERIFY(service->bindApplicationLifetime(f.lifetime.handle()));service->setAutomaticNetworkAllowed(true);
-        f.manager.reset();
         const auto backend=std::shared_ptr<vlc_metadata_backend_t>(service->holdCoreBackend(),vlc_metadata_backend_Release);
-        Native mounted(keeper_fixture_new_backend(backend.get(),nullptr),keeper_fixture_delete);
-        QTRY_VERIFY(keeper_fixture_child_done(mounted.get()));QVERIFY(keeper_fixture_child_status(mounted.get())!=VLC_SUCCESS);
+        unsigned completed=0;
+        const auto idle=std::shared_ptr<vlc_metadata_job_t>(vlc_metadata_job_New(backend.get(),vlc_metadata_job_GetRequest(f.child()),
+            [](vlc_metadata_job_t*,int,void* opaque) { ++*static_cast<unsigned*>(opaque); },&completed),vlc_metadata_job_Release);
+        QVERIFY(idle); f.manager.reset(); QVERIFY(vlc_metadata_backend_IsClosed(backend.get()));
+        QVERIFY(vlc_metadata_job_Start(idle.get())!=VLC_SUCCESS);
+        QCoreApplication::processEvents();QCOMPARE(completed,0u);
         QTRY_COMPARE(service->mediaCount(),0);QCOMPARE(service->nativeJobCount(),0);
     }
     void runnerSerialPortableNoMatchPublishesNativeStatus() {

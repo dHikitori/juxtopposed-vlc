@@ -40,16 +40,19 @@ manual GUI checks and full app performance comparison remain open.
 
 The user approved code edits, fixes, builds, staging, commits, and the native playlist transaction plan on 27 October 2026. Code staging now succeeds. The earlier scope hold has ended. See [the pending review](pending-implementation-review.md) for test results and required repairs.
 
-The typed artwork aggregate and serial Service runner are now in application
-source and all three build definitions. The current aggregate, runner, and
-mounted-Service matrix passes 89 normal and 89 ASAN/UBSAN checks. The shared
-Service regressions add 70 checks in each build. Native claims, image consent,
-and exact portable receipts reach final Core Apply. The portable image case
-uses the actual decoder and cache with a controlled network response. The
-production portable image adapter still needs background registration,
-package/key preparation, and image/cache work. Native owner activation and
-full app cutover checks remain open. This change is not in the current Windows
-package. See [the serial runner](artwork-serial-runner.md),
+The typed artwork aggregate and serial Service runner are in application
+source and all three build definitions. The production portable image adapter
+now prepares package, account, keys, and TLS on joined work. Cache reads,
+decode, and writes also run on joined work. The old synchronous image API is
+removed. The current five-suite cohort passes 271 normal and 271 ASAN/UBSAN
+checks with no skips or diagnostics, including the actual
+Manager TLS broker, managed cache, final Core Apply, and surviving-owner
+shutdown. See [portable artwork background work](portable-artwork-background.md)
+for the final verification record and its limits. The Store memory token
+covers one process. Profile ownership or cross-process revocation remains a
+gate. Native owner activation, preserved-provider checks, and full app cutover
+remain open. The current Windows package does not contain these changes.
+See [the serial runner](artwork-serial-runner.md),
 [the aggregate](artwork-attempt-aggregate.md),
 [positive Core authority](artwork-positive-source-authority.md),
 [portable positive transfer](artwork-positive-host-transfer.md) and

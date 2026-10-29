@@ -568,3 +568,20 @@ See [the 29 October build record](windows-performance-build-2026-10-29.md).
 GUI automation could not initialize from the WSL workspace. Actual UI
 responsiveness, Extensions navigation, and the full app comparison remain
 open; the unit and package results do not establish a performance budget.
+
+
+## Prepared portable artwork
+
+The production image adapter now runs package, account, key, TLS, cache, and
+decode work on joined execution. Entry and cancellation checks return within
+100 ms on the controlled host while the actual authority reader or image
+decoder is blocked. The owner event loop still processes its heartbeat.
+The image path starts no worker, timer, or scan while idle. Manager retirement
+closes surviving services and cancels pending image work.
+
+See [the image evidence](portable-artwork-background.md) for the exact test
+cohort and limitations. These component checks do not measure the whole app.
+The current Windows package predates this change. Startup, idle CPU, ordinary
+UI response, and quit comparisons remain open. The persistent
+[Windows cursor report](windows-cursor-feedback.md) also remains open; no
+CPU or helper-launch sample establishes its cause yet.

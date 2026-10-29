@@ -665,7 +665,7 @@ private slots:
         QVERIFY(store.setEnabled(id, true)); QVERIFY(!releaseCurrent());
         manager.reset(); QVERIFY(!firstCurrent()); QVERIFY(first(QStringLiteral("apiKey")).isEmpty());
     }
-    void nativeAssetRequestsRejectAnExternalConfigurationChange() {
+    void nativeBinaryAssetRequestsRejectAnExternalConfigurationChange() {
         QTemporaryDir storage; AddonManager manager(storage.path());
         const QString id = QStringLiteral("org.hakone.thesubtitledb");
         QVERIFY(manager.installLocalPackage(reference(), true));
@@ -678,10 +678,9 @@ private slots:
         };
         const QJsonObject request{{"url", "https://api.thesubtitledb.com/subtitles"}, {"credential", "apiKey"}};
         manager.fetchAsset(id + QStringLiteral("/search"), request, callback);
-        manager.fetchImageAsset(id + QStringLiteral("/search"), request, callback);
         PackageStore store(storage.path()); QJsonObject settings; quint64 revision = 0;
         QVERIFY(store.settings(id, &settings, &revision)); settings.insert("language", "fr");
-        QVERIFY(store.saveSettings(id, settings, revision)); QTRY_COMPARE(completed, 2);
+        QVERIFY(store.saveSettings(id, settings, revision)); QTRY_COMPARE(completed, 1);
     }
     void fullRemovalRevokesAllCredentialGenerations() {
 #ifdef Q_OS_LINUX

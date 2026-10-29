@@ -8,6 +8,7 @@
 #include <QSslKey>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QNetworkProxy>
 #include <QFile>
 #include <QPointer>
 #include <memory>

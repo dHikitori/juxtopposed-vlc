@@ -188,6 +188,30 @@ private slots:
             QCOMPARE(completed, 1); QVERIFY(result.isEmpty()); QVERIFY(!error.isEmpty()); QVERIFY(QDir(directory.path()).entryList(QDir::Files).isEmpty());
         }
     }
+    void refusedBackgroundWorkCompletesWithoutNetwork() {
+        QTemporaryDir directory;Fake fake;auto backend=fake.backend();
+        backend.work=[](auto,auto) { return QString{}; };
+        AddonArtworkAssets assets(std::move(backend),directory.path(),{});int completed=0;
+        QVERIFY(!assets.resolve("example/art",QStringLiteral("https://images.example.org/a.png"),[&](const auto& file,const auto& error) {
+            QVERIFY(file.isEmpty());QVERIFY(!error.isEmpty());++completed;
+        }).isEmpty());
+        QTRY_COMPARE(completed,1);QVERIFY(fake.calls.isEmpty());QTest::qWait(10);QCOMPARE(completed,1);
+    }
+    void lateBackgroundCompletionCannotStartAReplacementRequest() {
+        struct Work { std::function<void()> run;std::function<void(bool)> complete; };
+        QTemporaryDir directory;Fake fake;auto backend=fake.backend();QList<Work> work;QStringList canceled;
+        backend.work=[&](auto run,auto complete) { work.append({std::move(run),std::move(complete)});return QString::number(work.size()); };
+        backend.cancelWork=[&](const auto& id) { canceled.append(id); };
+        AddonArtworkAssets assets(std::move(backend),directory.path(),{});int completed=0;QUrl selected;
+        const auto complete=[&](const auto& file,const auto& error) { QVERIFY(error.isEmpty());selected=file;++completed; };
+        const auto url=QStringLiteral("https://images.example.org/a.png");
+        const auto first=assets.resolve("example/art",url,complete);QTRY_COMPARE(work.size(),1);assets.cancel(first);QCOMPARE(canceled,QStringList{QStringLiteral("1")});
+        QVERIFY(!assets.resolve("example/art",url,complete).isEmpty());QTRY_COMPARE(work.size(),2);
+        work[0].complete(true);QVERIFY(fake.calls.isEmpty());QCOMPARE(completed,0);
+        work[1].run();const auto cacheReady=work[1].complete;cacheReady(true);QCOMPARE(fake.calls.size(),1);
+        fake.complete(0);QCOMPARE(work.size(),3);work[2].run();const auto imageReady=work[2].complete;imageReady(true);
+        QCOMPARE(completed,1);QVERIFY(selected.isLocalFile());
+    }
     void completionCanDestroyTheAdapter()
     {
         QTemporaryDir directory; Fake fake; auto* assets = new AddonArtworkAssets(fake.backend(), directory.path(), {});

@@ -10,10 +10,13 @@
 #include "addon_display_catalogue_reader.hpp"
 #include "addon_distribution_bootstrap.hpp"
 #include "addon_prepared_metadata_invocation.hpp"
+#include "addon_prepared_artwork_asset.hpp"
 #include "addon_metadata_coordinator.hpp"
 #include <QObject>
 #include <QVariantList>
 #include <atomic>
+
+class AddonArtworkAssets;
 
 namespace vlc::addons {
 class AddonStorage;
@@ -148,7 +151,8 @@ public:
                    NetworkBroker::RequestGuard, std::shared_ptr<AddonMetadataAttemptAdmission>);
     void cancel(const QString& invocation);
     quint64 fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
-    quint64 fetchImageAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
+    QString prepareArtworkAsset(const QString& contribution, ArtworkPreparationComplete);
+    quint64 fetchPreparedArtwork(const PreparedArtwork&, const QJsonObject&, NetworkBroker::Callback);
     void cancelAsset(quint64 job) { m_network.cancel(job); }
     NetworkBroker* networkBroker() { return &m_network; }
     // C++ only. The resolver keeps the release, permission, and account scope.
@@ -167,6 +171,7 @@ signals:
                            const QVariantMap& data, const QString& error);
 private:
     friend class ArtworkLookupRunner;
+    friend class ::AddonArtworkAssets;
     AddonManager(const QString&, std::unique_ptr<QNetworkAccessManager>, QObject*);
     QJsonObject schema(const InstalledPackage&) const;
     QJsonObject savedSettings(const QString&) const;

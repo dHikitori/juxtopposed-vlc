@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Exercise the real prepared Manager/Worker path. No Core layout is linked.
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 #include <QTest>
 #include <QTemporaryDir>
 #include <QSignalSpy>
@@ -11,6 +14,9 @@
 #include <QCoreApplication>
 #include <QScopeGuard>
 #include <QNetworkProxy>
+#include <QImageReader>
+#include <QBuffer>
+#include "addons/addon_artwork_assets.hpp"
 #include "fixtures/receipt_tls_fixture.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_artwork_attempt_plan.hpp"
@@ -28,6 +34,16 @@ extern "C" void __wrap__ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv(Ad
 {
     __real__ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv(worker);
     observedPreparedWorker = worker;
+}
+#endif
+#ifdef HAKONE_ARTWORK_READ_WRAP
+namespace { std::shared_ptr<metadataPreparationTest::Probe> artworkRead; }
+extern "C" QImage __real__ZN12QImageReader4readEv(QImageReader*);
+extern "C" QImage __wrap__ZN12QImageReader4readEv(QImageReader* reader)
+{
+    const auto probe=std::atomic_load(&artworkRead);
+    if(probe) probe->wait();
+    return __real__ZN12QImageReader4readEv(reader);
 }
 #endif
 namespace {
@@ -174,7 +190,95 @@ class TestAddonPreparedMetadataInvocation : public QObject {
     Q_OBJECT
 private slots:
     void init() { QCOMPARE(PreparedMetadataInvocation::processCount(), 0u); }
+    void managerRetirementStopsPendingArtworkWork() {
+        ReceiptTlsServer server; server.keepOpen = true; QVERIFY(server.start());
+        const auto state = std::make_shared<ReceiptTransportState>();
+        const auto observation = std::make_shared<PreparedTransportObservation>();
+        std::unique_ptr<QNetworkAccessManager> network = std::make_unique<PreparedTransport>(server, state, observation);
+        Fixture fixture(QStringLiteral("zero"), true, &network); QVERIFY(fixture.valid);
+        AddonArtworkAssets assets(fixture.manager.get(), fixture.store.filePath(QStringLiteral("image-cache")));
+        int completed = 0;
+        QVERIFY(!assets.resolve(contributionId, QStringLiteral("https://8.8.8.8/image.png"),
+            [&](const auto&, const auto&) { ++completed; }).isEmpty());
+        QTRY_COMPARE(server.requests, 1u);
+        fixture.manager.reset();
+        QCOMPARE(state->destroyed, 1u);
+        QTRY_VERIFY(fixture.lifetime.handle().qtDrained()); QTest::qWait(10); QCOMPARE(completed, 0);
+    }
 #ifdef HAKONE_METADATA_PREPARATION_WRAP
+    void artworkAuthorityPreparationKeepsTheOwnerResponsive_data() {
+        QTest::addColumn<bool>("destroy");QTest::newRow("cancel")<<false;QTest::newRow("retire Manager")<<true;
+    }
+    void artworkAuthorityPreparationKeepsTheOwnerResponsive() {
+        QFETCH(bool,destroy);Fixture fixture;QVERIFY(fixture.valid);
+        AddonArtworkAssets assets(fixture.manager.get(),fixture.store.filePath(QStringLiteral("image-cache")));
+        const auto probe=std::make_shared<metadataPreparationTest::Probe>();metadataPreparationTest::authority=probe;
+        const auto release=qScopeGuard([&] { metadataPreparationTest::authority.reset();probe->release(); });
+        int done=0;QElapsedTimer elapsed;elapsed.start();
+        const auto id=assets.resolve(contributionId,QStringLiteral("https://8.8.8.8/image.png"),[&](const auto&,const auto&) { ++done; });
+        QVERIFY(!id.isEmpty());QVERIFY(elapsed.elapsed()<100);QTRY_VERIFY(probe->entered.load());QVERIFY(!probe->onOwner.load());
+        bool heartbeat=false;QTimer::singleShot(0,[&] { heartbeat=true; });QTRY_VERIFY(heartbeat);
+        elapsed.restart();if(destroy) fixture.manager.reset();else assets.cancel(id);QVERIFY(elapsed.elapsed()<100);
+        probe->release();QTRY_VERIFY(fixture.lifetime.handle().qtDrained());QTest::qWait(10);QCOMPARE(done,0);
+    }
+#ifdef HAKONE_ARTWORK_READ_WRAP
+    void preparedArtworkUsesRealBrokerAndJoinedImageWork_data() {
+        QTest::addColumn<int>("mode");QTest::newRow("download")<<0;QTest::newRow("cached image")<<1;
+        QTest::newRow("cancel decode")<<2;QTest::newRow("disable during decode")<<3;
+        QTest::newRow("retire during decode")<<4;
+    }
+    void preparedArtworkUsesRealBrokerAndJoinedImageWork() {
+        QFETCH(int,mode);QImage image(4,4,QImage::Format_RGB32);image.fill(Qt::blue);QByteArray bytes;QBuffer output(&bytes);output.open(QIODevice::WriteOnly);QVERIFY(image.save(&output,"PNG"));
+        ReceiptTlsServer server;server.response="HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: "+QByteArray::number(bytes.size())+"\r\nConnection: close\r\n\r\n"+bytes;
+        QVERIFY(server.start());const auto state=std::make_shared<ReceiptTransportState>();const auto observation=std::make_shared<PreparedTransportObservation>();
+        std::unique_ptr<QNetworkAccessManager> network=std::make_unique<PreparedTransport>(server,state,observation);
+        Fixture fixture(QStringLiteral("zero"),true,&network);QVERIFY2(fixture.valid,qPrintable(fixture.error));
+        const auto cache=fixture.store.filePath(QStringLiteral("image-cache"));
+        const QVariantMap descriptor{{QStringLiteral("url"),QStringLiteral("https://8.8.8.8/image.png")},{QStringLiteral("credential"),QStringLiteral("apiKey")}};
+        if(mode==1) {
+            AddonArtworkAssets seed(fixture.manager.get(),cache);bool done=false;QUrl file;
+            QVERIFY(!seed.resolve(contributionId,descriptor,[&](const auto& value,const auto& error) { file=value;done=error.isEmpty(); }).isEmpty());
+            QTRY_VERIFY(done);QVERIFY(file.isLocalFile());QCOMPARE(server.requests,1u);
+        }
+        AddonArtworkAssets assets(fixture.manager.get(),cache);
+        const auto probe=std::make_shared<metadataPreparationTest::Probe>();std::atomic_store(&artworkRead,probe);
+        const auto release=qScopeGuard([&] { std::atomic_store(&artworkRead,std::shared_ptr<metadataPreparationTest::Probe>{});probe->release(); });
+        int done=0;QUrl selected;QString error;QElapsedTimer elapsed;elapsed.start();
+        const auto id=assets.resolve(contributionId,descriptor,[&](const auto& file,const auto& failure) { selected=file;error=failure;++done; });
+        QVERIFY(!id.isEmpty());QVERIFY(elapsed.elapsed()<100);QTRY_VERIFY(probe->entered.load());QVERIFY(!probe->onOwner.load());QCOMPARE(done,0);
+        bool heartbeat=false;QTimer::singleShot(0,[&] { heartbeat=true; });QTRY_VERIFY(heartbeat);
+        if(mode==2) assets.cancel(id);if(mode==3) QVERIFY(fixture.manager->setEnabled(packageId,false));
+        if(mode==4) fixture.manager.reset();
+        probe->release();QTRY_VERIFY(fixture.lifetime.handle().qtDrained());
+        std::atomic_store(&artworkRead,std::shared_ptr<metadataPreparationTest::Probe>{});
+        if(mode>=2) { QTest::qWait(10);QCOMPARE(done,0);QVERIFY(!QFileInfo::exists(cache)); }
+        else { QTRY_COMPARE(done,1);QVERIFY2(error.isEmpty(),qPrintable(error));QVERIFY(selected.isLocalFile());QVERIFY(!QImage(selected.toLocalFile()).isNull()); }
+        QCOMPARE(server.requests,1u);QCOMPARE(state->admitted,1u);QCOMPARE(observation->key,QByteArray("unit-prepared-key"));
+        QCOMPARE(PreparedMetadataInvocation::processCount(),0u);
+    }
+#endif
+    void preparedArtworkRefusesAnotherOwnerAndChangedConfiguration() {
+        Fixture fixture;QVERIFY(fixture.valid);PreparedArtwork prepared;QString error;bool done=false;
+        QVERIFY(!fixture.manager->prepareArtworkAsset(contributionId,[&](auto value,const auto& failure) { prepared=std::move(value);error=failure;done=true; }).isEmpty());
+        QTRY_VERIFY(done);QVERIFY2(error.isEmpty(),qPrintable(error));QVERIFY(prepared && prepared->current());
+        QTemporaryDir profile;AddonManager other(profile.path());bool networkDone=false;
+        const QJsonObject request{{QStringLiteral("url"),QStringLiteral("https://8.8.8.8/image.png")}};
+        QCOMPARE(other.fetchPreparedArtwork(prepared,request,[&](const auto&) { networkDone=true; }),quint64(0));
+        QVERIFY(fixture.manager->setEnabled(packageId,false));QVERIFY(!prepared->current());
+        QCOMPARE(fixture.manager->fetchPreparedArtwork(prepared,request,[&](const auto&) { networkDone=true; }),quint64(0));
+        QTest::qWait(10);QVERIFY(!networkDone);
+    }
+    void preparedArtworkNetworkRejectsAnExternalConfigurationChange() {
+        Fixture fixture;QVERIFY(fixture.valid);PreparedArtwork prepared;bool done=false;
+        QVERIFY(!fixture.manager->prepareArtworkAsset(contributionId,[&](auto value,const auto&) { prepared=std::move(value);done=true; }).isEmpty());
+        QTRY_VERIFY(done);QVERIFY(prepared && prepared->current());
+        bool networkDone=false;QString error;
+        QVERIFY(fixture.manager->fetchPreparedArtwork(prepared,{{QStringLiteral("url"),QStringLiteral("https://8.8.8.8/image.png")}},
+            [&](const auto& response) { networkDone=true;error=response.error;QVERIFY(response.body.isEmpty()); })!=0);
+        PackageStore store(fixture.store.path());QJsonObject settings;quint64 revision=0;
+        QVERIFY(store.settings(packageId,&settings,&revision));settings.insert(QStringLiteral("language"),QStringLiteral("fr"));
+        QVERIFY(store.saveSettings(packageId,settings,revision));QTRY_VERIFY(networkDone);QVERIFY(error.contains(QStringLiteral("changed")));
+    }
     void providerSelectionDoesNotBlockTheOwner() {
         Fixture fixture; QVERIFY(fixture.valid);
         const auto probe = std::make_shared<metadataPreparationTest::Probe>();

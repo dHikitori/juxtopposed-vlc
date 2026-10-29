@@ -190,6 +190,17 @@ int main(int argc, char **argv)
             memcpy(owned_data, payload.begin, size); owned_data[size] = 0; data = owned_data;
             status = !strcmp(call->mode, "\"positive-partial\"") ? "partial" : "match";
             if (!strcmp(call->mode, "\"positive-error\"")) extra = ",\"error\":\"The fixture failed.\"";
+        } else if (!strcmp(call->mode, "\"image-broker-positive\"")) {
+            if (!field(context, "identity", &identity) || *identity.begin != '{') { free(line); return 12; }
+            static const char prefix[] = "{\"records\":[{\"identity\":";
+            static const char suffix[] = ",\"fields\":{\"artwork\":{\"url\":\"https://8.8.8.8/image.png\",\"credential\":\"apiKey\"}}}]}";
+            const size_t identity_size = (size_t)(identity.end - identity.begin);
+            const size_t size = sizeof(prefix) - 1 + identity_size + sizeof(suffix);
+            owned_data = malloc(size); if (!owned_data) { free(line); return 4; }
+            memcpy(owned_data, prefix, sizeof(prefix) - 1);
+            memcpy(owned_data + sizeof(prefix) - 1, identity.begin, identity_size);
+            memcpy(owned_data + sizeof(prefix) - 1 + identity_size, suffix, sizeof(suffix));
+            status = "match"; data = owned_data;
         } else if (!strcmp(call->mode, "\"echo\"")) {
             if (!field(context, "identity", &identity)) { free(line); return 12; }
             echo = &identity;

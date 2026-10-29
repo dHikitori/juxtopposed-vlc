@@ -98,14 +98,17 @@ Two space guards stopped preparation or linking before a test ran. The
 confirmed stopped service link resumed from the same graph after cleanup.
 Free space stayed above 7.5 GB.
 
+## Follow-up
+
+The later [portable image work](portable-artwork-background.md) implements
+background registration, package/key/TLS preparation, cache reads, decode, and
+writes. It adds real Manager TLS and complete Core Apply cases. The 159-case
+record above remains the proof for this earlier runner milestone.
+
 ## Remaining cutover work
 
-- Move the portable image adapter's registration checks, package and key
-  preparation, cache reads, decode, and writes off the UI thread. Its current
-  Manager path still calls synchronous `providersForFeature`, `installed`,
-  and credential preparation. A queued Qt callback is not background work.
-- Exercise that prepared image path with the real Manager network broker,
-  including account change, cache hit, cancellation, and final revocation.
+- Establish profile ownership or cross-process revocation. The prepared Store
+  token detects writes by Store objects in the same process.
 - Finish preserved provider, local metadata, status-bit, no-legacy-bypass,
   subtitle, and complete app checks before native owner activation.
 - Rebuild and test the supported app targets. The current Windows package
