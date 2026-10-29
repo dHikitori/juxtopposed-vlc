@@ -201,7 +201,11 @@ AddonMetadataService::Backend AddonMetadataService::managerBackend(vlc::addons::
     backend.providers.invoke = [target](const QString& id, const QString& operation, const QVariantMap& context) {
         auto projection = context;
         projection.remove(QStringLiteral("media"));
-        return target ? target->invoke(id, operation, projection) : QString{};
+        return target ? target->invokeMetadata(id, operation, projection) : QString{};
+    };
+    backend.providers.selectProviders = [target](const QString& feature, AddonMetadataCoordinator::SelectionComplete complete) {
+        if (target) return target->selectMetadataProviders(feature, std::move(complete));
+        return AddonMetadataCoordinator::SelectionCancel{};
     };
     backend.providers.cancel = [target](const QString& id) { if (target) target->cancel(id); };
     backend.registerBuiltin = [target](const QString& feature, const QVariantMap& descriptor) {
@@ -259,7 +263,20 @@ AddonMetadataService::AddonMetadataService(Backend backend, QObject* parent)
               if (!automaticNativeArtwork(job.get())) return {};
               const auto validate = found->artwork.validate;
               return validate(data, job.get());
-          }}, this),
+          }, m_backend.providers.selectProviders
+              ? std::function<AddonMetadataCoordinator::SelectionCancel(const QString&, AddonMetadataCoordinator::SelectionComplete)>{
+                  [owner=QPointer<AddonMetadataService>(this)](const QString& feature, AddonMetadataCoordinator::SelectionComplete complete) {
+                      if (!owner) return AddonMetadataCoordinator::SelectionCancel{};
+                      const auto select = owner->m_backend.providers.selectProviders;
+                      return select(feature, [owner, feature, complete=std::move(complete)](AddonMetadataCoordinator::ProviderSelection result) {
+                          if (!owner) return;
+                          QSet<QString> registered;
+                          for (const auto& row : std::as_const(result.providers)) registered.insert(row.toMap().value(QStringLiteral("id")).toString());
+                          for (auto it = owner->m_builtins.cbegin(); it != owner->m_builtins.cend(); ++it)
+                              if (it->lifetime && it->features.contains(feature) && !registered.contains(it.key())) result.providers.append(it->descriptor);
+                          complete(std::move(result));
+                      });
+                  }} : decltype(AddonMetadataCoordinator::Backend::selectProviders){}}, this),
       m_core(std::make_shared<CoreState>())
 {
     const QPointer<AddonMetadataService> owner(this);

@@ -5,6 +5,10 @@
 #include "addon_metadata_completion_policy.hpp"
 #include "addon_package_configuration.hpp"
 #include "addon_storage.hpp"
+#include "addon_repository_jobs.hpp"
+#include "addon_repository_cancellation.hpp"
+#include "addon_native_wake.hpp"
+#include <QUuid>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QFileInfo>
@@ -20,6 +24,7 @@
 #include <mutex>
 #include <thread>
 #include <utility>
+#include <algorithm>
 
 namespace vlc::addons {
 struct PreparedMetadataOwner { std::atomic_bool open{true}; };
@@ -104,26 +109,88 @@ struct PreparedMetadataInvocation::Data {
     QString capturedExecutable, executable;
     QJsonObject settings, credentialStatus;
     QSet<int> absentHttpStatuses;
-    bool tlsAvailable = false;
+    bool tlsAvailable = false, requiresAttempt = true;
     const std::shared_ptr<Secrets> secrets = std::make_shared<Secrets>();
     explicit Data(std::shared_ptr<RecipePermit> value) : permit(std::move(value)) {}
     ~Data() { secrets->wipe(); }
+    bool stage(AddonNativeAuthority&, const std::function<bool()>&, QString*);
     bool current() const noexcept {
         return owner && owner->open.load(std::memory_order_acquire) && lifetime.current()
             && sourceToken.current() && catalogueToken.current() && preparationToken.current();
     }
 };
+bool PreparedMetadataInvocation::Data::stage(AddonNativeAuthority& authority,
+    const std::function<bool()>& current, QString* error)
+{
+    const auto refuse = [error](const QString& text) { if (error) *error = text; return false; };
+    const QFileInfo worker(capturedExecutable);
+    if (capturedExecutable.isEmpty() || !worker.isFile() || !worker.isExecutable())
+        return refuse(QStringLiteral("The add-on worker is not available."));
+    executable = worker.absoluteFilePath();
+    tlsAvailable = QSslSocket::supportsSsl();
+    const auto properties = slot.schema.value(QStringLiteral("properties")).toObject();
+    for (auto it = properties.begin(); it != properties.end(); ++it) {
+        const auto field = it.value().toObject();
+        if (it.key().startsWith(QLatin1Char('_')) || packageConfiguration::secretField(field)) continue;
+        if (slot.settings.contains(it.key())) settings.insert(it.key(), slot.settings.value(it.key()));
+        else if (field.contains(QStringLiteral("default"))) settings.insert(it.key(), field.value(QStringLiteral("default")));
+    }
+    const auto declared = authority.package.manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray();
+    const auto approved = slot.approvedGrants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
+    QSet<QString> fields;
+    for (const auto& binding : declared) {
+        if (!approved.contains(binding)) continue;
+        const auto value = binding.toObject(); const auto origin = value.value(QStringLiteral("origin")).toString();
+        if (exactHttpsOrigin(origin).isEmpty())
+            return refuse(QStringLiteral("The credential origin is not correct."));
+        fields.insert(value.value(QStringLiteral("field")).toString());
+    }
+    qsizetype bytes = 0;
+    for (const auto& field : fields) {
+        if (!current() || !authority.current()) return refuse(QStringLiteral("The credential configuration changed."));
+        auto secret = authority.credentials(field);
+        const auto wipe = qScopeGuard([&] { secret.fill('\0'); });
+        if (!current() || !authority.current() || secret.size() > PreparedMetadataInvocation::MaximumFieldBytes
+            || secret.size() > PreparedMetadataInvocation::MaximumSecretBytes - bytes || !permit->charge(secret.size()))
+            return refuse(QStringLiteral("The prepared credential is not available or exceeds the limit."));
+        bytes += secret.size();
+        credentialStatus.insert(field, QJsonObject{{QStringLiteral("present"), !secret.isEmpty()}});
+        secrets->fields.insert(field, std::move(secret));
+    }
+    // The full saved-state reader and resolver end here on joined work.
+    if (!current() || !authority.current() || !this->current())
+        return refuse(QStringLiteral("The metadata preparation changed before completion."));
+    return true;
+}
 struct PreparedMetadataRuntime {
     struct Entry {
         QPointer<AddonWorker> worker;
         std::shared_ptr<PreparedMetadataInvocation::Data> data;
         std::shared_ptr<ProcessCompletion> completion;
-        QString request, package, contribution;
+        QString request, publicRequest, package, contribution;
         QString status, error;
         QJsonObject result;
         bool terminal = false, canceled = false;
     };
     struct Gate { QString package; std::weak_ptr<AddonMetadataNativeAdmission> admission; };
+    struct Preparation {
+        QString package;
+        std::shared_ptr<std::atomic_bool> canceled = std::make_shared<std::atomic_bool>(false);
+        std::function<void()> work;
+        std::function<void(bool)> complete;
+    };
+    std::unique_ptr<AddonRepositoryJobs> jobs;
+    std::unique_ptr<AddonNativeWake> wake;
+    NativeNotification available;
+    QStringList pending;
+    QHash<QString, Preparation> preparations;
+    QHash<QString, QString> aliases;
+    QString running;
+    // Fail closed until joined work has read recovery/safe-mode state. The
+    // snapshot must retain its Store token and exact owner revision.
+    bool safeMode = true;
+    int safeModeRevision = -1;
+    std::function<bool()> safeModeCurrent;
     const std::shared_ptr<PreparedMetadataOwner> owner = std::make_shared<PreparedMetadataOwner>();
     QHash<AddonWorker*, std::shared_ptr<Entry>> workers;
     QHash<QString, std::shared_ptr<Entry>> requests;
@@ -147,6 +214,202 @@ PreparedMetadataInvocation::~PreparedMetadataInvocation() = default;
 bool PreparedMetadataInvocation::current() const noexcept { return m_data && m_data->current(); }
 unsigned PreparedMetadataInvocation::processCount() noexcept { return processes.load(std::memory_order_acquire); }
 void AddonManager::initializePreparedMetadata() { m_preparedMetadata = std::make_shared<PreparedMetadataRuntime>(); }
+QString AddonManager::queueMetadataPreparation(const QString& package, std::function<void()> work,
+    std::function<void(bool)> complete)
+{
+    const auto runtime = m_preparedMetadata;
+    const auto life = AddonStreamLifetime::applicationHandle();
+    if (QThread::currentThread() != thread() || m_retiring || !runtime || !work || !complete
+        || !runtime->owner->open.load(std::memory_order_acquire) || !life.current()
+        || runtime->preparations.size() >= 64) return {};
+    if (!runtime->jobs) runtime->jobs = std::make_unique<AddonRepositoryJobs>(life);
+    const QString id = QStringLiteral("metadata-prepare:") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    PreparedMetadataRuntime::Preparation task;
+    task.package = package; task.work = std::move(work); task.complete = std::move(complete);
+    runtime->preparations.insert(id, std::move(task)); runtime->pending.append(id);
+    QTimer::singleShot(0, this, &AddonManager::pumpMetadataPreparation);
+    return id;
+}
+void AddonManager::pumpMetadataPreparation()
+{
+    const auto runtime = m_preparedMetadata;
+    if (m_retiring || !runtime || !runtime->owner->open.load(std::memory_order_acquire)
+        || !runtime->jobs || runtime->jobs->busy()) return;
+    while (!runtime->pending.isEmpty() && !runtime->preparations.contains(runtime->pending.first()))
+        runtime->pending.removeFirst();
+    if (runtime->pending.isEmpty()) { runtime->available = {}; return; }
+    const auto id = runtime->pending.first();
+    const auto task = runtime->preparations.value(id);
+    const auto canceled = task.canceled;
+    const QPointer<AddonManager> owner(this);
+    AddonRepositoryJobs::Refusal refusal;
+    const bool started = runtime->jobs->submit([work = task.work, canceled] {
+        if (!canceled->load(std::memory_order_acquire)) work();
+    }, [owner, runtime, id](AddonRepositoryJobs::Result result) {
+        runtime->running.clear();
+        auto found = runtime->preparations.find(id);
+        std::function<void(bool)> complete;
+        bool current = false;
+        if (found != runtime->preparations.end()) {
+            current = !found->canceled->load(std::memory_order_acquire);
+            complete = std::move(found->complete); runtime->preparations.erase(found);
+        }
+        if (runtime->owner->open.load(std::memory_order_acquire) && owner) {
+            QTimer::singleShot(0, owner, &AddonManager::pumpMetadataPreparation);
+            if (current && complete) complete(result == AddonRepositoryJobs::Result::Finished);
+        }
+    }, &refusal);
+    if (started) {
+        runtime->pending.removeFirst(); runtime->running = id;
+        // The background job owns the reader. Keep only cancellation and the
+        // completion on the owner; do not retain another credential resolver.
+        runtime->preparations[id].work = {};
+        runtime->available = {}; return;
+    }
+    if (refusal == AddonRepositoryJobs::Refusal::ProcessQuota) {
+        if (!runtime->wake) runtime->wake = std::make_unique<AddonNativeWake>([owner] {
+            if (owner) owner->pumpMetadataPreparation();
+        });
+        if (runtime->wake->valid()) {
+            if (!runtime->available)
+                runtime->available = AddonRepositoryJobs::onProcessAvailable(runtime->wake->nativeCallback());
+            if (runtime->available) {
+                // Subscribe before rechecking: a concurrent release cannot be lost.
+                if (AddonRepositoryJobs::processCount() < AddonRepositoryJobs::ProcessLimit)
+                    QTimer::singleShot(0, this, &AddonManager::pumpMetadataPreparation);
+                return;
+            }
+        }
+    }
+    runtime->pending.removeFirst(); runtime->preparations.remove(id);
+    QTimer::singleShot(0, this, &AddonManager::pumpMetadataPreparation);
+    if (task.complete) task.complete(false);
+}
+bool AddonManager::cancelMetadataPreparation(const QString& id)
+{
+    const auto runtime = m_preparedMetadata;
+    if (!runtime) return false;
+    const auto found = runtime->preparations.find(id);
+    if (found == runtime->preparations.end()) return false;
+    found->canceled->store(true, std::memory_order_release);
+    runtime->preparations.erase(found); runtime->pending.removeAll(id);
+    if (runtime->running == id && runtime->jobs) runtime->jobs->cancel();
+    if (runtime->pending.isEmpty()) runtime->available = {};
+    return true;
+}
+QVariantMap AddonManager::builtinMetadataProvider(const QString& id) const
+{
+    const auto runtime = m_preparedMetadata;
+    if (m_retiring || m_distributionBootstrapInProgress || !runtime || runtime->safeMode
+        || runtime->safeModeRevision != m_revision || !runtime->safeModeCurrent || !runtime->safeModeCurrent()) return {};
+    return m_builtinProviders.value(id);
+}
+AddonMetadataCoordinator::SelectionCancel AddonManager::selectMetadataProviders(const QString& feature,
+    AddonMetadataCoordinator::SelectionComplete complete)
+{
+    const auto source = metadataCatalogueSource();
+    const auto runtime = m_preparedMetadata;
+    const QPointer<AddonManager> owner(this);
+    const auto revision = m_revision;
+    const auto result = std::make_shared<AddonMetadataCoordinator::ProviderSelection>();
+    const auto safeMode = std::make_shared<bool>(true);
+    QVariantList builtins;
+    for (const auto& row : m_builtinProviders)
+        if (row.value(QStringLiteral("features")).toStringList().contains(feature)) builtins.append(row);
+    QString id;
+    if (source && runtime) {
+        const auto alive = runtime->owner;
+        id = queueMetadataPreparation({}, [source = *source, alive, builtins, feature, result, safeMode] {
+            MetadataCatalogueSnapshot catalogue;
+            if (!source.current() || !alive->open.load(std::memory_order_acquire)
+                || !source.catalogueReader || !source.catalogueReader(&catalogue, &result->error) || !catalogue.current()) {
+                if (result->error.isEmpty()) result->error = QStringLiteral("The metadata provider list is not available.");
+                return;
+            }
+            *safeMode = catalogue.safeMode;
+            for (const auto& row : std::as_const(catalogue.packages)) {
+                if (RepositoryCancellation::requested()) return;
+                QList<Contribution> declarations;
+                for (const auto& declaration : row.contributions)
+                    if (declaration.type == QLatin1String("metadata.provider") && declaration.features.contains(feature))
+                        declarations.append(declaration);
+                if (declarations.isEmpty()) continue;
+                const auto present = [&source, &row](const QString& reference) {
+                    auto value = source.credentialReader ? source.credentialReader(row.package.manifest.id, reference) : QByteArray{};
+                    const bool found = !value.isEmpty(); value.fill('\0'); return found;
+                };
+                const bool enabled = !catalogue.safeMode && row.savedEnabled && row.package.enabled;
+                const bool configured = enabled && packageConfiguration::configured(row.settings, row.schema, present);
+                const auto account = enabled ? packageConfiguration::packageAccountReference(row.package, row.settings, row.schema, present) : QString{};
+                const QString partition = QString::fromLatin1(row.package.digest) + QLatin1Char(':')
+                    + QString::number(row.package.generation) + QLatin1Char(':') + QString::number(row.settingsRevision);
+                for (const auto& declaration : std::as_const(declarations))
+                    result->providers.append(QVariantMap{{"id", QString(row.package.manifest.id + '/' + declaration.id)},
+                        {"packageId", row.package.manifest.id}, {"name", row.package.manifest.name},
+                        {"enabled", enabled}, {"configured", configured}, {"accountReference", account},
+                        {"cachePartition", partition}, {"features", declaration.features},
+                        {"operations", declaration.operations}, {"mediaKinds", declaration.mediaKinds}});
+            }
+            for (auto row : builtins) {
+                if (catalogue.safeMode) { auto map = row.toMap(); map.insert(QStringLiteral("enabled"), false); row = map; }
+                result->providers.append(row);
+            }
+            const auto order = catalogue.providerPreferences.value(feature).toArray();
+            const auto rank = [&order](const QVariant& row) {
+                const auto id = row.toMap().value(QStringLiteral("id")).toString();
+                for (qsizetype i = 0; i < order.size(); ++i) if (order.at(i).toString() == id) return i;
+                return order.size();
+            };
+            std::stable_sort(result->providers.begin(), result->providers.end(), [&](const auto& a, const auto& b) { return rank(a) < rank(b); });
+            const auto queued = source.queuedAuthority, authority = catalogue.authority;
+            result->current = [alive, queued, authority] {
+                return alive->open.load(std::memory_order_acquire) && queued.current() && authority.current();
+            };
+        }, [owner, revision, result, safeMode, complete](bool success) {
+            if (!owner || !complete) return;
+            if (!success || owner->revision() != revision) {
+                result->providers.clear(); result->error = QStringLiteral("The metadata provider configuration changed.");
+            }
+            const auto runtime = owner->m_preparedMetadata;
+            runtime->safeMode = *safeMode; runtime->safeModeRevision = revision;
+            runtime->safeModeCurrent = success && result->error.isEmpty() ? result->current : std::function<bool()>{};
+            complete(std::move(*result));
+        });
+    }
+    if (id.isEmpty()) {
+        QTimer::singleShot(0, this, [complete = std::move(complete)] {
+            if (complete) complete({{}, {}, QStringLiteral("The metadata service is not available. Try again.")});
+        });
+    }
+    return [owner, id] { if (owner && !id.isEmpty()) owner->cancelMetadataPreparation(id); };
+}
+QString AddonManager::invokeMetadata(const QString& contribution, const QString& operation, const QVariantMap& context)
+{
+    const auto prepare = metadataInvocationPreparer(contribution, operation, QJsonObject::fromVariantMap(context));
+    struct Result { std::unique_ptr<PreparedMetadataInvocation> prepared; QString error; };
+    const auto result = std::make_shared<Result>();
+    const QPointer<AddonManager> owner(this);
+    const auto publicId = std::make_shared<QString>();
+    const auto id = queueMetadataPreparation(contribution.section(QLatin1Char('/'), 0, 0), [prepare, result] {
+        if (prepare) result->prepared = prepare(&result->error);
+    }, [owner, publicId, result, contribution](bool success) {
+        if (!owner) return;
+        QString request;
+        if (success && result->prepared) request = owner->invokePreparedMetadata(std::move(result->prepared), {}, {});
+        if (!owner) return;
+        if (request.isEmpty()) {
+            emit owner->operationFinished(*publicId, contribution, QStringLiteral("error"), {},
+                result->error.isEmpty() ? QStringLiteral("The metadata provider could not start.") : result->error);
+            return;
+        }
+        const auto runtime = owner->m_preparedMetadata;
+        const auto entry = runtime->requests.value(request);
+        if (!entry) { owner->cancel(request); return; }
+        entry->publicRequest = *publicId; runtime->aliases.insert(*publicId, request);
+    });
+    *publicId = id; return id;
+}
+
 MetadataInvocationPreparer AddonManager::metadataInvocationPreparer(std::shared_ptr<const ArtworkAttemptPlan> plan, unsigned ordinal) const
 {
     if (QThread::currentThread() != thread() || !QCoreApplication::instance()
@@ -194,43 +457,59 @@ MetadataInvocationPreparer AddonManager::metadataInvocationPreparer(std::shared_
         data->owner = owner; data->sourceToken = plan->queuedAuthority; data->catalogueToken = plan->authority;
         data->preparationToken = queued; data->lifetime = lifetime; data->slot = slot; data->subject = plan->subject;
         data->capturedExecutable = executable; data->absentHttpStatuses = *policy;
-        const QFileInfo worker(executable);
-        if (executable.isEmpty() || !worker.isFile() || !worker.isExecutable())
-            return refuse(QStringLiteral("The add-on worker is not available."));
-        data->executable = worker.absoluteFilePath();
-        data->tlsAvailable = QSslSocket::supportsSsl();
-        const auto properties = slot.schema.value(QStringLiteral("properties")).toObject();
-        for (auto it = properties.begin(); it != properties.end(); ++it) {
-            const auto field = it.value().toObject();
-            if (it.key().startsWith(QLatin1Char('_')) || packageConfiguration::secretField(field)) continue;
-            if (slot.settings.contains(it.key())) data->settings.insert(it.key(), slot.settings.value(it.key()));
-            else if (field.contains(QStringLiteral("default"))) data->settings.insert(it.key(), field.value(QStringLiteral("default")));
-        }
-        const auto declared = authority->package.manifest.permissionScope(QStringLiteral("credentials.use")).value(QStringLiteral("bindings")).toArray();
-        const auto approved = slot.approvedGrants.value(QStringLiteral("credentials.use")).toObject().value(QStringLiteral("bindings")).toArray();
-        QSet<QString> fields;
-        for (const auto& binding : declared) {
-            if (!approved.contains(binding)) continue;
-            const auto value = binding.toObject(); const auto origin = value.value(QStringLiteral("origin")).toString();
-            if (exactHttpsOrigin(origin).isEmpty())
-                return refuse(QStringLiteral("The credential origin is not correct."));
-            fields.insert(value.value(QStringLiteral("field")).toString());
-        }
-        qsizetype bytes = 0;
-        for (const auto& field : fields) {
-            if (!current() || !authority->current()) return refuse(QStringLiteral("The credential configuration changed."));
-            auto secret = authority->credentials(field);
-            const auto wipe = qScopeGuard([&] { secret.fill('\0'); });
-            if (!current() || !authority->current() || secret.size() > PreparedMetadataInvocation::MaximumFieldBytes
-                || secret.size() > PreparedMetadataInvocation::MaximumSecretBytes - bytes || !permit->charge(secret.size()))
-                return refuse(QStringLiteral("The prepared credential is not available or exceeds the limit."));
-            bytes += secret.size();
-            data->credentialStatus.insert(field, QJsonObject{{QStringLiteral("present"), !secret.isEmpty()}});
-            data->secrets->fields.insert(field, std::move(secret));
-        }
-        // The full saved-state reader and resolver end here on joined work.
-        if (!current() || !authority->current() || !data->current())
-            return refuse(QStringLiteral("The metadata preparation changed before completion."));
+        if (!data->stage(*authority, current, error)) return {};
+        return std::unique_ptr<PreparedMetadataInvocation>(new PreparedMetadataInvocation(std::move(data)));
+    };
+}
+MetadataInvocationPreparer AddonManager::metadataInvocationPreparer(const QString& contribution,
+    const QString& operation, const QJsonObject& context) const
+{
+    if (QThread::currentThread() != thread() || m_retiring || !m_preparedMetadata
+        || !m_preparedMetadata->owner->open.load(std::memory_order_acquire)) return {};
+    const auto owner = m_preparedMetadata->owner;
+    const auto queued = m_store.authorityToken();
+    const auto authorityReader = nativeAuthorityReader(contribution);
+    const auto executable = m_workerExecutable;
+    const auto lifetime = AddonStreamLifetime::applicationHandle();
+    if (!queued.current() || !lifetime.current() || !authorityReader) return {};
+    const auto ownerThread = std::this_thread::get_id();
+    return [owner, queued, authorityReader, executable, lifetime, ownerThread, contribution, operation, context]
+        (QString* error) -> std::unique_ptr<PreparedMetadataInvocation> {
+        const auto refuse = [error](const QString& text) -> std::unique_ptr<PreparedMetadataInvocation> {
+            if (error) *error = text; return {};
+        };
+        const auto current = [&] {
+            return std::this_thread::get_id() != ownerThread && owner->open.load(std::memory_order_acquire)
+                && queued.current() && lifetime.current() && !RepositoryCancellation::requested();
+        };
+        if (!current()) return refuse(QStringLiteral("The metadata request is no longer current."));
+        auto authority = authorityReader();
+        if (!current() || !authority || !authority->live() || !authority->current())
+            return refuse(QStringLiteral("Enable this add-on. Then enter its settings."));
+        ArtworkAttemptPlan::Slot slot;
+        slot.contribution = contribution; slot.contract = authority->contribution.contract;
+        slot.operation = operation; slot.feature = context.value(QStringLiteral("feature")).toString();
+        slot.package = authority->package; slot.declaration = authority->contribution;
+        slot.settings = authority->settings; slot.schema = authority->schema;
+        slot.settingsRevision = authority->settingsRevision; slot.accountReference = authority->accountReference;
+        slot.approvedGrants = authority->package.grants;
+        slot.projectedContext = packageConfiguration::projectMetadataContext(authority->package.manifest, slot.approvedGrants, context);
+        slot.projectedContextDigest = digest(slot.projectedContext);
+        slot.releaseDigest = slot.package.digest; slot.releaseGeneration = slot.package.generation;
+        slot.partition = QString::fromLatin1(slot.releaseDigest) + QLatin1Char(':')
+            + QString::number(slot.releaseGeneration) + QLatin1Char(':') + QString::number(slot.settingsRevision);
+        slot.requestedFields.clear();
+        const auto policy = metadataCompletionAbsentStatuses(slot.declaration.document, slot.feature, operation);
+        if (slot.declaration.type != QLatin1String("metadata.provider") || slot.contract != QLatin1String("metadata@1")
+            || !slot.declaration.features.contains(slot.feature) || !slot.declaration.operations.contains(operation) || !policy)
+            return refuse(QStringLiteral("The metadata provider scope is not correct."));
+        const auto permit = RecipePermit::acquire();
+        if (!permit) return refuse(QStringLiteral("Metadata preparation is busy. Try again."));
+        auto data = std::make_shared<PreparedMetadataInvocation::Data>(permit);
+        data->owner = owner; data->sourceToken = queued; data->catalogueToken = queued;
+        data->preparationToken = queued; data->lifetime = lifetime; data->slot = slot; data->requiresAttempt = false;
+        data->capturedExecutable = executable; data->absentHttpStatuses = *policy;
+        if (!data->stage(*authority, current, error)) return {};
         return std::unique_ptr<PreparedMetadataInvocation>(new PreparedMetadataInvocation(std::move(data)));
     };
 }
@@ -241,21 +520,21 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
     const auto refuse = [&attempt] { if (attempt) attempt->blocked(); return QString{}; };
     if (!QCoreApplication::instance()
         || thread() != QCoreApplication::instance()->thread() || m_retiring || !m_preparedMetadata
-        || !prepared || !prepared->m_data || !attempt) return refuse();
+        || !prepared || !prepared->m_data) return refuse();
     const auto runtime = m_preparedMetadata;
     const auto data = prepared->m_data;
     const auto& slot = data->slot;
-    if (data->owner != runtime->owner || !data->current() || !attempt->current()
+    if (data->owner != runtime->owner || !data->current() || (data->requiresAttempt && !attempt) || (attempt && !attempt->current())
         || data->capturedExecutable != m_workerExecutable || m_withdrawingPackages.contains(slot.package.manifest.id)
         || m_removingPackages.contains(slot.package.manifest.id) || m_store.packageRetiring(slot.package.manifest.id)
-        || attempt->m_capture.nativeSubject != data->subject || attempt->m_capture.ordinal != slot.ordinal) return refuse();
+        || (attempt && (attempt->m_capture.nativeSubject != data->subject || attempt->m_capture.ordinal != slot.ordinal))) return refuse();
     const QPointer<AddonManager> owner(this);
-    const auto gate = attempt->m_capture.admission;
+    const auto gate = attempt ? attempt->m_capture.admission : std::shared_ptr<AddonMetadataNativeAdmission>{};
     const auto lifetime = data->lifetime;
-    const auto captureLife = attempt->m_capture.lifetime;
-    const auto capturedLive = attempt->m_capture.live;
+    const auto captureLife = attempt ? attempt->m_capture.lifetime : lifetime;
+    const auto capturedLive = attempt ? attempt->m_capture.live : NetworkBroker::RequestGuard{};
     NetworkBroker::RequestGuard current = [data, nativeCurrent, gate, lifetime, captureLife, capturedLive] {
-        return data->current() && lifetime.current() && captureLife.current() && gate && gate->current()
+        return data->current() && lifetime.current() && captureLife.current() && (!gate || gate->current())
             && NetworkBroker::guardCurrent(nativeCurrent) && NetworkBroker::guardCurrent(capturedLive);
     };
     if (!NetworkBroker::guardCurrent(current) || !owner) return refuse();
@@ -273,7 +552,7 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
     }
     auto unfinished = qScopeGuard([completion] { completion->finish(); });
     if (!NetworkBroker::guardCurrent(current) || !owner) return refuse();
-    if (!attempt->bindManager({slot.contribution, slot.contract, slot.feature, slot.operation,
+    if (attempt && !attempt->bindManager({slot.contribution, slot.contract, slot.feature, slot.operation,
             slot.accountReference, slot.partition, slot.releaseDigest, slot.releaseGeneration,
             slot.settingsRevision, slot.approvedGrants, slot.projectedContext,
             slot.requestedFields, data->absentHttpStatuses})) { completion->finish(); return refuse(); }
@@ -330,10 +609,11 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
             const auto& runtime = delivery->runtime; const auto& entry = delivery->entry;
             const auto owner = delivery->owner; const auto& current = delivery->current;
             const auto request = entry->request, contribution = entry->contribution;
+            const auto publicRequest = entry->publicRequest.isEmpty() ? request : entry->publicRequest;
             auto status = entry->status, error = entry->error;
             const auto result = entry->result;
             const bool canceled = entry->canceled || entry->completion->canceled.load(std::memory_order_acquire);
-            const bool permitted = NetworkBroker::guardCurrent(current);
+            const bool permitted = NetworkBroker::guardCurrent(current) && entry->worker && entry->worker->preparedCleanExit();
             const bool deliver = !canceled && entry->terminal && owner;
             const auto worker = entry->worker;
             runtime->workers.remove(worker.data());
@@ -345,9 +625,10 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
             // Check the retained owner flag before any Manager member access.
             if (!runtime->owner->open.load(std::memory_order_acquire) || !owner) return;
             owner->m_invocationPackages.remove(request); owner->m_invocationContributions.remove(request);
+            runtime->aliases.remove(publicRequest);
             if (!deliver) return;
-            if (!permitted) { status = QStringLiteral("denied"); error = QStringLiteral("The metadata invocation is no longer current."); }
-            emit owner->operationFinished(request, contribution, status, permitted ? result.toVariantMap() : QVariantMap{}, error);
+            if (!permitted) { status = entry->publicRequest.isEmpty() ? QStringLiteral("denied") : QStringLiteral("error"); error = QStringLiteral("The metadata invocation is no longer current."); }
+            emit owner->operationFinished(publicRequest, contribution, status, permitted ? result.toVariantMap() : QVariantMap{}, error);
         });
     });
     poll->start();
@@ -360,7 +641,7 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
         entry->canceled = true; if (weak) weak->retirePrepared(true); return refuse();
     }
     runtime->requests.insert(request, entry);
-    runtime->gates.insert(request, {entry->package, gate});
+    if (gate) runtime->gates.insert(request, {entry->package, gate});
     m_invocationPackages.insert(request, entry->package); m_invocationContributions.insert(request, slot.contribution);
     return request;
 }
@@ -385,8 +666,12 @@ bool AddonManager::cancelPreparedMetadata(const QString& request)
 {
     const auto runtime = m_preparedMetadata;
     if (!runtime) return false;
-    const auto entry = runtime->requests.take(request);
-    const auto captured = runtime->gates.take(request);
+    if (cancelMetadataPreparation(request)) return true;
+    const auto actual = runtime->aliases.take(request);
+    const auto key = actual.isEmpty() ? request : actual;
+    const auto entry = runtime->requests.take(key);
+    const auto captured = runtime->gates.take(key);
+    if (!actual.isEmpty()) { m_invocationPackages.remove(key); m_invocationContributions.remove(key); }
     const auto gate = captured.admission.lock();
     if (!entry && !gate) return false;
     if (entry) {
@@ -404,6 +689,14 @@ void AddonManager::retirePreparedMetadata(const QString& package)
     const auto runtime = m_preparedMetadata;
     if (!runtime) return;
     if (package.isEmpty()) runtime->owner->open.store(false, std::memory_order_release);
+    const auto preparations = runtime->preparations.keys();
+    for (const auto& id : preparations)
+        if (package.isEmpty() || runtime->preparations.value(id).package == package) cancelMetadataPreparation(id);
+    if (package.isEmpty()) {
+        runtime->available = {}; runtime->wake.reset();
+        if (runtime->jobs) runtime->jobs->close();
+        runtime->jobs.reset(); runtime->pending.clear(); runtime->aliases.clear();
+    }
     QList<std::shared_ptr<PreparedMetadataRuntime::Entry>> entries;
     QList<std::shared_ptr<AddonMetadataNativeAdmission>> gates;
     for (auto it = runtime->workers.begin(); it != runtime->workers.end();) {

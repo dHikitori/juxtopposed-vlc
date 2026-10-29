@@ -96,12 +96,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND EXISTS "$
     add_executable(test_addon_prepared_metadata_invocation "../tests/test_addon_prepared_metadata_invocation.cpp")
     target_link_libraries(test_addon_prepared_metadata_invocation PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_prepared_metadata_invocation PRIVATE
-        HAKONE_PREPARED_OWNER_WRAP
+        HAKONE_PREPARED_OWNER_WRAP HAKONE_METADATA_PREPARATION_WRAP
         HAKONE_PREPARED_PROCESS_FIXTURE="$<TARGET_FILE:addon_prepared_metadata_process>"
         HAKONE_PREPARED_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
         HAKONE_PREPARED_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm"
         HAKONE_ATTEMPT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/metadata-attempt")
-    target_link_options(test_addon_prepared_metadata_invocation PRIVATE "-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv")
+    target_link_options(test_addon_prepared_metadata_invocation PRIVATE "-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv"
+        "-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv"
+        "-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString")
     add_dependencies(test_addon_prepared_metadata_invocation addon_prepared_metadata_process)
     add_test(NAME addon_prepared_metadata_invocation COMMAND test_addon_prepared_metadata_invocation)
     set_tests_properties(addon_prepared_metadata_invocation PROPERTIES TIMEOUT 180)

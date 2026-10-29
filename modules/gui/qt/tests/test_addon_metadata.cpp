@@ -58,6 +58,78 @@ class TestAddonMetadata : public QObject
 {
     Q_OBJECT
 private slots:
+    void asynchronousSelectionCanBeCanceledWithoutStartingAProvider() {
+        FakeBackend fake; auto backend = fake.backend();
+        AddonMetadataCoordinator::SelectionComplete selected;
+        int cancellations = 0;
+        backend.providersForFeature = [](const QString&) -> QVariantList { qFatal("Synchronous provider selection ran."); };
+        backend.selectProviders = [&](const QString&, auto complete) {
+            selected = std::move(complete); return [&] { ++cancellations; };
+        };
+        AddonMetadataCoordinator coordinator(std::move(backend));
+        QSignalSpy finished(&coordinator, &AddonMetadataCoordinator::finished);
+        const auto request = coordinator.searchAssets("subtitles", context());
+        QTest::qWait(10); QVERIFY(fake.calls.isEmpty()); QVERIFY(selected);
+        coordinator.cancel(request); QCOMPARE(cancellations, 1);
+        selected({{registration("one/search")}, [] { return true; }, {}});
+        QTest::qWait(10); QVERIFY(fake.calls.isEmpty()); QVERIFY(finished.isEmpty());
+    }
+    void asynchronousSelectionTimeoutCancelsPendingWork() {
+        FakeBackend fake; auto backend = fake.backend();
+        AddonMetadataCoordinator::SelectionComplete selected;
+        int cancellations = 0;
+        backend.selectProviders = [&](const QString&, auto complete) {
+            selected = std::move(complete); return [&] { ++cancellations; };
+        };
+        AddonMetadataCoordinator coordinator(std::move(backend));
+        QSignalSpy finished(&coordinator, &AddonMetadataCoordinator::finished);
+        auto input = context(); input.insert("timeoutMs", 100);
+        coordinator.searchAssets("subtitles", input);
+        QTRY_COMPARE(finished.size(), 1); QCOMPARE(cancellations, 1);
+        QCOMPARE(finished.first()[1].toString(), QStringLiteral("error"));
+        selected({{registration("one/search")}, [] { return true; }, {}});
+        QTest::qWait(10); QVERIFY(fake.calls.isEmpty()); QCOMPARE(finished.size(), 1);
+    }
+    void asynchronousSelectionRejectsChangedAuthority() {
+        FakeBackend fake; auto backend = fake.backend();
+        AddonMetadataCoordinator::SelectionComplete selected;
+        backend.selectProviders = [&](const QString&, auto complete) { selected = std::move(complete); return [] {}; };
+        AddonMetadataCoordinator coordinator(std::move(backend));
+        QSignalSpy finished(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.searchAssets("subtitles", context());
+        selected({{registration("one/search")}, [] { return false; }, {}});
+        QTRY_COMPARE(finished.size(), 1); QVERIFY(fake.calls.isEmpty());
+        QCOMPARE(finished.first()[1].toString(), QStringLiteral("error"));
+    }
+    void invalidationAndDestructionRetirePendingSelection() {
+        FakeBackend fake; auto backend = fake.backend();
+        AddonMetadataCoordinator::SelectionComplete selected;
+        int cancellations = 0;
+        backend.selectProviders = [&](const QString&, auto complete) {
+            selected = std::move(complete); return [&] { ++cancellations; };
+        };
+        auto coordinator = std::make_unique<AddonMetadataCoordinator>(std::move(backend));
+        coordinator->searchAssets("subtitles", context()); coordinator->invalidate(); QCOMPARE(cancellations, 1);
+        selected({{registration("one/search")}, [] { return true; }, {}});
+        coordinator->searchAssets("subtitles", context()); coordinator.reset(); QCOMPARE(cancellations, 2);
+        selected({{registration("one/search")}, [] { return true; }, {}});
+        QTest::qWait(10); QVERIFY(fake.calls.isEmpty());
+    }
+    void asynchronousSelectionKeepsProviderFallbackOrder() {
+        FakeBackend fake; auto backend = fake.backend();
+        AddonMetadataCoordinator::SelectionComplete selected;
+        backend.selectProviders = [&](const QString&, auto complete) { selected = std::move(complete); return [] {}; };
+        AddonMetadataCoordinator coordinator(std::move(backend));
+        QSignalSpy finished(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.setProviderOrder("subtitles", {"two/search", "one/search"});
+        coordinator.searchAssets("subtitles", context());
+        selected({{registration("one/search"), registration("two/search")}, [] { return true; }, {}});
+        QTRY_COMPARE(fake.calls.size(), 1); QCOMPARE(fake.calls.first().provider, QStringLiteral("two/search"));
+        complete(coordinator, fake.calls.first(), "no_match");
+        QTRY_COMPARE(fake.calls.size(), 2); QCOMPARE(fake.calls.last().provider, QStringLiteral("one/search"));
+        complete(coordinator, fake.calls.last(), "match", assets());
+        QTRY_COMPARE(finished.size(), 1); QCOMPARE(finished.first()[1].toString(), QStringLiteral("match"));
+    }
     void enrichmentUsesSdkIdentityEvidence_data()
     {
         QTest::addColumn<QVariantMap>("target"); QTest::addColumn<QVariantMap>("candidate"); QTest::addColumn<bool>("accepted");

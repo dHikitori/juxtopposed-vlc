@@ -275,6 +275,9 @@ void AddonWorker::message(const QJsonObject& object)
     const auto id = object.value(QStringLiteral("id")).toString();
     if (type == QLatin1String("result")) {
         if (!m_invocations.contains(id)) {
+            if (m_prepared && m_retired.contains(id)) {
+                fail(tr("The prepared add-on sent another terminal result.")); return;
+            }
             // Keep ordinary stale-result handling, but retire a retained proof.
             if (const auto gate = m_attemptGates.value(id).lock()) gate->revoke();
             return;
@@ -304,6 +307,7 @@ void AddonWorker::message(const QJsonObject& object)
     const auto invocation = object.value(QStringLiteral("invocation")).toString();
     // A request can arrive after its invocation ended or was canceled.
     if (type == QLatin1String("host-call") && m_retired.contains(invocation)) {
+        if (m_prepared) { fail(tr("The prepared add-on sent a request after its result.")); return; }
         if (const auto gate = m_attemptGates.value(invocation).lock()) gate->revoke();
         return;
     }

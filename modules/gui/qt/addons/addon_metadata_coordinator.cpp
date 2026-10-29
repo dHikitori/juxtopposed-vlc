@@ -99,6 +99,8 @@ AddonMetadataCoordinator::AddonMetadataCoordinator(Backend backend, QObject* par
 
 AddonMetadataCoordinator::~AddonMetadataCoordinator()
 {
+    for (const auto& consumer : std::as_const(m_consumers))
+        if (consumer.cancelSelection) consumer.cancelSelection();
     for (const auto& job : m_jobs)
         if (!job.invocation.isEmpty() && m_backend.cancel) m_backend.cancel(job.invocation);
 }
@@ -148,11 +150,52 @@ QString AddonMetadataCoordinator::start(const QString& featureInput, const QStri
     consumer.required = fields;
     consumer.required.removeDuplicates();
     consumer.aggregate = aggregate;
-    const auto query = m_backend.providersForFeature;
-    const auto nativeQuery = m_backend.requiresNativeScope;
+    consumer.selecting = true;
+    m_consumers.insert(id, consumer);
+    const int timeout = std::clamp(context.value(QStringLiteral("timeoutMs"), 15000).toInt(), 100, 30000);
+    QTimer::singleShot(timeout, this, [this, id] {
+        const auto it = m_consumers.find(id);
+        if (it == m_consumers.end()) return;
+        it->status = QStringLiteral("error");
+        it->error = tr("The metadata request time limit has ended.");
+        finish(id);
+    });
     const QPointer<AddonMetadataCoordinator> owner(this);
-    const auto registrations = query ? query(feature) : QVariantList{};
-    if (!owner) return id;
+    if (m_backend.selectProviders) {
+        const auto select = m_backend.selectProviders;
+        auto cancel = select(feature, [owner, id](ProviderSelection result) {
+            if (owner) owner->selected(id, std::move(result));
+        });
+        if (!owner) { if (cancel) cancel(); return id; }
+        auto found = m_consumers.find(id);
+        if (found == m_consumers.end() || !found->selecting) { if (cancel) cancel(); }
+        else found->cancelSelection = std::move(cancel);
+    } else {
+        const auto query = m_backend.providersForFeature;
+        const auto rows = query ? query(feature) : QVariantList{};
+        if (owner) selected(id, {rows, {}, {}});
+    }
+    return id;
+}
+
+void AddonMetadataCoordinator::selected(const QString& id, ProviderSelection result)
+{
+    const auto found = m_consumers.constFind(id);
+    if (found == m_consumers.cend() || !found->selecting) return;
+    auto consumer = *found;
+    consumer.selecting = false;
+    consumer.cancelSelection = {};
+    consumer.selectionCurrent = std::move(result.current);
+    const QPointer<AddonMetadataCoordinator> owner(this);
+    const auto feature = consumer.feature, operation = consumer.operation, privateScope = consumer.privateScope;
+    if (!result.error.isEmpty() || (consumer.selectionCurrent && !consumer.selectionCurrent())) {
+        auto live = m_consumers.find(id);
+        live->status = QStringLiteral("error");
+        live->error = result.error.isEmpty() ? tr("The metadata provider configuration changed.") : result.error;
+        finish(id); return;
+    }
+    const auto nativeQuery = m_backend.requiresNativeScope;
+    const auto& registrations = result.providers;
     QHash<QString, QVariantMap> eligible;
     QStringList defaults;
     const auto kind = consumer.context.value(QStringLiteral("identity")).toMap().value(QStringLiteral("kind")).toString();
@@ -161,7 +204,7 @@ QString AddonMetadataCoordinator::start(const QString& featureInput, const QStri
         const auto providerId = provider.value(QStringLiteral("id")).toString();
         if (providerId.isEmpty() || eligible.contains(providerId) || !provider.value(QStringLiteral("enabled")).toBool()) continue;
         const bool native = nativeQuery && nativeQuery(providerId);
-        if (!owner) return id;
+        if (!owner || !m_consumers.contains(id)) return;
         if (native && (privateScope.isEmpty() || !m_backend.invokeNative)) continue;
         if (operation == QStringLiteral("identify")
             && (!provider.value(QStringLiteral("operations")).toStringList().contains(operation)
@@ -192,7 +235,7 @@ QString AddonMetadataCoordinator::start(const QString& featureInput, const QStri
         const auto plan = m_backend.planProviders;
         const QPointer<AddonMetadataCoordinator> alive(this);
         const auto planned = plan(feature, operation, before, privateScope);
-        if (!alive) return id;
+        if (!alive || !m_consumers.contains(id)) return;
         consumer.providers.clear(); QSet<QString> selected;
         for (const auto& value : planned) {
             const auto providerId = value.toMap().value(QStringLiteral("id")).toString();
@@ -206,17 +249,9 @@ QString AddonMetadataCoordinator::start(const QString& featureInput, const QStri
         }
     }
     consumer.providers = consumer.providers.mid(0, MaxProviders);
-    m_consumers.insert(id, consumer);
-    const int timeout = std::clamp(context.value(QStringLiteral("timeoutMs"), 15000).toInt(), 100, 30000);
-    QTimer::singleShot(timeout, this, [this, id] {
-        const auto it = m_consumers.find(id);
-        if (it == m_consumers.end()) return;
-        it->status = QStringLiteral("error");
-        it->error = tr("The metadata request time limit has ended.");
-        finish(id);
-    });
+    if (!m_consumers.contains(id)) return;
+    m_consumers.insert(id, std::move(consumer));
     QTimer::singleShot(0, this, [this, id] { advance(id); });
-    return id;
 }
 
 QStringList AddonMetadataCoordinator::missing(const Consumer& consumer) const
@@ -259,7 +294,11 @@ void AddonMetadataCoordinator::advance(const QString& consumerId)
 {
     const QPointer<AddonMetadataCoordinator> owner(this);
     auto it = m_consumers.find(consumerId);
-    if (it == m_consumers.end()) return;
+    if (it == m_consumers.end() || it->selecting) return;
+    if (it->selectionCurrent && !it->selectionCurrent()) {
+        it->status = QStringLiteral("error"); it->error = tr("The metadata provider configuration changed.");
+        finish(consumerId); return;
+    }
     if ((it->operation == QStringLiteral("enrich") && missing(*it).isEmpty())
         || (!it->aggregate && (it->operation == QStringLiteral("searchAssets")
             || it->operation == QStringLiteral("identify")) && !it->candidates.isEmpty())) {
@@ -610,6 +649,8 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
     const auto consumer = *found;
     m_consumers.remove(consumerId);
     const QPointer<AddonMetadataCoordinator> alive(this);
+    if (consumer.cancelSelection) consumer.cancelSelection();
+    if (!alive) return;
     detach(consumerId, consumer.pending);
     if (!alive) return;
     QVariantMap data{{QStringLiteral("contextGeneration"), consumer.context.value(QStringLiteral("generation"), consumer.context.value(QStringLiteral("contextGeneration")))},
@@ -666,8 +707,11 @@ void AddonMetadataCoordinator::cancel(const QString& consumerId)
     const auto it = m_consumers.constFind(consumerId);
     if (it == m_consumers.cend()) return;
     const auto keys = it->pending;
+    const auto cancelSelection = it->cancelSelection;
     m_consumers.remove(consumerId);
     const QPointer<AddonMetadataCoordinator> alive(this);
+    if (cancelSelection) cancelSelection();
+    if (!alive) return;
     detach(consumerId, keys);
     if (!alive) return;
     emit canceled(consumerId);

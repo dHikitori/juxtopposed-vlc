@@ -2019,20 +2019,20 @@ if qt6_dep.found()
                 'name': 'test_qt_addon_prepared_metadata_invocation',
                 'sources': files('tests/test_addon_prepared_metadata_invocation.cpp'),
                 'moc_sources': files('tests/test_addon_prepared_metadata_invocation.cpp'),
-                'moc_args': ['-DHAKONE_PREPARED_OWNER_WRAP'],
+                'moc_args': ['-DHAKONE_PREPARED_OWNER_WRAP', '-DHAKONE_METADATA_PREPARATION_WRAP'],
                 'link_with': [addon_host_library, libvlccore],
                 'suite': ['qt', 'addons'],
                 'timeout': 180,
                 'include_directories': qt_include_dir,
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
                 'cpp_args': [
-                    '-DHAKONE_PREPARED_OWNER_WRAP',
+                    '-DHAKONE_PREPARED_OWNER_WRAP', '-DHAKONE_METADATA_PREPARATION_WRAP',
                     '-DHAKONE_PREPARED_PROCESS_FIXTURE="' + addon_prepared_metadata_process.full_path() + '"',
                     '-DHAKONE_PREPARED_RUST_WORKER="' + addon_worker_target.full_path() + '"',
                     '-DHAKONE_PREPARED_FRENCH_TV_WASM="' + meson.project_source_root() / 'contrib-addons/examples/french-tv/dist/addon.wasm' + '"',
                     '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
                 ],
-                'link_args': qt_link_args + ['-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv'],
+                'link_args': qt_link_args + ['-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv', '-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv', '-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString'],
                 'depends': [addon_worker_dependencies, addon_prepared_metadata_process],
                 'env': addon_worker_environment,
             }
@@ -2255,10 +2255,19 @@ if qt6_dep.found()
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
         }
+        subtitle_preparation_args = []
+        subtitle_preparation_link_args = []
+        if host_system == 'linux'
+            subtitle_preparation_args = ['-DHAKONE_METADATA_PREPARATION_WRAP']
+            subtitle_preparation_link_args = ['-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv', '-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString']
+        endif
         vlc_tests += {
             'name': 'test_qt_subtitle_sources',
             'sources': files('tests/test_subtitle_sources.cpp', 'util/subtitle_source_service.cpp'),
             'moc_sources': files('tests/test_subtitle_sources.cpp'),
+            'moc_args': subtitle_preparation_args,
+            'cpp_args': subtitle_preparation_args,
+            'link_args': qt_link_args + subtitle_preparation_link_args,
             'moc_headers': files('util/subtitle_source_service.hpp'),
             'link_with': [addon_host_library, libvlccore],
             'suite': ['qt'],

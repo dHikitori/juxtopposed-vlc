@@ -2683,22 +2683,22 @@ TESTS += test_qt_addon_metadata_attempt
 
 addon_prepared_metadata_process_SOURCES = tests/fixtures/addon_prepared_metadata_process.c
 check_PROGRAMS += addon_prepared_metadata_process
-test_qt_addon_prepared_metadata_invocation_SOURCES = tests/test_addon_prepared_metadata_invocation.cpp
+test_qt_addon_prepared_metadata_invocation_SOURCES = tests/test_addon_prepared_metadata_invocation.cpp tests/fixtures/metadata_preparation_probe.hpp
 nodist_test_qt_addon_prepared_metadata_invocation_SOURCES = tests/test_addon_prepared_metadata_invocation.moc
 BUILT_SOURCES += tests/test_addon_prepared_metadata_invocation.moc
 CLEANFILES += tests/test_addon_prepared_metadata_invocation.moc
 test_qt_addon_prepared_metadata_invocation_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) \
-    -DHAKONE_PREPARED_OWNER_WRAP \
+    -DHAKONE_PREPARED_OWNER_WRAP -DHAKONE_METADATA_PREPARATION_WRAP \
     -DHAKONE_PREPARED_PROCESS_FIXTURE='"$(abs_builddir)/addon_prepared_metadata_process$(EXEEXT)"' \
     -DHAKONE_PREPARED_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
     -DHAKONE_PREPARED_FRENCH_TV_WASM='"$(abs_top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm"' \
     -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(abs_srcdir)/tests/fixtures/metadata-attempt"'
 test_qt_addon_prepared_metadata_invocation_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_prepared_metadata_invocation_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
-test_qt_addon_prepared_metadata_invocation_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS) -Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv
+test_qt_addon_prepared_metadata_invocation_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS) -Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv -Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv -Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString
 test_qt_addon_prepared_metadata_invocation$(EXEEXT): addon_prepared_metadata_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
 tests/test_addon_prepared_metadata_invocation.moc: $(srcdir)/tests/test_addon_prepared_metadata_invocation.cpp
-	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_PREPARED_OWNER_WRAP $< -o $@
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_PREPARED_OWNER_WRAP -DHAKONE_METADATA_PREPARATION_WRAP $< -o $@
 check_PROGRAMS += test_qt_addon_prepared_metadata_invocation
 TESTS += test_qt_addon_prepared_metadata_invocation
 endif
@@ -3588,7 +3588,7 @@ check_PROGRAMS += test_qt_media_identity
 TESTS += test_qt_media_identity
 
 test_qt_subtitle_sources_SOURCES = \
-	tests/test_subtitle_sources.cpp util/subtitle_source_service.cpp util/subtitle_source_service.hpp
+	tests/test_subtitle_sources.cpp tests/fixtures/metadata_preparation_probe.hpp util/subtitle_source_service.cpp util/subtitle_source_service.hpp
 nodist_test_qt_subtitle_sources_SOURCES = \
 	tests/test_subtitle_sources.moc util/subtitle_source_service.moc.cpp
 BUILT_SOURCES += tests/test_subtitle_sources.moc
@@ -3597,6 +3597,12 @@ test_qt_subtitle_sources_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
 test_qt_subtitle_sources_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_subtitle_sources_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_subtitle_sources_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+if HAVE_LINUX
+test_qt_subtitle_sources_CPPFLAGS += -DHAKONE_METADATA_PREPARATION_WRAP
+test_qt_subtitle_sources_LDFLAGS += -Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv -Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString
+tests/test_subtitle_sources.moc: $(srcdir)/tests/test_subtitle_sources.cpp
+	$(moc_verbose)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_METADATA_PREPARATION_WRAP -o $@ $<
+endif
 check_PROGRAMS += test_qt_subtitle_sources
 TESTS += test_qt_subtitle_sources
 

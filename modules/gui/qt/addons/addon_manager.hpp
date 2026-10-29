@@ -10,6 +10,7 @@
 #include "addon_display_catalogue_reader.hpp"
 #include "addon_distribution_bootstrap.hpp"
 #include "addon_prepared_metadata_invocation.hpp"
+#include "addon_metadata_coordinator.hpp"
 #include <QObject>
 #include <QVariantList>
 #include <atomic>
@@ -75,6 +76,11 @@ public:
     // Owner admission uses memory only. An empty ID means admission refused.
     QString invokePreparedMetadata(std::unique_ptr<PreparedMetadataInvocation>, NetworkBroker::RequestGuard,
                                    std::shared_ptr<AddonMetadataAttemptAdmission>);
+    // These entry points return immediately. All saved-state/key reads run on
+    // joined work. Neither a display row nor its cache can authorize execution.
+    AddonMetadataCoordinator::SelectionCancel selectMetadataProviders(const QString&, AddonMetadataCoordinator::SelectionComplete);
+    QString invokeMetadata(const QString&, const QString&, const QVariantMap&);
+    QVariantMap builtinMetadataProvider(const QString&) const;
     QString storageDirectory() const { return m_store.storageDirectory(); }
     // Read these memory snapshots on the manager thread. They contain no key bytes.
     QString workerExecutable() const { return m_workerExecutable; }
@@ -179,6 +185,10 @@ private:
     QHash<QString,DisplayRequest> m_displayRequests;
     void finishDistributionBootstrap(const QList<DistributionBootstrapEntry>&,
         const DistributionBootstrapBatch*,bool canceled,const QString& error);
+    QString queueMetadataPreparation(const QString& package, std::function<void()>, std::function<void(bool)>);
+    void pumpMetadataPreparation();
+    bool cancelMetadataPreparation(const QString&);
+    MetadataInvocationPreparer metadataInvocationPreparer(const QString&, const QString&, const QJsonObject&) const;
     void initializePreparedMetadata();
     void retirePreparedMetadata(const QString& package = {});
     bool cancelPreparedMetadata(const QString& invocation);

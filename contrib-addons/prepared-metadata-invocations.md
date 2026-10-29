@@ -1,8 +1,10 @@
 # Prepared metadata invocations
 
 The host can now prepare a portable metadata call on joined work. The first
-adapter takes a selected slot from `ArtworkAttemptPlan`. App owner activation
-and general metadata-plan adaptation remain open.
+adapter takes a selected slot from `ArtworkAttemptPlan`. Ordinary interactive
+metadata calls now use joined preparation too; see [the subtitle search
+fix](subtitle-online-responsiveness.md). Native artwork owner activation and
+the serial plan runner remain open.
 
 ## Preparation and admission
 
@@ -50,7 +52,7 @@ Cancellation and retirement wipe active recipe keys before native
 cancellation. The final cleanup releases the process permit after the
 worker and callback values end.
 
-## Evidence
+## Evidence at `15f7568633`
 
 Current source passes 120 normal and 120 ASAN/UBSAN checks on WSL Linux with
 Qt 6.8.3. There are no failed cases, skipped cases or runtime warnings.

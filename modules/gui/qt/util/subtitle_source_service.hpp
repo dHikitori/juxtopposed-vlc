@@ -146,7 +146,7 @@ private:
     QByteArray m_apiKey;
     bool m_customKey = false;
     QVariantList m_languages;
-    bool m_languagesLoaded = false;
+    bool m_languagesLoaded = false, m_languagesWanted = false;
     quint64 m_languagesGeneration = 0;
     QPointer<QNetworkReply> m_languagesReply;
     QPointer<QNetworkReply> m_searchReply;

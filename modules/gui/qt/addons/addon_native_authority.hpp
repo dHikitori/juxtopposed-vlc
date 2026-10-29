@@ -11,7 +11,7 @@ struct AddonNativeAuthority {
     InstalledPackage package;
     Contribution contribution;
     QString globalId, accountReference;
-    QJsonObject settings;
+    QJsonObject settings, schema;
     quint64 settingsRevision = 0;
     NetworkBroker::CredentialResolver credentials;
     // The live check uses memory only. The current check also reads saved state.

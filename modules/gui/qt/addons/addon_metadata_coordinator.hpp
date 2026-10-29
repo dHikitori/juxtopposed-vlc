@@ -23,6 +23,14 @@ public:
         QString family;
         QVariantMap attribution;
     };
+    struct ProviderSelection {
+        QVariantList providers;
+        // Native/memory checks only. Selection is never execution authority.
+        std::function<bool()> current;
+        QString error;
+    };
+    using SelectionComplete = std::function<void(ProviderSelection)>;
+    using SelectionCancel = std::function<void()>;
     struct Backend {
         std::function<QVariantList(const QString&)> providersForFeature;
         std::function<QString(const QString&, const QString&, const QVariantMap&)> invoke;
@@ -34,6 +42,9 @@ public:
         std::function<QVariantList(const QString&, const QString&, const QVariantList&, const QString&)> planProviders;
         // A native query only: no I/O, callback, target write, or Qt mutation.
         std::function<std::optional<NativeArtwork>(const QString&, const QVariantMap&, const QString&)> validateNativeArtwork;
+        // The factory and completion run on the owner thread. Package and key
+        // reads run on joined work. A backend must complete asynchronously.
+        std::function<SelectionCancel(const QString&, SelectionComplete)> selectProviders;
     };
 
     explicit AddonMetadataCoordinator(Backend backend, QObject* parent = nullptr);
@@ -82,6 +93,9 @@ private:
         QString error;
         int next = 0;
         int outstanding = 0;
+        SelectionCancel cancelSelection;
+        std::function<bool()> selectionCurrent;
+        bool selecting = false;
         bool aggregate = false;
         bool ambiguous = false;
         bool entityAmbiguous = false;
@@ -105,6 +119,7 @@ private:
     QString start(const QString& feature, const QString& operation,
                   const QVariantMap& context, const QStringList& fields, bool aggregate,
                   const QString& privateScope = {});
+    void selected(const QString& consumer, ProviderSelection);
     void advance(const QString& consumer);
     void subscribe(const QString& consumer, const QVariantMap& registration);
     void complete(const QString& invocation, const QString& contribution,

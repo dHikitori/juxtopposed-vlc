@@ -144,18 +144,23 @@ bool SubtitleSourceService::configured() const
                 && provider.value("configured").toBool();
         });
     }
-    return configuredForExecution();
+    if (m_addonManagerRetired) return false;
+    if (!m_addonManager) return !m_apiKey.isEmpty();
+    // Unmounted contract-test/legacy callers keep the synchronous status API.
+    // A mounted display never falls back to it, including during retirement.
+    const auto providers = m_addonManager->providersForFeature(QStringLiteral("subtitles"));
+    return std::any_of(providers.cbegin(), providers.cend(), [](const QVariant& value) {
+        const auto provider = value.toMap();
+        return provider.value("enabled").toBool() && provider.value("configured").toBool();
+    });
 }
 
 bool SubtitleSourceService::configuredForExecution() const
 {
     if (m_addonManagerRetired) return false;
     if (!m_addonManager) return !m_apiKey.isEmpty();
-    const auto providers = m_addonManager->providersForFeature(QStringLiteral("subtitles"));
-    return std::any_of(providers.cbegin(), providers.cend(), [](const QVariant& value) {
-        const auto provider = value.toMap();
-        return provider.value("enabled").toBool() && provider.value("configured").toBool();
-    });
+    // Fresh configuration is checked by the asynchronous coordinator.
+    return m_metadata || m_sharedMetadata;
 }
 
 bool SubtitleSourceService::providerDisplayBound() const
@@ -250,10 +255,14 @@ void SubtitleSourceService::setAddonManager(vlc::addons::AddonManager* manager)
     backend.providersForFeature = [this](const QString& feature) {
         return m_addonManager ? m_addonManager->providersForFeature(feature) : QVariantList{};
     };
+    backend.selectProviders = [this](const QString& feature, AddonMetadataCoordinator::SelectionComplete complete) {
+        return m_addonManager ? m_addonManager->selectMetadataProviders(feature, std::move(complete))
+            : AddonMetadataCoordinator::SelectionCancel{};
+    };
     backend.invoke = [this](const QString& contribution, const QString& operation, const QVariantMap& context) {
         if (contribution != builtinSubtitles)
-            return m_addonManager ? m_addonManager->invoke(contribution, operation, context) : QString{};
-        if (!m_builtin || operation != QLatin1String("searchAssets") || m_targetIndex >= m_searchTargets.size()) return QString{};
+            return m_addonManager ? m_addonManager->invokeMetadata(contribution, operation, context) : QString{};
+        if (!providerAvailable(builtinSubtitles) || !m_builtin || operation != QLatin1String("searchAssets") || m_targetIndex >= m_searchTargets.size()) return QString{};
         const auto invocation = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const auto& target = m_searchTargets[m_targetIndex];
         const QVariantMap request{{"url", target.url}, {"identity", context.value("identity")},
@@ -573,7 +582,9 @@ QVariantList SubtitleSourceService::parseSources(const QByteArray& bytes, QStrin
 void SubtitleSourceService::fetchLanguages()
 {
     if (m_addonManagerRetired) return;
-    if (m_apiKey.isEmpty() || (m_addonManager && !providerAvailable(builtinSubtitles)) || m_languagesLoaded || m_languagesReply) return;
+    if (m_apiKey.isEmpty() || m_languagesLoaded || m_languagesReply) return;
+    if (m_addonManager && !providerAvailable(builtinSubtitles)) { m_languagesWanted = true; return; }
+    m_languagesWanted = false;
     const auto generation = ++m_languagesGeneration;
     m_languagesReply = request(m_options.apiBase.resolved(QUrl(QStringLiteral("infos/languages"))), {}, true,
         m_options.maxJsonBytes, [this, generation](const QByteArray& bytes, const QString& error) {
@@ -726,6 +737,7 @@ void SubtitleSourceService::finishProviderSearch(const QString& consumer, const 
     if (consumer != m_providerSearch || data.value("contextGeneration").toULongLong() != m_searchGeneration
         || m_targetIndex >= m_searchTargets.size()) return;
     m_providerSearch.clear();
+    if (m_languagesWanted) fetchLanguages();
     const auto generation = m_searchGeneration;
     for (const auto& value : data.value("candidates").toList()) {
         const auto candidate = value.toMap();
@@ -767,8 +779,15 @@ void SubtitleSourceService::finishProviderSearch(const QString& consumer, const 
 
 bool SubtitleSourceService::providerAvailable(const QString& contribution) const
 {
-    if (!m_addonManager) return false;
-    for (const auto& value : m_addonManager->providersForFeature(QStringLiteral("subtitles"))) {
+    if (m_addonManagerRetired || !m_addonManager) return false;
+    if (contribution == builtinSubtitles) {
+        const auto provider = m_addonManager->builtinMetadataProvider(contribution);
+        return provider.value("enabled").toBool() && provider.value("configured").toBool();
+    }
+    // Display filtering is advisory. Downloads validate their exact release,
+    // account, grants and current configuration again in the asset broker.
+    if (!m_providerDisplayMode) return true;
+    for (const auto& value : displayProviders()) {
         const auto provider = value.toMap();
         if (provider.value("id").toString() == contribution)
             return provider.value("enabled").toBool() && provider.value("configured").toBool();

@@ -42,6 +42,7 @@ private:
     // Only the prepared Manager path can select this process lifecycle.
     void enablePreparedLifecycle();
     void retirePrepared(bool revoke);
+    bool preparedCleanExit() const noexcept { return m_preparedCleanExit && !m_preparedAbort; }
     struct PreparedTerminal {
         QString invocation, status, error;
         QJsonObject data;

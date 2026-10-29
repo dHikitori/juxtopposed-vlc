@@ -4,7 +4,14 @@ This file records implementation progress and test evidence. Updated 29 October 
 
 The full scope in this directory remains the objective. SDK v1 still has open completion gates. The earlier effort estimate was about 80–85% complete, with about 15–20% left. That estimate came before the measured UI performance findings. It does not establish current readiness. The [completion backlog](completion-backlog.md) records the remaining requirements and the evidence for each gap. The open gates below determine release readiness.
 
-Performance is the current priority. The earlier published build repeated
+Performance is the current priority. The **Online providers** freeze is traced
+to synchronous execution-path package scans. Provider selection and portable
+invocation preparation now run on joined work. The six related suites pass
+349 normal checks, including a blocked-reader UI regression. See
+[the diagnosis and fix](subtitle-online-responsiveness.md). The new Windows
+package and memory checks are in progress.
+
+The earlier published build repeated
 synchronous package scans during basic UI work. The new local Windows build
 at clean source `11adca2a52` includes the shared display path. See
 [the current build record](windows-performance-build-2026-10-29.md).

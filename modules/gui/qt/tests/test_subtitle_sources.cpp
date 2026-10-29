@@ -18,6 +18,7 @@
 #include "addons/addon_manager.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "addons/addon_catalogue_view.hpp"
+#include "fixtures/metadata_preparation_probe.hpp"
 #include <QScopeGuard>
 #include <atomic>
 #include <condition_variable>
@@ -105,11 +106,44 @@ struct SubtitleDisplayFixture {
 };
 class TestSubtitleSources : public QObject {
     Q_OBJECT
+    vlc::addons::AddonStreamLifetime m_applicationLifetime;
     static SubtitleSourceService::Options options(Server& server) { SubtitleSourceService::Options o;o.apiBase=server.base();o.timeoutMs=1000;return o; }
     static QVariantMap result(QSignalSpy& spy) { if(!spy.wait(5000))qFatal("Subtitle client did not finish");return spy.last()[1].toMap(); }
     static QVariantList search(SubtitleSourceService& client) { QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);client.search("The Wand S01E04","en");return result(spy).value("sources").toList(); }
     static QVariantList row(const QStringList& tracks) { return {QVariantMap{{"url","file:///movie.mkv"},{"baseline",QStringList{}},{"initialTracks",QStringList{}},{"tracks",tracks}}}; }
 private slots:
+    void initTestCase() { QVERIFY(vlc::addons::AddonStreamLifetime::registerApplication(m_applicationLifetime.handle())); }
+    void cleanupTestCase() {
+        m_applicationLifetime.close();
+        QElapsedTimer timer; timer.start();
+        while (!m_applicationLifetime.handle().qtDrained() && timer.elapsed() < 10000) {
+            QCoreApplication::processEvents(); QTest::qWait(1);
+        }
+        QVERIFY(m_applicationLifetime.handle().qtDrained());
+        QVERIFY(vlc::addons::AddonStreamLifetime::unregisterApplication(m_applicationLifetime.handle()));
+    }
+#ifdef HAKONE_METADATA_PREPARATION_WRAP
+    void onlineEntryAndCancelRemainResponsiveDuringASlowProviderRead() {
+        for (const bool cancel : {false, true}) {
+            QTemporaryDir directory; Server server;
+            server.respond = [](const HttpRequest&, QTcpSocket* socket) { Server::send(socket, results()); };
+            vlc::addons::AddonManager manager(directory.filePath("addons")); AddonMetadataService owner(&manager);
+            SubtitleSourceService client(options(server)); client.setAddonManager(&manager); client.setMetadataService(&owner);
+            client.setStorageDirectory(directory.filePath("subtitles")); QVERIFY(client.setApiKey("native-test-key"));
+            const auto probe = std::make_shared<metadataPreparationTest::Probe>(); metadataPreparationTest::catalogue = probe;
+            const auto release = qScopeGuard([&] { metadataPreparationTest::catalogue.reset(); probe->release(); });
+            QSignalSpy finished(&client, &SubtitleSourceService::searchFinished);
+            QElapsedTimer elapsed; elapsed.start(); client.fetchLanguages(); client.search("The Wand S01E04", "en");
+            QVERIFY(elapsed.elapsed() < 100); QTRY_VERIFY(probe->entered.load()); QVERIFY(!probe->onOwner.load());
+            bool heartbeat = false; QTimer::singleShot(0, [&] { heartbeat = true; }); QTRY_VERIFY(heartbeat);
+            QVERIFY(server.requests.isEmpty());
+            if (cancel) { elapsed.restart(); client.cancelSearch(); QVERIFY(elapsed.elapsed() < 100); }
+            probe->release();
+            if (cancel) { QTRY_VERIFY(m_applicationLifetime.handle().qtDrained()); QTest::qWait(20); QVERIFY(server.requests.isEmpty()); }
+            else { QTRY_COMPARE(finished.size(), 1); QCOMPARE(finished.first()[1].toMap().value("sources").toList().size(), 2); }
+        }
+    }
+#endif
     void incomingDeletionAfterUnregisterCannotReviveTheOldNativePath() {
         QTemporaryDir directory; Server server; SubtitleSourceService client(options(server));
         auto original=std::make_unique<vlc::addons::AddonManager>(directory.filePath("original"));

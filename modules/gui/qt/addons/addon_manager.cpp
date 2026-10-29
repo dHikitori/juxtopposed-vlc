@@ -831,6 +831,7 @@ AddonNativeAuthorityReader AddonManager::nativeAuthorityReader(const QString& gl
             ? QJsonObject{{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}}
             : QJsonDocument::fromJson(contents.value(package.manifest.settingsSchema)).object();
         if (document.value(QStringLiteral("type")).toString() != QLatin1String("object")) return std::nullopt;
+        result.schema = document;
         const auto properties = document.value(QStringLiteral("properties")).toObject();
         const auto references = result.settings.value(QStringLiteral("_credentials")).toObject();
         const auto present = [readSecret, id = package.manifest.id](const QString& reference) {

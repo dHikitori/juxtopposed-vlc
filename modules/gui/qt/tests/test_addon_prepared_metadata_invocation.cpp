@@ -14,6 +14,8 @@
 #include "fixtures/receipt_tls_fixture.hpp"
 #include "addons/addon_manager.hpp"
 #include "addons/addon_artwork_attempt_plan.hpp"
+#include "fixtures/metadata_preparation_probe.hpp"
+#include "addons/addon_repository_jobs.hpp"
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -172,6 +174,121 @@ class TestAddonPreparedMetadataInvocation : public QObject {
     Q_OBJECT
 private slots:
     void init() { QCOMPARE(PreparedMetadataInvocation::processCount(), 0u); }
+#ifdef HAKONE_METADATA_PREPARATION_WRAP
+    void providerSelectionDoesNotBlockTheOwner() {
+        Fixture fixture; QVERIFY(fixture.valid);
+        const auto probe = std::make_shared<metadataPreparationTest::Probe>();
+        metadataPreparationTest::catalogue = probe;
+        const auto release = qScopeGuard([&] { metadataPreparationTest::catalogue.reset(); probe->release(); });
+        bool done = false; AddonMetadataCoordinator::ProviderSelection selection;
+        QElapsedTimer elapsed; elapsed.start();
+        auto cancel = fixture.manager->selectMetadataProviders("artwork", [&](auto result) { selection = std::move(result); done = true; });
+        QVERIFY(elapsed.elapsed() < 100); QVERIFY(cancel);
+        QTRY_VERIFY(probe->entered.load()); QVERIFY(!probe->onOwner.load()); QVERIFY(!done);
+        bool heartbeat = false; QTimer::singleShot(0, [&] { heartbeat = true; }); QTRY_VERIFY(heartbeat);
+        probe->release(); QTRY_VERIFY(done); QVERIFY2(selection.error.isEmpty(), qPrintable(selection.error));
+        QVERIFY(selection.current && selection.current()); QCOMPARE(selection.providers.size(), 1);
+        QVERIFY(selection.providers.first().toMap().value("configured").toBool());
+    }
+    void cancelSelectionAndDestroyManagerWhileItsReadIsBlocked() {
+        for (const bool destroy : {false, true}) {
+            Fixture fixture; QVERIFY(fixture.valid);
+            const auto probe = std::make_shared<metadataPreparationTest::Probe>();
+            metadataPreparationTest::catalogue = probe;
+            const auto release = qScopeGuard([&] { metadataPreparationTest::catalogue.reset(); probe->release(); });
+            bool done = false;
+            auto cancel = fixture.manager->selectMetadataProviders("artwork", [&](auto) { done = true; });
+            QTRY_VERIFY(probe->entered.load()); QVERIFY(!probe->onOwner.load());
+            QElapsedTimer elapsed; elapsed.start();
+            if (destroy) fixture.manager.reset(); else cancel();
+            QVERIFY(elapsed.elapsed() < 100); probe->release();
+            QTRY_VERIFY(fixture.lifetime.handle().qtDrained()); QTest::qWait(10); QVERIFY(!done);
+        }
+    }
+    void disabledProviderCannotReturnFromPendingSelection() {
+        Fixture fixture; QVERIFY(fixture.valid);
+        const auto probe = std::make_shared<metadataPreparationTest::Probe>();
+        metadataPreparationTest::catalogue = probe;
+        const auto release = qScopeGuard([&] { metadataPreparationTest::catalogue.reset(); probe->release(); });
+        bool done = false; AddonMetadataCoordinator::ProviderSelection selection;
+        fixture.manager->selectMetadataProviders("artwork", [&](auto result) { selection = std::move(result); done = true; });
+        QTRY_VERIFY(probe->entered.load()); QVERIFY(fixture.manager->setEnabled(packageId, false));
+        probe->release(); QTRY_VERIFY(done); QVERIFY(!selection.error.isEmpty()); QVERIFY(selection.providers.isEmpty());
+    }
+    void invocationPreparationAndCancellationDoNotBlockTheOwner() {
+        for (const bool cancel : {false, true}) {
+            Fixture fixture; QVERIFY(fixture.valid);
+            const auto probe = std::make_shared<metadataPreparationTest::Probe>();
+            metadataPreparationTest::authority = probe;
+            const auto release = qScopeGuard([&] { metadataPreparationTest::authority.reset(); probe->release(); });
+            QSignalSpy result(fixture.manager.get(), &AddonManager::operationFinished);
+            QElapsedTimer elapsed; elapsed.start();
+            const auto request = fixture.manager->invokeMetadata(contributionId, "enrich", fixture.plan->attempts.first().projectedContext.toVariantMap());
+            QVERIFY(!request.isEmpty()); QVERIFY(elapsed.elapsed() < 100);
+            QTRY_VERIFY(probe->entered.load()); QVERIFY(!probe->onOwner.load()); QCOMPARE(PreparedMetadataInvocation::processCount(), 0u);
+            bool heartbeat = false; QTimer::singleShot(0, [&] { heartbeat = true; }); QTRY_VERIFY(heartbeat);
+            if (cancel) fixture.manager->cancel(request);
+            probe->release();
+            if (cancel) { QTRY_VERIFY(fixture.lifetime.handle().qtDrained()); QVERIFY(result.isEmpty()); }
+            else { QTRY_COMPARE(result.size(), 1); QCOMPARE(result.first()[0].toString(), request); QCOMPARE(result.first()[2].toString(), QStringLiteral("no_match")); }
+        }
+    }
+    void preparationDoesNotStartADisabledProvider() {
+        Fixture fixture; QVERIFY(fixture.valid);
+        const auto probe = std::make_shared<metadataPreparationTest::Probe>();
+        metadataPreparationTest::authority = probe;
+        const auto release = qScopeGuard([&] { metadataPreparationTest::authority.reset(); probe->release(); });
+        QSignalSpy result(fixture.manager.get(), &AddonManager::operationFinished);
+        const auto request = fixture.manager->invokeMetadata(contributionId, "enrich", fixture.plan->attempts.first().projectedContext.toVariantMap());
+        QVERIFY(!request.isEmpty()); QTRY_VERIFY(probe->entered.load());
+        QVERIFY(fixture.manager->setEnabled(packageId, false)); probe->release();
+        QTRY_VERIFY(fixture.lifetime.handle().qtDrained()); QVERIFY(result.isEmpty()); QCOMPARE(PreparedMetadataInvocation::processCount(), 0u);
+    }
+#endif
+    void asynchronousSelectionsKeepSafeModeDenial() {
+        Fixture fixture; QVERIFY(fixture.valid);
+        const QString builtin = QStringLiteral("hakone.builtin.prepared/artwork");
+        fixture.manager->registerBuiltinProvider("artwork", {{"id", builtin}, {"packageId", "hakone.builtin.prepared"},
+            {"name", "Native fixture"}, {"enabled", true}, {"configured", true}});
+        QVERIFY(fixture.manager->builtinMetadataProvider(builtin).isEmpty());
+        bool done = false;
+        fixture.manager->selectMetadataProviders("artwork", [&](auto result) { QVERIFY(result.error.isEmpty()); done = true; });
+        QTRY_VERIFY(done); QVERIFY(!fixture.manager->builtinMetadataProvider(builtin).isEmpty());
+        QVERIFY(fixture.manager->setSafeMode(true)); QVERIFY(fixture.manager->builtinMetadataProvider(builtin).isEmpty());
+        done = false;
+        fixture.manager->selectMetadataProviders("artwork", [&](auto result) {
+            QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+            for (const auto& row : result.providers) QVERIFY(!row.toMap().value("enabled").toBool());
+            done = true;
+        });
+        QTRY_VERIFY(done); QVERIFY(fixture.manager->builtinMetadataProvider(builtin).isEmpty());
+    }
+    void ordinaryPreparedCallsUseTheRealRustWorker() {
+        Fixture fixture(QStringLiteral("zero"), false, nullptr, QStringLiteral(HAKONE_PREPARED_FRENCH_TV_WASM), QStringLiteral(HAKONE_PREPARED_RUST_WORKER));
+        QVERIFY2(fixture.valid, qPrintable(fixture.error)); QSignalSpy result(fixture.manager.get(), &AddonManager::operationFinished);
+        const auto request = fixture.manager->invokeMetadata(contributionId, "enrich", fixture.plan->attempts.first().projectedContext.toVariantMap());
+        QVERIFY(!request.isEmpty()); QTRY_COMPARE(result.size(), 1); QCOMPARE(result.first()[0].toString(), request);
+        QCOMPARE(result.first()[2].toString(), QStringLiteral("no_match")); QTRY_VERIFY(drained(fixture.lifetime.handle()));
+    }
+    void ordinaryPreparedCallsRequireCleanEof_data() {
+        QTest::addColumn<QString>("mode"); QTest::addColumn<bool>("accepted");
+        QTest::newRow("clean") << QStringLiteral("zero") << true;
+        QTest::newRow("immediate") << QStringLiteral("immediate") << true;
+        QTest::newRow("duplicate") << QStringLiteral("duplicate") << false;
+        QTest::newRow("eof-duplicate") << QStringLiteral("eof-duplicate") << false;
+        QTest::newRow("late-host") << QStringLiteral("late-host") << false;
+        QTest::newRow("fragment") << QStringLiteral("eof-fragment") << false;
+        QTest::newRow("crash") << QStringLiteral("eof-crash") << false;
+        QTest::newRow("timeout") << QStringLiteral("eof-hold") << false;
+    }
+    void ordinaryPreparedCallsRequireCleanEof() {
+        QFETCH(QString, mode); QFETCH(bool, accepted);
+        Fixture fixture(mode); QVERIFY(fixture.valid); QSignalSpy result(fixture.manager.get(), &AddonManager::operationFinished);
+        const auto request = fixture.manager->invokeMetadata(contributionId, "enrich", fixture.plan->attempts.first().projectedContext.toVariantMap());
+        QVERIFY(!request.isEmpty()); QTRY_COMPARE(result.size(), 1); QCOMPARE(result.first()[0].toString(), request);
+        QCOMPARE(result.first()[2].toString() == QLatin1String("no_match"), accepted);
+        QTRY_VERIFY(drained(fixture.lifetime.handle()));
+    }
     void normalEofKeepsTransferredReceiptCurrent() {
         Fixture fixture; QVERIFY2(fixture.valid, qPrintable(fixture.error));
         auto recipe = fixture.recipe(); QVERIFY2(recipe, qPrintable(fixture.error));
