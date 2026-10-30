@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <memory>
 #include <thread>
+#include <vector>
 using namespace vlc::addons;
 using Session = StoreProfileSession;
 using Client = StoreProfileClient;
@@ -48,7 +49,7 @@ int child(const QStringList& args)
         say("ready " + epoch.generation.toHex() + ' ' + QByteArray::number(epoch.revision));
     };
     session = std::make_unique<Session>(std::move(options), std::move(peer));
-    std::thread writer;
+    std::vector<std::thread> writers;
     // Commands arrive on stdin. A reader thread posts them to the event loop.
     std::thread([&] {
         for (int command; (command = std::getchar()) != EOF;) {
@@ -56,19 +57,43 @@ int child(const QStringList& args)
                 if (command == 'q') {
                     session->close();
                     qApp->quit();
-                } else if (command == 'w' && !writer.joinable()) {
+                } else if (command == 'h') {
+                    // A native cancellation that never returns.
+                    watch = authority.capture().onInvalidated([] {
+                        say("hanging");
+                        for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));
+                    });
+                    say("armed");
+                } else if (command == 'w' || (command >= '1' && command <= '5')) {
+                    // 'w' writes. '1' to '5' exit at one writer boundary:
+                    // 1 holding store.lock, 2 after the permit request,
+                    // 3 after the grant, 4 inside the write, 5 before Complete.
+                    const int crashAt = command == 'w' ? 0 : command - '0';
+                    auto ready = session->readyWait();
                     auto port = session->writePort();
-                    writer = std::thread([port, profile] {
+                    writers.emplace_back([ready, port, profile, crashAt] {
+                        const auto crash = [crashAt](int point) {
+                            if (point != crashAt) return;
+                            say("crash " + QByteArray::number(point));
+                            std::_Exit(7);
+                        };
                         const auto deadline = G::now() + 10 * 1000 * 1000;
+                        ready(deadline);
                         G::Status status;
                         auto scope = G::prepareWriter(profile, {[] { return true; }, G::now, deadline}, &status);
+                        crash(1);
                         auto permit = port(deadline);
+                        crash(2);
                         G::Result result;
-                        if (scope && permit->wait())
-                            result = scope->write(permit->ticket(), [](const StoreProfileWriteContext& context, QString*) {
+                        if (scope && permit->wait()) {
+                            crash(3);
+                            result = scope->write(permit->ticket(), [crash](const StoreProfileWriteContext& context, QString*) {
+                                crash(4);
                                 return context.current() ? G::Change::Applied : G::Change::NeedsRecovery;
                             });
+                        }
                         scope.reset();
+                        crash(5);
                         permit->finish(result);
                         say("wrote " + QByteArray::number(int(result.status)) + ' ' + QByteArray::number(result.epoch.revision));
                     });
@@ -79,8 +104,9 @@ int child(const QStringList& args)
     if (!session->start())
         return 3;
     const int code = qApp->exec();
-    if (writer.joinable())
-        writer.join();
+    for (auto& writer : writers)
+        if (writer.joinable())
+            writer.join();
     session.reset();
     lifetime.close();
     lifetime.handle().waitQt(std::chrono::seconds(10));
@@ -195,6 +221,69 @@ private slots:
         while (third.process.canReadLine()) third.lines.append(third.process.readLine().trimmed());
         // Exactly one process coordinates the new generation.
         QVERIFY(second.saw("coordinating 1") != third.saw("coordinating 1"));
+    }
+    // Step 2.7: a process exits at each writer boundary. The survivor must
+    // reach a coherent ready record and write again.
+    void aWriterThatExitsAtABoundaryLeavesAWritableProfile_data() {
+        QTest::addColumn<char>("point");
+        QTest::newRow("holding store.lock") << '1';
+        QTest::newRow("after the permit request") << '2';
+        QTest::newRow("after the grant") << '3';
+        QTest::newRow("inside the write") << '4';
+        QTest::newRow("before Complete") << '5';
+    }
+    void aWriterThatExitsAtABoundaryLeavesAWritableProfile() {
+        QFETCH(char, point);
+        QTemporaryDir root, run;
+        Child survivor(root.path(), run.path()); QVERIFY(survivor.expect("coordinating 1")); QVERIFY(survivor.expect("ready"));
+        Child victim(root.path(), run.path()); QVERIFY(victim.expect("ready"));
+        QVERIFY(victim.send(point));
+        QVERIFY(victim.expect("crash"));
+        QVERIFY(victim.process.waitForFinished(10000));
+        QCOMPARE(victim.process.exitCode(), 7);
+        // A later write from the survivor passes, after any recovery.
+        QVERIFY(survivor.send('w'));
+        const auto wrote = survivor.expect("wrote", 30000); QVERIFY(wrote);
+        QVERIFY2(wrote->startsWith("wrote 0 "), wrote->constData());
+        QVERIFY(survivor.expect("ready"));
+    }
+    void aPeerKilledDuringItsCancellationStartsRecovery() {
+        QTemporaryDir root, run;
+        Child writer(root.path(), run.path()); QVERIFY(writer.expect("coordinating 1")); const auto old = writer.expect("ready"); QVERIFY(old);
+        Child hung(root.path(), run.path()); QVERIFY(hung.expect("ready"));
+        QVERIFY(hung.send('h')); QVERIFY(hung.expect("armed"));
+        QVERIFY(writer.send('w'));
+        QVERIFY(hung.expect("hanging"));
+        // The hung peer never acknowledges. It still holds its shared fence,
+        // so no write can pass it. Its exit ends the write and releases it.
+        QVERIFY(!writer.expect("wrote", 1000));
+        hung.process.kill(); QVERIFY(hung.process.waitForFinished(5000));
+        const auto first = writer.expect("wrote", 30000); QVERIFY(first);
+        QVERIFY2(!first->startsWith("wrote 0 "), first->constData());
+        const auto next = writer.expect("ready", 30000); QVERIFY(next);
+        QVERIFY(readyEpoch(*next).first != readyEpoch(*old).first);
+        QVERIFY(writer.send('w'));
+        const auto second = writer.expect("wrote", 30000); QVERIFY(second);
+        QVERIFY2(second->startsWith("wrote 0 "), second->constData());
+    }
+    void aCoordinatorKilledDuringAWriteHandsOver() {
+        QTemporaryDir root, run;
+        Child coordinator(root.path(), run.path()); QVERIFY(coordinator.expect("coordinating 1")); QVERIFY(coordinator.expect("ready"));
+        Child hung(root.path(), run.path()); QVERIFY(hung.expect("ready"));
+        Child writer(root.path(), run.path()); QVERIFY(writer.expect("ready"));
+        QVERIFY(hung.send('h')); QVERIFY(hung.expect("armed"));
+        QVERIFY(writer.send('w'));
+        QVERIFY(hung.expect("hanging"));
+        coordinator.process.kill(); QVERIFY(coordinator.process.waitForFinished(5000));
+        // The pending write fails. The hung peer still blocks recovery.
+        const auto failed = writer.expect("wrote", 30000); QVERIFY(failed);
+        QVERIFY2(!failed->startsWith("wrote 0 "), failed->constData());
+        hung.process.kill(); QVERIFY(hung.process.waitForFinished(5000));
+        QVERIFY(writer.expect("coordinating 1", 30000));
+        QVERIFY(writer.expect("ready", 30000));
+        QVERIFY(writer.send('w'));
+        const auto wrote = writer.expect("wrote", 30000); QVERIFY(wrote);
+        QVERIFY2(wrote->startsWith("wrote 0 "), wrote->constData());
     }
 };
 int main(int argc, char** argv)
