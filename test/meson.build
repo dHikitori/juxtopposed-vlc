@@ -147,6 +147,14 @@ if host_system == 'linux' and get_option('qt').allowed()
             args: ['-B', addon_app_smoke, '--driver', '--windows', '2'],
             suite: ['addons', addon_test_labels['addon_app_smoke_shared_profile']],
             is_parallel: false, timeout: 300)
+        test('addon_app_smoke_owner', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver', '--owner'],
+            suite: ['addons', addon_test_labels['addon_app_smoke_owner']],
+            is_parallel: false, timeout: 300)
+        test('addon_app_smoke_owner_two_windows', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver', '--owner', '--windows', '2'],
+            suite: ['addons', addon_test_labels['addon_app_smoke_owner_two_windows']],
+            is_parallel: false, timeout: 300)
     endif
 endif
 

@@ -1600,6 +1600,13 @@ if qt6_dep.found()
         test('addon_radio_browser_worker', prog_python,
             args: ['-B', meson.project_source_root() / 'contrib-addons/examples/radio-browser/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
             depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_radio_browser_worker']], timeout: 90)
+        # Each core Lua artwork script against its add-on; skipped without Lua 5.4.
+        addon_parity_lua = find_program('lua5.4', 'lua', required: false)
+        test('addon_artwork_parity', prog_python,
+            args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/artwork-providers/tests/test_parity.py',
+                '--worker', addon_worker_target.full_path()]
+                + (addon_parity_lua.found() ? ['--lua', addon_parity_lua.full_path()] : []),
+            depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_artwork_parity']], timeout: 180)
     endif
     modules_qrc = []
     foreach module : qml_modules

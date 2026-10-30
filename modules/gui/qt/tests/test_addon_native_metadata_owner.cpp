@@ -188,6 +188,24 @@ private slots:
         QVERIFY(!gate->current()); QVERIFY(!capture->token.current());
         const auto fresh = f.service->captureArtworkRegistrations(); QVERIFY(fresh); QVERIFY(fresh->builtins.isEmpty());
     }
+    void aReplacedFamilyOffersOnlyItsAddon()
+    {
+        Fixture f(false, false);
+        AddonNativeMetadataOwner::Options options; options.cacheDirectory = f.cache.path();
+        options.imageReader = f.reader->backend(); options.nativeFamilies = QStringList{QStringLiteral("french-tv")};
+        f.owner = AddonNativeMetadataOwner::create(f.service.get(), nullptr, VLC_OBJECT(f.core->p_libvlc_int), options);
+        QVERIFY(f.owner); QVERIFY(f.owner->ready());
+        const auto capture = f.service->captureArtworkRegistrations(); QVERIFY(capture);
+        QCOMPARE(capture->builtins.size(), 1);
+        QCOMPARE(capture->builtins.first().descriptor.value(QStringLiteral("id")).toString(),
+            QStringLiteral("hakone.builtin.french-tv/artwork"));
+        // With no family left, the owner still serves Core, through add-ons only.
+        f.owner.reset();
+        options.nativeFamilies = QStringList{};
+        f.owner = AddonNativeMetadataOwner::create(f.service.get(), nullptr, VLC_OBJECT(f.core->p_libvlc_int), options);
+        QVERIFY(f.owner); QVERIFY(f.owner->ready());
+        const auto none = f.service->captureArtworkRegistrations(); QVERIFY(none); QVERIFY(none->builtins.isEmpty());
+    }
     void aFactoryRequiresTheBoundAppAndRejectsASecondOwner()
     {
         Fixture fixture; QVERIFY(fixture.owner); QVERIFY(fixture.owner->ready()); QVERIFY(!fixture.owner->active());

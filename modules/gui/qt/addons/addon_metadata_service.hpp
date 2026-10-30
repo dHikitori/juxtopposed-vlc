@@ -125,6 +125,8 @@ public:
     void setAutomaticNetworkAllowed(bool allowed);
     bool automaticNetworkAllowed() const;
     int nativeJobCount() const;
+    // Every request Core sent to this backend, accepted or refused.
+    quint64 coreRequestCount() const;
     vlc_metadata_backend_t* holdCoreBackend() const;
     void shutdown();
 

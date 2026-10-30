@@ -109,6 +109,8 @@ class App:
                    '--aout', 'adummy', '--vout', 'vdummy', '--no-qt-privacy-ask',
                    '--no-metadata-network-access', '-vv', '--file-logging',
                    '--logfile', str(self.log_path), '--log-verbose', '2']
+        if args.owner:
+            command.append('--metadata-native-owner')
         if trace:
             command = ['strace', '-f', '-qq', '-e', 'trace=execve', '-o',
                        str(self.trace_path)] + command
@@ -332,6 +334,16 @@ def run(args):
                 1 for pid in process_tree(first.pid) if worker_process(pid))
 
         if args.driver:
+            # Each window is its own process, so each one has its own owner.
+            for app in [first] + ([second] if second else []):
+                report = app.drive('metadata', args.timeout)
+                results.setdefault('metadata', {})[app.name] = report
+                expected = args.owner
+                if not report.get('ok') or report.get('owned') != expected \
+                        or report.get('ownerIsThisWindow') != expected or report.get('ownerActive') != expected:
+                    raise Failure(f'{app.name}: the metadata owner is not as expected: {report}')
+            if args.owner and not args.no_playback and results['metadata']['first']['coreRequests'] < 1:
+                raise Failure('playback sent no metadata request to the add-on owner')
             results['helper_launches'] = first.drive('stats', args.timeout)['launches']
         windows = [first] + ([second] if second else [])
         trees = [process_tree(app.pid) for app in windows]
@@ -406,6 +418,8 @@ def main():
     parser.add_argument('--query', default='a', help='discovery fixture search text')
     parser.add_argument('--no-playback', action='store_true',
                         help='do not play the sample, for builds that cannot')
+    parser.add_argument('--owner', action='store_true',
+                        help='turn on the add-on metadata owner (needs --driver)')
     parser.add_argument('--no-addons', action='store_true',
                         help='do not wait for bundled add-ons, for a build without them')
     parser.add_argument('--no-display', action='store_true',

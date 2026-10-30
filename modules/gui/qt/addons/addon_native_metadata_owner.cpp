@@ -64,6 +64,7 @@ bool AddonNativeMetadataOwner::initialize(vlc_object_t* parent, const Options& o
     m_service->setNativeArtworkAdapter(m_images);
     if (!m_service || !m_service->nativeOwnerIs(this)) return false;
     for (const auto& binding : AddonMetadataFamilyPlan::bindings()) {
+        if (options.nativeFamilies && !options.nativeFamilies->contains(binding.family)) continue;
         const auto native = family(binding.family);
         const QString partition = QStringLiteral("native-family-artwork@1:") + m_partition + ':' + binding.family;
         const QVariantMap descriptor{{QStringLiteral("id"), binding.nativeContribution},

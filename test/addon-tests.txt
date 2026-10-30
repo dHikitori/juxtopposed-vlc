@@ -44,6 +44,7 @@ test_qt_addon_store_profile_coordinator         profile     all
 test_qt_addon_store_profile_socket              profile     all
 
 # metadata: identification, artwork and the native metadata pipeline
+addon_artwork_parity                            metadata    meson
 test_qt_addon_artwork_assets                    metadata    all
 test_qt_addon_artwork_attempt_aggregate         metadata    all
 test_qt_addon_artwork_attempt_keeper            metadata    all
@@ -163,3 +164,5 @@ addon_app_smoke                                 app         meson
 addon_app_smoke_two_windows                     app         meson
 addon_app_smoke_driver                          app         meson
 addon_app_smoke_shared_profile                  app         meson
+addon_app_smoke_owner                           app         meson
+addon_app_smoke_owner_two_windows               app         meson

@@ -8,6 +8,7 @@
 #include "qt.hpp"
 
 #include <QObject>
+#include <memory>
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QQuickItem>
@@ -21,6 +22,7 @@
 #include <QMessageBox>
 
 class VLCVarChoiceModel;
+class AddonNativeMetadataOwner;
 
 class MainUI : public QObject
 {
@@ -49,6 +51,7 @@ private:
     QQuickItem* m_rootItem = nullptr;
 
     QPointer<QQmlEngine> m_engineBound;
+    std::unique_ptr<AddonNativeMetadataOwner> m_metadataOwner;
 };
 
 namespace vlc {

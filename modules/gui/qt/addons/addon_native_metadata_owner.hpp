@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QPointer>
 #include <memory>
+#include <optional>
 class AddonNativeProviderArtworkAssets;
 namespace vlc::addons { class AddonManager; }
 
@@ -24,6 +25,10 @@ public:
         AddonNativeArtworkAssets::Options images;
         AddonNativeArtworkAssets::Backend imageReader;
         bool activateCoreOwner = false;
+        // Families whose built-in member (the Core script) is still offered.
+        // Unset offers all of them. Leave out a family once its add-on passes
+        // test_parity.py: the plan then chooses the add-on.
+        std::optional<QStringList> nativeFamilies;
     };
     static std::unique_ptr<AddonNativeMetadataOwner> create(AddonMetadataService*,
         vlc::addons::AddonManager*, vlc_object_t*, const Options&);

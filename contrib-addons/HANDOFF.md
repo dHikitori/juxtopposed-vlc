@@ -69,10 +69,17 @@ The user delegated decisions 2–4 to Claude.
   offscreen compositor fix applied locally and a `bin/vlc-qt-check` link;
   neither is committed). Compare with `test/addon_app_smoke.py --build
   ../vlc-baseline/build --no-addons --no-playback`.
-- **Next:** Step 4 (native owner activation), now unblocked by Step 2.
-  Step 3 leftovers: the Extensions health row, startup on a normal Linux
-  install.
-- **Do not** activate the native metadata owner before Step 2 passes.
+- **Step 3 health row is done** (`2a34a12779`). The QML test runner links
+  again.
+- **Step 4 is done on Linux**; see `records/metadata-owner-activation.md`.
+  The Core option `metadata-native-owner` (off by default) mounts the owner.
+  `addon_artwork_parity` compares each Lua art script with its add-on; all
+  four pass, so the owner offers no built-in Lua member. `meson test
+  --suite app` includes owner-on runs in one and two windows.
+- **Next:** Step 5 (Windows review package and the user's live checks,
+  including "Subtitle53", which is not defined in this repository). Keep
+  the owner default off until those pass. Step 3 leftover: startup on a
+  normal Linux install.
 
 ## Environment notes
 

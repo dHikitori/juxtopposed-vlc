@@ -444,6 +444,15 @@ machine (partly explained), and the Windows cursor check.
 
 ### Step 4. Activate the native metadata owner
 
+Done on Linux, 30 October 2026; see [the record](records/metadata-owner-activation.md).
+The Core option `metadata-native-owner` (off by default) mounts the owner.
+All four artwork families pass the Lua-to-add-on parity test
+(`addon_artwork_parity`), so the owner offers no built-in Lua member. The
+smoke test passes with the owner on in one and two windows, and playback
+sends its request through the owner. Still open: the media library route in
+the app, and "Subtitle53", which this repository does not define, so it
+moves to the user's Step 5 checks. The default stays off until Step 5.
+
 - Mount the factory behind a core setting that is off by default. Run the
   preserved-provider parity matrix: local tags, sidecars, attachments, local
   artwork, user corrections, and each core online provider against its

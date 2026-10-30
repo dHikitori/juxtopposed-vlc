@@ -63,6 +63,11 @@ void AddonTestDriver::close()
         m_server->close();
 }
 
+void AddonTestDriver::setMetadataReport(std::function<QVariantMap()> report)
+{
+    m_metadata = std::move(report);
+}
+
 void AddonTestDriver::accept()
 {
     while (auto* socket = m_server->nextPendingConnection()) {
@@ -107,6 +112,11 @@ void AddonTestDriver::run(const QString& command, const QString& argument)
         install(argument);
     else if (command == QLatin1String("discover"))
         discover(argument);
+    else if (command == QLatin1String("metadata") && m_metadata) {
+        auto result = m_metadata();
+        result.insert(QStringLiteral("ok"), true);
+        reply(result);
+    }
     else
         reply({{"ok", false}, {"error", QStringLiteral("unknown command")}});
 }

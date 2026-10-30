@@ -92,6 +92,7 @@ struct AddonMetadataService::CoreState {
     QHash<quint64, AddonNativeArtworkAssets::Cancel> nativeCancels;
     quint64 sequence = 0;
     std::atomic_bool automaticAllowed{false};
+    std::atomic<quint64> dispatched{0};
     vlc::addons::AddonStreamLifetime::Handle lifetime;
     bool applicationBound = false;
     bool mayPostLocked() const { return !applicationBound || lifetime.current(); }
@@ -100,6 +101,7 @@ struct AddonMetadataService::CoreState {
     {
         const auto state = *static_cast<std::shared_ptr<CoreState>*>(opaque);
         const auto* request = vlc_metadata_job_GetRequest(job);
+        ++state->dispatched;
         if (!(request->flags & VLC_METADATA_REQUEST_NETWORK)
             || ((request->flags & VLC_METADATA_REQUEST_AUTOMATIC) && !state->automaticAllowed.load())) return VLC_EACCES;
         std::lock_guard<std::mutex> guard(state->lock);
@@ -817,6 +819,7 @@ bool AddonMetadataService::applicationCurrent() const
 bool AddonMetadataService::automaticNetworkAllowed() const { return m_core->automaticAllowed.load(); }
 int AddonMetadataService::nativeJobCount() const
 { std::lock_guard<std::mutex> guard(m_core->lock); return m_core->jobs.size(); }
+quint64 AddonMetadataService::coreRequestCount() const { return m_core->dispatched.load(); }
 void AddonMetadataService::setAutomaticNetworkAllowed(bool allowed)
 {
     QPointer<AddonMetadataService> guard(this);

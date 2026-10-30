@@ -80,6 +80,8 @@
 #include "addons/addon_catalogue_view.hpp"
 #include "addons/addon_package_summaries.hpp"
 #include "addons/addon_metadata_service.hpp"
+#include "addons/addon_native_metadata_owner.hpp"
+#include <vlc_metadata_owner.h>
 #include "addon_distribution_paths.hpp"
 #include "addons/addon_theme_service.hpp"
 #include "addons/addon_ui_registry.hpp"
@@ -451,6 +453,21 @@ void MainUI::registerQMLTypes()
             m_intf->p_mainPlayerController->setMetadataService(metadataService);
             connect(m_intf->p_mainPlayerController, &PlayerController::metadataNetworkAccessChanged,
                 metadataService, &AddonMetadataService::setAutomaticNetworkAllowed);
+            // One-way for this instance: once the owner is registered, Core never
+            // runs its own online lookups again, even after the owner closes.
+            if (var_InheritBool(m_intf, "metadata-native-owner")) {
+                AddonNativeMetadataOwner::Options options;
+                options.cacheDirectory = QDir(addonManager->storageDirectory()).filePath(QStringLiteral("native-artwork-cache"));
+                options.activateCoreOwner = true;
+                // Every family's add-on passed the parity test, so no Core
+                // script runs under the owner.
+                options.nativeFamilies = QStringList{};
+                m_metadataOwner = AddonNativeMetadataOwner::create(metadataService, addonManager, VLC_OBJECT(m_intf), options);
+                if (!m_metadataOwner)
+                    msg_Warn(m_intf, "Cannot start the add-on metadata owner; online metadata lookups are off");
+                else
+                    msg_Dbg(m_intf, "Add-on metadata owner active");
+            }
             auto* themes = new vlc::addons::AddonThemeService(addonManager, this);
             const auto updateThemeAccent = [this, themes] {
                 char* option = var_InheritString(m_intf, "qt-accent-color");
@@ -532,8 +549,20 @@ void MainUI::registerQMLTypes()
             if (libraryTargets) discovery->setPlaylistBackend(libraryTargets->backend());
             qmlRegisterSingletonInstance<vlc::addons::AddonDiscoveryService>(uri, versionMajor, versionMinor, "AddonDiscovery", discovery);
 #ifdef VLC_ADDON_TEST_DRIVER
-            if (auto* driver = vlc::addons::AddonTestDriver::create(addonManager, packageSummaries, discovery, this))
+            if (auto* driver = vlc::addons::AddonTestDriver::create(addonManager, packageSummaries, discovery, this)) {
                 connect(m_mainCtx, &MainCtx::addonWorkRetiring, driver, [driver] { driver->close(); }, Qt::DirectConnection);
+                driver->setMetadataReport([this, service = QPointer<AddonMetadataService>(metadataService)] {
+                    bool owned = false;
+                    vlc_metadata_backend_t* current = vlc_metadata_owner_Hold(VLC_OBJECT(m_intf), &owned);
+                    vlc_metadata_backend_t* ours = service ? service->holdCoreBackend() : nullptr;
+                    const bool same = current && current == ours;
+                    if (current) vlc_metadata_backend_Release(current);
+                    if (ours) vlc_metadata_backend_Release(ours);
+                    return QVariantMap{{QStringLiteral("owned"), owned}, {QStringLiteral("ownerIsThisWindow"), same},
+                        {QStringLiteral("ownerActive"), m_metadataOwner && m_metadataOwner->active()},
+                        {QStringLiteral("coreRequests"), service ? qint64(service->coreRequestCount()) : -1}};
+                });
+            }
 #endif
         }
         qmlRegisterType<vlc::addons::AddonVisualizerSurface>(uri, versionMajor, versionMinor, "AddonVisualizerSurface");
