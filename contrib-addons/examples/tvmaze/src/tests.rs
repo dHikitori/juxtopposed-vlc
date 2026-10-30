@@ -227,3 +227,84 @@ fn season_cache_serves_a_second_episode_without_more_http() {
     assert_eq!(provider.handle(&request)[0]["type"], "host-call");
     assert!(provider.cache.is_empty());
 }
+fn identify(id: &str, query: Option<&str>) -> Value {
+    let mut message = invoke(id);
+    message["operation"] = json!("identify");
+    message["context"]["fields"] = json!([]);
+    if let Some(query) = query {
+        message["context"]["manual"] = json!(true);
+        message["context"]["query"] = json!(query);
+    }
+    message
+}
+#[test]
+fn identify_offers_each_matching_show_with_the_local_numbering() {
+    let mut provider = Provider::default();
+    let search = provider.handle(&identify("i", None)).remove(0);
+    assert_eq!(
+        search["request"]["url"],
+        "https://api.tvmaze.com/search/shows?q=Example%20Series"
+    );
+    let other = json!({"id":112,"name":"Example Series","premiered":"2020-06-01","url":"https://www.tvmaze.com/shows/112/example"});
+    let wrong_year = json!({"id":113,"name":"Example Series","premiered":"1999-01-01"});
+    let reply = complete(
+        &mut provider,
+        &search,
+        json!([{"show":show()},{"show":other},{"show":wrong_year}]),
+    )
+    .remove(0);
+    assert_eq!(reply["status"], "match");
+    let candidates = reply["data"]["candidates"].as_array().unwrap();
+    assert_eq!(candidates.len(), 2);
+    let first = &candidates[0]["identity"];
+    assert_eq!(first["kind"], "episode");
+    assert_eq!(first["season"], 1);
+    assert_eq!(first["episodes"], json!([2]));
+    assert_eq!(first["ids"]["tvmazeShow"], "111");
+    assert_eq!(first["ids"]["seriesImdb"], "tt1234567");
+    assert_eq!(candidates[1]["identity"]["ids"]["tvmazeShow"], "112");
+    assert_eq!(
+        candidates[1]["attribution"]["url"],
+        "https://www.tvmaze.com/shows/112/example"
+    );
+    assert!(candidates[0].get("attribution").is_none());
+}
+#[test]
+fn identify_uses_the_manual_query_and_limits_choices() {
+    let mut provider = Provider::default();
+    let search = provider
+        .handle(&identify("i", Some("Another Show")))
+        .remove(0);
+    assert_eq!(
+        search["request"]["url"],
+        "https://api.tvmaze.com/search/shows?q=Another%20Show"
+    );
+    let shows: Vec<Value> = (1..=12)
+        .map(|n| json!({"show":{"id":n,"name":format!("Another Show {n}")}}))
+        .collect();
+    let reply = complete(&mut provider, &search, json!(shows)).remove(0);
+    assert_eq!(
+        reply["data"]["candidates"].as_array().unwrap().len(),
+        MAX_CANDIDATES
+    );
+    let search = provider.handle(&identify("j", None)).remove(0);
+    assert_eq!(
+        complete(&mut provider, &search, json!([])).remove(0)["status"],
+        "no_match"
+    );
+}
+#[test]
+fn a_chosen_show_enriches_by_its_id() {
+    let mut provider = Provider::default();
+    let mut request = invoke("e");
+    request["context"]["identity"]["ids"] = json!({"tvmazeShow":"112"});
+    let call = provider.handle(&request).remove(0);
+    assert_eq!(call["request"]["url"], "https://api.tvmaze.com/shows/112");
+}
+#[test]
+fn identify_needs_one_numbered_episode() {
+    let mut provider = Provider::default();
+    let mut request = identify("i", None);
+    request["context"]["identity"]["episodes"] = json!([2, 3]);
+    assert_eq!(provider.handle(&request)[0]["status"], "unsupported");
+}

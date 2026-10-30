@@ -16,7 +16,7 @@ class AddonNativeProviderArtworkAssets;
 class AddonMetadataChoices;
 struct input_item_t;
 
-namespace vlc::addons { class AddonManager; class ArtworkLookupRunner; }
+namespace vlc::addons { class AddonManager; class ArtworkLookupRunner; class AddonAcceptedIdentities; }
 
 /** One metadata owner for a host. Call the Qt API on the owner thread.
  * The native backend API can receive a request from a different thread.
@@ -125,6 +125,11 @@ public:
     void setAutomaticNetworkAllowed(bool allowed);
     bool automaticNetworkAllowed() const;
     int nativeJobCount() const;
+    // The identities the user accepted. Consumers add an accepted identity's
+    // IDs and revision to their later requests.
+    void setAcceptedIdentities(std::shared_ptr<vlc::addons::AddonAcceptedIdentities>);
+    std::shared_ptr<vlc::addons::AddonAcceptedIdentities> acceptedIdentities() const { return m_acceptedIdentities; }
+    void noteIdentityAccepted() { emit identityAccepted(); }
     // Every request Core sent to this backend, accepted or refused.
     quint64 coreRequestCount() const;
     vlc_metadata_backend_t* holdCoreBackend() const;
@@ -140,6 +145,8 @@ signals:
                   const QVariantMap& data, const QString& error);
     void canceled(const QString& consumer);
     void invalidated();
+    // The user accepted an identity; consumers look up again with it.
+    void identityAccepted();
 
 private:
     struct CoreState;
@@ -200,6 +207,7 @@ private:
 
     bool m_managerBacked = false;
     QPointer<vlc::addons::AddonManager> m_manager;
+    std::shared_ptr<vlc::addons::AddonAcceptedIdentities> m_acceptedIdentities;
     QHash<quint64, QPointer<vlc::addons::ArtworkLookupRunner>> m_artworkRunners;
     QPointer<AddonNativeProviderContext> m_artworkContext;
     QPointer<AddonNativeProviderArtworkAssets> m_providerImages;

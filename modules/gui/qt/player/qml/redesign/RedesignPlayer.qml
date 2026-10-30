@@ -221,6 +221,14 @@ FocusScope {
         onWheelLeftRight: steps => adjust(steps)
     }
     RedesignSleepTimer { id: sleepTimer; onTriggered: MainPlaylistController.pause() }
+    RedesignIdentityDialog {
+        id: identityDialog
+        objectName: "identityDialog"
+        parent: view
+        scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
+        videoBackdropContent: rootPlayer.menuBackdropContent
+        backend: typeof AddonIdentityChoice !== "undefined" ? AddonIdentityChoice : null
+    }
     RedesignGotoTimeDialog {
         id: gotoTime
         objectName: "gotoTimeDialog"
@@ -657,6 +665,7 @@ FocusScope {
                     if (rootPlayer.seriesFeedUrl) { seriesFeed.setSources([]); seriesFeed.setSources([{mrl: rootPlayer.seriesFeedUrl}]) }
                     else seriesModel.refresh()
                 }
+                onIdentifyRequested: identityDialog.begin()
                 onFolderRequested: {
                     const folder = DialogsProvider.selectLibraryFolder(seriesModel.folder)
                     if (folder.toString()) seriesModel.refresh(folder)

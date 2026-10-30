@@ -80,6 +80,27 @@ class PortableWorkerTests(unittest.TestCase):
             self.assertEqual(result["data"]["attribution"]["name"], "TVmaze")
             self.assertEqual(result["data"]["identity"]["episodes"], [2])
 
+    def test_identify_offers_series_choices_for_the_episode(self):
+        with Worker() as worker:
+            request = invoke("identify")
+            request["operation"] = "identify"
+            request["context"]["fields"] = []
+            search, = worker.dispatch(request)
+            self.assertEqual(search["request"]["url"], "https://api.tvmaze.com/search/shows?q=Example%20Series")
+            result, = complete(worker, search, [
+                {"show": {"id": 111, "name": "Example Series", "premiered": "2020-01-01"}},
+                {"show": {"id": 112, "name": "Example Series", "premiered": "2020-09-01",
+                          "url": "https://www.tvmaze.com/shows/112/example-series"}}])
+            self.assertEqual(result["status"], "match")
+            identities = [row["identity"] for row in result["data"]["candidates"]]
+            self.assertEqual([row["ids"]["tvmazeShow"] for row in identities], ["111", "112"])
+            self.assertTrue(all(row["season"] == 1 and row["episodes"] == [2] for row in identities))
+            # The chosen series is then looked up by its ID.
+            chosen = invoke("details")
+            chosen["context"]["identity"] = identities[1]
+            show, = worker.dispatch(chosen)
+            self.assertEqual(show["request"]["url"], "https://api.tvmaze.com/shows/112")
+
     def test_cancel_ignores_late_http_result(self):
         with Worker() as worker:
             call, = worker.dispatch(invoke())

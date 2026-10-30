@@ -26,6 +26,7 @@ FocusScope {
     signal closeRequested()
     signal refreshRequested()
     signal folderRequested()
+    signal identifyRequested()
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Episodes")
 
@@ -131,8 +132,10 @@ FocusScope {
                     id: options
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     entries: [{action: "refresh", label: qsTr("Refresh"), icon: "repeat"}].concat(root.podcast ? []
-                        : [{action: "folder", label: qsTr("Choose series folder…"), icon: "folder"}])
-                    onActionRequested: action => action === "folder" ? root.folderRequested() : root.refreshRequested()
+                        : [{action: "folder", label: qsTr("Choose series folder…"), icon: "folder"},
+                           {action: "identify", label: qsTr("Choose series…"), icon: "search"}])
+                    onActionRequested: action => action === "folder" ? root.folderRequested()
+                        : action === "identify" ? root.identifyRequested() : root.refreshRequested()
                 }
             }
             RedesignButton {

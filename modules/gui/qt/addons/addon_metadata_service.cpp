@@ -820,6 +820,8 @@ bool AddonMetadataService::automaticNetworkAllowed() const { return m_core->auto
 int AddonMetadataService::nativeJobCount() const
 { std::lock_guard<std::mutex> guard(m_core->lock); return m_core->jobs.size(); }
 quint64 AddonMetadataService::coreRequestCount() const { return m_core->dispatched.load(); }
+void AddonMetadataService::setAcceptedIdentities(std::shared_ptr<vlc::addons::AddonAcceptedIdentities> identities)
+{ m_acceptedIdentities = std::move(identities); }
 void AddonMetadataService::setAutomaticNetworkAllowed(bool allowed)
 {
     QPointer<AddonMetadataService> guard(this);

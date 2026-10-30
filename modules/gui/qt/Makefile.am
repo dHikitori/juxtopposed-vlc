@@ -168,6 +168,10 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_metadata_catalogue_source.hpp \
 	addons/addon_package_summaries.cpp \
 	addons/addon_package_summaries.hpp \
+	addons/addon_accepted_identities.cpp \
+	addons/addon_accepted_identities.hpp \
+	addons/addon_identity_choice.cpp \
+	addons/addon_identity_choice.hpp \
 	addons/addon_catalogue_view.cpp \
 	addons/addon_catalogue_view.hpp \
 	addons/addon_catalogue_view_manager.cpp \
@@ -319,6 +323,7 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_native_artwork_assets.hpp
 QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
+	addons/addon_identity_choice.moc.cpp \
 	addons/addon_package_summaries.moc.cpp \
 	addons/addon_catalogue_view.moc.cpp \
 	addons/addon_network.moc.cpp \
@@ -1588,6 +1593,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignStartupVolume.qml \
 	player/qml/redesign/RedesignConfirmationDialog.qml \
 	player/qml/redesign/RedesignGotoTimeDialog.qml \
+	player/qml/redesign/RedesignIdentityDialog.qml \
 	player/qml/redesign/RedesignTime.qml \
 	player/qml/redesign/RedesignNetworkDialog.qml \
 	player/qml/redesign/RedesignPlaylistDialog.qml \
@@ -2693,6 +2699,17 @@ test_qt_addon_worker_health_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd)
 test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_worker_health
 TESTS += test_qt_addon_worker_health
+
+test_qt_addon_identity_choice_SOURCES = tests/test_addon_identity_choice.cpp
+nodist_test_qt_addon_identity_choice_SOURCES = tests/test_addon_identity_choice.moc
+BUILT_SOURCES += tests/test_addon_identity_choice.moc
+CLEANFILES += tests/test_addon_identity_choice.moc
+test_qt_addon_identity_choice_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_identity_choice_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_identity_choice_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_identity_choice_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_identity_choice
+TESTS += test_qt_addon_identity_choice
 
 test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.cpp
 nodist_test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.moc

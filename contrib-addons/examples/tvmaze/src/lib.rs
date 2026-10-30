@@ -7,9 +7,11 @@ const API: &str = "https://api.tvmaze.com";
 const MAX_INPUT: usize = 1024 * 1024;
 const MAX_BODY: usize = 512 * 1024;
 const MAX_PENDING: usize = 8;
+const MAX_CANDIDATES: usize = 8;
 
 #[derive(Clone)]
 enum Stage {
+    Identify,
     Show(bool),
     Seasons,
     Episodes,
@@ -109,6 +111,24 @@ fn seasonal(identity: &Value) -> Option<(u64, u64)> {
     }
     Some((season, episode))
 }
+// The episode identity a show gives, in the host's identity keys.
+fn episode_identity(show: &Value, season: u64, episode: u64) -> Value {
+    let mut identity = json!({"kind":"episode","title":text(show, "name"),"season":season,"episodes":[episode],
+        "ids":{"tvmazeShow":number(&show["id"]).unwrap_or(0).to_string()}});
+    if let Some(year) = text(show, "premiered")
+        .get(..4)
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        identity["year"] = json!(year);
+    }
+    if let Some(imdb) = show["externals"]["imdb"].as_str() {
+        identity["ids"]["seriesImdb"] = json!(imdb);
+    }
+    if let Some(tvdb) = number(&show["externals"]["thetvdb"]) {
+        identity["ids"]["seriesTvdb"] = json!(tvdb.to_string());
+    }
+    identity
+}
 fn reply(id: &str, status: &str, data: Value, error: &str) -> Vec<Value> {
     let mut result = json!({"type":"result","id":id,"status":status,"data":data});
     if !error.is_empty() {
@@ -202,11 +222,13 @@ impl Provider {
         if id.is_empty() || id.len() > 256 {
             return Vec::new();
         }
-        if text(message, "contribution") != "episodes" || text(message, "operation") != "enrich" {
+        let operation = text(message, "operation");
+        let identify = operation == "identify";
+        if text(message, "contribution") != "episodes" || (operation != "enrich" && !identify) {
             return failed(
                 &id,
                 "unsupported",
-                "This provider supplies episode titles only.",
+                "This provider supplies episode titles and series choices only.",
             );
         }
         if self.pending.len() >= MAX_PENDING
@@ -226,9 +248,10 @@ impl Provider {
             .or_else(|| identity.get("type").and_then(Value::as_str))
             .unwrap_or("");
         if kind != "episode"
-            || !context["fields"]
-                .as_array()
-                .is_some_and(|fields| fields.iter().any(|f| f == "episodeTitle"))
+            || (!identify
+                && !context["fields"]
+                    .as_array()
+                    .is_some_and(|fields| fields.iter().any(|f| f == "episodeTitle")))
         {
             return failed(
                 &id,
@@ -266,6 +289,19 @@ impl Provider {
             path: String::new(),
             cache_generation: self.cache_generation,
         };
+        if identify {
+            // Offer each show the search returns; the user chooses one.
+            let title = text(&lookup.identity, "title");
+            if title.trim().is_empty() || title.len() > 1024 {
+                return failed(
+                    &lookup.invocation,
+                    "no_match",
+                    "The series title is not available.",
+                );
+            }
+            lookup.stage = Stage::Identify;
+            return self.request(lookup, format!("/search/shows?q={}", encode(&title)));
+        }
         let path;
         if let Some(tvmaze) = scoped_id(&lookup.identity, "tvmazeShow", "tvmaze")
             .and_then(|id| id.parse::<u64>().ok())
@@ -362,6 +398,44 @@ impl Provider {
             );
         };
         match lookup.stage {
+            Stage::Identify => {
+                let Some(entries) = value.as_array().filter(|items| items.len() <= 100) else {
+                    return failed(
+                        &lookup.invocation,
+                        "error",
+                        "The TVmaze show list is invalid.",
+                    );
+                };
+                let candidates: Vec<Value> = entries
+                    .iter()
+                    .map(|entry| &entry["show"])
+                    .filter(|show| show_matches(show, &lookup.identity, false))
+                    .filter(|show| {
+                        let name = text(show, "name");
+                        !name.trim().is_empty() && name.len() <= 1024
+                    })
+                    .take(MAX_CANDIDATES)
+                    .map(|show| {
+                        let source = text(show, "url");
+                        let mut candidate = json!({"identity":episode_identity(show, lookup.season, lookup.episode)});
+                        if source.starts_with("https://www.tvmaze.com/shows/") && source.len() <= 2048 {
+                            candidate["attribution"] =
+                                json!({"name":"TVmaze","url":source,"license":"CC-BY-SA-4.0"});
+                        }
+                        candidate
+                    })
+                    .collect();
+                if candidates.is_empty() {
+                    return reply(&lookup.invocation, "no_match", json!({}), "");
+                }
+                self.remember(&lookup, &body);
+                reply(
+                    &lookup.invocation,
+                    "match",
+                    json!({"candidates":candidates}),
+                    "",
+                )
+            }
             Stage::Show(search) => {
                 let shows: Vec<Value> = if search {
                     let Some(entries) = value.as_array().filter(|items| items.len() <= 100) else {
@@ -464,22 +538,8 @@ impl Provider {
                 {
                     return reply(&lookup.invocation, "no_match", json!({}), "");
                 }
-                let show_name = text(&lookup.show, "name");
                 self.remember(&lookup, &body);
-                let mut identity = json!({"kind":"episode","title":show_name,"season":lookup.season,"episodes":[lookup.episode],"ids":{"tvmazeShow":number(&lookup.show["id"]).unwrap().to_string()}});
-                let premiered = text(&lookup.show, "premiered");
-                if let Some(year) = premiered
-                    .get(..4)
-                    .and_then(|value| value.parse::<u64>().ok())
-                {
-                    identity["year"] = json!(year);
-                }
-                if let Some(imdb) = lookup.show["externals"]["imdb"].as_str() {
-                    identity["ids"]["seriesImdb"] = json!(imdb);
-                }
-                if let Some(tvdb) = number(&lookup.show["externals"]["thetvdb"]) {
-                    identity["ids"]["seriesTvdb"] = json!(tvdb.to_string());
-                }
+                let identity = episode_identity(&lookup.show, lookup.season, lookup.episode);
                 reply(
                     &lookup.invocation,
                     "match",

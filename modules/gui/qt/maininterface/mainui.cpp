@@ -81,6 +81,8 @@
 #include "addons/addon_package_summaries.hpp"
 #include "addons/addon_metadata_service.hpp"
 #include "addons/addon_native_metadata_owner.hpp"
+#include "addons/addon_accepted_identities.hpp"
+#include "addons/addon_identity_choice.hpp"
 #include <vlc_metadata_owner.h>
 #include "addon_distribution_paths.hpp"
 #include "addons/addon_theme_service.hpp"
@@ -453,6 +455,20 @@ void MainUI::registerQMLTypes()
             m_intf->p_mainPlayerController->setMetadataService(metadataService);
             connect(m_intf->p_mainPlayerController, &PlayerController::metadataNetworkAccessChanged,
                 metadataService, &AddonMetadataService::setAutomaticNetworkAllowed);
+            auto acceptedIdentities = std::make_shared<vlc::addons::AddonAcceptedIdentities>(addonManager->storageDirectory());
+            metadataService->setAcceptedIdentities(acceptedIdentities);
+            auto* identityChoice = new vlc::addons::AddonIdentityChoice(metadataService, acceptedIdentities,
+                [player = m_intf->p_mainPlayerController->getPlayer()]() -> input_item_t* {
+                    vlc_player_locker lock(player);
+                    input_item_t* item = vlc_player_GetCurrentMedia(player);
+                    return item ? input_item_Hold(item) : nullptr;
+                }, this);
+            connect(m_intf->p_mainPlayerController, &PlayerController::inputChanged,
+                identityChoice, &vlc::addons::AddonIdentityChoice::cancel);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                identityChoice, &vlc::addons::AddonIdentityChoice::close, Qt::DirectConnection);
+            qmlRegisterSingletonInstance<vlc::addons::AddonIdentityChoice>(uri, versionMajor, versionMinor,
+                "AddonIdentityChoice", identityChoice);
             // One-way for this instance: once the owner is registered, Core never
             // runs its own online lookups again, even after the owner closes.
             if (var_InheritBool(m_intf, "metadata-native-owner")) {

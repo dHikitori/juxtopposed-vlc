@@ -3,6 +3,7 @@
 #include "maininterface/mainctx.hpp"
 #include "player_controller.hpp"
 #include "addons/addon_metadata_service.hpp"
+#include "addons/addon_accepted_identities.hpp"
 #include "util/episode_title_cache.hpp"
 #include "medialibrary/medialib.hpp"
 #include "medialibrary/mlhelper.hpp"
@@ -91,6 +92,10 @@ void EpisodeMetadata::setMetadataService(AddonMetadataService* service)
         });
         connect(service, &AddonMetadataService::invalidated, this, [this] {
             m_attemptedProviders.clear(); schedule();
+        });
+        // A newly accepted series replaces titles found under the old guess.
+        connect(service, &AddonMetadataService::identityAccepted, this, [this] {
+            cancel(); m_resolved.clear(); m_titles.clear(); m_attemptedProviders.clear(); schedule();
         });
     }
     schedule();
@@ -292,11 +297,27 @@ void EpisodeMetadata::lookupProvider()
         m_attemptedProviders.insert(url);
         m_providerIdentity = MediaIdentity::toMap(target);
         m_providerTarget = url;
-        const auto media = m_sharedMetadata->acquireMedia(url, m_providerIdentity);
+        // The series the user accepted names the work; its revision keeps
+        // results cached under an earlier choice apart.
+        auto request = m_providerIdentity;
+        quint64 accepted = 0;
+        const auto choices = m_sharedMetadata->acceptedIdentities();
+        if (const auto record = choices ? choices->find(vlc::addons::AddonAcceptedIdentities::key(request)) : std::nullopt) {
+            auto ids = request.value(QStringLiteral("ids")).toMap();
+            const auto chosen = record->identity.value(QStringLiteral("ids")).toMap();
+            for (auto it = chosen.cbegin(); it != chosen.cend(); ++it) ids.insert(it.key(), it.value());
+            request.insert(QStringLiteral("ids"), ids);
+            request.insert(QStringLiteral("title"), record->identity.value(QStringLiteral("title")));
+            if (record->identity.value(QStringLiteral("year")).toInt() > 0)
+                request.insert(QStringLiteral("year"), record->identity.value(QStringLiteral("year")));
+            accepted = record->revision;
+        }
+        const auto media = m_sharedMetadata->acquireMedia(url, request);
         if (media.isEmpty()) continue;
         m_busy = true;
         m_providerRequest = m_sharedMetadata->enrich(QStringLiteral("video.details"), {
             {QStringLiteral("media"), media}, {QStringLiteral("automatic"), true},
+            {QStringLiteral("acceptedIdentityRevision"), QVariant::fromValue(accepted)},
             {QStringLiteral("generation"), QVariant::fromValue(m_generation)},
             {QStringLiteral("targetRevision"), QVariant::fromValue(m_generation)}}, {QStringLiteral("episodeTitle")});
         m_sharedMetadata->releaseMedia(media);

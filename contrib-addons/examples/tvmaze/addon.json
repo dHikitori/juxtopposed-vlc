@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "id": "org.videolan.tvmaze",
   "name": "TVmaze episode titles",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "Hakone reference add-ons",
   "license": "GPL-2.0-or-later",
   "source": "https://github.com/hakone-org/addon-tvmaze.git",
@@ -28,12 +28,14 @@
       "type": "metadata.provider",
       "contract": "metadata@1",
       "features": [
-        "video.details"
+        "video.details",
+        "video.identity"
       ],
       "mediaKinds": [
         "episode"
       ],
       "operations": [
+        "identify",
         "enrich"
       ],
       "requires": [
