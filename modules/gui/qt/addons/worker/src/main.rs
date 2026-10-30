@@ -3,11 +3,14 @@
 //! returned to the authenticated parent; there are no WASI imports or secrets.
 use wasmtime::error::{bail, Context, Result};
 use serde_json::{json, Value};
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
+use sha2::{Digest, Sha256};
 use wasmtime::{Caller, Config, Engine, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder, TypedFunc};
 
 const MAX_MESSAGE: usize = 1024 * 1024;
 const MAX_MODULE: usize = 16 * 1024 * 1024;
+// Compiled native code is larger than the Wasm module it comes from.
+const MAX_PRECOMPILED: usize = 128 * 1024 * 1024;
 const MAX_MEMORY: usize = 64 * 1024 * 1024;
 const MAX_OUTGOING: usize = 64;
 const OUTPUT_ENVELOPE_BYTES: usize = br#"{"type":"messages","messages":[]}"#.len();
@@ -27,17 +30,40 @@ struct Runtime {
     dispatch: TypedFunc<(i32, i32), ()>,
 }
 
+// One engine configuration for compiling, precompiling and loading. Wasmtime
+// refuses precompiled code from a different version or configuration.
+fn engine() -> Result<Engine> {
+    let mut config = Config::new();
+    config.consume_fuel(true);
+    config.max_wasm_stack(512 * 1024);
+    config.wasm_multi_memory(false);
+    // A small reservation also makes worker virtual-memory use predictable.
+    config.memory_reservation(MAX_MEMORY as u64);
+    Engine::new(&config)
+}
+
 impl Runtime {
     fn new(bytes: &[u8]) -> Result<Self> {
         if bytes.len() > MAX_MODULE { bail!("module exceeds size limit"); }
-        let mut config = Config::new();
-        config.consume_fuel(true);
-        config.max_wasm_stack(512 * 1024);
-        config.wasm_multi_memory(false);
-        // A small reservation also makes worker virtual-memory use predictable.
-        config.memory_reservation(MAX_MEMORY as u64);
-        let engine = Engine::new(&config)?;
+        let engine = engine()?;
         let module = Module::from_binary(&engine, bytes).context("invalid portable Wasm")?;
+        Self::with_module(engine, module)
+    }
+
+    // The host made this file with --precompile, before any guest code ran,
+    // and supplies its SHA-256. A different file is not loaded.
+    fn precompiled(bytes: &[u8], expected: &str) -> Result<Self> {
+        if bytes.len() > MAX_PRECOMPILED { bail!("precompiled module exceeds size limit"); }
+        let digest: String = Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect();
+        if digest != expected { bail!("precompiled module digest mismatch"); }
+        let engine = engine()?;
+        // SAFETY: the digest binds these bytes to the host's own precompile
+        // output, and Wasmtime checks the version and configuration.
+        let module = unsafe { Module::deserialize(&engine, bytes) }.context("incompatible precompiled module")?;
+        Self::with_module(engine, module)
+    }
+
+    fn with_module(engine: Engine, module: Module) -> Result<Self> {
         for import in module.imports() {
             if import.module() != "hakone" || import.name() != "host_send" {
                 bail!("unsupported module import");
@@ -170,20 +196,61 @@ fn write_message(out: &mut impl Write, message: &Value) -> Result<()> {
     Ok(())
 }
 
-fn run() -> Result<()> {
-    let path = std::env::args_os().nth(1).context("expected a portable module path")?;
+fn read_limited(path: &std::ffi::OsStr, limit: usize) -> Result<Vec<u8>> {
     let file = std::fs::File::open(path).context("cannot read module")?;
-    use std::io::Read;
     let mut bytes = Vec::new();
-    file.take((MAX_MODULE + 1) as u64).read_to_end(&mut bytes)?;
-    let mut runtime = Runtime::new(&bytes)?;
+    file.take((limit + 1) as u64).read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+// --precompile <module.wasm> <output>: compile once and write native code. No
+// guest code runs. The host checks and keeps the output.
+fn precompile(input: &std::ffi::OsStr, output: &std::ffi::OsStr) -> Result<()> {
+    let bytes = read_limited(input, MAX_MODULE)?;
+    if bytes.len() > MAX_MODULE { bail!("module exceeds size limit"); }
+    let engine = engine()?;
+    // The same checks as a normal start, so a refused module is not cached.
+    let module = Module::from_binary(&engine, &bytes).context("invalid portable Wasm")?;
+    drop(Runtime::with_module(engine.clone(), module)?);
+    let compiled = engine.precompile_module(&bytes)?;
+    std::fs::write(output, compiled).context("cannot write precompiled module")?;
+    Ok(())
+}
+
+fn run() -> Result<()> {
+    let args: Vec<_> = std::env::args_os().collect();
+    if args.len() == 4 && args[1] == "--precompile" {
+        return precompile(&args[2], &args[3]);
+    }
+    // --precompiled <file> <sha256> <module.wasm>: load the precompiled file if
+    // it matches, else compile the module.
+    let precompiled = args.len() == 5 && args[1] == "--precompiled";
+    let path = if precompiled { &args[4] } else { args.get(1).context("expected a portable module path")? };
+    let cached = if precompiled {
+        let expected = args[3].to_str().unwrap_or_default();
+        read_limited(&args[2], MAX_PRECOMPILED).ok().and_then(|bytes| Runtime::precompiled(&bytes, expected).ok())
+    } else {
+        None
+    };
+    let precompiled_used = cached.is_some();
+    let mut runtime = match cached {
+        Some(runtime) => runtime,
+        None => Runtime::new(&read_limited(path, MAX_MODULE)?)?,
+    };
     // Initialize standard streams before applying the OS restrictions.
     let input = io::stdin();
     let output = io::stdout();
     let mut reader = input.lock();
     let mut out = output.lock();
     restrict_process()?;
-    write_message(&mut out, &json!({"type":"ready", "protocol":"wasm-message-v1"}))?;
+    // A plain start keeps the original ready message. In precompiled mode the
+    // host learns whether the cache was used.
+    let ready = if precompiled {
+        json!({"type":"ready", "protocol":"wasm-message-v1", "precompiled": precompiled_used})
+    } else {
+        json!({"type":"ready", "protocol":"wasm-message-v1"})
+    };
+    write_message(&mut out, &ready)?;
     loop {
         let mut line = Vec::new();
         let count = reader.by_ref().take((MAX_MESSAGE + 2) as u64).read_until(b'\n', &mut line)?;
@@ -218,6 +285,27 @@ mod tests {
             (func (export "hakone_dealloc") (param i32 i32))
             (func (export "hakone_dispatch") (param $ptr i32) (param $len i32) {dispatch})
         )"#)).unwrap()
+    }
+    #[test]
+    fn precompiled_modules_load_only_with_their_digest() {
+        let wasm = module("local.get $ptr local.get $len call $send drop", "");
+        let compiled = engine().unwrap().precompile_module(&wasm).unwrap();
+        let digest: String = Sha256::digest(&compiled).iter().map(|byte| format!("{byte:02x}")).collect();
+        let mut runtime = Runtime::precompiled(&compiled, &digest).unwrap();
+        let input = json!({"type":"test"});
+        assert_eq!(runtime.dispatch(&input).unwrap(), vec![input]);
+        let mut changed = compiled.clone();
+        let last = changed.len() - 1;
+        changed[last] ^= 1;
+        assert!(Runtime::precompiled(&changed, &digest).is_err());
+        assert!(Runtime::precompiled(&compiled, &"0".repeat(64)).is_err());
+    }
+    #[test]
+    fn precompiled_modules_keep_the_import_checks() {
+        let wasm = module("", r#"(import "wasi_snapshot_preview1" "random_get" (func))"#);
+        let compiled = engine().unwrap().precompile_module(&wasm).unwrap();
+        let digest: String = Sha256::digest(&compiled).iter().map(|byte| format!("{byte:02x}")).collect();
+        assert!(Runtime::precompiled(&compiled, &digest).is_err());
     }
     #[test]
     fn copies_messages_and_runs_repeated_dispatches() {

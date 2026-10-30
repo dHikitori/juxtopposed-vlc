@@ -1275,6 +1275,7 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
             return !replacement->failed() && replacement->configurationCurrent() ? replacement : nullptr;
     }
     auto* instance = new AddonWorker(package, &m_network, this); instance->setExecutable(m_workerExecutable);
+    instance->setPrecompiledCache(QDir(storageDirectory()).filePath(QStringLiteral("compiled")));
     instance->setHostServices(&m_hostServices);
     const auto id = package.manifest.id;
     NetworkBroker::RequestGuard current;

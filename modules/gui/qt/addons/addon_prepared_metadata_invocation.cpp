@@ -18,6 +18,7 @@
 #include <QScopeGuard>
 #include <QSslSocket>
 #include <QThread>
+#include <QDir>
 #include <QTimer>
 #include <atomic>
 #include <condition_variable>
@@ -673,6 +674,7 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
     auto* worker = new AddonWorker(slot.package, &m_network);
     entry->worker = worker; runtime->workers.insert(worker, entry);
     worker->enablePreparedLifecycle(); worker->setExecutable(data->executable);
+    worker->setPrecompiledCache(QDir(storageDirectory()).filePath(QStringLiteral("compiled")));
     worker->setHostServices(&m_hostServices); worker->setRequestGuard(current);
     const auto secretFields = data->secrets;
     worker->setConfiguration(data->settings, data->credentialStatus, [secretFields, current](const QString& field) {

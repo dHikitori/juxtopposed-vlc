@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_worker.hpp"
 #include "addon_process_launch.hpp"
+#include "addon_precompiled_modules.hpp"
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -115,7 +116,11 @@ void AddonWorker::start()
     m_process.setProcessEnvironment(environment);
     m_process.setWorkingDirectory(m_package.directory);
     m_process.setProgram(executable);
-    m_process.setArguments({QDir(m_package.directory).filePath(m_package.manifest.runtimeEntry)});
+    bool missing = false;
+    m_process.setArguments(AddonPrecompiledModules::arguments(m_precompiled, executable, m_package, &missing));
+    // Compile once for the next start (finding F1).
+    if (missing)
+        AddonPrecompiledModules::schedule(m_precompiled, executable, m_package);
     m_startup.start(15000);
     prepareHelperLaunch(m_process);
     m_process.start();

@@ -18,6 +18,8 @@ public:
     explicit AddonWorker(const InstalledPackage&, NetworkBroker*, QObject* parent = nullptr);
     ~AddonWorker() override;
     void setExecutable(const QString&);
+    // The profile's precompiled module cache. Empty disables it.
+    void setPrecompiledCache(const QString& directory) { m_precompiled = directory; }
     void setHostServices(AddonHostServices* services) { m_services = services; }
     void setHostCapabilities(const QJsonObject& capabilities) { m_hostCapabilities = capabilities; }
     void setConfiguration(const QJsonObject& nonsecretSettings, const QJsonObject& credentialStatus,
@@ -87,6 +89,7 @@ private:
     NetworkBroker::CredentialResolver m_resolver;
     NetworkBroker::RequestGuard m_requestGuard;
     QString m_executable;
+    QString m_precompiled;
     bool m_ready = false, m_stopping = false, m_failed = false;
     bool m_prepared = false, m_preparedRetiring = false, m_preparedAbort = false;
     bool m_preparedCleanExit = false, m_preparedNotified = false;

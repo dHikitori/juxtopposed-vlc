@@ -153,6 +153,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_profile_host.hpp \
 	addons/addon_process_launch.cpp \
 	addons/addon_process_launch.hpp \
+	addons/addon_precompiled_modules.cpp \
+	addons/addon_precompiled_modules.hpp \
 	addons/addon_native_wake.cpp \
 	addons/addon_native_wake.hpp \
 	addons/addon_native_notifications.cpp \
