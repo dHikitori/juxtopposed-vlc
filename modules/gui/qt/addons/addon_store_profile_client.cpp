@@ -3,8 +3,13 @@
 # include "config.h"
 #endif
 #include "addon_store_profile_client.hpp"
+#include "addon_native_wake.hpp"
 #include <QRandomGenerator>
 #include <QtEndian>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
 
 namespace vlc::addons {
 namespace {
@@ -22,11 +27,222 @@ QByteArray requestNonce()
 }
 }
 
+struct StoreProfileWritePermit::State {
+    enum class Phase { Waiting, Granted, Refused, Finished };
+    std::mutex mutex;
+    std::condition_variable changed;
+    Phase phase = Phase::Waiting;
+    Epoch epoch;
+    QByteArray request;
+    qint64 deadline = 0;
+    // Native-safe binding to the live connection that sent Begin.
+    std::atomic_bool live{false};
+    std::weak_ptr<StoreProfileClient::Mailbox> mailbox;
+    void settle(Phase next)
+    {
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (phase != Phase::Waiting && !(phase == Phase::Granted && next != Phase::Granted))
+                return;
+            phase = next;
+        }
+        if (next != Phase::Granted)
+            live.store(false, std::memory_order_release);
+        changed.notify_all();
+    }
+};
+
+// Commands from writers on joined work. The control thread takes them after a
+// native wake. A closed mailbox refuses new permits.
+struct StoreProfileClient::Mailbox {
+    struct Command {
+        std::shared_ptr<StoreProfileWritePermit::State> permit;
+        bool finish = false;
+        Generation::Result result;
+    };
+    std::mutex mutex;
+    std::deque<Command> commands;
+    std::function<void()> wake;
+    bool open = true;
+    bool post(Command command)
+    {
+        std::function<void()> signal;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (!open)
+                return false;
+            commands.push_back(std::move(command));
+            signal = wake;
+        }
+        if (signal)
+            signal();
+        return true;
+    }
+};
+
+StoreProfileWritePermit::StoreProfileWritePermit(std::shared_ptr<State> state) : m_state(std::move(state)) {}
+
+StoreProfileWritePermit::~StoreProfileWritePermit()
+{
+    // A permit that was never finished ends its write here.
+    finish({});
+}
+
+bool StoreProfileWritePermit::wait()
+{
+    std::unique_lock<std::mutex> lock(m_state->mutex);
+    const auto remaining = std::chrono::microseconds(qMax<qint64>(0, m_state->deadline - Generation::now()));
+    m_state->changed.wait_for(lock, remaining, [this] { return m_state->phase != State::Phase::Waiting; });
+    return m_state->phase == State::Phase::Granted && Generation::now() < m_state->deadline;
+}
+
+bool StoreProfileWritePermit::current() const noexcept
+{
+    return m_state->live.load(std::memory_order_acquire) && Generation::now() < m_state->deadline;
+}
+
+StoreProfileGeneration::Ticket StoreProfileWritePermit::ticket() const
+{
+    std::lock_guard<std::mutex> lock(m_state->mutex);
+    const auto state = m_state;
+    return {m_state->epoch, m_state->request,
+            {[state] { return state->live.load(std::memory_order_acquire); }, Generation::now, m_state->deadline}};
+}
+
+void StoreProfileWritePermit::finish(const StoreProfileGeneration::Result& result)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_state->mutex);
+        if (m_state->phase == State::Phase::Finished)
+            return;
+    }
+    // Close the ticket first. The control thread then reports the result.
+    m_state->live.store(false, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lock(m_state->mutex);
+        m_state->phase = State::Phase::Finished;
+    }
+    m_state->changed.notify_all();
+    if (const auto mailbox = m_state->mailbox.lock())
+        mailbox->post({m_state, true, result});
+}
+
 StoreProfileClient::StoreProfileClient(Options options, std::unique_ptr<StoreAuthorityPeer> peer, QObject* parent)
-    : QObject(parent), m_options(std::move(options)), m_work(m_options.work, this), m_peer(std::move(peer))
+    : QObject(parent), m_options(std::move(options)), m_work(m_options.work, this), m_peer(std::move(peer)),
+      m_mailbox(std::make_shared<Mailbox>())
 {
     m_retry.setSingleShot(true);
     connect(&m_retry, &QTimer::timeout, this, [this] { connectToCoordinator(); });
+    m_permitDeadline.setSingleShot(true);
+    connect(&m_permitDeadline, &QTimer::timeout, this, [this] { endPermit(); });
+    m_mail = new AddonNativeWake([this] { takeMail(); }, this);
+    std::lock_guard<std::mutex> lock(m_mailbox->mutex);
+    if (m_mail->valid())
+        m_mailbox->wake = m_mail->nativeCallback();
+    else
+        m_mailbox->open = false;
+}
+
+StoreProfileClient::WritePort StoreProfileClient::writePort() const
+{
+    const std::weak_ptr<Mailbox> weak = m_mailbox;
+    return [weak](qint64 deadline) {
+        auto state = std::make_shared<StoreProfileWritePermit::State>();
+        state->deadline = deadline;
+        state->request = requestNonce();
+        state->mailbox = weak;
+        const auto mailbox = weak.lock();
+        const bool posted = deadline > Generation::now() && deadline - Generation::now() <= Generation::MaximumDuration
+            && mailbox && mailbox->post({state, false, {}});
+        if (!posted)
+            state->settle(StoreProfileWritePermit::State::Phase::Refused);
+        return std::unique_ptr<StoreProfileWritePermit>(new StoreProfileWritePermit(state));
+    };
+}
+
+void StoreProfileClient::takeMail()
+{
+    std::deque<Mailbox::Command> commands;
+    {
+        std::lock_guard<std::mutex> lock(m_mailbox->mutex);
+        commands.swap(m_mailbox->commands);
+    }
+    for (auto& command : commands) {
+        if (command.finish)
+            finishPermit(command.permit, command.result);
+        else
+            beginPermit(command.permit);
+    }
+}
+
+void StoreProfileClient::beginPermit(std::shared_ptr<StoreProfileWritePermit::State> permit)
+{
+    // The arbiter accepts one pending write. A second permit is refused.
+    if (m_state == State::Closed || m_permit || Generation::now() >= permit->deadline) {
+        permit->settle(StoreProfileWritePermit::State::Phase::Refused);
+        return;
+    }
+    m_permit = std::move(permit);
+    m_permitSent = false;
+    const auto remaining = qMax<qint64>(0, m_permit->deadline - Generation::now());
+    m_permitDeadline.start(int(remaining / 1000 + 1));
+    sendBegin();
+}
+
+void StoreProfileClient::sendBegin()
+{
+    // Begin needs a joined ready connection. A permit that arrives earlier
+    // waits for the join.
+    if (!m_permit || m_permitSent || m_state != State::Ready || !m_ready || !m_socket)
+        return;
+    {
+        std::lock_guard<std::mutex> lock(m_permit->mutex);
+        m_permit->epoch = *m_ready;
+    }
+    m_permitSent = true;
+    m_socket->send({Kind::Begin, m_connection, *m_ready, m_permit->request, m_permit->deadline});
+}
+
+void StoreProfileClient::endPermit()
+{
+    m_permitDeadline.stop();
+    if (!m_permit)
+        return;
+    // A loss, Recover, close or the deadline ends the permit. Its ticket
+    // closes at once.
+    m_permit->live.store(false, std::memory_order_release);
+    m_permit->settle(StoreProfileWritePermit::State::Phase::Refused);
+    m_permit.reset();
+    m_permitSent = false;
+}
+
+void StoreProfileClient::finishPermit(std::shared_ptr<StoreProfileWritePermit::State> permit,
+    const StoreProfileGeneration::Result& result)
+{
+    if (permit != m_permit)
+        return;
+    Epoch epoch;
+    QByteArray request;
+    qint64 deadline = 0;
+    {
+        std::lock_guard<std::mutex> lock(permit->mutex);
+        epoch = permit->epoch;
+        request = permit->request;
+        deadline = permit->deadline;
+    }
+    m_permit.reset();
+    m_permitSent = false;
+    m_permitDeadline.stop();
+    // Only a granted write on the same live connection reports a result.
+    if (!m_granted || !m_socket)
+        return;
+    m_granted = false;
+    const bool next = result.status == Generation::Status::Ready && result.epoch.generation == epoch.generation
+        && result.epoch.revision == epoch.revision + 1;
+    if (next)
+        m_socket->send({Kind::Complete, m_connection, result.epoch, request, deadline});
+    else
+        m_socket->send({Kind::Abort, m_connection, epoch, request, deadline});
 }
 
 StoreProfileClient::~StoreProfileClient()
@@ -137,10 +353,23 @@ void StoreProfileClient::received(const Message& message)
         }
         return;
     }
+    case Kind::Grant:
+        if (!m_permit || !m_permitSent || m_granted || message.request != m_permit->request
+            || message.deadline != m_permit->deadline || message.epoch != m_permit->epoch) {
+            protocolError();
+            return;
+        }
+        m_granted = true;
+        m_permitDeadline.stop();
+        m_permit->live.store(true, std::memory_order_release);
+        m_permit->settle(StoreProfileWritePermit::State::Phase::Granted);
+        return;
     case Kind::Revoke:
         revoke(message);
         return;
     case Kind::Recover:
+        endPermit();
+        m_granted = false;
         revoke(std::nullopt);
         return;
     default:
@@ -257,6 +486,7 @@ void StoreProfileClient::admitted(quint64 attempt, const Epoch& epoch, bool admi
     }
     m_ready = epoch;
     setState(State::Ready);
+    sendBegin();
 }
 
 void StoreProfileClient::revoke(std::optional<Message> acknowledge)
@@ -333,6 +563,8 @@ void StoreProfileClient::lost()
         m_socket.release()->deleteLater();
     m_connection.clear();
     m_rejoin = false;
+    endPermit();
+    m_granted = false;
     if (!m_reconnectUntil)
         m_reconnectUntil = Generation::now() + m_options.reconnectLimit;
     revoke(std::nullopt);
@@ -371,6 +603,14 @@ void StoreProfileClient::close()
         return;
     m_state = State::Closed;
     m_retry.stop();
+    {
+        std::lock_guard<std::mutex> lock(m_mailbox->mutex);
+        m_mailbox->open = false;
+        m_mailbox->commands.clear();
+    }
+    if (m_mail)
+        m_mail->close();
+    endPermit();
     m_work.close();
     if (m_socket) {
         auto* socket = m_socket.release();

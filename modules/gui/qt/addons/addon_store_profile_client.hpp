@@ -10,6 +10,36 @@
 #include <optional>
 
 namespace vlc::addons {
+class AddonNativeWake;
+// A write permit for one prepared writer scope (Step 2.3). Thread-safe. The
+// writer's joined task holds the prepared scope, and so store.lock, then
+// calls wait(), writes with ticket(), and calls finish() once.
+class StoreProfileWritePermit final {
+public:
+    using Epoch = StoreProfileGeneration::Epoch;
+    ~StoreProfileWritePermit();
+    StoreProfileWritePermit(const StoreProfileWritePermit&) = delete;
+    StoreProfileWritePermit& operator=(const StoreProfileWritePermit&) = delete;
+    // Joined work only. Blocks until the coordinator's Grant, a refusal or
+    // the deadline.
+    bool wait();
+    // Native-safe. True only while granted, before the deadline and finish(),
+    // and while the connection that sent Begin is live and has not seen
+    // Recover. A loss ends it at once.
+    bool current() const noexcept;
+    // The epoch and request that the coordinator granted. The control uses
+    // current() and the permit's deadline.
+    StoreProfileGeneration::Ticket ticket() const;
+    // Call once. A Ready result at the next revision sends Complete. Any other
+    // result of a granted write sends Abort, which starts recovery.
+    void finish(const StoreProfileGeneration::Result&);
+private:
+    friend class StoreProfileClient;
+    struct State;
+    explicit StoreProfileWritePermit(std::shared_ptr<State>);
+    const std::shared_ptr<State> m_state;
+};
+
 // Host only. One per process and canonical profile, on the same independent
 // joined control thread as the coordinator, never on the GUI thread. It owns
 // the process's StoreAuthorityPeer and its control socket.
@@ -55,7 +85,14 @@ public:
     // The current ready epoch, only while admitted.
     std::optional<Epoch> epoch() const;
     QByteArray connection() const { return m_connection; }
-    bool timerActive() const noexcept { return m_retry.isActive(); }
+    bool timerActive() const noexcept { return m_retry.isActive() || m_permitDeadline.isActive(); }
+    // Thread-safe and weak. A writer on joined work requests a permit with the
+    // deadline of its prepared scope. A closed client refuses at once. One
+    // write can be pending at a time.
+    using WritePort = std::function<std::unique_ptr<StoreProfileWritePermit>(qint64 deadline)>;
+    WritePort writePort() const;
+    // Implementation detail shared with StoreProfileWritePermit.
+    struct Mailbox;
 
 private:
     void connectToCoordinator();
@@ -72,6 +109,11 @@ private:
     void scheduleReconnect();
     void protocolError();
     void setState(State);
+    void takeMail();
+    void beginPermit(std::shared_ptr<StoreProfileWritePermit::State>);
+    void sendBegin();
+    void endPermit();
+    void finishPermit(std::shared_ptr<StoreProfileWritePermit::State>, const StoreProfileGeneration::Result&);
 
     const Options m_options;
     StoreProfileControlWork m_work;
@@ -97,6 +139,13 @@ private:
     bool m_rejoin = false;
     qint64 m_reconnectUntil = 0;
     QTimer m_retry;
+    // Write permits arrive from joined work through this mailbox.
+    std::shared_ptr<Mailbox> m_mailbox;
+    AddonNativeWake* m_mail = nullptr;
+    std::shared_ptr<StoreProfileWritePermit::State> m_permit;
+    bool m_permitSent = false;
+    bool m_granted = false;
+    QTimer m_permitDeadline;
     State m_state = State::Starting;
 };
 }

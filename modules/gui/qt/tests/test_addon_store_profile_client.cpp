@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <atomic>
+#include <thread>
 #include <memory>
 #include <optional>
 using namespace vlc::addons;
@@ -108,6 +109,34 @@ struct Fixture {
         lifetime.close();
         lifetime.handle().waitQt(std::chrono::seconds(10));
     }
+};
+// A writer on its own thread, like a joined task: prepared scope first, then
+// the permit, the write, and finish.
+struct WriterTask {
+    std::thread thread;
+    std::atomic_bool granted{false}, done{false};
+    G::Result result;
+    void start(const QString& profile, Client::WritePort port, qint64 micros,
+               std::function<void(StoreProfileWritePermit&)> beforeWrite = {},
+               G::Change change = G::Change::Applied) {
+        thread = std::thread([this, profile, port, micros, beforeWrite, change] {
+            const auto deadline = G::now() + micros;
+            G::Status status;
+            auto scope = G::prepareWriter(profile, {[] { return true; }, G::now, deadline}, &status);
+            auto permit = port(deadline);
+            if (scope && permit->wait()) {
+                granted = true;
+                if (beforeWrite) beforeWrite(*permit);
+                result = scope->write(permit->ticket(), [change](const StoreProfileWriteContext& context, QString*) {
+                    return context.current() ? change : G::Change::NeedsRecovery;
+                });
+            }
+            scope.reset();
+            permit->finish(result);
+            done = true;
+        });
+    }
+    ~WriterTask() { if (thread.joinable()) thread.join(); }
 };
 QString states(const Fixture& f) {
     QStringList names;
@@ -243,6 +272,100 @@ private slots:
             QVERIFY(f.ready());
             QCOMPARE(*f.client->epoch(), result.epoch);
         }
+    }
+    void aPermitWritesAndRejoinsTheNextRevision() {
+        Fixture f; QVERIFY(f.serve());
+        Writer other; QVERIFY(other.join(*f.endpoint, f.profile.path()));
+        QVERIFY(f.startClient()); QVERIFY(f.ready());
+        const auto epoch = *f.client->epoch();
+        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000);
+        const auto revoke = other.next(K::Revoke); QVERIFY(revoke);
+        other.fence.reset();
+        QVERIFY(other.send(K::Revoked, revoke->epoch, revoke->request, revoke->deadline));
+        QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
+        QVERIFY(writer.granted.load());
+        QCOMPARE(writer.result.status, G::Status::Ready);
+        QCOMPARE(writer.result.epoch.revision, epoch.revision + 1);
+        QVERIFY(other.next(K::Available));
+        QTRY_VERIFY_WITH_TIMEOUT(f.client->epoch() && *f.client->epoch() == writer.result.epoch, 15000);
+        QCOMPARE(*f.coordinator->epoch(), writer.result.epoch);
+        QVERIFY(!f.client->timerActive());
+    }
+    void aLossEndsAGrantedPermitBeforeItsWrite() {
+        Fixture f; QVERIFY(f.serve());
+        QVERIFY(f.startClient()); QVERIFY(f.ready());
+        auto go = std::make_shared<std::atomic_bool>(false);
+        auto liveAtGrant = std::make_shared<std::atomic_bool>(false);
+        auto liveAfterLoss = std::make_shared<std::atomic_bool>(true);
+        WriterTask writer;
+        writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000,
+            [go, liveAtGrant, liveAfterLoss](StoreProfileWritePermit& permit) {
+                liveAtGrant->store(permit.current());
+                while (!go->load()) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                liveAfterLoss->store(permit.current());
+            });
+        QTRY_VERIFY_WITH_TIMEOUT(writer.granted.load(), 15000);
+        f.coordinator->close();
+        QTRY_VERIFY_WITH_TIMEOUT(f.client->state() != Client::State::Ready, 5000);
+        go->store(true);
+        QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
+        QVERIFY(liveAtGrant->load());
+        QVERIFY(!liveAfterLoss->load());
+        // The ticket was not current, so the store was not written.
+        QCOMPARE(writer.result.status, G::Status::Stale);
+    }
+    void aPermitBeforeTheJoinWaitsForIt() {
+        Fixture f; QVERIFY(f.serve());
+        QVERIFY(f.startClient());
+        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
+        QVERIFY(writer.granted.load());
+        QCOMPARE(writer.result.status, G::Status::Ready);
+        QVERIFY(f.ready());
+        QCOMPARE(*f.client->epoch(), writer.result.epoch);
+    }
+    void aSecondPermitIsRefusedWhileOneIsPending() {
+        Fixture f; QVERIFY(f.serve());
+        Writer other; QVERIFY(other.join(*f.endpoint, f.profile.path()));
+        QVERIFY(f.startClient()); QVERIFY(f.ready());
+        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000);
+        const auto revoke = other.next(K::Revoke); QVERIFY(revoke);
+        // The first write waits for the other peer's acknowledgement.
+        auto second = f.client->writePort()(G::now() + 5 * 1000 * 1000);
+        bool refused = false;
+        std::thread waiter([&] { refused = !second->wait(); });
+        QTRY_VERIFY_WITH_TIMEOUT(refused, 5000);
+        waiter.join();
+        second->finish({});
+        other.fence.reset();
+        QVERIFY(other.send(K::Revoked, revoke->epoch, revoke->request, revoke->deadline));
+        QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
+        QCOMPARE(writer.result.status, G::Status::Ready);
+    }
+    void anUnacknowledgedWriteEndsAtTheDeadline() {
+        Fixture f; QVERIFY(f.serve());
+        Writer silent; QVERIFY(silent.join(*f.endpoint, f.profile.path()));
+        QVERIFY(f.startClient()); QVERIFY(f.ready());
+        const auto epoch = *f.client->epoch();
+        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 500 * 1000);
+        QVERIFY(silent.next(K::Revoke));
+        silent.fence.reset();
+        QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
+        QVERIFY(!writer.granted.load());
+        QTRY_VERIFY_WITH_TIMEOUT(f.client->epoch() && f.client->epoch()->generation != epoch.generation, 15000);
+        QVERIFY(!f.client->timerActive());
+    }
+    void aFailedWriteSendsAbortAndRecovers() {
+        Fixture f; QVERIFY(f.serve());
+        QVERIFY(f.startClient()); QVERIFY(f.ready());
+        const auto epoch = *f.client->epoch();
+        WriterTask writer;
+        writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000, {}, G::Change::NeedsRecovery);
+        QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
+        QVERIFY(writer.granted.load());
+        QCOMPARE(writer.result.status, G::Status::NeedsRecovery);
+        QTRY_VERIFY_WITH_TIMEOUT(f.client->epoch() && f.client->epoch()->generation != epoch.generation, 15000);
+        QCOMPARE(f.client->epoch()->revision, 0u);
     }
 };
 QTEST_GUILESS_MAIN(TestAddonStoreProfileClient)
