@@ -5,6 +5,7 @@
 #include <QScopeGuard>
 #include <utility>
 #include "addons/addon_metadata_coordinator.hpp"
+#include "addons/addon_result_retention.hpp"
 
 namespace {
 struct FakeBackend {
@@ -970,6 +971,143 @@ private slots:
             QCOMPARE(!credit.isEmpty(), url == QStringLiteral("https://www.tvmaze.com/episodes/1"));
             QVERIFY(!credit.contains("extra"));
         }
+    }
+
+    void retentionSetsReuseAndLibraryKeeping() {
+        FakeBackend fake; fake.providers = {registration("a/details")};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrich("video.details", context(1), {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+        auto record = claims({{"description", "Provider text"}});
+        record["retention"] = QVariantMap{{"reuseSeconds", 1}, {"keep", "library"}};
+        complete(coordinator, fake.calls[0], "match", record); QTRY_COMPARE(results.size(), 1);
+        const auto provenance = results[0][2].toMap().value("provenance").toMap().value("description").toMap();
+        QVERIFY(vlc::addons::ResultRetention::mayKeep(provenance));
+        QVERIFY(!results[0][2].toMap().contains("stale"));
+        coordinator.enrich("video.details", context(2), {"description"}); QTRY_COMPARE(results.size(), 2);
+        QCOMPARE(fake.calls.size(), 1);
+        // The provider's one second ends the reuse.
+        QTest::qWait(1100);
+        coordinator.enrich("video.details", context(3), {"description"}); QTRY_COMPARE(fake.calls.size(), 2);
+    }
+
+    void withoutRetentionFieldsStayInMemoryAndUseTheHostDefault() {
+        FakeBackend fake; fake.providers = {registration("a/details")};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrich("video.details", context(1), {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(coordinator, fake.calls[0], "match", claims({{"description", "Provider text"}})); QTRY_COMPARE(results.size(), 1);
+        const auto provenance = results[0][2].toMap().value("provenance").toMap().value("description").toMap();
+        QCOMPARE(provenance.value("retention").toMap().value("keep").toString(), "memory");
+        QVERIFY(!vlc::addons::ResultRetention::mayKeep(provenance));
+        coordinator.enrich("video.details", context(2), {"description"}); QTRY_COMPARE(results.size(), 2);
+        QCOMPARE(fake.calls.size(), 1);
+    }
+
+    void forbiddenReuseAndIncorrectRetentionAreNotReused() {
+        // No reuse is a valid choice: saving accepted fields stays separate.
+        const QList<QVariant> records{QVariantMap{{"reuseSeconds", 0}, {"keep", "library"}},
+            QVariantMap{{"reuseSeconds", 60}, {"keep", "forever"}}, QVariantMap{{"reuseSeconds", 60}, {"store", "disk"}},
+            QVariantMap{{"reuseSeconds", -1}}, QVariantMap{{"reuseSeconds", "60"}}, QVariantMap{{"reuseSeconds", 1.5}},
+            QVariantMap{{"reuseSeconds", 86401}}, QVariant(QStringLiteral("library"))};
+        for (const auto& retention : records) {
+            FakeBackend fake; fake.providers = {registration("a/details")};
+            AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+            coordinator.enrich("video.details", context(1), {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+            auto record = claims({{"description", "Provider text"}}); record["retention"] = retention;
+            complete(coordinator, fake.calls[0], "match", record); QTRY_COMPARE(results.size(), 1);
+            const auto provenance = results[0][2].toMap().value("provenance").toMap().value("description").toMap();
+            QCOMPARE(vlc::addons::ResultRetention::mayKeep(provenance), &retention == &records.first());
+            coordinator.enrich("video.details", context(2), {"description"}); QTRY_COMPARE(fake.calls.size(), 2);
+        }
+    }
+
+    void retentionIsClampedForEachStatus() {
+        using vlc::addons::ResultRetention;
+        const QVariantMap generous{{"retention", QVariantMap{{"reuseSeconds", 86400}, {"keep", "library"}, {"offlineSeconds", 604800}}}};
+        QCOMPARE(ResultRetention::from("match", generous).reuseMs, 86400 * 1000LL);
+        QCOMPARE(ResultRetention::from("partial", generous).offlineMs, 604800 * 1000LL);
+        QVERIFY(ResultRetention::from("partial", generous).library);
+        // A negative or unclear answer is kept for a short time only, and
+        // it has no fields to save or show while offline.
+        QCOMPARE(ResultRetention::from("no_match", generous).reuseMs, 3600 * 1000LL);
+        QCOMPARE(ResultRetention::from("ambiguous", generous).reuseMs, 600 * 1000LL);
+        QCOMPARE(ResultRetention::from("no_match", generous).offlineMs, 0LL);
+        QVERIFY(!ResultRetention::from("no_match", generous).library);
+        for (const auto& status : {"error", "offline", "auth_required", "rate_limited", "unsupported"})
+            QCOMPARE(ResultRetention::from(status, generous).reuseMs, 0LL);
+        QCOMPARE(ResultRetention::from("no_match", {}).reuseMs, 60 * 1000LL);
+        QCOMPARE(ResultRetention::from("match", {}).reuseMs, 600 * 1000LL);
+        QVERIFY(!ResultRetention::from("match", {{"retention", QVariantMap{{"offlineSeconds", 604801}}}}).valid);
+    }
+
+    void aPartialResultKeepsItsOwnRetention() {
+        FakeBackend fake; fake.providers = {registration("a/details")};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrich("video.details", context(1), {"description", "genre"}); QTRY_COMPARE(fake.calls.size(), 1);
+        auto record = claims({{"description", "Provider text"}});
+        record["retention"] = QVariantMap{{"reuseSeconds", 0}};
+        complete(coordinator, fake.calls[0], "partial", record); QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(results[0][1].toString(), "partial");
+        coordinator.enrich("video.details", context(2), {"description", "genre"}); QTRY_COMPARE(fake.calls.size(), 2);
+        record["retention"] = QVariantMap{{"reuseSeconds", 60}};
+        complete(coordinator, fake.calls[1], "partial", record); QTRY_COMPARE(results.size(), 2);
+        coordinator.enrich("video.details", context(3), {"description", "genre"}); QTRY_COMPARE(results.size(), 3);
+        QCOMPARE(fake.calls.size(), 2);
+        QCOMPARE(results[2][1].toString(), "partial");
+    }
+
+    void anAmbiguousIdentificationIsReusedBriefly() {
+        FakeBackend fake; auto provider = registration("a/identity"); provider["operations"] = QStringList{"identify"};
+        fake.providers = {provider};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        auto request = context(1); request["identity"] = QVariantMap{{"kind", "movie"}, {"title", "Example Movie"}};
+        coordinator.identify("video.identity", request); QTRY_COMPARE(fake.calls.size(), 1);
+        const QVariantMap candidates{{"candidates", QVariantList{QVariantMap{{"identity", identity("tt0000001")}},
+            QVariantMap{{"identity", identity("tt0000002")}}}}};
+        complete(coordinator, fake.calls[0], "ambiguous", candidates); QTRY_COMPARE(results.size(), 1);
+        QCOMPARE(results[0][1].toString(), "ambiguous");
+        coordinator.identify("video.identity", request); QTRY_COMPARE(results.size(), 2);
+        QCOMPARE(fake.calls.size(), 1);
+        QCOMPARE(results[1][2].toMap().value("candidates").toList().size(), 2);
+    }
+
+    void anExpiredAnswerIsShownOfflineOnlyWhenPermittedAndLabeled() {
+        FakeBackend fake; fake.providers = {registration("a/details")};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrich("video.details", context(1), {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+        auto record = claims({{"description", "Provider text"}});
+        record["retention"] = QVariantMap{{"reuseSeconds", 0}, {"offlineSeconds", 60}};
+        complete(coordinator, fake.calls[0], "match", record); QTRY_COMPARE(results.size(), 1);
+        // The answer is not reused while the provider can be asked.
+        coordinator.enrich("video.details", context(2), {"description"}); QTRY_COMPARE(fake.calls.size(), 2);
+        complete(coordinator, fake.calls[1], "offline", {}, "No network"); QTRY_COMPARE(results.size(), 2);
+        QCOMPARE(results[1][1].toString(), "match");
+        const auto data = results[1][2].toMap();
+        QVERIFY(data.value("stale").toBool());
+        QCOMPARE(data.value("fields").toMap().value("description").toString(), "Provider text");
+        QVERIFY(data.value("provenance").toMap().value("description").toMap().value("stale").toBool());
+        // A request during the offline wait gets the same labeled answer.
+        coordinator.enrich("video.details", context(3), {"description"}); QTRY_COMPARE(results.size(), 3);
+        QCOMPARE(fake.calls.size(), 2);
+        QVERIFY(results[2][2].toMap().value("stale").toBool());
+        // Another account cannot see the answer.
+        auto changed = fake.providers[0].toMap(); changed["cachePartition"] = "a/details:release-1:account-2:settings-1";
+        fake.providers[0] = changed;
+        coordinator.enrich("video.details", context(4), {"description"}); QTRY_COMPARE(fake.calls.size(), 3);
+        complete(coordinator, fake.calls[2], "offline", {}, "No network"); QTRY_COMPARE(results.size(), 4);
+        QCOMPARE(results[3][1].toString(), "offline");
+        QVERIFY(!results[3][2].toMap().contains("stale"));
+    }
+
+    void anAnswerWithoutOfflinePermissionIsNotShownOffline() {
+        FakeBackend fake; fake.providers = {registration("a/details")};
+        AddonMetadataCoordinator coordinator(fake.backend()); QSignalSpy results(&coordinator, &AddonMetadataCoordinator::finished);
+        coordinator.enrich("video.details", context(1), {"description"}); QTRY_COMPARE(fake.calls.size(), 1);
+        auto record = claims({{"description", "Provider text"}}); record["retention"] = QVariantMap{{"reuseSeconds", 0}};
+        complete(coordinator, fake.calls[0], "match", record); QTRY_COMPARE(results.size(), 1);
+        coordinator.enrich("video.details", context(2), {"description"}); QTRY_COMPARE(fake.calls.size(), 2);
+        complete(coordinator, fake.calls[1], "offline", {}, "No network"); QTRY_COMPARE(results.size(), 2);
+        QCOMPARE(results[1][1].toString(), "offline");
+        QVERIFY(results[1][2].toMap().value("fields").toMap().isEmpty());
     }
 
     void timeoutPreservesPartialSuccessAndCancelsThePendingProvider() {

@@ -137,7 +137,9 @@ private slots:
         const QVariantMap provenance{{"provider", "org.example.provider/episodes"}, {"feature", "video.details"},
             {"cachePartition", "release:account:revision"}, {"attribution", QVariantMap{{"name", "Example provider"},
                 {"url", "https://provider.example.org/episodes/1"}, {"license", "Example license"}}}};
-        const auto bytes = HostMetadataCache::encode(identity, "Provider title", provenance);
+        // The provider permits saving; the record itself is not stored.
+        auto permitted = provenance; permitted.insert("retention", QVariantMap{{"keep", "library"}});
+        const auto bytes = HostMetadataCache::encode(identity, "Provider title", permitted);
         QVERIFY(bytes.startsWith("vlc-host-metadata-v1\n")); QVERIFY(!bytes.startsWith(EpisodeTitleCache::prefix));
         const auto entry = HostMetadataCache::decode(bytes, target, identity);
         QCOMPARE(entry.title, "Provider title"); QCOMPARE(entry.provenance, provenance);
@@ -145,6 +147,18 @@ private slots:
         QVERIFY(EpisodeTitleCache::decode(bytes, target, identity).title.isEmpty());
         auto other = identity; other.season = 2; QVERIFY(HostMetadataCache::decode(bytes, target, other).title.isEmpty());
         QVERIFY(HostMetadataCache::encode(identity, "Missing provider", {}).isEmpty());
+    }
+    void anAddOnTitleIsSavedOnlyWhenItsRetentionPermits()
+    {
+        const auto identity = SeriesDiscovery::identify(QUrl("file:///Example.Series.2020/Example.Series.S01E01.mkv"));
+        QVariantMap provenance{{"provider", "org.example.provider/episodes"}, {"feature", "video.details"}};
+        QVERIFY(HostMetadataCache::encode(identity, "Provider title", provenance).isEmpty());
+        provenance.insert("retention", QVariantMap{{"keep", "memory"}});
+        QVERIFY(HostMetadataCache::encode(identity, "Provider title", provenance).isEmpty());
+        provenance.insert("retention", QVariantMap{{"keep", "library"}});
+        QVERIFY(!HostMetadataCache::encode(identity, "Provider title", provenance).isEmpty());
+        // Local tags and the host's own sources have no package part.
+        QVERIFY(!HostMetadataCache::encode(identity, "Local title", {{"provider", "vlc.core.local"}, {"feature", "video.details"}}).isEmpty());
     }
     void cacheCodecRetainsTheOldFormatAndRejectsAnotherIdentity()
     {

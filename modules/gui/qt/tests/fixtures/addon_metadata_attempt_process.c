@@ -212,6 +212,8 @@ int main(int argc, char **argv)
         else if (!strcmp(call->mode, "\"records-type\"")) data = "{\"records\":{}}";
         else if (!strcmp(call->mode, "\"records-nonempty\"")) data = "{\"records\":[{\"fields\":{\"artwork\":\"image\"}}]}";
         else if (!strcmp(call->mode, "\"claim\"")) data = "{\"claim\":{}}";
+        else if (!strcmp(call->mode, "\"retention\"")) data = "{\"retention\":{\"reuseSeconds\":300}}";
+        else if (!strcmp(call->mode, "\"retention-bad\"")) data = "{\"retention\":{\"reuseSeconds\":\"300\"}}";
         else if (!strcmp(call->mode, "\"cursor\"")) data = "{\"cursor\":\"next\"}";
         else if (!strcmp(call->mode, "\"partial\"")) status = "partial";
         else if (!strcmp(call->mode, "\"error-type\"")) extra = ",\"error\":false";

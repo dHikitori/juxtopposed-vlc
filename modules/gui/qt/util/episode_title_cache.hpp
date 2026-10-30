@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "media_identity.hpp"
+#include "addons/addon_result_retention.hpp"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -64,8 +65,16 @@ inline QVariantMap boundedProvenance(const QVariantMap& value)
     if (!attribution.isEmpty()) result.insert("attribution", attribution);
     return result;
 }
+// An add-on provider (package/contribution) must permit saving its fields
+// in its retention record; without that they stay in memory. Host sources
+// such as local tags have no package part.
+inline bool mayPersist(const QVariantMap& provenance)
+{
+    return !provenance.value("provider").toString().contains('/') || vlc::addons::ResultRetention::mayKeep(provenance);
+}
 inline QByteArray encode(const MediaIdentity::Identity& identity, const QString& title, const QVariantMap& provenance)
 {
+    if (!mayPersist(provenance)) return {};
     const auto source = boundedProvenance(provenance);
     if (source.value("provider").toString().isEmpty() || title.isEmpty()) return {};
     const QJsonObject record{{"identity", identityRecord(identity)}, {"fields", QJsonObject{{"episodeTitle", title}}},

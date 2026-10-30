@@ -83,6 +83,7 @@ addon_host_sources = files(
     'addons/addon_worker.hpp',
     'addons/addon_metadata_coordinator.cpp',
     'addons/addon_metadata_coordinator.hpp',
+    'addons/addon_result_retention.hpp',
     'addons/addon_metadata_family_plan.cpp',
     'addons/addon_metadata_family_plan.hpp',
     'addons/addon_metadata_choices.cpp',

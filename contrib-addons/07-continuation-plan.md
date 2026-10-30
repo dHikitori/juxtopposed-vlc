@@ -478,6 +478,7 @@ moves to the user's Step 5 checks. The default stays off until Step 5.
 
 Row 1 is mounted (30 October 2026); see [the record](records/identity-choice.md).
 Row 2 is mounted (31 October 2026); see [the record](records/self-test-and-health.md).
+Row 3 is mounted (31 October 2026); see [the record](records/result-retention.md).
 
 1. **Identity choice dialog** and persistent accepted revision. The Service
    already exists, so this has high user value for little work.

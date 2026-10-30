@@ -21,8 +21,8 @@ The host does not require a network request as evidence that the provider ran.
 The receipt still needs an actual dispatch for the exact current invocation.
 A cached result or a result from another invocation cannot supply this receipt.
 
-The data object can contain only `identity`, `records`, `candidates`, and
-`fields`. The arrays must be empty. The fields object must be empty. The provider
+The data object can contain only `identity`, `records`, `candidates`,
+`fields`, and a correct `retention` record (see below). The arrays must be empty. The fields object must be empty. The provider
 can omit identity. If identity is present, it must equal the request identity
 after strict host normalization. External ID namespace and scope remain distinct.
 Episode numbering must use one scheme without mixed fields. Conflicts, a page
@@ -142,3 +142,26 @@ transfer now pass 69 aggregate and 36 native image checks in each build.
 The serial Service runner and mounted owner remain integration gates. See
 [portable evidence](../records/artwork-positive-host-transfer.md) and
 [native evidence](../records/artwork-native-positive-authority.md).
+
+## Retention
+
+Any metadata result can state what the provider permits the host to keep, in
+`data.retention`:
+
+```json
+{"retention": {"reuseSeconds": 3600, "keep": "library", "offlineSeconds": 86400}}
+```
+
+| Key | Values | Without the key |
+| --- | --- | --- |
+| `reuseSeconds` | Integer, 0 to 86400. How long the host can reuse the answer for the same request, account and settings. 0 means do not reuse. | 600 for `match` and `partial`; 60 for `no_match` and `ambiguous` |
+| `keep` | `"memory"` or `"library"`. Use `"library"` only when the data license permits the host to save accepted fields in the media library. | `"memory"`: fields are not saved |
+| `offlineSeconds` | Integer, 0 to 604800. After the reuse time ends, how long the host can show the answer, labeled as not current, while the provider is offline. | 0: never shown offline |
+
+The host clamps reuse to 24 hours for `match` and `partial`, 1 hour for
+`no_match` and 10 minutes for `ambiguous`. `keep` and `offlineSeconds` apply
+only to `match` and `partial`. Errors, timeouts, sign-in requests and rate
+limits are never reused as answers. A record with an unknown key or a value
+that is not correct permits nothing: no reuse, no saving and no offline use.
+The host holds reused answers in memory only. A new account, release or
+settings generation does not see them.

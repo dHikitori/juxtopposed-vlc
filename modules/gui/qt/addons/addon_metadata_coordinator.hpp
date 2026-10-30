@@ -70,6 +70,9 @@ public slots:
 signals:
     /** data carries contextGeneration/targetRevision and expectedFieldRevisions.
      * A consumer must compare them before it writes an enrichment patch.
+     * data.stale is true when an expired answer is shown while a provider is
+     * offline. Field provenance carries retention.keep: only "library"
+     * fields can be saved outside memory (see addon_result_retention.hpp).
      */
     void finished(const QString& consumer, const QString& status,
                   const QVariantMap& data, const QString& error);
@@ -97,6 +100,7 @@ private:
         std::function<bool()> selectionCurrent;
         bool selecting = false;
         bool aggregate = false;
+        bool stale = false;
         bool ambiguous = false;
         bool entityAmbiguous = false;
     };
@@ -114,6 +118,9 @@ private:
         QVariantMap data;
         QString error;
         qint64 expires = 0;
+        // An expired answer can still be shown, labeled, while the
+        // provider is offline when its retention record permits it.
+        qint64 offlineUntil = 0;
     };
 
     QString start(const QString& feature, const QString& operation,
@@ -125,7 +132,9 @@ private:
     void complete(const QString& invocation, const QString& contribution,
                   const QString& status, const QVariantMap& data, const QString& error);
     void consume(const QString& consumer, const QVariantMap& registration,
-                 const QString& status, const QVariantMap& data, const QString& error);
+                 const QString& status, const QVariantMap& data, const QString& error, bool stale = false);
+    const Cached* offlineAnswer(const QString& key) const;
+    void remember(const QString& key, const QString& status, const QVariantMap& data);
     void finish(const QString& consumer);
     QStringList missing(const Consumer& consumer) const;
     void detach(const QString& consumer, const QSet<QString>& keys);

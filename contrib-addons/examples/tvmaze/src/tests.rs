@@ -37,6 +37,8 @@ fn title_lookup_preserves_the_season_workflow() {
     assert_eq!(result["data"]["fields"]["episodeTitle"], "Example episode");
     assert_eq!(result["data"]["identity"]["ids"]["seriesImdb"], "tt1234567");
     assert_eq!(result["data"]["attribution"]["license"], "CC-BY-SA-4.0");
+    assert_eq!(result["data"]["retention"]["keep"], "library");
+    assert_eq!(result["data"]["retention"]["reuseSeconds"], 3600);
     assert!(provider.pending.is_empty());
 }
 #[test]

@@ -243,7 +243,8 @@ private slots:
     void strictResultValidation_data() {
         QTest::addColumn<QString>("mode"); QTest::addColumn<bool>("expected");
         QTest::newRow("same identity")<<QStringLiteral("echo")<<true;
-        for(const auto* mode : {"wrong-identity","mixed-numbering","records-type","records-nonempty","claim","cursor","partial","error-type","error-text","unknown-key","duplicate","late-host"})
+        QTest::newRow("retention")<<QStringLiteral("retention")<<true;
+        for(const auto* mode : {"retention-bad","wrong-identity","mixed-numbering","records-type","records-nonempty","claim","cursor","partial","error-type","error-text","unknown-key","duplicate","late-host"})
             QTest::newRow(mode)<<QString::fromLatin1(mode)<<false;
     }
     void strictResultValidation() {

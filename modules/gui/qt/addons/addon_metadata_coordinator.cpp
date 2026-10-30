@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_metadata_coordinator.hpp"
 #include "addon_metadata_identity.hpp"
+#include "addon_result_retention.hpp"
 #include "util/media_identity.hpp"
 
 #include <QCryptographicHash>
@@ -338,12 +339,15 @@ void AddonMetadataCoordinator::subscribe(const QString& consumerId, const QVaria
     const auto blocked = m_backoff.constFind(provider + '\n' + partition);
     const bool waiting = !partition.isEmpty() && blocked != m_backoff.cend() && blocked->expires > m_clock.elapsed();
     if (waiting || (cached != m_cache.cend() && cached->expires > m_clock.elapsed())) {
-        const auto value = waiting ? *blocked : *cached;
-        QTimer::singleShot(0, this, [this, consumerId, key, registration, value] {
+        // A provider that is waiting after an offline result can still
+        // supply an expired answer that permits offline use.
+        const auto* stale = waiting && blocked->status == QStringLiteral("offline") ? offlineAnswer(key) : nullptr;
+        const auto value = stale ? *stale : waiting ? *blocked : *cached;
+        QTimer::singleShot(0, this, [this, consumerId, key, registration, value, offline = stale != nullptr] {
             auto it = m_consumers.find(consumerId);
             if (it == m_consumers.end() || !it->pending.remove(key)) return;
             --it->outstanding;
-            consume(consumerId, registration, value.status, value.data, value.error);
+            consume(consumerId, registration, value.status, value.data, value.error, offline);
             advance(consumerId);
         });
         return;
@@ -422,6 +426,9 @@ void AddonMetadataCoordinator::complete(const QString& invocation, const QString
         if (m_backoff.size() >= MaxCache) m_backoff.clear();
         m_backoff.insert(backoffKey, {status, data, error.left(512), m_clock.elapsed() + qint64(seconds) * 1000});
     }
+    // An offline provider can answer with an expired result that permits it.
+    const auto* stale = status == QStringLiteral("offline") ? offlineAnswer(key) : nullptr;
+    const auto answer = stale ? *stale : Cached{status, data, error, 0, 0};
     bool cacheable = job.privateScope.isEmpty();
     if (job.operation == QStringLiteral("searchAssets") || job.operation == QStringLiteral("identify")) {
         const auto candidates = data.value(QStringLiteral("candidates")).toList();
@@ -429,28 +436,51 @@ void AddonMetadataCoordinator::complete(const QString& invocation, const QString
         for (const auto& candidate : candidates)
             if (QJsonDocument(QJsonObject::fromVariantMap(candidate.toMap())).toJson(QJsonDocument::Compact).size() > MaxCandidateBytes) { cacheable = false; break; }
     }
-    if (cacheable && (status == QStringLiteral("match") || status == QStringLiteral("partial") || status == QStringLiteral("no_match"))) {
+    if (status == QStringLiteral("match") || status == QStringLiteral("partial") || status == QStringLiteral("no_match")
+            || status == QStringLiteral("ambiguous")) {
         m_backoff.remove(backoffKey);
-        if (m_cache.size() >= MaxCache) m_cache.clear();
-        m_cache.insert(key, {status, data, {}, m_clock.elapsed() + (status == QStringLiteral("no_match") ? 15000 : 60000)});
+        if (cacheable) remember(key, status, data);
+        else m_cache.remove(key);
     }
     for (const auto& waiter : job.waiters) {
         auto consumer = m_consumers.find(waiter);
         if (consumer == m_consumers.end() || !consumer->pending.remove(key)) continue;
         --consumer->outstanding;
         const QPointer<AddonMetadataCoordinator> alive(this);
-        consume(waiter, job.registration, status, data, error);
+        consume(waiter, job.registration, answer.status, answer.data, answer.error, stale != nullptr);
         if (!alive) return;
         advance(waiter);
         if (!alive) return;
     }
 }
 
+const AddonMetadataCoordinator::Cached* AddonMetadataCoordinator::offlineAnswer(const QString& key) const
+{
+    const auto found = m_cache.constFind(key);
+    return found != m_cache.cend() && found->offlineUntil > m_clock.elapsed() ? &*found : nullptr;
+}
+
+void AddonMetadataCoordinator::remember(const QString& key, const QString& status, const QVariantMap& data)
+{
+    const auto retention = vlc::addons::ResultRetention::from(status, data);
+    if (retention.reuseMs <= 0 && retention.offlineMs <= 0) { m_cache.remove(key); return; }
+    const auto now = m_clock.elapsed();
+    if (m_cache.size() >= MaxCache && !m_cache.contains(key)) {
+        m_cache.removeIf([now](const QHash<QString, Cached>::iterator& entry) {
+            return entry->expires <= now && entry->offlineUntil <= now;
+        });
+        if (m_cache.size() >= MaxCache) m_cache.clear();
+    }
+    const auto expires = now + retention.reuseMs;
+    m_cache.insert(key, {status, data, {}, expires, retention.offlineMs > 0 ? expires + retention.offlineMs : 0});
+}
+
 void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariantMap& registration,
-                                      const QString& status, const QVariantMap& data, const QString& error)
+                                      const QString& status, const QVariantMap& data, const QString& error, bool stale)
 {
     auto it = m_consumers.find(consumerId);
     if (it == m_consumers.end()) return;
+    if (stale) it->stale = true;
     if (statusWeight(status) > statusWeight(it->status)) { it->status = status; it->error = error.left(512); }
     if (status == QStringLiteral("ambiguous")) { it->ambiguous = true; it->entityAmbiguous = true; }
     const bool manual = it->context.value(QStringLiteral("manual")).toBool()
@@ -608,6 +638,8 @@ void AddonMetadataCoordinator::consume(const QString& consumerId, const QVariant
     auto fieldProvenance = provenance;
     const auto credit = attribution(record.value(QStringLiteral("attribution")));
     if (!credit.isEmpty()) fieldProvenance.insert(QStringLiteral("attribution"), credit);
+    fieldProvenance.insert(QStringLiteral("retention"), vlc::addons::ResultRetention::from(status, data).provenance());
+    if (stale) fieldProvenance.insert(QStringLiteral("stale"), true);
     for (const auto& field : missing(*it)) {
         const auto value = fields.value(field);
         if (!populated(value)) continue;
@@ -657,6 +689,8 @@ void AddonMetadataCoordinator::finish(const QString& consumerId)
         {QStringLiteral("targetRevision"), consumer.context.value(QStringLiteral("targetRevision"))},
         {QStringLiteral("expectedFieldRevisions"), consumer.context.value(QStringLiteral("fieldRevisions"))}};
     QString status = consumer.status;
+    // An answer that includes an expired result shown while offline is labeled.
+    if (consumer.stale) data.insert(QStringLiteral("stale"), true);
     if (consumer.operation == QStringLiteral("searchAssets") || consumer.operation == QStringLiteral("identify")) {
         auto candidates = consumer.candidates;
         QHash<QString, int> rank;

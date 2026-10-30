@@ -154,6 +154,13 @@ fn self_test(id: &str) -> Vec<Value> {
         });
     reply(id, if passed { "ok" } else { "error" }, json!({}), "")
 }
+// TVmaze data is CC BY-SA and its API answers change slowly: the host may
+// reuse an answer for an hour, save accepted titles to the library and show
+// an expired answer for a day while TVmaze cannot be reached.
+fn retention() -> Value {
+    json!({"reuseSeconds":3600,"keep":"library","offlineSeconds":86400})
+}
+
 fn reply(id: &str, status: &str, data: Value, error: &str) -> Vec<Value> {
     let mut result = json!({"type":"result","id":id,"status":status,"data":data});
     if !error.is_empty() {
@@ -458,7 +465,7 @@ impl Provider {
                 reply(
                     &lookup.invocation,
                     "match",
-                    json!({"candidates":candidates}),
+                    json!({"candidates":candidates,"retention":retention()}),
                     "",
                 )
             }
@@ -570,7 +577,8 @@ impl Provider {
                     &lookup.invocation,
                     "match",
                     json!({"identity":identity,"fields":{"episodeTitle":name},
-                    "attribution":{"name":"TVmaze","url":source,"license":"CC-BY-SA-4.0"}}),
+                    "attribution":{"name":"TVmaze","url":source,"license":"CC-BY-SA-4.0"},
+                    "retention":retention()}),
                     "",
                 )
             }

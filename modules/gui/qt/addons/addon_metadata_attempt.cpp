@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Records one exact provider attempt. Native owner activation is separate.
 #include "addon_metadata_attempt.hpp"
+#include "addon_result_retention.hpp"
 #include "addon_metadata_identity.hpp"
 #include <QCryptographicHash>
 #include <QJsonArray>
@@ -193,7 +194,11 @@ bool completeNoMatch(const QJsonObject& data, const QJsonObject& expectedIdentit
 {
     unsigned nodes = 0; qsizetype bytes = 0;
     if (!bounded(data, nodes, bytes) || QJsonDocument(data).toJson(QJsonDocument::Compact).size() > MaxResult
-        || !only(data, {QStringLiteral("identity"), QStringLiteral("records"), QStringLiteral("candidates"), QStringLiteral("fields")})) return false;
+        || !only(data, {QStringLiteral("identity"), QStringLiteral("records"), QStringLiteral("candidates"), QStringLiteral("fields"),
+            QStringLiteral("retention")})) return false;
+    // A retention record describes reuse, not the answer; it must be correct.
+    if (data.contains(QStringLiteral("retention"))
+        && !vlc::addons::ResultRetention::from(QStringLiteral("no_match"), data.toVariantMap()).valid) return false;
     if (data.contains(QStringLiteral("identity"))) {
         const auto observed = data[QStringLiteral("identity")];
         if (!observed.isObject() || !identity(observed.toObject())
