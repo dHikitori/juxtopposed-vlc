@@ -3,15 +3,11 @@
 # include "config.h"
 #endif
 #include "addon_store_profile_coordinator.hpp"
-#include "addon_native_wake.hpp"
 #include <QLocalServer>
 #include <QRandomGenerator>
 #include <QtEndian>
-#include <atomic>
 #include <chrono>
-#include <deque>
 #include <limits>
-#include <mutex>
 #include <thread>
 
 namespace vlc::addons {
@@ -30,37 +26,8 @@ QByteArray instanceNonce()
 }
 }
 
-// Results from joined work. The worker posts a closure and signals the native
-// wake. The control thread runs the closures. After close, nothing is posted.
-struct StoreProfileCoordinator::Inbox {
-    std::mutex mutex;
-    std::deque<Result> results;
-    std::function<void()> wake;
-    std::atomic_bool open{true};
-    void post(Result result)
-    {
-        std::function<void()> signal;
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            if (!open.load(std::memory_order_acquire))
-                return;
-            results.push_back(std::move(result));
-            signal = wake;
-        }
-        if (signal)
-            signal();
-    }
-    std::deque<Result> take()
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        std::deque<Result> taken;
-        taken.swap(results);
-        return taken;
-    }
-};
-
 StoreProfileCoordinator::StoreProfileCoordinator(Options options, QObject* parent)
-    : QObject(parent), m_options(std::move(options)), m_inbox(std::make_shared<Inbox>())
+    : QObject(parent), m_options(std::move(options)), m_work(m_options.work, this)
 {
     m_wake.setSingleShot(true);
     connect(&m_wake, &QTimer::timeout, this, [this] { expire(); });
@@ -78,46 +45,18 @@ std::optional<StoreProfileCoordinator::Epoch> StoreProfileCoordinator::epoch() c
     return m_arbiter->epoch();
 }
 
-bool StoreProfileCoordinator::run(std::function<Result()> task)
-{
-    const auto inbox = m_inbox;
-    return m_options.work.startQtWork(
-        [inbox, task = std::move(task)] {
-            if (!inbox->open.load(std::memory_order_acquire))
-                return;
-            auto result = task();
-            if (result)
-                inbox->post(std::move(result));
-        },
-        [inbox] { inbox->open.store(false, std::memory_order_release); });
-}
-
-void StoreProfileCoordinator::deliver()
-{
-    for (auto& result : m_inbox->take()) {
-        if (m_state == State::Closed)
-            return;
-        result(*this);
-    }
-}
-
 bool StoreProfileCoordinator::start()
 {
     if (m_started || m_state != State::Starting || m_options.directory.isEmpty() || !m_options.recovery)
         return false;
     m_started = true;
-    m_native = new AddonNativeWake([this] { deliver(); }, this);
-    if (!m_native->valid()) {
+    if (!m_work.valid()) {
         fail();
         return false;
     }
-    {
-        std::lock_guard<std::mutex> lock(m_inbox->mutex);
-        m_inbox->wake = m_native->nativeCallback();
-    }
     const auto directory = m_options.directory;
     const auto runtime = m_options.unixRuntime;
-    const bool started = run([directory, runtime]() -> Result {
+    const bool started = m_work.run([this, directory, runtime]() -> StoreProfileControlWork::Result {
         Generation::Status status = Generation::Status::Error;
         QString error;
         std::shared_ptr<Generation> owner(Generation::acquireCoordinator(directory, &status, &error));
@@ -128,9 +67,7 @@ bool StoreProfileCoordinator::start()
         if (endpoint)
             QLocalServer::removeServer(endpoint->address());
 #endif
-        return [owner, endpoint, status, error](StoreProfileCoordinator& self) {
-            self.claimed(owner, endpoint, status, error);
-        };
+        return [this, owner, endpoint, status, error] { claimed(owner, endpoint, status, error); };
     });
     if (!started)
         fail();
@@ -173,21 +110,19 @@ void StoreProfileCoordinator::startRecovery()
     m_recovering = true;
     const auto generation = m_generation;
     const auto recovery = m_options.recovery;
-    const auto inbox = m_inbox;
+    const auto current = m_work.current();
     const auto limit = qBound<qint64>(1, m_options.recoveryLimit, Generation::MaximumDuration);
-    const bool started = run([generation, recovery, inbox, limit]() -> Result {
+    const bool started = m_work.run([this, generation, recovery, current, limit]() -> StoreProfileControlWork::Result {
         const auto deadline = Generation::now() + limit;
-        const Generation::Control control{[inbox] { return inbox->open.load(std::memory_order_acquire); },
-                                          Generation::now, deadline};
+        const Generation::Control control{current, Generation::now, deadline};
         auto result = generation->recover(control, recovery);
         // Peers release their shared fences after Recover. Retry a busy
         // fence only while this recovery is active.
-        while (result.status == Generation::Status::Busy && Generation::now() < deadline
-               && inbox->open.load(std::memory_order_acquire)) {
+        while (result.status == Generation::Status::Busy && Generation::now() < deadline && current()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             result = generation->recover(control, recovery);
         }
-        return [result](StoreProfileCoordinator& self) { self.recoveryFinished(result); };
+        return [this, result] { recoveryFinished(result); };
     });
     if (!started)
         fail();
@@ -213,23 +148,21 @@ void StoreProfileCoordinator::recoveryFinished(const StoreProfileGeneration::Res
 void StoreProfileCoordinator::startCheck(const Message& receipt)
 {
     const auto directory = m_options.directory;
-    const auto inbox = m_inbox;
-    const bool started = run([directory, receipt, inbox]() -> Result {
+    const auto current = m_work.current();
+    const bool started = m_work.run([this, directory, receipt, current]() -> StoreProfileControlWork::Result {
         // The writer released both locks before Complete. Read the exact ready
         // record under the shared native fence, then release that fence.
         const auto deadline = qMin(receipt.deadline, Generation::now() + Generation::MaximumDuration);
-        const Generation::Control control{[inbox] { return inbox->open.load(std::memory_order_acquire); },
-                                          Generation::now, deadline};
+        const Generation::Control control{current, Generation::now, deadline};
         Generation::Status status = Generation::Status::Error;
         auto prepared = Generation::prepareJoin(directory, receipt.epoch, control, &status);
-        while (status == Generation::Status::Busy && Generation::now() < deadline
-               && inbox->open.load(std::memory_order_acquire)) {
+        while (status == Generation::Status::Busy && Generation::now() < deadline && current()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
             prepared = Generation::prepareJoin(directory, receipt.epoch, control, &status);
         }
         const bool coherent = status == Generation::Status::Ready && prepared.fence && prepared.epoch == receipt.epoch;
         prepared.fence.reset();
-        return [receipt, coherent](StoreProfileCoordinator& self) { self.checkFinished(receipt, coherent); };
+        return [this, receipt, coherent] { checkFinished(receipt, coherent); };
     });
     if (!started)
         fail();
@@ -395,11 +328,7 @@ void StoreProfileCoordinator::close()
         return;
     const bool failed = m_state == State::Failed;
     m_state = State::Closed;
-    {
-        std::lock_guard<std::mutex> lock(m_inbox->mutex);
-        m_inbox->open.store(false, std::memory_order_release);
-        m_inbox->results.clear();
-    }
+    m_work.close();
     m_wake.stop();
     m_handshakes.clear();
     if (m_listener)
@@ -415,8 +344,6 @@ void StoreProfileCoordinator::close()
     // Joined work can still hold the generation. The owner lock ends with its
     // last reference.
     m_generation.reset();
-    if (m_native)
-        m_native->close();
     if (failed)
         m_state = State::Failed;
 }

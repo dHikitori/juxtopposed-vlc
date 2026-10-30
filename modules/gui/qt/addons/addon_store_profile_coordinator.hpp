@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "addon_store_profile_control.hpp"
 #include "addon_store_profile_socket.hpp"
-#include "addon_stream_lifetime.hpp"
 #include <QHash>
 #include <QObject>
 #include <QTimer>
@@ -10,7 +10,6 @@
 #include <optional>
 
 namespace vlc::addons {
-class AddonNativeWake;
 // Host only. Use one per process and canonical profile, on an independent
 // joined control thread with an event loop, never on the GUI thread.
 //
@@ -55,10 +54,6 @@ public:
     bool timerActive() const noexcept { return m_wake.isActive(); }
 
 private:
-    struct Inbox;
-    using Result = std::function<void(StoreProfileCoordinator&)>;
-    bool run(std::function<Result()>);
-    void deliver();
     void claimed(std::shared_ptr<StoreProfileGeneration>, std::optional<StoreProfileEndpoint>,
                  StoreProfileGeneration::Status, const QString& error);
     void startRecovery();
@@ -76,8 +71,7 @@ private:
     void fail();
 
     const Options m_options;
-    const std::shared_ptr<Inbox> m_inbox;
-    AddonNativeWake* m_native = nullptr;
+    StoreProfileControlWork m_work;
     std::shared_ptr<StoreProfileGeneration> m_generation;
     std::unique_ptr<StoreProfileArbiter> m_arbiter;
     std::unique_ptr<StoreProfileListener> m_listener;

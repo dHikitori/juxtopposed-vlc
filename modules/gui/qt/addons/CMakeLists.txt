@@ -15,6 +15,8 @@ add_library(vlc_addon_host STATIC
     addon_store_profile_protocol.cpp addon_store_profile_protocol.hpp
     addon_store_profile_socket.cpp addon_store_profile_socket.hpp
     addon_store_profile_coordinator.cpp addon_store_profile_coordinator.hpp
+    addon_store_profile_control.cpp addon_store_profile_control.hpp
+    addon_store_profile_client.cpp addon_store_profile_client.hpp
     addon_native_wake.cpp addon_native_wake.hpp addon_catalogue_store_lock.hpp
     addon_native_notifications.cpp addon_native_notifications.hpp
     addon_catalogue_view.cpp addon_catalogue_view.hpp addon_catalogue_view_manager.cpp addon_display_catalogue_reader.hpp
@@ -49,7 +51,7 @@ elseif(APPLE)
 endif()
 add_executable(addon_visualizer_process "../tests/fixtures/addon_visualizer_process.c")
 set_target_properties(addon_visualizer_process PROPERTIES AUTOMOC OFF)
-foreach(name display_integration distribution_bootstrap catalogue_view display_catalogue package_summaries packages runtime metadata metadata_choices broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority store_process_fence store_profile_generation store_profile_protocol store_profile_peer store_profile_socket store_profile_coordinator store_profile_settings store_profile_packages store_profile_lifecycle catalogue_native native_notifications stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs native_authority)
+foreach(name display_integration distribution_bootstrap catalogue_view display_catalogue package_summaries packages runtime metadata metadata_choices broker ui_registry discovery theme sessions audio_analysis visual_scene visualizer_parameters visualizers visualizer_resources visualizer_worker visualizer_worker_runtime visualizer_render_queue host_services repository_updates playable_gate artwork_assets artwork_image queue_transactions discovery_service source_admissions source_consent storage store_authority store_process_fence store_profile_generation store_profile_protocol store_profile_peer store_profile_socket store_profile_coordinator store_profile_client store_profile_settings store_profile_packages store_profile_lifecycle catalogue_native native_notifications stream_manifest websocket_codec stream_http stream_proxy stream_shutdown app_shutdown repository_jobs native_authority)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     target_compile_definitions(test_addon_${name} PRIVATE VLC_ADDON_SOURCE_ROOT="${VLC_SOURCE_ROOT}")
