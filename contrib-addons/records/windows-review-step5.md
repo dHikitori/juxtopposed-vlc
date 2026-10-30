@@ -121,6 +121,34 @@ The user confirmed on Windows with package `575db46083` that starting a
 video and closing the app both now work well. The other rows are still
 being checked.
 
+## Fourth user run: Add Subtitles and Radio Browser
+
+- **Add Subtitles showed only "The add-on store is busy".** The provider
+  list is read on background work and refused at once when another reader
+  held `store.lock`. Fixed in `c8f5b39d86`: the read reports a held lock
+  and provider selection retries for up to 10 s.
+- **Radio Browser still froze the window ("Not Responding"), with the
+  package on a local drive.** The stall report (`--qt-hang-report`),
+  resolved against the build's symbol table, showed:
+  - a 17.1 s stall with all 40 samples in Qt's
+    `QWindowsDirectWriteFontDatabase::populateFamily`, under
+    `QFontEngineMulti::ensureFallbackFamiliesQueried` while a list row was
+    laid out. The first text needing a fallback font made Qt read every
+    installed family (543 font files here) on the GUI thread.
+  - a 1.7 s stall in `AddonManager::packages()`, which read and hashed
+    every package on the GUI thread.
+
+  A native probe built against the same static Qt 6.8.3 measured the first
+  fallback layout at 288–391 ms cold and 1 ms after reading each family's
+  writing systems first. Fixed in `ac63876518` (that read runs at startup
+  on a low-priority thread) and `fbbf9a3c5d` (package reads cached by store
+  token and state-file stamp; a new worker verifies its package again).
+
+Package `ac63876518`: `vlc.exe`
+`2434fe13bd273922f9e52fef60f2959ccb2190f8d1b42fbb42b4df98c36e390b`,
+`libqt_plugin.dll`
+`ae5d86db7094c927fe52c0a2d560b96c07976b8e554c05475ce8c1294fc400e4`.
+
 ## Checks run here
 
 The packaged worker ran natively on Windows with the bundled MusicBrainz
