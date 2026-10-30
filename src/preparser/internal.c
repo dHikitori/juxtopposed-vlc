@@ -203,7 +203,11 @@ PreparserRequestNew(struct preparser_sys *preparser, void (*run)(void *), input_
     input_item_Hold(item);
 
     vlc_sem_init(&req_owner->preparse_ended, 0);
-    req_owner->preparse_status = options & VLC_PREPARSER_TYPE_PARSE ? VLC_EGENERIC : VLC_SUCCESS;
+    /* Only fetch-only requests start successful. A parse sets its own result,
+     * and a thumbnail succeeds only when the input delivers a picture. */
+    req_owner->preparse_status = options & (VLC_PREPARSER_TYPE_PARSE
+        | VLC_PREPARSER_TYPE_THUMBNAIL | VLC_PREPARSER_TYPE_THUMBNAIL_TO_FILES)
+        ? VLC_EGENERIC : VLC_SUCCESS;
     atomic_init(&req_owner->interrupted, false);
 
     req_owner->runnable.run = run;
