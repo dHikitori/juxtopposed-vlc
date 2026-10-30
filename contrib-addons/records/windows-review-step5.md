@@ -117,6 +117,10 @@ Package `575db46083`: `vlc.exe`
 `libqt_plugin.dll`
 `fe0160f6fd9fd7e4812d872107cb2b8a2857891aaf48bd861c105af07317453f`.
 
+The user confirmed on Windows with package `575db46083` that starting a
+video and closing the app both now work well. The other rows are still
+being checked.
+
 ## Checks run here
 
 The packaged worker ran natively on Windows with the bundled MusicBrainz
