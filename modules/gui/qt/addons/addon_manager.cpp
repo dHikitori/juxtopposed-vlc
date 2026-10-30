@@ -218,6 +218,9 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Install
         if (current) *current = [] { return false; };
         return [](const QString&) { return QByteArray{}; };
     }
+    // Taken before the read: a store change after it makes the guard read
+    // the configuration from disk again.
+    const auto token = m_store.authorityToken();
     QJsonObject settings; quint64 revision = 0;
     const bool captured = m_store.networkConfiguration(package, &settings, &revision);
     const auto references = settings.value("_credentials").toObject();
@@ -226,9 +229,12 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Install
     const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value("bindings").toArray();
     for (const auto& value : bindings) if (approved.contains(value)) fields.insert(value.toObject().value("field").toString());
     const QPointer<AddonManager> owner(const_cast<AddonManager*>(this));
-    NetworkBroker::RequestGuard guard = [owner, package, settings, revision, captured] {
+    // The guard runs for every worker message and network chunk. While no
+    // store change has happened, the captured configuration is still the
+    // saved one, so it needs no file read.
+    NetworkBroker::RequestGuard guard = [owner, package, settings, revision, captured, token] {
         return captured && owner && !owner->m_retiring && !owner->m_withdrawingPackages.contains(package.manifest.id)
-            && owner->m_store.networkConfigurationMatches(package, settings, revision);
+            && (token.current() || owner->m_store.networkConfigurationMatches(package, settings, revision));
     };
     if (current) *current = guard;
     return [owner, guard, references, fields, id = package.manifest.id](const QString& field) {
@@ -1302,6 +1308,24 @@ QVariantMap AddonManager::health(const QString& id) const
     const auto now = m_crashClock.isValid() ? m_crashClock.elapsed() : 0;
     return {{"crashes", ledger->recent.size()}, {"retryInMs", qMax<qint64>(0, ledger->retryAfter - now)}};
 }
+bool AddonManager::verifiedPackage(const QString& id, InstalledPackage* package)
+{
+    // These states change without a store write, so they are checked each time.
+    if (m_retiring || m_withdrawingPackages.contains(id) || m_removingPackages.contains(id) || m_store.packageRetiring(id))
+        return false;
+    const auto found = m_verified.constFind(id);
+    if (found != m_verified.cend() && found->token.current()) {
+        *package = found->package;
+        return found->usable;
+    }
+    const auto token = m_store.authorityToken();
+    InstalledPackage current;
+    const bool usable = m_store.installed(id, &current) && current.enabled && configured(current);
+    if (m_verified.size() >= 64) m_verified.clear();
+    m_verified.insert(id, {token, current, usable});
+    *package = current;
+    return usable;
+}
 AddonWorker* AddonManager::worker(const InstalledPackage& package)
 {
     // A crashed package waits before its worker starts again (finding F3).
@@ -1364,7 +1388,7 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
     }
     const auto packageId = packagePart(contributionId); InstalledPackage package;
     if (m_retiring || m_withdrawingPackages.contains(packageId)) return {};
-    if (!m_store.installed(packageId, &package) || !package.enabled || !configured(package)) {
+    if (!verifiedPackage(packageId, &package)) {
         const auto request = QUuid::createUuid().toString(QUuid::WithoutBraces);
         QTimer::singleShot(0, this, [this, request, contributionId] { emit operationFinished(request, contributionId, QStringLiteral("auth_required"), {}, tr("Enable this add-on. Then enter its settings.")); });
         return request;

@@ -216,6 +216,12 @@ private:
     AddonHostServices m_hostServices;
     std::unique_ptr<AddonStorage> m_storage;
     QHash<QString, AddonWorker*> m_workers;
+    // A package verified for invoke, with the store token from before the
+    // read. While no store change has happened the token stays current, so
+    // later invocations skip reading and hashing the package again.
+    struct VerifiedPackage { StoreAuthorityToken token; InstalledPackage package; bool usable = false; };
+    QHash<QString, VerifiedPackage> m_verified;
+    bool verifiedPackage(const QString& id, InstalledPackage* package);
     // Crash ledger (finding F3). A crash makes the next start wait 2 s, then
     // 4 s. The third crash in five minutes turns the package off through the
     // guarded writer, so every window applies it. Counts stay in memory and do

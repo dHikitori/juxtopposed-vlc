@@ -192,7 +192,11 @@ QString AddonDiscoveryService::openSource(const QString& source)
     if (refresh) refresh(source);
     if (!owner || !available() || identity != m_coordinator.sourceIdentity(source)) return {};
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    View view; view.source = source; view.sourceIdentity = identity; m_views.insert(id, view);
+    View view; view.source = source; view.sourceIdentity = identity;
+    // The first page is requested next. Show loading from the first frame,
+    // not "Use search" while the worker starts.
+    view.busy = m_coordinator.supports(source, QStringLiteral("roots"));
+    m_views.insert(id, view);
     QTimer::singleShot(0, this, [this, id] { startView(id); });
     return id;
 }
@@ -202,8 +206,11 @@ void AddonDiscoveryService::startView(const QString& id)
     if (it == m_views.end() || it->started || !viewCurrent(*it)) return;
     it->started = true;
     const auto source = it->source; const QPointer<AddonDiscoveryService> owner(this);
-    if (m_coordinator.supports(source, QStringLiteral("roots"))) fetch(id);
-    else emit viewChanged(id);
+    if (!m_coordinator.supports(source, QStringLiteral("roots")) || !fetch(id)) {
+        if (!owner) return;
+        if (const auto view = m_views.find(id); view != m_views.end()) view->busy = false;
+        emit viewChanged(id);
+    }
     if (owner && m_views.contains(id) && viewCurrent(m_views.value(id)) && m_playlists.list) loadPlaylists(id);
 }
 QVariantMap AddonDiscoveryService::view(const QString& id) const

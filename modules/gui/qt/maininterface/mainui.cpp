@@ -83,6 +83,7 @@
 #include "addons/addon_native_metadata_owner.hpp"
 #include "addons/addon_accepted_identities.hpp"
 #include "addons/addon_identity_choice.hpp"
+#include "addons/addon_process_launch.hpp"
 #include <vlc_metadata_owner.h>
 #include "addon_distribution_paths.hpp"
 #include "addons/addon_theme_service.hpp"
@@ -180,6 +181,7 @@ MainUI::MainUI(qt_intf_t *p_intf, MainCtx *mainCtx, QWindow* interfaceWindow,  Q
 
 MainUI::~MainUI()
 {
+    vlc::addons::setHelperLaunchObserver({});
     for (auto* manager:findChildren<vlc::addons::AddonManager*>(QString(),Qt::FindDirectChildrenOnly)) manager->setNativeStreamAvailable(false);
     for (auto* source:findChildren<vlc::addons::AddonDiscoverySourceOwner*>(QString(),Qt::FindDirectChildrenOnly)) source->close();
     for (auto* review:findChildren<vlc::addons::AddonSourceConsentUi*>(QString(),Qt::FindDirectChildrenOnly)) review->close();
@@ -455,6 +457,11 @@ void MainUI::registerQMLTypes()
             m_intf->p_mainPlayerController->setMetadataService(metadataService);
             connect(m_intf->p_mainPlayerController, &PlayerController::metadataNetworkAccessChanged,
                 metadataService, &AddonMetadataService::setAutomaticNetworkAllowed);
+            // For the Windows cursor check: Tools > Messages, debug level.
+            vlc::addons::setHelperLaunchObserver([intf = m_intf](quint64 count, const QString& program) {
+                msg_Dbg(intf, "Add-on helper launch %llu%s%s", static_cast<unsigned long long>(count),
+                        program.isEmpty() ? "" : ": ", qtu(program));
+            });
             auto acceptedIdentities = std::make_shared<vlc::addons::AddonAcceptedIdentities>(addonManager->storageDirectory());
             metadataService->setAcceptedIdentities(acceptedIdentities);
             auto* identityChoice = new vlc::addons::AddonIdentityChoice(metadataService, acceptedIdentities,
