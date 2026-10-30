@@ -10,7 +10,7 @@
 #include <deque>
 #include <atomic>
 #include <functional>
-#include <QFileSystemWatcher>
+#include "util/background_watcher.hpp"
 #include <QImage>
 #include <QVariantMap>
 
@@ -93,7 +93,9 @@ private:
     QSet<BaseAsyncTask*> m_tasks;
     QSet<BaseAsyncTask*> m_persistentTasks;
     std::shared_ptr<std::atomic_bool> m_cancelled = std::make_shared<std::atomic_bool>(false);
-    QFileSystemWatcher m_watcher;
+    // Off the GUI thread: watching a network folder can take seconds.
+    BackgroundWatcher m_watcher;
+    void watchedChanged(const QString& path);
     QSet<QString> m_watched;
     void watch(const QString& path);
     // Drop one item's results, and its folder's collage, so the next

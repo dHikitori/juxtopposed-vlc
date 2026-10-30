@@ -3,14 +3,14 @@
 #include <QThreadPool>
 #include <cmath>
 
-SeriesModel::SeriesModel(QObject* parent) : QAbstractListModel(parent), m_results(std::make_shared<SeriesScanResult>())
+SeriesModel::SeriesModel(QObject* parent) : QAbstractListModel(parent), m_results(std::make_shared<SeriesScanResult>()),
+    m_watcher(this, [this](const QString&) { m_refreshTimer.start(); })
 {
     qRegisterMetaType<SeriesDiscovery::Result>();
     connect(m_results.get(), &SeriesScanResult::ready, this, [this](quint64 serial, const SeriesDiscovery::Result& result, bool complete) {
         if (serial == m_serial) publish(result, complete);
     }, Qt::QueuedConnection);
     m_refreshTimer.setInterval(300); m_refreshTimer.setSingleShot(true);
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_refreshTimer, qOverload<>(&QTimer::start));
     connect(&m_refreshTimer, &QTimer::timeout, this, [this] { scan(); });
 }
 
@@ -83,7 +83,7 @@ void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
     m_current = url; m_metadata = metadata; m_target = target;
     if (!same) {
         cancel(); m_refreshTimer.stop();
-        if (!m_watcher.directories().isEmpty()) m_watcher.removePaths(m_watcher.directories());
+        m_watcher.clear();
         m_rows.clear(); m_root.clear(); m_states.clear(); m_requestedStates.clear(); m_requestedArtwork.clear();
         m_loading = false; m_limited = false; m_extended = false; m_message.clear();
     }
@@ -163,8 +163,7 @@ void SeriesModel::publish(const SeriesDiscovery::Result& result, bool complete)
         m_loading = false;
         m_message = result.error == "root" ? tr("Choose the series folder to look for other episodes.")
             : result.error.isEmpty() ? QString() : tr("This folder could not be read. Choose the series folder to try again.");
-        if (!m_watcher.directories().isEmpty()) m_watcher.removePaths(m_watcher.directories());
-        if (!result.directories.isEmpty()) m_watcher.addPaths(result.directories);
+        m_watcher.setPaths(result.directories);
     }
     project(true); if (complete) loadStates(); emit statusChanged();
 }

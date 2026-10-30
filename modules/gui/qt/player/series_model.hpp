@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include <QAbstractListModel>
-#include <QFileSystemWatcher>
+#include "util/background_watcher.hpp"
 #include <QTimer>
 #include <memory>
 #include "util/series_discovery.hpp"
@@ -96,7 +96,8 @@ private:
     SeriesDiscovery::Identity m_target;
     std::shared_ptr<SeriesScanResult> m_results;
     std::shared_ptr<std::atomic_bool> m_cancelled;
-    QFileSystemWatcher m_watcher;
+    // Off the GUI thread: watching a network folder can take seconds.
+    BackgroundWatcher m_watcher;
     QTimer m_refreshTimer;
     quint64 m_serial = 0;
     int m_selectedSeason = -1;

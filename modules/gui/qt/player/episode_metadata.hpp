@@ -9,6 +9,8 @@
 #include <QVariantMap>
 #include <functional>
 #include "util/series_discovery.hpp"
+#include <QHash>
+#include <optional>
 
 class MainCtx;
 class QJsonDocument;
@@ -55,6 +57,11 @@ private:
     QElapsedTimer m_lastRequest;
     QUrl m_current;
     QVariantMap m_metadata;
+    // Parsing a file name is the costly part of a lookup, and every sibling
+    // is compared many times. A sibling's identity depends on its URL only;
+    // the current one also on m_metadata, so it is dropped when either changes.
+    mutable QHash<QUrl, MediaIdentity::Identity> m_identities;
+    mutable std::optional<MediaIdentity::Identity> m_currentIdentity;
     struct EpisodeTitle { QString title; QUrl source; QVariantMap provenance; };
     QSet<QUrl> m_candidates;
     QSet<QUrl> m_resolved;

@@ -93,8 +93,11 @@ inline QString compact(QString value) { return normalize(value).remove(QLatin1Ch
 
 inline QString displayTitle(QString value)
 {
-    value.replace(QRegularExpression(QStringLiteral("[._]+")), QStringLiteral(" "));
-    value.remove(QRegularExpression(QStringLiteral("^[\\s\\-]+|[\\s\\-\\[(]+$")));
+    // Compiled once: these run for every file name in a series folder.
+    static const QRegularExpression separators(QStringLiteral("[._]+"));
+    static const QRegularExpression edges(QStringLiteral("^[\\s\\-]+|[\\s\\-\\[(]+$"));
+    value.replace(separators, QStringLiteral(" "));
+    value.remove(edges);
     return value.simplified();
 }
 
@@ -131,7 +134,8 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
         result.kind = hint;
         if (audioFile) name = QFileInfo(name).completeBaseName();
         // Only an explicit track prefix is removed; numeric titles remain titles.
-        const auto numbered = QRegularExpression(QStringLiteral("^(\\d{1,3})(?:[ ._-]+)(.+)$")).match(name);
+        static const QRegularExpression numberedName(QStringLiteral("^(\\d{1,3})(?:[ ._-]+)(.+)$"));
+        const auto numbered = numberedName.match(name);
         if (hint == Kind::MusicTrack && numbered.hasMatch()) {
             result.track = numbered.captured(1).toInt(); name = numbered.captured(2);
         }
@@ -140,7 +144,8 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
             result.artist = displayTitle(parts[0]); name = parts[1];
             result.provenance.insert("artist", "filename");
         }
-        if (hint == Kind::MusicTrack && QRegularExpression(QStringLiteral("^\\d{1,3}$")).match(name).hasMatch()) result.track = name.toInt();
+        static const QRegularExpression trackNumber(QStringLiteral("^\\d{1,3}$"));
+        if (hint == Kind::MusicTrack && trackNumber.match(name).hasMatch()) result.track = name.toInt();
         result.title = displayTitle(name);
         if (genericTitle(result.title)) result.title.clear();
         if (!result.title.isEmpty()) result.provenance.insert("title", "filename");
@@ -148,9 +153,10 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
     }
     // Release names need not have extensions. Do not remove arbitrary final dotted words.
     const auto originalName = name;
-    name.remove(QRegularExpression(QStringLiteral(
+    static const QRegularExpression knownExtension(QStringLiteral(
         "\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|srt|ass|ssa|vtt|sub|idx|smi|mp3|m4a|ogg|opus|flac)$"),
-        QRegularExpression::CaseInsensitiveOption));
+        QRegularExpression::CaseInsensitiveOption);
+    name.remove(knownExtension);
     const bool hasExtension = name != originalName;
     const auto insensitive = QRegularExpression::CaseInsensitiveOption;
     qsizetype end = name.size();
@@ -215,20 +221,24 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
         }
     }
 
-    const QList<QPair<QString, QString>> releasePatterns = {
-        {"resolution", "(?:480|576|720|1080|1440|2160|4320)[pi]|[48]k"},
-        {"source", "web[ .-]?(?:dl|rip)|blu[ .-]?ray|b[dr]rip|hdtv|dvdrip|dvd"},
-        {"videoCodec", "[xh][ .-]?26[45]|hevc|avc|av1|xvid|divx"},
-        {"audioCodec", "e?[ .-]?ac[ .-]?3|dts(?:[ .-]?hd)?|aac|flac|truehd|opus"},
-        {"fps", "(?:23[.]976|24|25|29[.]97|30|50|59[.]94|60)[ .-]?fps"},
-    };
+    static const auto releasePatterns = [insensitive] {
+        QList<QPair<QString, QRegularExpression>> patterns;
+        for (const auto& rule : QList<QPair<QString, QString>>{
+                 {"resolution", "(?:480|576|720|1080|1440|2160|4320)[pi]|[48]k"},
+                 {"source", "web[ .-]?(?:dl|rip)|blu[ .-]?ray|b[dr]rip|hdtv|dvdrip|dvd"},
+                 {"videoCodec", "[xh][ .-]?26[45]|hevc|avc|av1|xvid|divx"},
+                 {"audioCodec", "e?[ .-]?ac[ .-]?3|dts(?:[ .-]?hd)?|aac|flac|truehd|opus"},
+                 {"fps", "(?:23[.]976|24|25|29[.]97|30|50|59[.]94|60)[ .-]?fps"}})
+            patterns.append({rule.first, QRegularExpression("(?:^|[ ._\\[(-])(" + rule.second + ")(?=$|[ ._\\[)\\]-])", insensitive)});
+        return patterns;
+    }();
+    static const QRegularExpression fpsSuffix("[ .-]*fps$", insensitive);
     bool technical = false;
     for (const auto& rule : releasePatterns) {
-        const QRegularExpression pattern("(?:^|[ ._\\[(-])(" + rule.second + ")(?=$|[ ._\\[)\\]-])", insensitive);
-        const auto match = pattern.match(name);
+        const auto match = rule.second.match(name);
         if (match.hasMatch()) {
             result.release.insert(rule.first, rule.first == "fps"
-                ? match.captured(1).remove(QRegularExpression("[ .-]*fps$", insensitive)) : compact(match.captured(1)));
+                ? match.captured(1).remove(fpsSuffix) : compact(match.captured(1)));
             cut(match.capturedStart()); technical = true;
         }
     }
@@ -401,7 +411,8 @@ inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
     auto folder = parse(parent.fileName());
     if (result.kind == Kind::MusicTrack) {
         auto albumFolder = parent;
-        const auto disc = QRegularExpression(QStringLiteral("^(?:disc|disk|cd)[ ._-]*(\\d+)$"), QRegularExpression::CaseInsensitiveOption).match(parent.fileName());
+        static const QRegularExpression discFolder(QStringLiteral("^(?:disc|disk|cd)[ ._-]*(\\d+)$"), QRegularExpression::CaseInsensitiveOption);
+        const auto disc = discFolder.match(parent.fileName());
         if (disc.hasMatch()) {
             result.disc = disc.captured(1).toInt();
             albumFolder = parent.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
@@ -455,7 +466,8 @@ inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata, bool u
         const auto series = normalize(identity.title);
         if (!series.isEmpty() && normalized.startsWith(series + QLatin1Char(' '))) {
             auto tail = normalized.mid(series.size() + 1);
-            tail.remove(QRegularExpression(QStringLiteral("^(?:episode|ep) ")));
+            static const QRegularExpression episodeWord(QStringLiteral("^(?:episode|ep) "));
+            tail.remove(episodeWord);
             bool ok = false;
             const int number = tail.toInt(&ok);
             if (ok && identity.episodes.contains(number)) return false;
@@ -470,8 +482,9 @@ inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata, bool u
     // A title after an explicit season/episode marker is useful even when the
     // file has no tags. Do not use a release suffix (1080p, WEB-DL, codecs, etc.).
     auto name = url.fileName();
-    name.remove(QRegularExpression(QStringLiteral("\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|mts|ogv|divx)$"),
-        QRegularExpression::CaseInsensitiveOption));
+    static const QRegularExpression videoExtension(QStringLiteral("\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|mts|ogv|divx)$"),
+        QRegularExpression::CaseInsensitiveOption);
+    name.remove(videoExtension);
     const auto marker = episodePattern().match(name);
     if (!marker.hasMatch()) return {};
     auto title = name.mid(marker.capturedEnd());

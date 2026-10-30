@@ -50,16 +50,16 @@ QString usableImage(const QString& artwork)
 }
 }
 
-MLFileArtwork::MLFileArtwork(QObject* parent) : QObject(parent)
+MLFileArtwork::MLFileArtwork(QObject* parent)
+    : QObject(parent), m_watcher(this, [this](const QString& path) { watchedChanged(path); })
 {
-    const auto invalidate = [this](const QString& path) {
-        // A chosen artwork is replaced in the override folder; setSelectedArtwork
-        // already refreshes that one item.
-        if (path.startsWith(ArtworkStore::directory())) return;
-        clear(); emit invalidated();
-    };
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, invalidate);
-    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, invalidate);
+}
+void MLFileArtwork::watchedChanged(const QString& path)
+{
+    // A chosen artwork is replaced in the override folder; setSelectedArtwork
+    // already refreshes that one item.
+    if (path.startsWith(ArtworkStore::directory())) return;
+    clear(); emit invalidated();
 }
 
 void MLFileArtwork::runTask(std::function<ArtworkResult()> execute, std::function<void(const ArtworkResult&)> completed, bool persistent)
@@ -168,7 +168,7 @@ void MLFileArtwork::clear()
         if (!m_persistentTasks.contains(task)) static_cast<ArtworkTask*>(task)->abandon();
     m_tasks = m_persistentTasks;
     m_preferred.clear(); m_completed.clear(); m_fallback.clear(); m_cached.clear(); m_metadata.clear(); m_folders.clear();
-    if (!m_watched.isEmpty()) m_watcher.removePaths(QStringList(m_watched.cbegin(), m_watched.cend()));
+    m_watcher.clear();
     m_watched.clear();
     if (m_request) {
         vlc_preparser_Cancel(m_preparser, m_request);

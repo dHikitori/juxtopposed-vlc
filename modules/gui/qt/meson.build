@@ -868,6 +868,8 @@ qt_plugin_sources = files(
     'util/vlcqtmessagehandler.cpp',
     'util/vlcqtmessagehandler.hpp',
     'util/hang_reporter.cpp',
+    'util/background_watcher.cpp',
+    'util/background_watcher.hpp',
     'util/hang_reporter.hpp',
     'util/colorizedsvgicon.cpp',
     'util/colorizedsvgicon.hpp',
@@ -2325,7 +2327,7 @@ if qt6_dep.found()
         }
         vlc_tests += {
             'name': 'test_qt_series_model',
-            'sources': files('tests/test_series_model.cpp', 'player/series_model.cpp'),
+            'sources': files('tests/test_series_model.cpp', 'player/series_model.cpp', 'util/background_watcher.cpp'),
             'moc_sources': files('tests/test_series_model.cpp'),
             'moc_headers': files('player/series_model.hpp'),
             'suite': ['qt'],
@@ -2484,6 +2486,7 @@ if qt6_dep.found()
                 'addons/addon_stream_lifetime.cpp',
                 'medialibrary/mlmediastore.cpp',
                 'medialibrary/mlfileartwork.cpp',
+                'util/background_watcher.cpp',
                 'medialibrary/mlfoldersmodel.cpp',
                 'medialibrary/mlhelper.cpp',
                 'playlist/playlist_controller.cpp',

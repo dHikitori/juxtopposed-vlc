@@ -102,7 +102,15 @@ void EpisodeMetadata::setMetadataService(AddonMetadataService* service)
 }
 MediaIdentity::Identity EpisodeMetadata::identity(const QUrl& url) const
 {
-    return SeriesDiscovery::identify(url, url == m_current ? m_metadata : QVariantMap());
+    if (url == m_current) {
+        if (!m_currentIdentity) m_currentIdentity = SeriesDiscovery::identify(url, m_metadata);
+        return *m_currentIdentity;
+    }
+    if (const auto found = m_identities.constFind(url); found != m_identities.cend()) return *found;
+    const auto value = SeriesDiscovery::identify(url, {});
+    if (m_identities.size() >= 4096) m_identities.clear();
+    m_identities.insert(url, value);
+    return value;
 }
 void EpisodeMetadata::readCached(const QList<QUrl>& urls)
 {
@@ -142,9 +150,9 @@ void EpisodeMetadata::request(const QUrl& url, const QVariantMap& metadata)
     // request is in flight. Keep it when the identifying evidence is unchanged.
     const bool unchanged = url == m_current && MediaIdentity::toMap(previous) == MediaIdentity::toMap(next);
     const bool sameSeries = SeriesDiscovery::sameSeries(previous, next);
-    m_metadata = metadata;
+    m_metadata = metadata; m_currentIdentity.reset();
     if (!unchanged) {
-        cancel(); m_current = url;
+        cancel(); m_current = url; m_currentIdentity.reset();
         if (!sameSeries) m_candidates.clear();
         m_resolved.remove(url);
         if (!sameSeries || previous.year != next.year || previous.ids != next.ids) {

@@ -700,6 +700,8 @@ libqt_plugin_la_SOURCES = \
 	util/vlcqtmessagehandler.cpp \
 	util/vlcqtmessagehandler.hpp \
 	util/hang_reporter.cpp \
+	util/background_watcher.cpp \
+	util/background_watcher.hpp \
 	util/hang_reporter.hpp \
 	util/colorizedsvgicon.cpp \
 	util/colorizedsvgicon.hpp \
@@ -3390,7 +3392,7 @@ test_cover_generator_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_cover_generator
 TESTS += test_cover_generator
 
-test_series_model_SOURCES = tests/test_series_model.cpp player/series_model.cpp player/series_model.hpp
+test_series_model_SOURCES = tests/test_series_model.cpp player/series_model.cpp player/series_model.hpp util/background_watcher.cpp util/background_watcher.hpp
 nodist_test_series_model_SOURCES = tests/test_series_model.moc player/series_model.moc.cpp
 BUILT_SOURCES += tests/test_series_model.moc
 CLEANFILES += tests/test_series_model.moc
@@ -3478,6 +3480,7 @@ test_ml_model_SOURCES = \
 	addons/addon_stream_lifetime.cpp addons/addon_stream_lifetime.hpp \
 	medialibrary/mlmediastore.hpp medialibrary/mlmediastore.cpp \
 	medialibrary/mlfileartwork.hpp medialibrary/mlfileartwork.cpp util/asynctask.hpp \
+	util/background_watcher.hpp util/background_watcher.cpp \
 	medialibrary/mlfoldersmodel.hpp medialibrary/mlfoldersmodel.cpp \
 	medialibrary/mlhelper.hpp medialibrary/mlhelper.cpp \
 	playlist/playlist_controller.hpp playlist/playlist_controller.cpp \
