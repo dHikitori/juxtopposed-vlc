@@ -255,15 +255,33 @@ def run(args):
         wait_for('stop', lambda: 'VLC_PLAYER_STATE_STOPPED' in first.log()[before_play:],
                  args.timeout)
 
+        second = None
+        if args.windows == 2:
+            second = App(args, home, 'second', False, args.driver)
+            apps.append(second)
+            second.connect(args.timeout)
+            results['second_start_seconds'] = round(time.monotonic() - second.started, 3)
+
         if args.driver:
             reply = first.drive('extensions', args.timeout)
             if not reply.get('ok'):
                 raise Failure(f'the Extensions list did not load: {reply}')
             results['extensions'] = reply
+            if second:
+                wait_for('the second window joins', lambda: second.drive('extensions', args.timeout).get('ok'),
+                         args.timeout)
+                rows_before = second.drive('extensions', args.timeout)['rows']
+            installed_at = time.monotonic()
             reply = first.drive(f'install {args.fixture}', args.timeout)
             if not reply.get('ok'):
                 raise Failure(f'the discovery fixture did not install: {reply}')
             results['fixture_install_ms'] = reply['ms']
+            if second:
+                # The other window sees the change after it rejoins the profile.
+                wait_for('the install in the second window',
+                         lambda: second.drive('extensions', args.timeout).get('rows') == rows_before + 1,
+                         args.timeout)
+                results['second_window_sees_install_ms'] = round((time.monotonic() - installed_at) * 1000)
             package = reply['id']
             # The first open includes the worker start. The second shows
             # whether the worker is reused.
@@ -278,21 +296,21 @@ def run(args):
             results['workers_after_use'] = sum(
                 1 for pid in process_tree(first.pid) if worker_process(pid))
 
-        pids = process_tree(first.pid)
-        before = cpu_seconds(pids)
+        windows = [first] + ([second] if second else [])
+        trees = [process_tree(app.pid) for app in windows]
+        before = [cpu_seconds(pids) for pids in trees]
         time.sleep(args.idle)
-        pids = process_tree(first.pid)
+        trees = [process_tree(app.pid) for app in windows]
         results['idle_seconds'] = args.idle
-        results['idle_cpu_seconds'] = round(cpu_seconds(pids) - before, 3)
-        results['idle_processes'] = len(pids)
-        results['idle_workers'] = sum(1 for pid in pids if worker_process(pid))
-        results['resident_bytes'] = resident_bytes(pids)
+        results['idle_cpu_seconds'] = round(cpu_seconds(trees[0]) - before[0], 3)
+        results['idle_processes'] = len(trees[0])
+        results['idle_workers'] = sum(1 for pid in trees[0] if worker_process(pid))
+        results['resident_bytes'] = resident_bytes(trees[0])
+        if second:
+            results['second_idle_cpu_seconds'] = round(cpu_seconds(trees[1]) - before[1], 3)
+            results['second_resident_bytes'] = resident_bytes(trees[1])
 
-        if args.windows == 2:
-            second = App(args, home, 'second', False)
-            apps.append(second)
-            second.connect(args.timeout)
-            results['second_start_seconds'] = round(time.monotonic() - second.started, 3)
+        if second:
             order = [second, first] if args.quit_second_first else [first, second]
             results['quit_order'] = [app.name for app in order]
             results['quit_seconds'] = [round(app.quit(args.timeout), 3) for app in order]

@@ -116,11 +116,15 @@ struct WriterTask {
     std::thread thread;
     std::atomic_bool granted{false}, done{false};
     G::Result result;
-    void start(const QString& profile, Client::WritePort port, qint64 micros,
+    void start(const QString& profile, Client* client, qint64 micros,
                std::function<void(StoreProfileWritePermit&)> beforeWrite = {},
                G::Change change = G::Change::Applied) {
-        thread = std::thread([this, profile, port, micros, beforeWrite, change] {
+        auto ready = client->readyWait();
+        auto port = client->writePort();
+        thread = std::thread([this, profile, ready, port, micros, beforeWrite, change] {
             const auto deadline = G::now() + micros;
+            // The join first, without store.lock. Then the scope and the permit.
+            ready(deadline);
             G::Status status;
             auto scope = G::prepareWriter(profile, {[] { return true; }, G::now, deadline}, &status);
             auto permit = port(deadline);
@@ -278,7 +282,7 @@ private slots:
         Writer other; QVERIFY(other.join(*f.endpoint, f.profile.path()));
         QVERIFY(f.startClient()); QVERIFY(f.ready());
         const auto epoch = *f.client->epoch();
-        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000);
+        WriterTask writer; writer.start(f.profile.path(), f.client.get(), 10 * 1000 * 1000);
         const auto revoke = other.next(K::Revoke); QVERIFY(revoke);
         other.fence.reset();
         QVERIFY(other.send(K::Revoked, revoke->epoch, revoke->request, revoke->deadline));
@@ -298,7 +302,7 @@ private slots:
         auto liveAtGrant = std::make_shared<std::atomic_bool>(false);
         auto liveAfterLoss = std::make_shared<std::atomic_bool>(true);
         WriterTask writer;
-        writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000,
+        writer.start(f.profile.path(), f.client.get(), 10 * 1000 * 1000,
             [go, liveAtGrant, liveAfterLoss](StoreProfileWritePermit& permit) {
                 liveAtGrant->store(permit.current());
                 while (!go->load()) std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -314,10 +318,17 @@ private slots:
         // The ticket was not current, so the store was not written.
         QCOMPARE(writer.result.status, G::Status::Stale);
     }
-    void aPermitBeforeTheJoinWaitsForIt() {
+    void aPermitBeforeTheJoinIsRefusedAndTheReadyWaitPasses() {
         Fixture f; QVERIFY(f.serve());
         QVERIFY(f.startClient());
-        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000);
+        // A writer holds store.lock while it asks; it must not wait for a join.
+        auto early = f.client->writePort()(G::now() + 5 * 1000 * 1000);
+        bool refused = false;
+        std::thread waiter([&] { refused = !early->wait(); });
+        QTRY_VERIFY_WITH_TIMEOUT(refused, 5000);
+        waiter.join();
+        early->finish({});
+        WriterTask writer; writer.start(f.profile.path(), f.client.get(), 10 * 1000 * 1000);
         QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
         QVERIFY(writer.granted.load());
         QCOMPARE(writer.result.status, G::Status::Ready);
@@ -328,7 +339,7 @@ private slots:
         Fixture f; QVERIFY(f.serve());
         Writer other; QVERIFY(other.join(*f.endpoint, f.profile.path()));
         QVERIFY(f.startClient()); QVERIFY(f.ready());
-        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000);
+        WriterTask writer; writer.start(f.profile.path(), f.client.get(), 10 * 1000 * 1000);
         const auto revoke = other.next(K::Revoke); QVERIFY(revoke);
         // The first write waits for the other peer's acknowledgement.
         auto second = f.client->writePort()(G::now() + 5 * 1000 * 1000);
@@ -347,7 +358,7 @@ private slots:
         Writer silent; QVERIFY(silent.join(*f.endpoint, f.profile.path()));
         QVERIFY(f.startClient()); QVERIFY(f.ready());
         const auto epoch = *f.client->epoch();
-        WriterTask writer; writer.start(f.profile.path(), f.client->writePort(), 500 * 1000);
+        WriterTask writer; writer.start(f.profile.path(), f.client.get(), 500 * 1000);
         QVERIFY(silent.next(K::Revoke));
         silent.fence.reset();
         QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
@@ -360,7 +371,7 @@ private slots:
         QVERIFY(f.startClient()); QVERIFY(f.ready());
         const auto epoch = *f.client->epoch();
         WriterTask writer;
-        writer.start(f.profile.path(), f.client->writePort(), 10 * 1000 * 1000, {}, G::Change::NeedsRecovery);
+        writer.start(f.profile.path(), f.client.get(), 10 * 1000 * 1000, {}, G::Change::NeedsRecovery);
         QTRY_VERIFY_WITH_TIMEOUT(writer.done.load(), 15000);
         QVERIFY(writer.granted.load());
         QCOMPARE(writer.result.status, G::Status::NeedsRecovery);

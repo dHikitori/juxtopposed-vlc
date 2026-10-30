@@ -40,7 +40,9 @@ DistributionBootstrapItem ensure(PackageStore& store,const QString& directory,
     if(!previousSource.isEmpty() && previousSource!=source){result.error=QStringLiteral("The app package source changed.");return result;}
     result.offer={{QStringLiteral("name"),manifest.name},{QStringLiteral("version"),manifest.version},{QStringLiteral("source"),source}};
     DistributionInstallResult installed;
-    if(!store.ensureDistributionPackage(directory,manifest,&installed,&result.error)) {
+    if(!store.change([&](QString* e){return store.ensureDistributionPackage(directory,manifest,&installed,e);},
+            [&](const StoreProfileWriteContext& c,QString* e){return store.ensureDistributionPackage(c,directory,manifest,&installed,e);},
+            &result.error)) {
         result.error=result.error.left(1024);
         if(RepositoryCancellation::requested())result.status=QStringLiteral("canceled");
         return result;

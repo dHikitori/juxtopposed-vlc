@@ -113,6 +113,34 @@ int child(QCoreApplication& app, const QStringList& args) {
 class TestAddonStoreProfileSocket : public QObject {
     Q_OBJECT
 private slots:
+#ifndef Q_OS_WIN
+    void aDeepRuntimeDirectoryFallsBackToAFittingOne() {
+        QTemporaryDir profile, base;
+        QVERIFY(profile.isValid() && base.isValid());
+        const auto saved = qgetenv("XDG_RUNTIME_DIR");
+        const auto restore = qScopeGuard([saved] {
+            if (saved.isNull()) qunsetenv("XDG_RUNTIME_DIR"); else qputenv("XDG_RUNTIME_DIR", saved);
+        });
+        // A private runtime directory whose socket path cannot fit sun_path.
+        auto deep = base.path();
+        while (QFile::encodeName(deep).size() < 120) deep += QStringLiteral("/runtime-directory");
+        QVERIFY(QDir().mkpath(deep));
+        for (auto path = deep; path.size() > base.path().size(); path = QFileInfo(path).path())
+            QVERIFY(QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        qputenv("XDG_RUNTIME_DIR", QFile::encodeName(deep));
+        const auto fallback = E::forProfile(profile.path());
+        QVERIFY(fallback);
+        QVERIFY2(fallback->address().startsWith(QDir(QStringLiteral("/tmp")).canonicalPath() + QStringLiteral("/hakone-")),
+                 qPrintable(fallback->address()));
+        // A short runtime directory is still the first choice.
+        QTemporaryDir shortRuntime; QVERIFY(shortRuntime.isValid());
+        QVERIFY(QFile::setPermissions(shortRuntime.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        qputenv("XDG_RUNTIME_DIR", QFile::encodeName(shortRuntime.path()));
+        const auto preferred = E::forProfile(profile.path());
+        QVERIFY(preferred);
+        QVERIFY(preferred->address().startsWith(QDir(shortRuntime.path()).filePath(QStringLiteral("hakone")) + QLatin1Char('/')));
+    }
+#endif
     void endpointIsCanonicalAndProfileScoped() {
         QTemporaryDir root, other, runtime;
         const auto first = E::forProfile(root.path(), runtime.path()), alias = E::forProfile(root.path() + QStringLiteral("/."), runtime.path()), second = E::forProfile(other.path(), runtime.path());

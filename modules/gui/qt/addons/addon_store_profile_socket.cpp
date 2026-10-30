@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_store_profile_socket.hpp"
+#include <functional>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -183,13 +184,16 @@ QByteArray endpointSecret(const QString& root)
     return {};
 }
 #ifndef Q_OS_WIN
-QString runtimeParent(const QString& requested, const QByteArray& digest)
+// Candidate parents in a fixed order, so every process of the same user and
+// environment chooses the same one. The caller takes the first candidate that
+// is private and whose socket path fits sun_path.
+QString runtimeParent(const QString& requested, const QByteArray& digest, const std::function<bool(const QString&)>& fits)
 {
-    if (!requested.isEmpty()) return privateDirectory(requested) ? requested : QString{};
+    if (!requested.isEmpty()) return fits(requested) && privateDirectory(requested) ? requested : QString{};
     const auto xdg = qEnvironmentVariable("XDG_RUNTIME_DIR");
     if (QDir::isAbsolutePath(xdg) && privateDirectory(xdg, false)) {
         const auto child = QDir(xdg).filePath(QStringLiteral("hakone"));
-        if (privateDirectory(child)) return child;
+        if (fits(child) && privateDirectory(child)) return child;
     }
 #ifdef Q_OS_DARWIN
     char temporary[1024] = {};
@@ -198,7 +202,7 @@ QString runtimeParent(const QString& requested, const QByteArray& digest)
         const auto user = QFile::decodeName(temporary);
         if (QDir::isAbsolutePath(user) && privateDirectory(QDir::cleanPath(user), false)) {
             const auto child = QDir(QDir::cleanPath(user)).filePath(QStringLiteral("hakone"));
-            if (privateDirectory(child)) return child;
+            if (fits(child) && privateDirectory(child)) return child;
         }
     }
 #endif
@@ -206,7 +210,7 @@ QString runtimeParent(const QString& requested, const QByteArray& digest)
     // by another user, and privateDirectory() still refuses a foreign one.
     const auto fallback = QDir(QStringLiteral("/tmp")).canonicalPath() + QStringLiteral("/hakone-")
         + QString::fromLatin1(digest.toHex().sliced(32, 16));
-    return privateDirectory(fallback) ? fallback : QString{};
+    return fits(fallback) && privateDirectory(fallback) ? fallback : QString{};
 }
 #endif
 struct Descriptor {
@@ -239,10 +243,14 @@ std::optional<StoreProfileEndpoint> StoreProfileEndpoint::forProfile(const QStri
     Q_UNUSED(runtime);
     QString address = QStringLiteral("hakone-profile-") + QString::fromLatin1(digest.toHex().first(32));
 #else
-    const auto parent = runtimeParent(runtime, digest);
+    const auto name = QStringLiteral("hakone-") + QString::fromLatin1(digest.toHex().first(32));
+    const auto fits = [&name](const QString& parent) {
+        return QFile::encodeName(QDir(parent).filePath(name)).size() < qsizetype(sizeof(sockaddr_un::sun_path));
+    };
+    // A deep runtime directory falls through to the next candidate.
+    const auto parent = runtimeParent(runtime, digest, fits);
     if (parent.isEmpty()) return {};
-    const auto address = QDir(parent).filePath(QStringLiteral("hakone-") + QString::fromLatin1(digest.toHex().first(32)));
-    if (QFile::encodeName(address).size() >= qsizetype(sizeof(sockaddr_un::sun_path))) return {};
+    const auto address = QDir(parent).filePath(name);
 #endif
     return StoreProfileEndpoint(std::move(address));
 }

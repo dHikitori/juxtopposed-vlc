@@ -312,7 +312,9 @@ bool AddonManager::saveSettingsImpl(const QString& id,const QVariantMap& input,c
         }
     }
     values.insert("_credentials", references);
-    if (!m_store.saveSettings(id, values, expectedRevision, expectedStamp, &error)) return reject(error);
+    if (!m_store.change([&](QString* e) { return m_store.saveSettings(id, values, expectedRevision, expectedStamp, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveSettings(c, id, values, expectedRevision, expectedStamp, e); },
+            &error)) return reject(error);
     // Keep old credentials for rollback. Explicit account deletion revokes all generations.
     if (!withdraw(id)) return false;
     for (const auto& field : deletedFields)
@@ -543,6 +545,17 @@ bool AddonManager::displayCatalogueLoading() const
 {const auto* display=displayCatalogue();return display && display->loading();}
 QString AddonManager::displayCatalogueError() const
 {const auto* display=displayCatalogue();return display?display->error():tr("The extension list is not available.");}
+void AddonManager::profileChanged()
+{
+    if (m_retiring)
+        return;
+    ProviderPreferences preferences;
+    if (m_store.providerPreferences(&preferences))
+        m_providerOrder = preferences.values;
+    refreshDisplayCatalogue();
+    emit catalogueChanged();
+    changed(true);
+}
 void AddonManager::refreshDisplayCatalogue()
 {if(auto* display=displayCatalogue())display->refresh();}
 QVariantList AddonManager::displayProvidersForFeature(const QString& feature) const
@@ -910,7 +923,9 @@ bool AddonManager::setProviderOrder(const QString& feature, const QStringList& i
 {
     if (feature.isEmpty() || feature.startsWith('_') || feature.size() > 128 || ids.size() > 128 || QSet<QString>(ids.begin(), ids.end()).size() != ids.size()) return changed(false, tr("The provider order is not correct."));
     QJsonObject saved; QString error;
-    if (!m_store.saveProviderOrder(feature, ids, &saved, &error)) return changed(false, error);
+    if (!m_store.change([&](QString* e) { return m_store.saveProviderOrder(feature, ids, &saved, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveProviderOrder(c, feature, ids, &saved, e); },
+            &error)) return changed(false, error);
     m_providerOrder = saved; return changed(true);
 }
 
@@ -1127,10 +1142,17 @@ bool AddonManager::approvePendingPackage(bool enable)
                 || active.identity.source != candidate->identity.source)))
             return changed(false, tr("The app distribution source changed. Do a new package review."));
     }
-    if (!m_store.install(*candidate, candidate->manifest.requiredPermissions, &error, candidate->identity.distributionSource)) return changed(false, error);
+    const auto grants = candidate->manifest.requiredPermissions;
+    const bool distribution = candidate->identity.distributionSource;
+    if (!m_store.change([&](QString* e) { return m_store.install(*candidate, grants, e, distribution); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.install(c, *candidate, grants, e, distribution); },
+            &error)) return changed(false, error);
     m_pendingPackage.reset();
     m_updateResult.clear();
-    if (enable && !m_store.setEnabled(candidate->manifest.id, true, &error)) return changed(false, error);
+    const auto installedId = candidate->manifest.id;
+    if (enable && !m_store.change([&](QString* e) { return m_store.setEnabled(installedId, true, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, installedId, true, e); },
+            &error)) return changed(false, error);
     return changed(true);
 }
 void AddonManager::discardPendingPackage()
@@ -1148,7 +1170,9 @@ bool AddonManager::installLocalPackage(const QString& directory, bool approve)
     PackageCandidate candidate;
     if (!PackageStore::inspectDirectory(directory, identity, &candidate, &error)) return changed(false, error);
     if (!withdraw(manifest.id)) return false;
-    return changed(m_store.install(candidate, approve ? manifest.requiredPermissions : QJsonObject{}, &error), error);
+    const auto grants = approve ? manifest.requiredPermissions : QJsonObject{};
+    return changed(m_store.change([&](QString* e) { return m_store.install(candidate, grants, e); },
+        [&](const StoreProfileWriteContext& c, QString* e) { return m_store.install(c, candidate, grants, e); }, &error), error);
 }
 bool AddonManager::setEnabled(const QString& id, bool enabled)
 {
@@ -1157,26 +1181,36 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
     for (const auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) builtin = true;
     if (builtin) {
         QJsonObject saved; QString error;
-        if (!m_store.saveBuiltinProviderEnabled(id, enabled, &saved, &error)) return changed(false, error);
+        if (!m_store.change([&](QString* e) { return m_store.saveBuiltinProviderEnabled(id, enabled, &saved, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveBuiltinProviderEnabled(c, id, enabled, &saved, e); },
+                &error)) return changed(false, error);
         m_providerOrder = saved;
         for (auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) descriptor.insert("enabled", enabled);
         return changed(true);
     }
-    QString error; if (!withdraw(id)) return false; return changed(m_store.setEnabled(id, enabled, &error), error);
+    QString error; if (!withdraw(id)) return false;
+    return changed(m_store.change([&](QString* e) { return m_store.setEnabled(id, enabled, e); },
+        [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, id, enabled, e); }, &error), error);
 }
 bool AddonManager::rollback(const QString& id)
 { if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
-  QString error; if (!withdraw(id)) return false; return changed(m_store.rollback(id, &error), error); }
+  QString error; if (!withdraw(id)) return false;
+  return changed(m_store.change([&](QString* e) { return m_store.rollback(id, e); },
+      [&](const StoreProfileWriteContext& c, QString* e) { return m_store.rollback(c, id, e); }, &error), error); }
 bool AddonManager::setSafeMode(bool enabled)
 {
     QString error;
-    if (!m_store.setSafeMode(enabled, &error)) return changed(false, error);
+    if (!m_store.change([&](QString* e) { return m_store.setSafeMode(enabled, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setSafeMode(c, enabled, e); },
+            &error)) return changed(false, error);
     if (enabled) for (const auto& id : m_store.installedIds()) if (!withdraw(id)) return false;
     return changed(true);
 }
 bool AddonManager::recoverPackage(const QString& id)
 { if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
-  QString error; if (!withdraw(id)) return false; return changed(m_store.recover(id, &error), error); }
+  QString error; if (!withdraw(id)) return false;
+  return changed(m_store.change([&](QString* e) { return m_store.recover(id, e); },
+      [&](const StoreProfileWriteContext& c, QString* e) { return m_store.recover(c, id, e); }, &error), error); }
 QVariantList AddonManager::retainedGenerations(const QString& id) const
 { return m_store.retainedGenerations(id).toVariantList(); }
 bool AddonManager::uninstall(const QString& id, bool removeData)
@@ -1198,14 +1232,19 @@ bool AddonManager::uninstall(const QString& id, bool removeData)
         if (!store.canUninstall(id, removeData, error.get())) return;
         if (removeData) {
             InstalledPackage active;
-            if (store.installed(id, &active) && !store.setEnabled(id, false, error.get())) return;
+            if (store.installed(id, &active) && !store.change([&](QString* e) { return store.setEnabled(id, false, e); },
+                    [&](const StoreProfileWriteContext& c, QString* e) { return store.setEnabled(c, id, false, e); }, error.get())) return;
             CredentialStore credentials;
             if (!credentials.removePackage(id)) {
                 *error = QStringLiteral("The app cannot delete all saved keys. The add-on stays disabled. Try deletion again."); return;
             }
         }
-        if (!store.setDistributionSuppressed(id, true, error.get())) return;
-        *success = store.uninstall(id, removeData, error.get());
+        // One permitted write covers suppression and removal.
+        *success = store.change([&](QString* e) { return store.setDistributionSuppressed(id, true, e) && store.uninstall(id, removeData, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) {
+                const auto suppressed = store.setDistributionSuppressed(c, id, true, e);
+                return suppressed == StoreProfileGeneration::Change::Applied ? store.uninstall(c, id, removeData, e) : suppressed;
+            }, error.get());
     }, [this, id, retirement, error, success](AddonRepositoryJobs::Result result) mutable {
         m_removingPackages.remove(id);
         retirement.reset();

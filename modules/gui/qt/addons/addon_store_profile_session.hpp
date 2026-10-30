@@ -37,6 +37,7 @@ public:
     bool coordinating() const noexcept;
     StoreProfileClient::State state() const noexcept;
     std::optional<StoreProfileClient::Epoch> epoch() const;
+    StoreProfileClient::ReadyWait readyWait() const;
     StoreProfileClient::WritePort writePort() const;
     bool timerActive() const noexcept;
 

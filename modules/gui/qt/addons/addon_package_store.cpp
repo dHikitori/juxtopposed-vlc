@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_package_store.hpp"
+#include "addon_store_profile_client.hpp"
 #include "addon_display_catalogue_reader.hpp"
 #include "addon_catalogue_store_lock.hpp"
 #include "addon_distribution_bootstrap.hpp"
@@ -9,6 +10,8 @@
 #include "addon_storage_data.hpp"
 #include <QCryptographicHash>
 #include <cmath>
+#include <mutex>
+#include <thread>
 #include "addon_repository_updates.hpp"
 #include "addon_repository_cancellation.hpp"
 #include <QDir>
@@ -694,7 +697,85 @@ bool validateCandidate(const PackageCandidate& candidate, QString* error)
 }
 } // namespace
 
-PackageStore::PackageStore(QString root) : m_root(QDir::cleanPath(std::move(root))), m_authority(m_root) {}
+struct PackageStore::WriteSlot {
+    std::mutex mutex;
+    ProfileWriter writer;
+};
+PackageStore::PackageStore(QString root)
+    : m_root(QDir::cleanPath(std::move(root))), m_authority(m_root), m_writeSlot(std::make_shared<WriteSlot>()) {}
+void PackageStore::setProfileWriter(ProfileWriter writer) const
+{
+    std::lock_guard<std::mutex> lock(m_writeSlot->mutex);
+    m_writeSlot->writer = std::move(writer);
+}
+bool PackageStore::change(const std::function<bool(QString*)>& ordinary, const GuardedChange& guarded, QString* error) const
+{
+    if (!m_authority.peerAttached())
+        return ordinary(error);
+    ProfileWriter writer;
+    {
+        std::lock_guard<std::mutex> lock(m_writeSlot->mutex);
+        writer = m_writeSlot->writer;
+    }
+    if (!writer.waitReady || !writer.permit)
+        return fail(error, QStringLiteral("Add-on changes are not available until the app joins the shared add-on profile."));
+    using Generation = StoreProfileGeneration;
+    const auto deadline = Generation::now() + WriteLimit;
+    const Generation::Control control{[] { return true; }, Generation::now, deadline};
+    for (;;) {
+        // Wait for the join without store.lock: a recovery before the join
+        // needs store.lock.
+        if (!writer.waitReady(deadline))
+            return fail(error, QStringLiteral("Other app windows did not release the add-on profile in time. Try again."));
+        // store.lock, then the permit. The exclusive fence comes in write().
+        Generation::Status status = Generation::Status::Error;
+        QString prepared;
+        auto scope = Generation::prepareWriter(m_root, control, &status, &prepared);
+        if (scope) {
+            auto permit = writer.permit(deadline);
+            if (permit && permit->wait()) {
+                const auto result = scope->write(permit->ticket(), guarded);
+                scope.reset();
+                // Complete after both locks are released, so the coordinator
+                // can check the saved record.
+                permit->finish(result);
+                if (result.status == Generation::Status::Ready && result.applied)
+                    return true;
+                return fail(error, result.error.isEmpty() ? QStringLiteral("The add-on change did not finish.") : result.error);
+            }
+            if (permit)
+                permit->finish({});
+        } else if (status != Generation::Status::Busy) {
+            return fail(error, prepared);
+        }
+        // Refused, for example by a recovery that started after the join, or
+        // a busy store. Release store.lock and try again.
+        scope.reset();
+        if (Generation::now() >= deadline)
+            return fail(error, QStringLiteral("Other app windows did not release the add-on profile in time. Try again."));
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+}
+bool PackageStore::recoverProfile(const StoreProfileWriteContext& context, QString* error)
+{
+    if (!context.current())
+        return fail(error, QStringLiteral("The add-on profile recovery is no longer current."));
+    // An interrupted install can leave its staging directory. Nothing else
+    // refers to it, because the release pointer moves only after the rename.
+    const QDir packages(QDir(context.directory()).filePath(QStringLiteral("packages")));
+    for (const auto& package : packages.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks)) {
+        const QDir releases(QDir(package.absoluteFilePath()).filePath(QStringLiteral("releases")));
+        for (const auto& entry : releases.entryInfoList({QStringLiteral(".staging-*")}, QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot)) {
+            if (!context.current())
+                return fail(error, QStringLiteral("The add-on profile recovery is no longer current."));
+            const bool removed = entry.isSymLink() || !entry.isDir() ? QFile::remove(entry.absoluteFilePath())
+                                                                     : QDir(entry.absoluteFilePath()).removeRecursively();
+            if (!removed)
+                return fail(error, QStringLiteral("The app cannot remove an interrupted add-on installation."));
+        }
+    }
+    return context.current();
+}
 QString PackageStore::storageDirectory() const { return m_root; }
 QString PackageStore::releaseDirectory(const QString& id, const QString& digest) const
 {

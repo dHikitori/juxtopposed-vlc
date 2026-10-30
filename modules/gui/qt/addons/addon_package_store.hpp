@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QVariantMap>
 #include <functional>
+#include <memory>
 
 namespace vlc::addons {
 struct PrivateStorageContext;
@@ -80,6 +81,7 @@ using MetadataCatalogueReader = std::function<bool(MetadataCatalogueSnapshot*, Q
 
 struct DisplayCatalogueSnapshot;
 struct DisplayCatalogueRequest;
+class StoreProfileWritePermit;
 class PackageStore
 {
 public:
@@ -177,11 +179,34 @@ public:
     // The ordinary write methods above then refuse; use the guarded methods
     // inside a coordinator-permitted StoreProfileGeneration write.
     bool sharedProfile() const noexcept { return m_authority.peerAttached(); }
+    // The app's profile host supplies these. All copies of this store share
+    // them. waitReady blocks until the profile session is joined; permit asks
+    // the coordinator for one write. A null permit means no session.
+    struct ProfileWriter {
+        std::function<bool(qint64 deadline)> waitReady;
+        std::function<std::unique_ptr<StoreProfileWritePermit>(qint64 deadline)> permit;
+    };
+    using GuardedChange = std::function<StoreProfileGeneration::Change(const StoreProfileWriteContext&, QString*)>;
+    void setProfileWriter(ProfileWriter) const;
+    // One store change. An unshared profile runs the ordinary method. A shared
+    // profile takes a prepared writer and the coordinator's permit, then runs
+    // the guarded method inside the permitted write. It can wait for other app
+    // processes up to WriteLimit. Never call it from a store or native callback.
+    bool change(const std::function<bool(QString*)>& ordinary, const GuardedChange& guarded,
+                QString* error = nullptr) const;
+    static constexpr qint64 WriteLimit = 10 * 1000 * 1000;
+    // Profile recovery for the coordinator. It runs with the owner lock,
+    // store.lock and the exclusive fence held. It removes release staging left
+    // by an interrupted install. Package states that need recovery keep their
+    // flag for the user's explicit Restore action.
+    static bool recoverProfile(const StoreProfileWriteContext&, QString* error = nullptr);
 
 private:
     bool ordinaryWriteAllowed(QString* error) const;
+    struct WriteSlot;
     QString m_root;
     StoreAuthority m_authority;
+    std::shared_ptr<WriteSlot> m_writeSlot;
     StoreProfileGeneration::Change installLocked(const PackageCandidate&, const QJsonObject& grants,
         QString* error, bool distributionApproval, bool cancelBeforeCommit = false,
         const StoreProfileWriteContext* = nullptr, bool initiallyEnabled = false);

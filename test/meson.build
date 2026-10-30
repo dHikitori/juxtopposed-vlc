@@ -142,6 +142,11 @@ if host_system == 'linux' and get_option('qt').allowed()
             args: ['-B', addon_app_smoke, '--driver'],
             suite: ['addons', addon_test_labels['addon_app_smoke_driver']],
             is_parallel: false, timeout: 300)
+        # Step 2's exit check: an install in one window shows in the other.
+        test('addon_app_smoke_shared_profile', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver', '--windows', '2'],
+            suite: ['addons', addon_test_labels['addon_app_smoke_shared_profile']],
+            is_parallel: false, timeout: 300)
     endif
 endif
 

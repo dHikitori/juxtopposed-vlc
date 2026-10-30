@@ -89,9 +89,14 @@ public:
     std::optional<Epoch> epoch() const;
     QByteArray connection() const { return m_connection; }
     bool timerActive() const noexcept { return m_retry.isActive() || m_permitDeadline.isActive(); }
-    // Thread-safe and weak. A writer on joined work requests a permit with the
-    // deadline of its prepared scope. A closed client refuses at once. One
-    // write can be pending at a time.
+    // Thread-safe and weak. A writer on joined work first waits until this
+    // client is joined, without holding store.lock: the join can need a
+    // recovery that takes store.lock. It then prepares its writer scope and
+    // requests a permit with the scope's deadline. A permit requested while the
+    // client is not joined, or while another write is pending, is refused at
+    // once. The writer then releases store.lock and tries again.
+    using ReadyWait = std::function<bool(qint64 deadline)>;
+    ReadyWait readyWait() const;
     using WritePort = std::function<std::unique_ptr<StoreProfileWritePermit>(qint64 deadline)>;
     WritePort writePort() const;
     // Implementation detail shared with StoreProfileWritePermit.

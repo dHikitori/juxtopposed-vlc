@@ -64,6 +64,9 @@ struct StoreProfileClient::Mailbox {
     std::deque<Command> commands;
     std::function<void()> wake;
     bool open = true;
+    // The client's joined state, for writers that wait for it.
+    std::condition_variable readyChanged;
+    bool ready = false;
     bool post(Command command)
     {
         std::function<void()> signal;
@@ -143,6 +146,20 @@ StoreProfileClient::StoreProfileClient(Options options, std::unique_ptr<StoreAut
         m_mailbox->open = false;
 }
 
+StoreProfileClient::ReadyWait StoreProfileClient::readyWait() const
+{
+    const std::weak_ptr<Mailbox> weak = m_mailbox;
+    return [weak](qint64 deadline) {
+        const auto mailbox = weak.lock();
+        if (!mailbox)
+            return false;
+        std::unique_lock<std::mutex> lock(mailbox->mutex);
+        const auto remaining = std::chrono::microseconds(qMax<qint64>(0, deadline - Generation::now()));
+        mailbox->readyChanged.wait_for(lock, remaining, [&] { return mailbox->ready || !mailbox->open; });
+        return mailbox->ready && mailbox->open;
+    };
+}
+
 StoreProfileClient::WritePort StoreProfileClient::writePort() const
 {
     const std::weak_ptr<Mailbox> weak = m_mailbox;
@@ -177,8 +194,10 @@ void StoreProfileClient::takeMail()
 
 void StoreProfileClient::beginPermit(std::shared_ptr<StoreProfileWritePermit::State> permit)
 {
-    // The arbiter accepts one pending write. A second permit is refused.
-    if (m_state == State::Closed || m_permit || Generation::now() >= permit->deadline) {
+    // The arbiter accepts one pending write. A second permit is refused. A
+    // permit while not joined is refused too: its writer holds store.lock,
+    // which a recovery before the join can need.
+    if (m_state != State::Ready || m_permit || Generation::now() >= permit->deadline) {
         permit->settle(StoreProfileWritePermit::State::Phase::Refused);
         return;
     }
@@ -191,8 +210,6 @@ void StoreProfileClient::beginPermit(std::shared_ptr<StoreProfileWritePermit::St
 
 void StoreProfileClient::sendBegin()
 {
-    // Begin needs a joined ready connection. A permit that arrives earlier
-    // waits for the join.
     if (!m_permit || m_permitSent || m_state != State::Ready || !m_ready || !m_socket)
         return;
     {
@@ -486,7 +503,6 @@ void StoreProfileClient::admitted(quint64 attempt, const Epoch& epoch, bool admi
     }
     m_ready = epoch;
     setState(State::Ready);
-    sendBegin();
 }
 
 void StoreProfileClient::revoke(std::optional<Message> acknowledge)
@@ -600,6 +616,11 @@ void StoreProfileClient::setState(State state)
     if (m_state == state || m_state == State::Closed)
         return;
     m_state = state;
+    {
+        std::lock_guard<std::mutex> lock(m_mailbox->mutex);
+        m_mailbox->ready = state == State::Ready;
+    }
+    m_mailbox->readyChanged.notify_all();
     const auto changed = m_options.changed;
     if (changed)
         changed(state);
@@ -614,8 +635,10 @@ void StoreProfileClient::close()
     {
         std::lock_guard<std::mutex> lock(m_mailbox->mutex);
         m_mailbox->open = false;
+        m_mailbox->ready = false;
         m_mailbox->commands.clear();
     }
+    m_mailbox->readyChanged.notify_all();
     if (m_mail)
         m_mail->close();
     endPermit();

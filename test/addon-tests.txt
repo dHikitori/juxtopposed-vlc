@@ -25,6 +25,7 @@ test_qt_addon_native_notifications              profile     all
 test_qt_addon_packages                          profile     all
 test_qt_addon_repository_jobs                   profile     all
 test_qt_addon_repository_updates                profile     all
+test_qt_addon_profile_host                      profile     all
 test_qt_addon_runtime                           profile     all
 test_qt_addon_storage                           profile     all
 test_qt_addon_store_authority                   profile     all
@@ -160,3 +161,4 @@ test_src_player_audio_samples_lifecycle         visualizer  automake,meson
 addon_app_smoke                                 app         meson
 addon_app_smoke_two_windows                     app         meson
 addon_app_smoke_driver                          app         meson
+addon_app_smoke_shared_profile                  app         meson

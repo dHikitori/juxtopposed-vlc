@@ -114,6 +114,11 @@ std::optional<StoreProfileClient::Epoch> StoreProfileSession::epoch() const
     return m_client->epoch();
 }
 
+StoreProfileClient::ReadyWait StoreProfileSession::readyWait() const
+{
+    return m_client->readyWait();
+}
+
 StoreProfileClient::WritePort StoreProfileSession::writePort() const
 {
     return m_client->writePort();

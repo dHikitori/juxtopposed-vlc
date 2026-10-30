@@ -85,6 +85,12 @@ public:
     QString invokeMetadata(const QString&, const QString&, const QVariantMap&);
     QVariantMap builtinMetadataProvider(const QString&) const;
     QString storageDirectory() const { return m_store.storageDirectory(); }
+    // The profile host supplies the shared profile's writer. Store writes
+    // in a shared profile then go through the coordinator's permits.
+    void setProfileWriter(PackageStore::ProfileWriter writer) { m_store.setProfileWriter(std::move(writer)); }
+    // GUI thread. Another app process changed the shared profile. Reload the
+    // cached provider order and the display catalogue.
+    void profileChanged();
     // Read these memory snapshots on the manager thread. They contain no key bytes.
     QString workerExecutable() const { return m_workerExecutable; }
     QHash<QString, QHash<QString, bool>> credentialPresenceSnapshot() const { return m_secrets.presenceSnapshot(); }

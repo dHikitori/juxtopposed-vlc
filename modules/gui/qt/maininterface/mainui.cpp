@@ -35,6 +35,7 @@
 #include "player/control_list_model.hpp"
 #include "player/control_list_filter.hpp"
 #include "player/delay_estimator.hpp"
+#include "addons/addon_profile_host.hpp"
 #ifdef VLC_ADDON_TEST_DRIVER
 #include "addons/addon_test_driver.hpp"
 #endif
@@ -390,6 +391,14 @@ void MainUI::registerQMLTypes()
         if (!dataDirectory.isEmpty()) {
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
             msg_Dbg(m_intf, "Add-on store directory: %s", qtu(addonManager->storageDirectory()));
+            // Several app windows share this profile. Attach the profile peer
+            // before the bundled setup and before any native consumer starts.
+            auto* profileHost = new vlc::addons::AddonProfileHost(addonManager,
+                vlc::addons::AddonStreamLifetime::applicationHandle(), this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, profileHost, [profileHost] { profileHost->close(); },
+                Qt::DirectConnection);
+            if (!profileHost->start())
+                msg_Warn(m_intf, "Cannot share the add-on profile with other app windows");
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
             addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
