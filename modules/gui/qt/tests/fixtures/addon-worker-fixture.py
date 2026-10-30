@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 import json, os, sys, time
 mode = os.path.basename(sys.argv[1])
+if mode in ("--precompile", "--precompiled"):
+    # This stand-in has no compiled form; the host then compiles from source.
+    sys.exit(1)
 def output(value):
     print(json.dumps(value), flush=True)
 if mode == "invalid-protocol":

@@ -76,6 +76,9 @@ bool precompile(const QString& directory, const QString& executable, const Insta
     const auto temporary = base + QStringLiteral(".") + QString::number(QCoreApplication::applicationPid()) + QStringLiteral(".tmp");
     QProcess process;
     prepareHelperLaunch(process);
+    // The compile reads no input. A null input also ends a helper that waits
+    // for messages instead of holding this job to its time limit.
+    process.setStandardInputFile(QProcess::nullDevice());
     process.start(executable, {QStringLiteral("--precompile"), modulePath(package), temporary});
     const bool done = process.waitForFinished(30000);
     if (!done) {
