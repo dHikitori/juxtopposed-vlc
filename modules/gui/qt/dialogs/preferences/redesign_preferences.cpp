@@ -741,6 +741,8 @@ RedesignPreferences::RedesignPreferences(QObject* parent) : QObject(parent)
 #ifdef _WIN32
     m_pluginScan.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
         args->flags |= CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS;
+        // No global startup-feedback cursor for this background scan.
+        args->startupInfo->dwFlags |= STARTF_FORCEOFFFEEDBACK;
     });
 #endif
     size_t count = 0;

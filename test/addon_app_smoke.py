@@ -296,6 +296,8 @@ def run(args):
             results['workers_after_use'] = sum(
                 1 for pid in process_tree(first.pid) if worker_process(pid))
 
+        if args.driver:
+            results['helper_launches'] = first.drive('stats', args.timeout)['launches']
         windows = [first] + ([second] if second else [])
         trees = [process_tree(app.pid) for app in windows]
         before = [cpu_seconds(pids) for pids in trees]
@@ -306,6 +308,12 @@ def run(args):
         results['idle_processes'] = len(trees[0])
         results['idle_workers'] = sum(1 for pid in trees[0] if worker_process(pid))
         results['resident_bytes'] = resident_bytes(trees[0])
+        if args.driver:
+            # An idle app starts no add-on helper.
+            idle_launches = first.drive('stats', args.timeout)['launches'] - results['helper_launches']
+            results['idle_helper_launches'] = idle_launches
+            if idle_launches:
+                raise Failure(f'{idle_launches} add-on helpers started while the app was idle')
         if second:
             results['second_idle_cpu_seconds'] = round(cpu_seconds(trees[1]) - before[1], 3)
             results['second_resident_bytes'] = resident_bytes(trees[1])

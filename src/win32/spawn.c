@@ -109,7 +109,8 @@ static int vlc_spawn_inner(pid_t *restrict pid, const char *path,
             .hStdInput  = INVALID_HANDLE_VALUE,
             .hStdOutput = INVALID_HANDLE_VALUE,
             .hStdError  = INVALID_HANDLE_VALUE,
-            .dwFlags    = STARTF_USESTDHANDLES
+            /* No global startup-feedback cursor for helper processes. */
+            .dwFlags    = STARTF_USESTDHANDLES | STARTF_FORCEOFFFEEDBACK
         }
     };
 

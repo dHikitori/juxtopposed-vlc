@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_package_store.hpp"
+#include "addon_process_launch.hpp"
 #include "addon_store_profile_client.hpp"
 #include "addon_display_catalogue_reader.hpp"
 #include "addon_catalogue_store_lock.hpp"
@@ -565,6 +566,7 @@ public:
         };
         if (repository) fixed << QStringLiteral("--git-dir=") + m_repo;
         fixed.append(arguments);
+        prepareHelperLaunch(process);
         process.start(m_executable, fixed, QIODevice::ReadOnly);
         if (!process.waitForStarted(int(std::min<qint64>(3000, remaining))))
             return fail(error, QStringLiteral("The app cannot start the Git tool."));

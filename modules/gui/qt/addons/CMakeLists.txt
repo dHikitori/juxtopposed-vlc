@@ -19,6 +19,7 @@ add_library(vlc_addon_host STATIC
     addon_store_profile_client.cpp addon_store_profile_client.hpp
     addon_store_profile_session.cpp addon_store_profile_session.hpp
     addon_profile_host.cpp addon_profile_host.hpp
+    addon_process_launch.cpp addon_process_launch.hpp
     addon_native_wake.cpp addon_native_wake.hpp addon_catalogue_store_lock.hpp
     addon_native_notifications.cpp addon_native_notifications.hpp
     addon_catalogue_view.cpp addon_catalogue_view.hpp addon_catalogue_view_manager.cpp addon_display_catalogue_reader.hpp

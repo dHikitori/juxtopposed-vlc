@@ -7,6 +7,7 @@
 #include "addon_manager.hpp"
 #include "addon_package_summaries.hpp"
 #include "addon_discovery_service.hpp"
+#include "addon_process_launch.hpp"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -98,6 +99,8 @@ void AddonTestDriver::run(const QString& command, const QString& argument)
     m_clock.start();
     if (command == QLatin1String("ping"))
         reply({{"ok", true}});
+    else if (command == QLatin1String("stats"))
+        reply({{"ok", true}, {"launches", qint64(helperLaunchCount())}});
     else if (command == QLatin1String("extensions"))
         extensions();
     else if (command == QLatin1String("install"))

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_credentials.hpp"
+#include "addon_process_launch.hpp"
 #include <QProcess>
 #include <QStandardPaths>
 #include <QUuid>
@@ -37,6 +38,7 @@ QByteArray secretTool(const QStringList& arguments, const QByteArray& input, boo
     QProcess process;
     process.setProgram(executable);
     process.setArguments(arguments);
+    prepareHelperLaunch(process);
     process.start();
     if (!process.waitForStarted(1000)) return {};
     if (!input.isEmpty()) process.write(input);
@@ -171,6 +173,7 @@ bool CredentialStore::removePackage(const QString& package)
     if (!persistentAvailable()) return false;
     const auto executable = QStandardPaths::findExecutable(QStringLiteral("secret-tool"));
     QProcess process;
+    prepareHelperLaunch(process);
     process.start(executable, {QStringLiteral("clear"), QStringLiteral("application"), QStringLiteral("vlc-addons"),
         QStringLiteral("package"), package});
     if (!process.waitForStarted(1000)) return false;

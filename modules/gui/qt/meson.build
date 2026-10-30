@@ -45,6 +45,8 @@ addon_host_sources = files(
     'addons/addon_store_profile_session.hpp',
     'addons/addon_profile_host.cpp',
     'addons/addon_profile_host.hpp',
+    'addons/addon_process_launch.cpp',
+    'addons/addon_process_launch.hpp',
     'addons/addon_native_wake.cpp',
     'addons/addon_native_wake.hpp',
     'addons/addon_native_notifications.cpp',

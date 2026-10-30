@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_worker.hpp"
+#include "addon_process_launch.hpp"
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -116,6 +117,7 @@ void AddonWorker::start()
     m_process.setProgram(executable);
     m_process.setArguments({QDir(m_package.directory).filePath(m_package.manifest.runtimeEntry)});
     m_startup.start(15000);
+    prepareHelperLaunch(m_process);
     m_process.start();
 }
 
