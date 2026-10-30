@@ -75,6 +75,9 @@ struct MetadataCatalogueSnapshot
     qsizetype candidateCount = 0;
     qsizetype rawContributionCount = 0;
     bool safeMode = false;
+    // The read was refused only because another reader or a writer held
+    // store.lock; trying again later can succeed.
+    bool storeBusy = false;
     bool current() const noexcept { return queuedAuthority.current() && authority.current(); }
 };
 using MetadataCatalogueReader = std::function<bool(MetadataCatalogueSnapshot*, QString*)>;

@@ -1985,7 +1985,10 @@ bool PackageStore::readMetadataCatalogue(const StoreAuthorityToken& queued,
     if (!queued.current()) return fail(error, QStringLiteral("The metadata catalogue changed. Start the request again."));
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
-    if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
+    if (!lock.tryLock(0)) {
+        output->storeBusy = lock.error() == QLockFile::LockFailedError;
+        return fail(error, QStringLiteral("The add-on store is busy."));
+    }
     MetadataCatalogueSnapshot captured;
     captured.queuedAuthority = queued;
     captured.authority = m_authority.capture();

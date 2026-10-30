@@ -176,7 +176,9 @@ private slots:
         QLockFile lock(dir.filePath("store.lock")); QVERIFY(lock.tryLock(0));
         MetadataCatalogueSnapshot value; QElapsedTimer elapsed; elapsed.start();
         QVERIFY(!reader(&value, nullptr)); QVERIFY(elapsed.elapsed() < 1000); empty(value);
-        lock.unlock(); QVERIFY(reader(&value, nullptr)); QVERIFY(value.current());
+        // A held lock is reported as such, so background callers can retry.
+        QVERIFY(value.storeBusy);
+        lock.unlock(); QVERIFY(reader(&value, nullptr)); QVERIFY(value.current()); QVERIFY(!value.storeBusy);
     }
 #ifdef HAKONE_CATALOGUE_OPEN_PROBE
     void oneLockCoversFreshPreferencesAndEveryPackageRead()

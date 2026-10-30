@@ -17,6 +17,7 @@
 #include <QPointer>
 #include <QScopeGuard>
 #include <QSslSocket>
+#include <QElapsedTimer>
 #include <QThread>
 #include <QDir>
 #include <QTimer>
@@ -357,8 +358,19 @@ AddonMetadataCoordinator::SelectionCancel AddonManager::selectMetadataProviders(
         const auto alive = runtime->owner;
         id = queueMetadataPreparation({}, [source = *source, alive, builtins, feature, result, safeMode] {
             MetadataCatalogueSnapshot catalogue;
-            if (!source.current() || !alive->open.load(std::memory_order_acquire)
-                || !source.catalogueReader || !source.catalogueReader(&catalogue, &result->error) || !catalogue.current()) {
+            // Another reader can hold store.lock for seconds on a slow profile
+            // drive. This runs on background work, so wait for it in short
+            // steps rather than report the store as busy.
+            QElapsedTimer waited;
+            waited.start();
+            bool read = false;
+            while (source.current() && alive->open.load(std::memory_order_acquire) && source.catalogueReader) {
+                result->error.clear();
+                read = source.catalogueReader(&catalogue, &result->error);
+                if (read || !catalogue.storeBusy || RepositoryCancellation::requested() || waited.elapsed() >= 10000) break;
+                QThread::msleep(25);
+            }
+            if (!read || !source.current() || !alive->open.load(std::memory_order_acquire) || !catalogue.current()) {
                 if (result->error.isEmpty()) result->error = QStringLiteral("The metadata provider list is not available.");
                 return;
             }
