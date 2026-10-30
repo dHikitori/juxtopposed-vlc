@@ -152,6 +152,35 @@ class App:
     def send(self, command):
         self.connection.sendall(command.encode() + b'\n')
 
+    def ask(self, command, timeout=2.0):
+        """Send a cli command and return the text it answers within the timeout."""
+        self.connection.settimeout(0.05)
+        try:
+            while self.connection.recv(65536):
+                pass
+        except (socket.timeout, BlockingIOError):
+            pass
+        self.send(command)
+        answer = b''
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                chunk = self.connection.recv(65536)
+                if not chunk:
+                    break
+                answer += chunk
+                if b'\n' in answer.strip(b'> \n'):
+                    break
+            except socket.timeout:
+                if answer.strip(b'> \n'):
+                    break
+        self.connection.settimeout(10)
+        return answer.decode(errors='replace')
+
+    def playing(self):
+        answer = self.ask('is_playing')
+        return any(line.strip(' >') == '1' for line in answer.splitlines())
+
     def drive(self, command, timeout):
         """Send one driver command and return its JSON reply."""
         if self.driver is None:
@@ -237,6 +266,10 @@ def run(args):
                     VLC_DATA_PATH=str(args.build / 'share'),
                     VLC_LIBEXEC_PATH=str(args.build / 'bin'))
     args.env.pop('DBUS_SESSION_BUS_ADDRESS', None)
+    if args.no_display:
+        # Builds without the offscreen compositor fix crash with a display.
+        args.env.pop('DISPLAY', None)
+        args.env.pop('WAYLAND_DISPLAY', None)
     store = home / 'data' / 'vlc' / 'addons'
     apps = []
     try:
@@ -244,16 +277,18 @@ def run(args):
         apps.append(first)
         first.connect(args.timeout)
         results['start_seconds'] = round(time.monotonic() - first.started, 3)
-        wait_for('bundled add-ons', lambda: store.exists() and bundled_ready(store), args.timeout)
-        results['bundled_ready_seconds'] = round(time.monotonic() - first.started, 3)
+        if not args.no_addons:
+            wait_for('bundled add-ons', lambda: store.exists() and bundled_ready(store), args.timeout)
+            results['bundled_ready_seconds'] = round(time.monotonic() - first.started, 3)
 
-        before_play = len(first.log())
-        first.send(f'add file://{args.sample}')
-        wait_for('playback', lambda: 'VLC_PLAYER_STATE_PLAYING' in first.log()[before_play:],
-                 args.timeout)
-        first.send('stop')
-        wait_for('stop', lambda: 'VLC_PLAYER_STATE_STOPPED' in first.log()[before_play:],
-                 args.timeout)
+        if not args.no_playback:
+            # Ask the player itself, so the check does not depend on log text.
+            first.send(f'add file://{args.sample}')
+            wait_for('playback', first.playing, args.timeout)
+            first.send('stop')
+            wait_for('stop', lambda: not first.playing(), args.timeout)
+        # Let startup or the input tear down before anything is measured.
+        time.sleep(2)
 
         second = None
         if args.windows == 2:
@@ -369,6 +404,12 @@ def main():
     parser.add_argument('--fixture', type=Path,
                         default=Path(__file__).resolve().parent.parent / 'contrib-addons' / 'examples' / 'discovery-fixture')
     parser.add_argument('--query', default='a', help='discovery fixture search text')
+    parser.add_argument('--no-playback', action='store_true',
+                        help='do not play the sample, for builds that cannot')
+    parser.add_argument('--no-addons', action='store_true',
+                        help='do not wait for bundled add-ons, for a build without them')
+    parser.add_argument('--no-display', action='store_true',
+                        help='remove DISPLAY and WAYLAND_DISPLAY from the app environment')
     parser.add_argument('--idle', type=float, default=30.0, help='idle measurement in seconds')
     parser.add_argument('--timeout', type=float, default=60.0)
     parser.add_argument('--work', type=Path, default=None, help='parent of the temporary home')
