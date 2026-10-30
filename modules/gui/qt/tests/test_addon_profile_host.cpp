@@ -8,6 +8,8 @@
 #include <QSignalSpy>
 #include <QCoreApplication>
 #include <QTimer>
+#include <QDir>
+#include <QElapsedTimer>
 #include <cstdio>
 #include <thread>
 using namespace vlc::addons;
@@ -74,6 +76,7 @@ private slots:
         QVERIFY(f.host->start());
         QTRY_VERIFY_WITH_TIMEOUT(f.host->ready(), 15000);
         QVERIFY(f.host->coordinating());
+        QVERIFY(f.host->shared());
         // The profile is shared now: a direct ordinary write is refused.
         PackageStore direct(f.manager->storageDirectory());
         QVERIFY(direct.sharedProfile());
@@ -83,6 +86,27 @@ private slots:
         QVERIFY2(f.manager->setSafeMode(true), qPrintable(f.manager->errorMessage()));
         QVERIFY(direct.safeMode());
         QTRY_VERIFY_WITH_TIMEOUT(f.host->ready(), 15000);
+    }
+    void aDriveWithoutLocksLeavesTheProfileUnshared() {
+        // Set to a directory on such a drive, for example \\wsl.localhost\...
+        // on Windows.
+        const auto unlocked = qEnvironmentVariable("HAKONE_TEST_UNLOCKED_DIR");
+        if (unlocked.isEmpty()) QSKIP("HAKONE_TEST_UNLOCKED_DIR names no directory without file locks");
+        QTemporaryDir root(QDir(unlocked).filePath(QStringLiteral("profile-XXXXXX")));
+        QVERIFY(root.isValid());
+        AddonStreamLifetime lifetime;
+        auto* manager = new AddonManager(root.path());
+        auto* host = new AddonProfileHost(manager, lifetime.handle());
+        QVERIFY(host->start());
+        QVERIFY(!host->shared());
+        // Writes go straight to the store, without waiting for a coordinator.
+        QElapsedTimer clock; clock.start();
+        QVERIFY2(manager->setSafeMode(true), qPrintable(manager->errorMessage()));
+        QVERIFY(clock.elapsed() < 2000);
+        QVERIFY(PackageStore(root.path()).safeMode());
+        delete host; delete manager;
+        lifetime.close();
+        QVERIFY(lifetime.handle().waitQt(std::chrono::seconds(10)));
     }
     void afterCloseWritesAreRefused() {
         Fixture f;

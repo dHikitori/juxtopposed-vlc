@@ -17,7 +17,7 @@ using G = StoreProfileGeneration;
 namespace {
 void say(const QByteArray& line)
 {
-    std::fputs((line + '\n').constData(), stdout);
+    std::fputs(QByteArray(line + '\n').constData(), stdout);
     std::fflush(stdout);
 }
 

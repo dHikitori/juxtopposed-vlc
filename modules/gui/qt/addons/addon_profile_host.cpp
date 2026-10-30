@@ -5,6 +5,7 @@
 #include "addon_profile_host.hpp"
 #include "addon_manager.hpp"
 #include "addon_package_store.hpp"
+#include "addon_store_process_fence.hpp"
 
 namespace vlc::addons {
 AddonProfileHost::AddonProfileHost(AddonManager* manager, AddonStreamLifetime::Handle work, QObject* parent)
@@ -24,6 +25,11 @@ bool AddonProfileHost::start()
         return false;
     m_started = true;
     m_directory = m_manager->storageDirectory();
+    if (!StoreProcessFence::supported(m_directory)) {
+        qWarning("The add-on profile is on a drive without file locks, so it is not shared: "
+                 "add-on changes in this window are not sent to other windows.");
+        return true;
+    }
     // Memory only. From here, native admission and ordinary store writes wait
     // for the profile coordinator.
     auto peer = StoreAuthority(m_directory).attachPeer();
@@ -54,6 +60,7 @@ bool AddonProfileHost::start()
     if (!writer.permit)
         return false;
     m_manager->setProfileWriter(std::move(writer));
+    m_shared = true;
     return true;
 }
 

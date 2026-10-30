@@ -71,7 +71,13 @@ std::shared_ptr<const StoreProcessFence> StoreProcessFence::acquire(
     OVERLAPPED range{};
     if (!LockFileEx(native->file, LOCKFILE_FAIL_IMMEDIATELY
             | (mode == Mode::Replacement ? LOCKFILE_EXCLUSIVE_LOCK : 0), 0, 1, 0, &range)) {
-        if (GetLastError() == ERROR_LOCK_VIOLATION) { if (status) *status = Status::Busy; return {}; }
+        const auto code = GetLastError();
+        if (code == ERROR_LOCK_VIOLATION) { if (status) *status = Status::Busy; return {}; }
+        if (code == ERROR_INVALID_FUNCTION || code == ERROR_NOT_SUPPORTED) {
+            if (error) *error = QStringLiteral("The add-on profile drive does not support file locks.");
+            if (status) *status = Status::Unsupported;
+            return {};
+        }
         return fail("The app cannot lock the add-on profile.");
     }
 #elif defined(Q_OS_UNIX)
@@ -84,6 +90,11 @@ std::shared_ptr<const StoreProcessFence> StoreProcessFence::acquire(
         return fail("The add-on profile lock file is not correct.");
     if (flock(native->file, (mode == Mode::Peer ? LOCK_SH : LOCK_EX) | LOCK_NB)) {
         if (errno == EWOULDBLOCK || errno == EAGAIN) { if (status) *status = Status::Busy; return {}; }
+        if (errno == ENOLCK || errno == EOPNOTSUPP || errno == ENOTSUP) {
+            if (error) *error = QStringLiteral("The add-on profile drive does not support file locks.");
+            if (status) *status = Status::Unsupported;
+            return {};
+        }
         return fail("The app cannot lock the add-on profile.");
     }
 #else
@@ -92,5 +103,12 @@ std::shared_ptr<const StoreProcessFence> StoreProcessFence::acquire(
     const auto result = std::shared_ptr<const StoreProcessFence>(new StoreProcessFence(std::move(native)));
     if (status) *status = Status::Acquired;
     return result;
+}
+bool StoreProcessFence::supported(const QString& directory)
+{
+    if (!QDir().mkpath(directory)) return true;
+    Status status = Status::Error;
+    const auto probe = acquire(QDir(directory).filePath(QStringLiteral("profile-lock-probe")), Mode::Peer, &status);
+    return status != Status::Unsupported;
 }
 }

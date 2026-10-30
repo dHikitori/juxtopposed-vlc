@@ -10,9 +10,14 @@ namespace vlc::addons {
 class StoreProcessFence final {
 public:
     enum class Mode { Peer, Replacement };
-    enum class Status { Acquired, Busy, Error };
+    // Unsupported: the file system has no byte-range locks (for example the
+    // WSL share \\wsl.localhost on Windows, or some network shares).
+    enum class Status { Acquired, Busy, Error, Unsupported };
     static std::shared_ptr<const StoreProcessFence> acquire(
         const QString& absoluteFile, Mode, Status*, QString* error = nullptr);
+    // False only when the directory's file system cannot hold a fence. The
+    // probe uses its own file, so it never contends with a real fence.
+    static bool supported(const QString& directory);
     ~StoreProcessFence();
     StoreProcessFence(const StoreProcessFence&) = delete;
     StoreProcessFence& operator=(const StoreProcessFence&) = delete;
