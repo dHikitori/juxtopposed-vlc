@@ -18,6 +18,47 @@ toolchain. The `addon_worker` block in `BUILD-INFO.json` still names the
 previous verified worker bundle; this package's worker was built in the
 container from current source.
 
+## First user run: profile never joined (fixed)
+
+The user's first run (package `62bfe1513e`) showed, for every bundled
+add-on, "Other app windows did not release the add-on profile in time". The
+Extensions list never loaded, "Temporarily disable add-ons" hung for about
+30 s and then failed, and closing took 5–10 s. Only one window was open.
+
+Cause: the package runs from `build-windows/vlc-win64`, so its `portable/`
+profile is on the WSL share (`\\wsl.localhost\...`). A native probe showed
+that `LockFileEx` fails there with `ERROR_INVALID_FUNCTION`; on C: it works.
+The coordinator's fence needs that lock, so the profile session never
+joined, and each add-on write waited its 10 s limit on the GUI thread.
+
+Fix (`494b99aa88`): the fence reports `Unsupported` for that error, and the
+profile host probes the drive before it shares the profile. Without locks it
+keeps the profile unshared: ordinary store writes, serialized by
+`store.lock`, and a log warning that other windows are not told about
+changes.
+
+Native Windows runs of the rebuilt tests (built in the Windows build
+container, run from `%TEMP%`):
+
+| Test | Result |
+| --- | --- |
+| `test_qt_addon_profile_host`, profile on C: | 5 of 5 pass |
+| `test_qt_addon_profile_host`, profile on the WSL share, before the fix | 3 of 3 profile cases fail (`host->ready()` stays false) |
+| `test_qt_addon_profile_host` with the fix, including `aDriveWithoutLocksLeavesTheProfileUnshared` on the WSL share | 6 of 6 pass |
+| `test_qt_addon_store_profile_session` (handover and crash matrix) | 14 of 14 pass |
+
+These are the first Windows runs of the Step 2 session suites.
+
+The package is now `494b99aa88` (core and Qt): `vlc.exe`
+`0bd7b6b8b5e263be92e6a3cc137a6a6800b9a61706836828ffdc99a386a84110`,
+`libqt_plugin.dll`
+`b1edbd0fd75a513e648d1b1f461cc03b7db37ce411b18f4dccec4358f262ce28`.
+
+Still open: a write that cannot join a shared profile for another reason
+still waits up to 10 s on the GUI thread. Moving these writes to joined work
+with an asynchronous result is the follow-up named in
+[the mount record](profile-mount.md).
+
 ## Checks run here
 
 The packaged worker ran natively on Windows with the bundled MusicBrainz
