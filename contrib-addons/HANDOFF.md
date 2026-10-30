@@ -58,15 +58,14 @@ The user delegated decisions 2–4 to Claude.
   option `addon-test-driver`, off by default, on in `build-redesign`.
   `meson test --suite app` runs three full app tests, including the driver
   run with the discovery fixture.
-- **Step 2 in progress.** 2.1 coordinator (`5fd715edaa`) and 2.2 client
-  (`7a8c17ed81`) are done; see `records/profile-coordinator.md` and
-  `records/profile-client.md`. 2.3 permit (`a61031e03a`) and 2.4 write
-  refusal (`8808838eee`) are done (`records/profile-write-permit.md`). **Next:** 2.5,
-  coordinator handover. The
-  Step 1 remainder (Radio Browser playback, the F1 per-call measurement) can
-  wait for Step 3.
-- **Then:** the rest of Step 2 (the connection-bound write permit, write
-  refusal, coordinator handover, the app mount and the crash matrix).
+- **Step 2 is done on Linux** (`5fd715edaa` to `3ad4ffc6a2`). Records:
+  `records/profile-coordinator.md`, `profile-client.md`,
+  `profile-write-permit.md`, `profile-mount.md`. The app mounts the shared
+  profile (`AddonProfileHost`); every store write goes through permits. Not
+  run yet for the new units: Windows, ASAN/UBSAN, standalone CMake.
+- **Next:** Step 3 (performance: precompiled modules F1, cancellation event
+  F2, crash backoff F3, launch feedback F4). Step 4 (native owner
+  activation) is now unblocked by Step 2.
 - **Do not** activate the native metadata owner before Step 2 passes.
 
 ## Environment notes

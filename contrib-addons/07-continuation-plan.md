@@ -372,7 +372,14 @@ with the handshake deadline; see [the record](records/profile-coordinator.md).
 2.2, the client owner, is done in `7a8c17ed81`; see
 [the record](records/profile-client.md). 2.3, the write permit (`a61031e03a`),
 and 2.4, write refusal (`8808838eee`), are done; see
-[the record](records/profile-write-permit.md). 2.5 to 2.7 remain.
+[the record](records/profile-write-permit.md). 2.5 handover (`5760d62a9c`),
+2.6 app mount (`09f47c44fa`) and 2.7 crash matrix (`3ad4ffc6a2`) are done; see
+[the record](records/profile-mount.md). **Step 2's exit holds on Linux:** the
+crash matrix passes, the two-process control now passes (a change in one
+process cancels native work in the other), and the two-window smoke test
+installs a package in one window and shows it in the other, with no error and
+0.13–0.14 s idle CPU per window over 30 s. Windows and ASAN runs of the new
+units remain for the Step 5 milestone.
 
 Build on the tested protocol, arbiter, peer readiness, generation, writer
 scope and socket. The order of work:
