@@ -350,6 +350,17 @@ time as Step 2.
   Before Step 2 is mounted, the two-window variant only has to start and
   quit cleanly.
 
+Part done on 30 October 2026; see [the Linux smoke record](records/app-smoke-linux.md).
+The full app builds and starts headless. `addon_app_smoke` and
+`addon_app_smoke_two_windows` (label `app`) pass: start, bundled add-ons,
+local playback, 30 s idle and quit, with two windows quit in both orders.
+Idle CPU is about 0.2 s per 30 s and memory about 280 MB, with no add-on
+worker running. All seven labels pass in the VLC build after fixes, including
+a Core thumbnail status regression. Open: the Extensions model, a provider
+invocation against a local fixture, Radio Browser fixture playback and the
+worker numbers. These need an in-app test driver. A quit crash inside the WSL
+D3D12 GPU driver is also open; the smoke test uses llvmpipe.
+
 ### Step 2. Profile peer protocol owners
 
 Build on the tested protocol, arbiter, peer readiness, generation, writer

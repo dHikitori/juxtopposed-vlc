@@ -48,8 +48,16 @@ The user delegated decisions 2–4 to Claude.
   after them. Run a label with `meson test -C build-redesign --suite <label>`
   after sourcing `.design-reference/native-build/env.sh`. Records are now in
   `records/`. `IMPLEMENTATION.md` is the maturity matrix.
-- **Next:** Step 1 (full Linux app build plus a headless smoke test). Step 1
-  does not depend on Step 2, so they can run in parallel.
+- **Step 1 is partly done** (`818c1032a7` to `375f9dba89`). See
+  `records/app-smoke-linux.md`. The full app builds, `meson test --suite app`
+  passes, and all seven labels pass. Build with
+  `.design-reference/native-build/build-env.sh` sourced (it adds include and
+  library paths the full build needs). projectM is disabled in
+  `build-redesign` because its library is gone.
+- **Next:** the in-app test driver for the rest of the Step 1 smoke test
+  (Extensions model, provider invocation, Radio Browser fixture playback,
+  worker numbers). It needs a decision from the user on how the driver is
+  built. Step 2 can start in parallel.
 - **Then:** Step 2 (the coordinator and client owners, the
   connection-bound write permit, write refusal, coordinator handover, the
   app mount and the crash matrix).

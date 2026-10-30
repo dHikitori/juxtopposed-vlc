@@ -19,17 +19,19 @@ are in [records/](records/).
 | app-verified (Linux) | A scripted full Linux app run of current source checks it. |
 | platform-verified | Full app runs check it on Linux, Windows and macOS. |
 
-**No row is app-verified yet.** Step 1 of the continuation plan is the first
-full Linux app run of current source. Earlier app runs at older commits are
-listed as evidence. They do not raise a level, because the owners mounted
-since then have not run together. No row is platform-verified: there is no
-macOS build.
+**No row is app-verified yet.** The [Linux smoke test](records/app-smoke-linux.md)
+starts the full app with every current owner mounted, prepares the bundled
+add-ons, plays a local file, stays idle and quits, in one window and in two.
+It does not yet exercise any one requirement end to end, so it does not raise
+a level by itself. Earlier app runs at older commits are listed as evidence.
+No row is platform-verified: there is no macOS build.
 
 ## How to run the evidence
 
 Each add-on test has one label in [`test/addon-tests.txt`](../test/addon-tests.txt):
-`profile`, `metadata`, `source`, `ui`, `session` or `visualizer`. Run one label
-with one command:
+`profile`, `metadata`, `source`, `ui`, `session`, `visualizer`, or `app` for
+the full app smoke tests. Source `.design-reference/native-build/env.sh`
+first on this machine. Run one label with one command:
 
 - meson (VLC build): `meson test -C <build> --suite <label>`
 - standalone CMake (`modules/gui/qt/addons`): `ctest --test-dir <build> -L <label>`
@@ -49,12 +51,19 @@ Add one row for each label run that a record or a decision relies on.
 | Commit | Label | Result | Platform and build |
 | --- | --- | --- | --- |
 | `81e29bc6d0` | `profile` | 21 tests, 720 cases. 0 failed, 0 skipped. | Linux, meson debug (`build-redesign`), Docker cross-user cases included |
+| `375f9dba89` | `profile` | 21 tests, 720 cases. 0 failed, 0 skipped. | Linux, meson debug |
+| `375f9dba89` | `metadata` | 50 tests, 727 cases. 0 failed, 0 skipped. | Linux, meson debug |
+| `375f9dba89` | `source` | 22 tests, 289 cases. 0 failed, 1 skipped (needs a harness-only wrapper). | Linux, meson debug |
+| `375f9dba89` | `ui` | 7 tests, 170 cases. 0 failed, 0 skipped. | Linux, meson debug |
+| `375f9dba89` | `session` | 4 tests, 28 cases. 0 failed, 0 skipped. | Linux, meson debug |
+| `375f9dba89` | `visualizer` | 12 tests, 116 cases. 0 failed, 0 skipped. | Linux, meson debug |
+| `375f9dba89` | `app` | 2 tests (one and two windows). 0 failed. | Linux, meson debug, offscreen Qt, Mesa llvmpipe |
 
 ## Cross-cutting gates
 
 | Gate | State | Evidence |
 | --- | --- | --- |
-| Full Linux app build and scripted smoke test | Open. Plan Step 1. | — |
+| Full Linux app build and scripted smoke test | Builds and runs. Start, bundled preparation, playback, idle and quit pass in one and two windows. Extensions model, provider invocation, Radio Browser playback and Phase 0 worker numbers are open. Quit crashes in the WSL D3D12 GPU driver; the test uses llvmpipe. | [Linux smoke test](records/app-smoke-linux.md) |
 | Performance: no idle work, no package I/O in basic UI, worker cold and repeated cost | Open. Focused idle regressions pass. No full app measurement. Plan findings F1–F3 apply. | [performance contract](performance-contract.md) |
 | Windows GUI checks of the current review package (`74ae4267fc`) | Open, with the user. | [Windows artwork build](records/windows-artwork-build-2026-10-30.md) |
 | Windows cursor report | Open, with the user. Plan F4 gives the hypothesis and the live check. | [cursor report](records/windows-cursor-feedback.md) |
