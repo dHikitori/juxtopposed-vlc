@@ -108,7 +108,7 @@ ColumnLayout {
             return
         }
         if (loaded) return // Preserve private edits through unrelated refreshes.
-        const nextSchema = backend.displaySettingsSchema(packageId)
+        const nextSchema = Contract.plain(backend.displaySettingsSchema(packageId), {})
         schemaError = Contract.validateSettingsSchema(nextSchema)
         if (schemaError.length) return
         schema = Contract.clone(nextSchema)
@@ -141,7 +141,7 @@ ColumnLayout {
             schemaError = ""; draftValues = ({}); initialValues = ({}); initialBackendValues = ({}); secretStatus = ({})
             return
         }
-        const nextSchema = backend.settingsSchema(packageId)
+        const nextSchema = Contract.plain(backend.settingsSchema(packageId), {})
         schemaError = Contract.validateSettingsSchema(nextSchema)
         if (schemaError.length) { schema = {type: "object", properties: {}, additionalProperties: false}; draftValues = ({}); initialValues = ({}); initialBackendValues = ({}); secretStatus = ({}); return }
         schema = Contract.clone(nextSchema)

@@ -456,6 +456,17 @@ TestCase {
         compare(page.stateText(manager.packages[0]), "Temporarily disabled")
         page.setPaused(false); verify(item("addonPackageEnabled_org.example.one").enabled)
     }
+    function test_anAddonWithoutSettingsOffersNoSettingsButton() {
+        manager.packages = [{id: "org.example.one", name: "One", enabled: true, hasSettings: false},
+                            {id: "org.example.two", name: "Two", enabled: true}]; manager.revision++
+        selectPackage("org.example.one")
+        verify(!item("addonSelectedSettings").enabled)
+        verify(!item("addonPackageConfigure_org.example.one").visible)
+        // Rows without the flag keep the button, as before.
+        selectPackage("org.example.two")
+        verify(item("addonSelectedSettings").enabled)
+        verify(item("addonPackageConfigure_org.example.two").visible)
+    }
     function test_anEnabledRowShowsRecentWorkerCrashes() {
         manager.packages = [{id: "org.example.one", name: "One", enabled: true}]; manager.revision++
         compare(page.stateText(manager.packages[0]), "Enabled")

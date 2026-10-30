@@ -110,7 +110,9 @@ std::shared_ptr<const AddonCatalogueView::Data> AddonCatalogueView::project(Disp
             {"publisherVerified",false},{"enabled",package.enabled},{"savedEnabled",row.savedEnabled},
             {"displayPartition",settingsPartition},{"configured",configured},{"configurationKnown",known},{"configurationState",!known?QStringLiteral("unknown"):configured?QStringLiteral("ready"):QStringLiteral("missing")},{"installed",true},
             {"recoveryRequired",package.recoveryRequired},{"removing",source.removing.contains(id)},
-            {"hasPrevious",!package.previousDigest.isEmpty()}};
+            {"hasPrevious",!package.previousDigest.isEmpty()},
+            // A package without a settings field has nothing to open.
+            {"hasSettings",!row.schema.value(QStringLiteral("properties")).toObject().isEmpty()}};
         const auto app=source.distributions.value(id);
         SemanticVersion offered,installed;
         const bool update=package.identity.distributionSource && !package.recoveryRequired

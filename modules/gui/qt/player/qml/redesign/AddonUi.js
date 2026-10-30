@@ -12,6 +12,9 @@ function own(object, key) {
 function record(value) { return value !== null && typeof value === "object" && !Array.isArray(value) }
 function safeKey(key) { return /^[A-Za-z_][A-Za-z0-9_.-]{0,95}$/.test(key) && !forbiddenKeys.includes(key) }
 function clone(value) { return JSON.parse(JSON.stringify(value)) }
+// A list from C++ arrives as a sequence, for which Array.isArray is false.
+// Validate and keep plain copies of host data instead.
+function plain(value, fallback) { return value === undefined || value === null ? fallback : clone(value) }
 
 function dataError(value, depth, budget) {
     if (depth > 20 || --budget.nodes < 0) return "The data is larger than the limit."

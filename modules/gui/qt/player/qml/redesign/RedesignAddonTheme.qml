@@ -10,7 +10,7 @@ QtObject {
     property string userAccent: ""
     property bool highContrast: false
     property bool reducedTransparency: false
-    readonly property string errorMessage: document === null ? "" : Contract.validate(document)
+    readonly property string errorMessage: document === null ? "" : Contract.validate(Contract.plain(document, null))
     readonly property bool valid: errorMessage.length === 0
     readonly property bool usesFallbackVariant: document !== null && valid && !document.variants[lightTheme ? "light" : "dark"]
     readonly property var snapshot: Contract.resolve(document, lightTheme, userAccent, {highContrast: highContrast, reducedTransparency: reducedTransparency})

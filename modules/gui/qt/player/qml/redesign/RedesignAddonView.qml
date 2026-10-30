@@ -30,13 +30,15 @@ Item {
     function accept() {
         if (!ready) return
         if (document === null) { acceptedDocument = null; acceptedState = ({}); acceptedMessages = ({}); errorMessage = ""; return }
-        const problem = Contract.validateView(document, registeredCommands)
-            || Contract.validateData(state) || Contract.validateData(messages)
-            || Contract.validateProjection(document.root, state, null, messages)
+        const nextDocument = Contract.plain(document, null), nextState = Contract.plain(state, {})
+        const nextMessages = Contract.plain(messages, {})
+        const problem = Contract.validateView(nextDocument, Contract.plain(registeredCommands, []))
+            || Contract.validateData(nextState) || Contract.validateData(nextMessages)
+            || Contract.validateProjection(nextDocument.root, nextState, null, nextMessages)
         if (problem) { errorMessage = qsTr("The add-on view has an error. %1").arg(problem); return }
-        acceptedState = Contract.clone(state)
-        acceptedMessages = Contract.clone(messages)
-        if (JSON.stringify(document) !== JSON.stringify(acceptedDocument)) acceptedDocument = Contract.clone(document)
+        acceptedState = nextState
+        acceptedMessages = nextMessages
+        if (JSON.stringify(nextDocument) !== JSON.stringify(acceptedDocument)) acceptedDocument = nextDocument
         errorMessage = ""
     }
     function resolve(value, item) { return Contract.resolve(value, acceptedState, item, acceptedMessages) }

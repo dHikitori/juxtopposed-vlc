@@ -381,7 +381,8 @@ ColumnLayout {
             }
             ActionButton {
                 objectName: "addonSelectedSettings"
-                caption: qsTr("Settings"); visible: root.width >= root.theme.dp(360); enabled: root.listReady && !!root.selectedPackage.id && !root.busy
+                caption: qsTr("Settings"); visible: root.width >= root.theme.dp(360)
+                enabled: root.listReady && !!root.selectedPackage.id && root.selectedPackage.hasSettings !== false && !root.busy
                 onClicked: root.configure(root.selectedPackage.id)
             }
             ActionButton {
@@ -422,6 +423,8 @@ ColumnLayout {
                 ActionButton {
                     objectName: "addonPackageConfigure_" + (root.selectedPackage.id || "")
                     caption: root.selectedPackage.configured === false && root.selectedPackage.configurationKnown !== false ? qsTr("Set up…") : qsTr("Settings…")
+                    // An add-on without settings has nothing to open.
+                    visible: root.selectedPackage.hasSettings !== false
                     enabled: root.listReady && !root.busy
                     onClicked: root.configure(root.selectedPackage.id)
                 }
