@@ -44,10 +44,12 @@ The user delegated decisions 2–4 to Claude.
   Native Windows passes 32/32 socket and 16/16 peer cases. Four negative
   controls fail as intended. Note 3 (the handshake deadline) moves to the
   Step 2 coordinator owner.
-- **Next:** Step 0b (test labels, a check that the three build systems list
-  the same tests, and the document move), and Step 1 (full Linux app build
-  plus a headless smoke test). Step 1 does not depend on Step 2, so they can
-  run in parallel.
+- **Step 0b is done** in `81e29bc6d0`, `992463f6f5` and the matrix commit
+  after them. Run a label with `meson test -C build-redesign --suite <label>`
+  after sourcing `.design-reference/native-build/env.sh`. Records are now in
+  `records/`. `IMPLEMENTATION.md` is the maturity matrix.
+- **Next:** Step 1 (full Linux app build plus a headless smoke test). Step 1
+  does not depend on Step 2, so they can run in parallel.
 - **Then:** Step 2 (the coordinator and client owners, the
   connection-bound write permit, write refusal, coordinator handover, the
   app mount and the crash matrix).
@@ -89,6 +91,14 @@ These matter on this machine (WSL2 on Windows):
   - Step 0b replaces this harness with labelled in-repository test suites.
 - **Full app builds:** `build-redesign/` (Linux, ninja) and `build-windows/`.
   Neither has been rebuilt with the latest owners. That is Step 1.
+  - `build-redesign` is a meson tree. Source
+    `.design-reference/native-build/env.sh` first. Without it, the Qt tools
+    (`rcc`, `qmltyperegistrar`) cannot load ICU 73 from the sysroot, and
+    meson regeneration fails.
+  - The Qt SDK, the sysroot, `build-redesign/test` and
+    `build-redesign/modules/libqt_plugin.so.p` are symlinks to the C: drive
+    (87 GB free), so test executables and Qt plugin objects do not use the
+    WSL disk.
 - **Commit trailer:** `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Open items owned by the user

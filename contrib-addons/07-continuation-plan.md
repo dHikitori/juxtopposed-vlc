@@ -322,6 +322,19 @@ Done on 30 October 2026, except note 3, which moves to Step 2. See
 - **Exit:** one command runs each label on Linux. All relative links in this
   directory resolve.
 
+Done on 30 October 2026 in `81e29bc6d0` (labels), `992463f6f5` (move) and
+the matrix commit after it. [`test/addon-tests.txt`](../test/addon-tests.txt)
+holds the labels; meson and CMake read it. `check_addon_tests.py` passes for
+128 tests. The `profile` label runs with one meson command: 21 tests and 720
+cases pass. The other labels resolve to their tests in meson; they run with
+the Step 1 build. Findings:
+
+- 18 add-on tests are registered only in the standalone CMake project. The
+  table records them. The three profile write tests are now also in
+  Automake and meson.
+- The episode and artwork consumer tests (`build_addon_episode_tests.py`)
+  are in no build system.
+
 ### Step 1. Walking skeleton on Linux
 
 This step does not depend on Step 2. Start it first, or run it at the same
