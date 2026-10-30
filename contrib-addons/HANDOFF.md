@@ -58,8 +58,10 @@ The user delegated decisions 2–4 to Claude.
   option `addon-test-driver`, off by default, on in `build-redesign`.
   `meson test --suite app` runs three full app tests, including the driver
   run with the discovery fixture.
-- **Step 2 started.** 2.1, the coordinator owner, is done in `5fd715edaa`
-  (`records/profile-coordinator.md`). **Next:** 2.2, the client owner. The
+- **Step 2 in progress.** 2.1 coordinator (`5fd715edaa`) and 2.2 client
+  (`7a8c17ed81`) are done; see `records/profile-coordinator.md` and
+  `records/profile-client.md`. **Next:** 2.3, the connection-bound write
+  permit. The
   Step 1 remainder (Radio Browser playback, the F1 per-call measurement) can
   wait for Step 3.
 - **Then:** the rest of Step 2 (the connection-bound write permit, write

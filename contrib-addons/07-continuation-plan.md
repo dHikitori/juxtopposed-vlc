@@ -369,7 +369,8 @@ GPU driver (the smoke test uses llvmpipe).
 
 Started 30 October 2026. 2.1, the coordinator owner, is done in `5fd715edaa`,
 with the handshake deadline; see [the record](records/profile-coordinator.md).
-2.2 to 2.7 remain.
+2.2, the client owner, is done in `7a8c17ed81`; see
+[the record](records/profile-client.md). 2.3 to 2.7 remain.
 
 Build on the tested protocol, arbiter, peer readiness, generation, writer
 scope and socket. The order of work:
