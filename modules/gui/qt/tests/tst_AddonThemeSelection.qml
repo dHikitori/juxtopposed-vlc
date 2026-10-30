@@ -43,6 +43,15 @@ TestCase {
         keyClick(Qt.Key_Space)
         compare(service.selectedTheme, ""); compare(service.selections, 2)
     }
+    function test_resetIsHiddenAfterAMouseChoice() {
+        mouseMove(page, page.width + 50, page.height + 50); wait(20)
+        page.forceActiveFocus()
+        item("addonThemeSelection").forceActiveFocus(Qt.MouseFocusReason)
+        verify(!item("addonThemeRestoreDefault").visible)
+        page.forceActiveFocus()
+        item("addonThemeSelection").forceActiveFocus(Qt.TabFocusReason)
+        verify(item("addonThemeRestoreDefault").visible)
+    }
     function test_missingVariantAndRecoveryStayVisible() {
         service.selectedTheme = "org.example.theme/midnight"; page.lightTheme = true
         verify(item("addonThemeFallbackStatus").visible)

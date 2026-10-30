@@ -37,33 +37,48 @@ ColumnLayout {
                 text: qsTr("Theme pack"); textFormat: Text.PlainText; wrapMode: Text.Wrap
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
             }
-            RedesignButton {
+            // Same help control and reset rule as RedesignPreferenceRow.
+            C.ToolButton {
                 id: help
                 objectName: "addonThemeHelp"
+                readonly property string helpText: qsTr("Choose an enabled theme pack. The app applies the theme at once.")
+                width: root.theme.dp(24); height: width; padding: root.theme.dp(3)
                 x: label.width + root.theme.dp(8); anchors.verticalCenter: parent.verticalCenter
-                width: root.theme.dp(24); height: width; iconSize: root.theme.dp(18)
-                iconName: "info"; text: qsTr("Choose an enabled theme pack. The app applies the theme at once.")
-                tooltipTextFormat: Text.PlainText
-                Accessible.name: qsTr("About theme packs"); Accessible.description: text
-                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                focusPolicy: Qt.StrongFocus
+                hoverEnabled: true
+                Accessible.name: qsTr("About theme packs"); Accessible.description: helpText
                 onClicked: hint.visible ? hint.close() : hint.open()
+                contentItem: RedesignIcon {
+                    name: "info"; color: root.theme.foreground
+                    opacity: help.hovered || help.visualFocus || hint.visible ? 1 : 0.4
+                }
+                background: Rectangle {
+                    radius: root.theme.dp(4)
+                    color: help.hovered ? root.theme.hover : "transparent"
+                    border.width: help.visualFocus ? 1 : 0
+                    border.color: root.theme.accent
+                }
                 C.Popup {
                     id: hint
                     objectName: "addonThemeHelpPopup"
-                    parent: C.Overlay.overlay
                     popupType: C.Popup.Item
-                    margins: root.theme.dp(6)
-                    x: parent ? Math.max(margins, Math.min(help.mapToItem(parent, 0, 0).x, parent.width - width - margins)) : 0
-                    y: parent ? help.mapToItem(parent, 0, help.height).y + root.theme.dp(4) : help.height
-                    width: Math.min(root.theme.dp(360), root.width, parent ? parent.width - 2 * margins : root.width)
-                    padding: root.theme.dp(12); focus: true
+                    y: help.height + root.theme.dp(4)
+                    width: Math.min(root.theme.dp(360), root.width)
+                    x: Math.max(-help.x, Math.min(0, root.width - help.x - width))
+                    padding: root.theme.dp(12); margins: root.theme.dp(6)
+                    focus: true
                     closePolicy: C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutside
                     contentItem: Text {
-                        text: help.text; textFormat: Text.PlainText; wrapMode: Text.Wrap
+                        text: help.helpText; textFormat: Text.PlainText; wrapMode: Text.Wrap
                         color: root.theme.bright; font.pixelSize: root.theme.dp(14)
                     }
                     background: Rectangle { radius: root.theme.dp(6); color: root.theme.panel; border.width: 1; border.color: root.theme.border }
                 }
+            }
+            RedesignToolTip {
+                theme: root.theme; text: help.helpText
+                visible: (rowHover.hovered || help.visualFocus) && !hint.visible && !reset.hovered && !reset.visualFocus
+                delay: help.hovered || help.visualFocus ? 0 : 500
             }
             RedesignButton {
                 id: reset
@@ -72,7 +87,9 @@ ColumnLayout {
                 width: root.theme.dp(26); height: root.theme.dp(28); iconSize: root.theme.dp(18)
                 iconName: "history"; text: qsTr("Reset to default"); tooltipTextFormat: Text.PlainText
                 Accessible.name: qsTr("Reset theme pack to default")
-                visible: rowHover.hovered || help.activeFocus || selector.activeFocus || hovered || visualFocus
+                // Keyboard focus in the row also shows it, so Tab can reach it;
+                // focus left by a mouse click does not.
+                visible: rowHover.hovered || hovered || visualFocus || help.visualFocus || selector.visualFocus
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.backend.selectTheme("")
             }
