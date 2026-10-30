@@ -35,6 +35,7 @@ test_qt_addon_store_profile_packages            profile     all
 test_qt_addon_store_profile_peer                profile     all
 test_qt_addon_store_profile_protocol            profile     all
 test_qt_addon_store_profile_settings            profile     all
+test_qt_addon_store_profile_writes              profile     all
 test_qt_addon_store_profile_client              profile     all
 test_qt_addon_store_profile_coordinator         profile     all
 test_qt_addon_store_profile_socket              profile     all

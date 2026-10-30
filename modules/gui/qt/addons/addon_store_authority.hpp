@@ -110,6 +110,9 @@ public:
     // Hold the store lock before this gate. Keep it through the last write.
     StoreAuthorityMutation mutation() const noexcept;
     void invalidate() const noexcept;
+    // True once a peer was attached to this profile in this process. From then
+    // on, store writes need the profile coordinator's permit (Step 2.4).
+    bool peerAttached() const noexcept;
     // Persistent display wake only. Callback uses native/std state, must not
     // block, throw, retain Qt values or reenter Store. No authority is granted.
     // Notifications may repeat. The native wake/caller coalesces them; a final

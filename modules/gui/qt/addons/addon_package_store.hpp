@@ -173,7 +173,13 @@ public:
     StoreProfileGeneration::Change setDistributionSuppressed(const StoreProfileWriteContext&,
         const QString& id, bool suppressed, QString* error = nullptr);
 
+    // True once this process shares the profile with other app processes.
+    // The ordinary write methods above then refuse; use the guarded methods
+    // inside a coordinator-permitted StoreProfileGeneration write.
+    bool sharedProfile() const noexcept { return m_authority.peerAttached(); }
+
 private:
+    bool ordinaryWriteAllowed(QString* error) const;
     QString m_root;
     StoreAuthority m_authority;
     StoreProfileGeneration::Change installLocked(const PackageCandidate&, const QJsonObject& grants,

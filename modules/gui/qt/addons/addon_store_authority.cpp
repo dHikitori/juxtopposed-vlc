@@ -283,6 +283,10 @@ StoreAuthorityWatch StoreAuthorityToken::onInvalidated(std::function<void()> can
     if (!admitted) { callback->fire(); endCallbackBatch(m_state); return {}; }
     StoreAuthorityWatch watch; watch.m_callback = std::move(callback); return watch;
 }
+bool StoreAuthority::peerAttached() const noexcept
+{
+    return m_state->peerStamp.load(std::memory_order_acquire) != 0;
+}
 void StoreAuthority::invalidate() const noexcept
 {
     if (m_state->peerStamp.load(std::memory_order_acquire)) closePeerAuthority(m_state);

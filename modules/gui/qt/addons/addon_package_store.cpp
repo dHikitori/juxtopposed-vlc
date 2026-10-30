@@ -1036,8 +1036,17 @@ bool PackageStore::privateStorage(const PrivateStorageContext& context, const QS
     if (response) *response = result;
     return true;
 }
+bool PackageStore::ordinaryWriteAllowed(QString* error) const
+{
+    // A shared profile changes only through the coordinator's permit, so that
+    // other processes revoke their native authority first.
+    if (!m_authority.peerAttached())
+        return true;
+    return fail(error, QStringLiteral("Other app windows share this add-on profile. The change must go through the profile coordinator."));
+}
 bool PackageStore::install(const PackageCandidate& candidate, const QJsonObject& grants, QString* error, bool distributionApproval)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     if (!validateCandidate(candidate, error) || !validateGrants(candidate.manifest, grants, error)) return false;
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The app cannot create the add-on store."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
@@ -1249,6 +1258,7 @@ ProfileChange PackageStore::installLocked(const PackageCandidate& candidate, con
 bool PackageStore::ensureDistributionPackage(const QString& directory,const Manifest& offer,
     DistributionInstallResult* output,QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     if(output)*output={};
     const auto id=offer.id;
     if(!packageId(id))return fail(error,QStringLiteral("The distribution package ID is not correct."));
@@ -1372,6 +1382,7 @@ QStringList PackageStore::installedIds() const
 }
 bool PackageStore::setEnabled(const QString& id, bool enabled, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     return setEnabledLocked(id, enabled, error) == ProfileChange::Applied;
@@ -1412,6 +1423,7 @@ ProfileChange PackageStore::setEnabledLocked(const QString& id, bool enabled, QS
 }
 bool PackageStore::rollback(const QString& id, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     return rollbackLocked(id, error, nullptr) == ProfileChange::Applied;
@@ -1503,6 +1515,7 @@ bool PackageStore::canUninstall(const QString& id, bool removeData, QString* err
 }
 bool PackageStore::uninstall(const QString& id, bool removeData, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     if (!packageId(id)) return fail(error, QStringLiteral("The package ID is not correct."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
@@ -1623,6 +1636,7 @@ bool PackageStore::saveSettings(const QString& id,const QJsonObject& settings,qu
 { return saveSettings(id,settings,revision,QString{},error); }
 bool PackageStore::saveSettings(const QString& id,const QJsonObject& settings,quint64 revision,const QString& expectedStamp,QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     if (QJsonDocument(settings).toJson(QJsonDocument::Compact).size() > 256 * 1024)
         return fail(error, QStringLiteral("The settings are too large."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
@@ -1741,6 +1755,7 @@ QJsonArray PackageStore::retainedGenerations(const QString& id, QString* error) 
 
 bool PackageStore::recover(const QString& id, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
     return recoverLocked(id, error, nullptr) == ProfileChange::Applied;
@@ -2139,6 +2154,7 @@ ProfileChange PackageStore::saveProviderPreferenceLocked(const QString& key, con
 bool PackageStore::saveProviderOrder(const QString& feature, const QStringList& ids,
                                      QJsonObject* saved, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     const auto order = QJsonArray::fromStringList(ids);
     if (!providerFeature(feature) || !providerIds(order))
         return fail(error, QStringLiteral("The provider order is not correct."));
@@ -2148,6 +2164,7 @@ bool PackageStore::saveProviderOrder(const QString& feature, const QStringList& 
 bool PackageStore::saveBuiltinProviderEnabled(const QString& id, bool enabled,
                                               QJsonObject* saved, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     if (!packageId(id) || !id.startsWith(QLatin1String("hakone.builtin.")))
         return fail(error, QStringLiteral("The provider ID is not correct."));
     return saveProviderPreference(id, enabled, true, saved, error);
@@ -2178,6 +2195,7 @@ ProfileChange PackageStore::saveBuiltinProviderEnabled(const StoreProfileWriteCo
 
 bool PackageStore::setSafeMode(bool enabled, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if (!lock.tryLock(0)) return fail(error, QStringLiteral("The add-on store is busy."));
@@ -2240,6 +2258,7 @@ bool PackageStore::distributionSuppressed(const QString& id) const
 
 bool PackageStore::setDistributionSuppressed(const QString& id, bool suppressed, QString* error)
 {
+    if (!ordinaryWriteAllowed(error)) return false;
     if (!packageId(id)) return fail(error, QStringLiteral("The distribution package ID is not correct."));
     if (!QDir().mkpath(m_root)) return fail(error, QStringLiteral("The add-on store directory is not available."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);

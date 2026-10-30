@@ -2642,6 +2642,17 @@ test_qt_addon_store_profile_client_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_
 check_PROGRAMS += test_qt_addon_store_profile_client
 TESTS += test_qt_addon_store_profile_client
 
+test_qt_addon_store_profile_writes_SOURCES = tests/test_addon_store_profile_writes.cpp
+nodist_test_qt_addon_store_profile_writes_SOURCES = tests/test_addon_store_profile_writes.moc
+BUILT_SOURCES += tests/test_addon_store_profile_writes.moc
+CLEANFILES += tests/test_addon_store_profile_writes.moc
+test_qt_addon_store_profile_writes_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_store_profile_writes_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_writes_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_writes_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_writes
+TESTS += test_qt_addon_store_profile_writes
+
 test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.cpp
 nodist_test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.moc
 BUILT_SOURCES += tests/test_addon_store_profile_settings.moc
