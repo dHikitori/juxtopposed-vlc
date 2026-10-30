@@ -689,7 +689,7 @@ Item {
         Text {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: !root.homeSectionsVisible && root.itemCount === 0
+            visible: !root.homeSectionsVisible && !root.loading && root.itemCount === 0
             objectName: "libraryEmptyMessage"
             text: root.searchText.length > 0 ? qsTr("No media matches your search.") : root.emptyText
             wrapMode: Text.WordWrap; color: theme.foreground; font.pixelSize: theme.dp(14)

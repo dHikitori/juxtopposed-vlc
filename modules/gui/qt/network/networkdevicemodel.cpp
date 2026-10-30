@@ -203,7 +203,25 @@ class NetworkDeviceModelPrivate
 public:
     NetworkDeviceModelPrivate(NetworkDeviceModel * pub)
         : LocalListBaseModelPrivate<NetworkDeviceItemPtr>(pub)
-    {}
+    {
+        m_settle.setSingleShot(true);
+        m_settle.setInterval(5000);
+        QObject::connect(&m_settle, &QTimer::timeout, pub, [this] { finishLoading(); });
+    }
+
+    // Service discovery has no end signal. Loading ends with the first item,
+    // a failure, or after a short wait for a source that stays empty, so the
+    // view does not call a source empty while its first answer is on the way.
+    void finishLoading()
+    {
+        Q_Q(NetworkDeviceModel);
+        m_settle.stop();
+        if (!m_loading)
+            return;
+        m_loading = false;
+        emit q->loadingChanged();
+    }
+    QTimer m_settle;
 
     ~NetworkDeviceModelPrivate()
     {
@@ -258,6 +276,7 @@ public:
 
             m_revision += 1;
             invalidateCache();
+            finishLoading();
         });
 
         QObject::connect(m_sourcesProvider.get(), &DeviceSourceProvider::nameUpdated, q,
@@ -309,13 +328,14 @@ public:
 
             m_revision += 1;
             invalidateCache();
+            if (!m_items.empty())
+                finishLoading();
         });
 
-        m_sourcesProvider->init();
-
-        //service discovery don't notify preparse end
-        m_loading = false;
+        m_loading = true;
         emit q->loadingChanged();
+        m_settle.start();
+        m_sourcesProvider->init();
 
         return true;
     }
@@ -330,6 +350,7 @@ public:
 
     void onMediaAdded(const QSharedPointer<MediaSourceModel>& mediaSource, SharedInputItem media)
     {
+        finishLoading();
         std::size_t hash = qHash(media);
         auto it = std::find_if(
             m_items.begin(), m_items.end(),
