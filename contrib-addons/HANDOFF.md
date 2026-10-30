@@ -76,9 +76,11 @@ The user delegated decisions 2–4 to Claude.
   `addon_artwork_parity` compares each Lua art script with its add-on; all
   four pass, so the owner offers no built-in Lua member. `meson test
   --suite app` includes owner-on runs in one and two windows.
-- **Next:** Step 5 (Windows review package and the user's live checks,
-  including "Subtitle53", which is not defined in this repository). Keep
-  the owner default off until those pass. Step 3 leftover: startup on a
+- **Step 5 package is built** (`build-windows/vlc-win64`, core `8b78e46210`,
+  Qt `62bfe1513e`); see `records/windows-review-step5.md`. The packaged
+  worker passes its precompile checks natively on Windows. **Waiting for the
+  user's live checks** listed in that record. Keep the owner default off
+  until they pass. Step 3 leftover: startup on a
   normal Linux install.
 
 ## Environment notes
