@@ -308,3 +308,11 @@ fn identify_needs_one_numbered_episode() {
     request["context"]["identity"]["episodes"] = json!([2, 3]);
     assert_eq!(provider.handle(&request)[0]["status"], "unsupported");
 }
+#[test]
+fn self_test_passes_offline() {
+    let mut provider = Provider::default();
+    let reply = provider.handle(&json!({"type":"self-test","id":"check"}));
+    assert_eq!(reply.len(), 1);
+    assert_eq!(reply[0]["type"], "result");
+    assert_eq!(reply[0]["status"], "ok");
+}

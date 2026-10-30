@@ -19,7 +19,8 @@ TestCase {
         property var pendingPackage: ({})
         property var packages: []
         property int crashes: 0
-        function health(id) { return {crashes: crashes, retryInMs: 0} }
+        property bool observing: false
+        function health(id) { return {crashes: crashes, retryInMs: 0, observing: observing} }
         property var updateResult: ({})
         property var capabilities: ({workerAvailable: true, networkHttpAvailable: true, privateStorageAvailable: false, webSocketAvailable: false, coreOperations: []})
         property int updateRequests: 0
@@ -455,6 +456,13 @@ TestCase {
         compare(item("addonPackageEnabled_org.example.one").checked, false)
         compare(page.stateText(manager.packages[0]), "Temporarily disabled")
         page.setPaused(false); verify(item("addonPackageEnabled_org.example.one").enabled)
+    }
+    function test_anUpdatedAddonShowsItsTrial() {
+        manager.packages = [{id: "org.example.one", name: "One", enabled: true}]; manager.revision++
+        manager.observing = true; manager.revision++
+        compare(page.stateText(manager.packages[0]), "Enabled · New version on trial")
+        manager.observing = false; manager.revision++
+        compare(page.stateText(manager.packages[0]), "Enabled")
     }
     function test_anAddonWithoutSettingsOffersNoSettingsButton() {
         manager.packages = [{id: "org.example.one", name: "One", enabled: true, hasSettings: false},

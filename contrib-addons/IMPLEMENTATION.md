@@ -82,7 +82,7 @@ Add one row for each label run that a record or a decision relies on.
 | --- | --- | --- | --- |
 | Portable Wasm worker: no WASI, bounded memory, fuel, messages and IPC | mounted | `profile`: `test_qt_addon_runtime`; worker Rust tests; [Windows worker](records/windows-local-build.md) | Precompiled modules and warm worker (F1). Phase 0 start, footprint and hostile-computation numbers. |
 | Worker lifetime: cancellation, restart namespaces, revocation before withdrawal | mounted | `profile`: `test_qt_addon_runtime`, `test_qt_addon_broker`, `test_qt_addon_host_services`; [worker retirement](worker-retirement-contract.md) | Full app check. |
-| Crash backoff, quarantine and per-contribution health (`01-architecture.md:132,136`) | designed | — | Crash ledger, backoff, quarantine, health row (F3). |
+| Crash backoff, quarantine and per-contribution health (`01-architecture.md:132,136`) | mounted | `profile`: `test_qt_addon_worker_health`; [Step 3](records/performance-step3.md) | Per-contribution states beyond worker crashes. |
 | Host API dispatch, operation scopes and invocation guards | mounted | `profile`: `test_qt_addon_broker`, `test_qt_addon_invocation_guard` *(cmake)*; [request guards](records/native-invocation-guard.md) | Full app check. |
 | Credentials, origin scopes and public HTTPS network policy | mounted | `profile`: `test_qt_addon_runtime`, `test_qt_addon_broker`, `test_qt_addon_native_authority` | Credential stores on Windows and macOS. |
 | Guest private storage, quotas, account partitions and migrations | mounted | `profile`: `test_qt_addon_storage`; [storage contract](guest-storage-contract.md) | General blob namespace. |
@@ -99,7 +99,7 @@ Add one row for each label run that a record or a decision relies on.
 | Manifests, Git fetch (SHA-1 and SHA-256), immutable releases, permissions, enable, update and rollback | mounted | `profile`: `test_qt_addon_packages`, `test_qt_addon_git_objects` *(cmake)*, `test_qt_addon_repository_updates`; [Git formats](git-object-format-contract.md), [repository workers](records/repository-worker-lifetime.md). Windows app run at `2a689c3a11` installed seven bundles. | Full app check. Supported-platform Git checks. |
 | App distribution bundles, recovery, removal with data choice, safe mode | mounted | `profile`: `test_qt_addon_distribution_bootstrap`; `ui`: `test_qt_addon_display_integration`; [recovery contract](recovery-and-distribution-contract.md) | Full app check. Windows and macOS credential removal. |
 | Built-in provider IDs and reserved host namespaces | mounted | `profile`: `test_qt_addon_runtime`; [namespaces](host-provider-namespaces.md), [ID migration](records/builtin-provider-id-migration.md) | — |
-| Offline self-test and activation health transaction | designed | [Backlog](completion-backlog.md) | Step 6. |
+| Offline self-test and activation health transaction | mounted | [self-test and health](records/self-test-and-health.md); `profile`: `test_qt_addon_candidate_check`, `test_qt_addon_worker_health` | Staged data migration and commit journal (install steps 6–7); trial across restarts. |
 | Signed curated install path (optional) | designed | Projections report `publisherVerified=false`. | Trust anchor and catalogue verifier. |
 | Normative schemas, package validator, generated SDK types, templates, preview tool | designed | Session request and completion policy schemas only (`sdk/`). | Step 7. |
 

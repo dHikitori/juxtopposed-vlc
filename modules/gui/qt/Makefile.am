@@ -154,6 +154,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_process_launch.cpp \
 	addons/addon_process_launch.hpp \
 	addons/addon_precompiled_modules.cpp \
+	addons/addon_candidate_check.cpp \
+	addons/addon_candidate_check.hpp \
 	addons/addon_precompiled_modules.hpp \
 	addons/addon_native_wake.cpp \
 	addons/addon_native_wake.hpp \
@@ -2703,6 +2705,17 @@ test_qt_addon_worker_health_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd)
 test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_worker_health
 TESTS += test_qt_addon_worker_health
+
+test_qt_addon_candidate_check_SOURCES = tests/test_addon_candidate_check.cpp
+nodist_test_qt_addon_candidate_check_SOURCES = tests/test_addon_candidate_check.moc
+BUILT_SOURCES += tests/test_addon_candidate_check.moc
+CLEANFILES += tests/test_addon_candidate_check.moc
+test_qt_addon_candidate_check_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_candidate_check_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_candidate_check_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_candidate_check_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_candidate_check
+TESTS += test_qt_addon_candidate_check
 
 test_qt_addon_identity_choice_SOURCES = tests/test_addon_identity_choice.cpp
 nodist_test_qt_addon_identity_choice_SOURCES = tests/test_addon_identity_choice.moc

@@ -13,6 +13,7 @@
 #include "addon_prepared_artwork_asset.hpp"
 #include "addon_metadata_coordinator.hpp"
 #include <QObject>
+#include <QSet>
 #include <QElapsedTimer>
 #include <QVariantList>
 #include <atomic>
@@ -237,6 +238,10 @@ private:
     // restore clears the entry.
     struct CrashLedger { QList<qint64> recent; qint64 retryAfter = 0; };
     QHash<QString, CrashLedger> m_crashes;
+    // Updated packages in their health period (install step 8): the first
+    // worker crash restores the previous release; the first answer ends it.
+    QSet<QString> m_observing;
+    void observeUpdate(const QString& id);
     QElapsedTimer m_crashClock;
     bool crashBackoff(const QString& packageId) const;
     void recordCrash(const QString& packageId, const QString& error);

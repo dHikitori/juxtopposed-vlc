@@ -14,7 +14,8 @@
   },
   "runtime": {
     "kind": "wasm-message-v1",
-    "entry": "dist/addon.wasm"
+    "entry": "dist/addon.wasm",
+    "selfTest": true
   },
   "files": [
     "addon.json",

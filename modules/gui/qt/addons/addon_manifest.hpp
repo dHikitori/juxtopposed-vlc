@@ -49,6 +49,8 @@ struct Manifest
     QString id, name, version, publisher, license;
     QUrl source;
     QString runtimeKind, runtimeEntry;
+    // The module answers {"type":"self-test"} offline before it is installed.
+    bool runtimeSelfTest = false;
     QStringList files;
     QList<Contribution> contributions;
     QJsonObject requiredPermissions, optionalPermissions;

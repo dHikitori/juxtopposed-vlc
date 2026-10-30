@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
+#include "addon_candidate_check.hpp"
 #include "addon_catalogue_view.hpp"
 #include "addon_package_configuration.hpp"
 #include "addon_metadata_attempt.hpp"
@@ -1097,8 +1098,12 @@ bool AddonManager::stageRepository(const QString& source, const QString& tag)
     auto candidate = std::make_shared<PackageCandidate>();
     auto error = std::make_shared<QString>();
     auto success = std::make_shared<bool>(false);
-    const bool started=m_repositoryJobs->submit([candidate, error, success, source, tag] {
-        *success = PackageStore::fetchGitTag(source, tag, candidate.get(), error.get());
+    // The candidate is checked offline in the same background job, before
+    // the app offers it for install.
+    const auto worker = m_workerExecutable;
+    const bool started=m_repositoryJobs->submit([candidate, error, success, source, tag, worker] {
+        *success = PackageStore::fetchGitTag(source, tag, candidate.get(), error.get())
+            && AddonCandidateCheck::run(worker, *candidate, error.get(), [] { return RepositoryCancellation::requested(); });
     }, [this, candidate, error, success](AddonRepositoryJobs::Result result) {
         const bool canceled=result==AddonRepositoryJobs::Result::Canceled;
         const bool finished=result==AddonRepositoryJobs::Result::Finished;
@@ -1116,9 +1121,12 @@ bool AddonManager::checkRepositoryUpdates(const QString& id, const QString& rang
     auto candidate = std::make_shared<PackageCandidate>();
     auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
     const auto directory = m_store.storageDirectory();
-    const bool started=m_repositoryJobs->submit([candidate, error, success, directory, id, range, allowPrerelease] {
+    const auto worker = m_workerExecutable;
+    const bool started=m_repositoryJobs->submit([candidate, error, success, directory, id, range, allowPrerelease, worker] {
         PackageStore store(directory);
-        *success = store.fetchRepositoryUpdate(id, range, allowPrerelease, candidate.get(), error.get());
+        *success = store.fetchRepositoryUpdate(id, range, allowPrerelease, candidate.get(), error.get())
+            && (candidate->manifest.id.isEmpty()
+                || AddonCandidateCheck::run(worker, *candidate, error.get(), [] { return RepositoryCancellation::requested(); }));
     }, [this, candidate, error, success, id](AddonRepositoryJobs::Result result) {
         const bool canceled=result==AddonRepositoryJobs::Result::Canceled;
         const bool finished=result==AddonRepositoryJobs::Result::Finished;
@@ -1158,6 +1166,7 @@ bool AddonManager::approvePendingPackage(bool enable)
     m_pendingPackage.reset();
     m_updateResult.clear();
     const auto installedId = candidate->manifest.id;
+    observeUpdate(installedId);
     if (enable && !m_store.change([&](QString* e) { return m_store.setEnabled(installedId, true, e); },
             [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, installedId, true, e); },
             &error)) return changed(false, error);
@@ -1180,8 +1189,10 @@ bool AddonManager::installLocalPackage(const QString& directory, bool approve)
     if (!withdraw(manifest.id)) return false;
     m_crashes.remove(manifest.id);
     const auto grants = approve ? manifest.requiredPermissions : QJsonObject{};
-    return changed(m_store.change([&](QString* e) { return m_store.install(candidate, grants, e); },
-        [&](const StoreProfileWriteContext& c, QString* e) { return m_store.install(c, candidate, grants, e); }, &error), error);
+    const bool installed = m_store.change([&](QString* e) { return m_store.install(candidate, grants, e); },
+        [&](const StoreProfileWriteContext& c, QString* e) { return m_store.install(c, candidate, grants, e); }, &error);
+    if (installed) observeUpdate(manifest.id);
+    return changed(installed, error);
 }
 bool AddonManager::setEnabled(const QString& id, bool enabled)
 {
@@ -1277,8 +1288,27 @@ bool AddonManager::crashBackoff(const QString& id) const
     const auto ledger = m_crashes.constFind(id);
     return ledger != m_crashes.cend() && m_crashClock.isValid() && m_crashClock.elapsed() < ledger->retryAfter;
 }
+void AddonManager::observeUpdate(const QString& id)
+{
+    m_crashes.remove(id);
+    InstalledPackage package;
+    // Only an update has a previous release to go back to.
+    if (m_store.installed(id, &package) && !package.previousDigest.isEmpty()) m_observing.insert(id);
+    else m_observing.remove(id);
+}
 void AddonManager::recordCrash(const QString& id, const QString& error)
 {
+    if (m_observing.remove(id)) {
+        InstalledPackage package; QString refused;
+        if (m_store.installed(id, &package) && !package.previousDigest.isEmpty()
+            && m_store.change([&](QString* e) { return m_store.rollback(id, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return m_store.rollback(c, id, e); }, &refused)) {
+            m_crashes.remove(id);
+            const auto name = package.manifest.name.isEmpty() ? id : package.manifest.name;
+            changed(false, tr("The update of %1 did not start. The app restored the previous version.").arg(name));
+            return;
+        }
+    }
     if (!m_crashClock.isValid())
         m_crashClock.start();
     const auto now = m_crashClock.elapsed();
@@ -1304,11 +1334,13 @@ void AddonManager::recordCrash(const QString& id, const QString& error)
 }
 QVariantMap AddonManager::health(const QString& id) const
 {
+    const bool observing = m_observing.contains(id);
     const auto ledger = m_crashes.constFind(id);
     if (ledger == m_crashes.cend())
-        return {{"crashes", 0}, {"retryInMs", 0}};
+        return {{"crashes", 0}, {"retryInMs", 0}, {"observing", observing}};
     const auto now = m_crashClock.isValid() ? m_crashClock.elapsed() : 0;
-    return {{"crashes", ledger->recent.size()}, {"retryInMs", qMax<qint64>(0, ledger->retryAfter - now)}};
+    return {{"crashes", ledger->recent.size()}, {"retryInMs", qMax<qint64>(0, ledger->retryAfter - now)},
+        {"observing", observing}};
 }
 QByteArray AddonManager::installedStamp(const QString& id) const
 {
@@ -1392,6 +1424,9 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
     instance->setRequestGuard(std::move(current));
     connect(instance, &AddonWorker::completed, this, [this](const QString& request, const QString& status, const QJsonObject& data, const QString& error) {
         const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);
+        // An answer from the updated release ends its health period.
+        if (!contribution.isEmpty() && status != QLatin1String("error") && status != QLatin1String("denied"))
+            m_observing.remove(packagePart(contribution));
         if (!contribution.isEmpty()) emit operationFinished(request, contribution, status, data.toVariantMap(), error);
     });
     connect(instance, &AddonWorker::unavailable, this, [this, id, owner=QPointer<AddonWorker>(instance)](const QString& error) {

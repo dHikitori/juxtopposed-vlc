@@ -129,6 +129,31 @@ fn episode_identity(show: &Value, season: u64, episode: u64) -> Value {
     }
     identity
 }
+// The offline install check: run the show search and episode parsing on a
+// built-in sample in a separate provider, with no host call.
+fn self_test(id: &str) -> Vec<Value> {
+    if id.is_empty() || id.len() > 256 {
+        return Vec::new();
+    }
+    let mut provider = Provider::default();
+    let request = json!({"type":"invoke","id":"self-test","contribution":"episodes","operation":"identify",
+        "context":{"identity":{"kind":"episode","title":"Sample Series","season":1,"episodes":[2]},"fields":[]}});
+    let passed = provider
+        .handle(&request)
+        .first()
+        .filter(|call| call["type"] == "host-call")
+        .map(|call| {
+            let body = json!([{"show":{"id":7,"name":"Sample Series","premiered":"2001-01-01"}}]).to_string();
+            provider.complete(&json!({"type":"host-result","id":call["id"],"invocation":call["invocation"],
+                "status":"ok","response":{"status":200,"body":body,"headers":{}}}))
+        })
+        .and_then(|replies| replies.into_iter().next())
+        .is_some_and(|reply| {
+            reply["status"] == "match"
+                && reply["data"]["candidates"][0]["identity"]["ids"]["tvmazeShow"] == "7"
+        });
+    reply(id, if passed { "ok" } else { "error" }, json!({}), "")
+}
 fn reply(id: &str, status: &str, data: Value, error: &str) -> Vec<Value> {
     let mut result = json!({"type":"result","id":id,"status":status,"data":data});
     if !error.is_empty() {
@@ -209,6 +234,7 @@ impl Provider {
         match text(message, "type").as_str() {
             "invoke" => self.invoke(message),
             "host-result" => self.complete(message),
+            "self-test" => self_test(&text(message, "id")),
             "cancel" => {
                 let id = text(message, "id");
                 self.pending.retain(|_, lookup| lookup.invocation != id);

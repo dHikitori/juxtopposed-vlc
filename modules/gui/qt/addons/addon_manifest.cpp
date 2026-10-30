@@ -320,7 +320,10 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     if (root.contains("runtime")) {
         if (!root.value("runtime").isObject()) return fail(error, QStringLiteral("The runtime declaration is not correct."));
         const auto runtime = root.value("runtime").toObject();
-        if (!keys(runtime, {"kind", "entry"}, error, "runtime") || !text(runtime,"kind",&result.runtimeKind,error)
+        if (runtime.contains("selfTest") && !runtime.value("selfTest").isBool())
+            return fail(error, QStringLiteral("The runtime self-test declaration is not correct."));
+        result.runtimeSelfTest = runtime.value("selfTest").toBool();
+        if (!keys(runtime, {"kind", "entry", "selfTest"}, error, "runtime") || !text(runtime,"kind",&result.runtimeKind,error)
             || !text(runtime,"entry",&result.runtimeEntry,error) || result.runtimeKind != QStringLiteral("wasm-message-v1")
             || !requiredResource(result.runtimeEntry, result.files, error)) return fail(error, QStringLiteral("The runtime is not supported."));
     }

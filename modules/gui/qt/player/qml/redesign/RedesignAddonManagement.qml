@@ -149,8 +149,11 @@ ColumnLayout {
     // the extension off; the manager reports that separately.
     function healthText(row) {
         if (!row || typeof backend.health !== "function") return ""
-        const crashes = (backend.health(row.id) || {}).crashes || 0
-        return crashes > 0 ? qsTr("Stopped unexpectedly · %n time(s)", "", crashes) : ""
+        const health = backend.health(row.id) || {}
+        const crashes = health.crashes || 0
+        if (crashes > 0) return qsTr("Stopped unexpectedly · %n time(s)", "", crashes)
+        // An updated add-on until its first answer; a crash restores the previous version.
+        return health.observing ? qsTr("New version on trial") : ""
     }
     function setPaused(paused) {
         if (typeof backend.setSafeMode !== "function") return
