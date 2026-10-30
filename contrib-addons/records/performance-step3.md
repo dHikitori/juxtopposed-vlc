@@ -12,9 +12,11 @@ Step 3 of the [continuation plan](../07-continuation-plan.md). Written
 | F1, compile per worker start | `6efa39908f` | The worker loads host-made precompiled code when its SHA-256 matches, else compiles from source. The cache is keyed by release digest and worker build. |
 | F3, unlimited crash restarts | `097c2d5fd5` | A crash ledger per package: waits of 2 s and 4 s, then the package is turned off through the guarded writer on the third crash in five minutes. |
 
-The Extensions health row for F3 is still to do; `AddonManager::health()`
-supplies its data. The Windows cursor result needs the live check on Windows
-(Step 5).
+The Extensions page shows F3's ledger on an enabled row ("Enabled · Stopped
+unexpectedly · 2 time(s)"), read from `AddonManager::health()`; covered by
+`tst_AddonInstaller`. That QML runner had not linked since `b73aa857e5`
+because neither build linked the add-on host library into `qml_test`; both
+do now. The Windows cursor result needs the live check on Windows (Step 5).
 
 ## Measurements
 

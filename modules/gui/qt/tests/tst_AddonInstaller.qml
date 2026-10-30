@@ -18,6 +18,8 @@ TestCase {
         property string errorMessage: ""
         property var pendingPackage: ({})
         property var packages: []
+        property int crashes: 0
+        function health(id) { return {crashes: crashes, retryInMs: 0} }
         property var updateResult: ({})
         property var capabilities: ({workerAvailable: true, networkHttpAvailable: true, privateStorageAvailable: false, webSocketAvailable: false, coreOperations: []})
         property int updateRequests: 0
@@ -453,6 +455,15 @@ TestCase {
         compare(item("addonPackageEnabled_org.example.one").checked, false)
         compare(page.stateText(manager.packages[0]), "Temporarily disabled")
         page.setPaused(false); verify(item("addonPackageEnabled_org.example.one").enabled)
+    }
+    function test_anEnabledRowShowsRecentWorkerCrashes() {
+        manager.packages = [{id: "org.example.one", name: "One", enabled: true}]; manager.revision++
+        compare(page.stateText(manager.packages[0]), "Enabled")
+        manager.crashes = 2; manager.revision++
+        compare(page.stateText(manager.packages[0]), "Enabled · Stopped unexpectedly · 2 time(s)")
+        manager.packages = [{id: "org.example.one", name: "One", enabled: false}]; manager.revision++
+        compare(page.stateText(manager.packages[0]), "Disabled")
+        manager.crashes = 0
     }
     function test_narrowListAndInstallDialogStayWithinTheWindow() {
         const oldWidth = page.width

@@ -142,7 +142,15 @@ ColumnLayout {
     }
     function stateText(row) {
         return row.removing === true ? qsTr("Removal in progress") : safeMode ? qsTr("Temporarily disabled")
-            : row.configured === false && row.configurationKnown !== false ? row.enabled === true ? qsTr("Setup required") : qsTr("Disabled · Setup required") : row.enabled === true ? qsTr("Enabled") : qsTr("Disabled")
+            : row.configured === false && row.configurationKnown !== false ? row.enabled === true ? qsTr("Setup required") : qsTr("Disabled · Setup required")
+            : row.enabled === true ? [qsTr("Enabled"), healthText(row)].filter(value => value.length > 0).join(" · ") : qsTr("Disabled")
+    }
+    // Worker crashes in this app window. The third crash in five minutes turns
+    // the extension off; the manager reports that separately.
+    function healthText(row) {
+        if (!row || typeof backend.health !== "function") return ""
+        const crashes = (backend.health(row.id) || {}).crashes || 0
+        return crashes > 0 ? qsTr("Stopped unexpectedly · %n time(s)", "", crashes) : ""
     }
     function setPaused(paused) {
         if (typeof backend.setSafeMode !== "function") return

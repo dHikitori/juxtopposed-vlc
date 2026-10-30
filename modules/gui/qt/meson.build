@@ -2782,7 +2782,8 @@ if qt6_dep.found()
           qt6pre_qrc,
           build_by_default: false,
           dependencies: [quicktest_qt6_dep, qt6_dep, qtest_qt6_dep],
-          link_with: qmllibs,
+          # qml_test.hpp keeps joined add-on work alive through shutdown.
+          link_with: [qmllibs, addon_host_library],
           cpp_args: ['-DQUICK_TEST_SOURCE_DIR="' + meson.current_source_dir() + '/tests"']
         )
         foreach test_name, test_file : qml_tests
