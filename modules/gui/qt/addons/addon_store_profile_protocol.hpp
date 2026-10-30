@@ -71,6 +71,10 @@ public:
     Phase phase() const noexcept { return m_phase; }
     Epoch epoch() const { return m_epoch; }
     qsizetype peers() const noexcept { return m_peers.size(); }
+    // The pending write's deadline, while a write is active. The owner arms
+    // its single wake for this time and then calls advance().
+    std::optional<qint64> deadline() const noexcept
+    { return m_pending ? std::optional<qint64>(m_pending->begin.deadline) : std::nullopt; }
     Effects accept();
     Effects receive(const QByteArray& acceptedConnection, const Message&, qint64 now);
     Effects disconnected(const QByteArray& acceptedConnection);

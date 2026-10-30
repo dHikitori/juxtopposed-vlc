@@ -141,6 +141,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_store_profile_protocol.hpp \
 	addons/addon_store_profile_socket.cpp \
 	addons/addon_store_profile_socket.hpp \
+	addons/addon_store_profile_coordinator.cpp \
+	addons/addon_store_profile_coordinator.hpp \
 	addons/addon_native_wake.cpp \
 	addons/addon_native_wake.hpp \
 	addons/addon_native_notifications.cpp \
@@ -2613,6 +2615,17 @@ test_qt_addon_store_profile_socket_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON
 test_qt_addon_store_profile_socket_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_store_profile_socket
 TESTS += test_qt_addon_store_profile_socket
+
+test_qt_addon_store_profile_coordinator_SOURCES = tests/test_addon_store_profile_coordinator.cpp
+nodist_test_qt_addon_store_profile_coordinator_SOURCES = tests/test_addon_store_profile_coordinator.moc
+BUILT_SOURCES += tests/test_addon_store_profile_coordinator.moc
+CLEANFILES += tests/test_addon_store_profile_coordinator.moc
+test_qt_addon_store_profile_coordinator_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_profile_coordinator_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_coordinator_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_coordinator_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_coordinator
+TESTS += test_qt_addon_store_profile_coordinator
 
 test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.cpp
 nodist_test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.moc
