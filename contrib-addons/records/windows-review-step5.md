@@ -92,6 +92,31 @@ Not yet explained, and need a check on Windows:
   WSL share is the first suspect. Check: copy the whole `vlc-win64` folder,
   with its `portable/` settings, to a local drive and close it there.
 
+## Third user run: freeze at video start, slow close
+
+- The interface froze while a video started (about 10 s; much longer for a
+  file on a network share), while playback went on. Seek previews were
+  not the cause. When the sibling scan finished, the series view removed and
+  re-added a file watch for every scanned folder on the GUI thread, which
+  opens each folder over the network, and the episode code re-parsed every
+  sibling's name with regular expressions built per call. Fixed in
+  `a3bac38e82`: watches on their own thread with diffs, patterns compiled
+  once, parsed identities cached.
+- Close took 5 s (WSL folder) to 10–15 s (local copy). The close button
+  quits without hiding the window, so every shutdown wait showed as a frozen
+  window. Fixed in `fe749724e8`: windows hide when the quit starts, and a
+  precompile job stops at once when cancelled (it could hold the drain for
+  30 s, and a copied folder recompiles every add-on).
+- `ddd73694e8` adds `--qt-hang-report` (off by default): when the
+  interface thread stops for 0.5 s, its call stack is sampled to
+  `%TEMP%\vlc-hang-report.txt` as module+offset frames, which resolve
+  against the unstripped DLLs in the Windows build tree.
+
+Package `575db46083`: `vlc.exe`
+`967487f981675d8d802815d320d4c3a3d35a62569a33959ca4aa0cf7d8970d11`,
+`libqt_plugin.dll`
+`fe0160f6fd9fd7e4812d872107cb2b8a2857891aaf48bd861c105af07317453f`.
+
 ## Checks run here
 
 The packaged worker ran natively on Windows with the bundled MusicBrainz
