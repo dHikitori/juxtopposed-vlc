@@ -1170,6 +1170,7 @@ bool AddonManager::installLocalPackage(const QString& directory, bool approve)
     PackageCandidate candidate;
     if (!PackageStore::inspectDirectory(directory, identity, &candidate, &error)) return changed(false, error);
     if (!withdraw(manifest.id)) return false;
+    m_crashes.remove(manifest.id);
     const auto grants = approve ? manifest.requiredPermissions : QJsonObject{};
     return changed(m_store.change([&](QString* e) { return m_store.install(candidate, grants, e); },
         [&](const StoreProfileWriteContext& c, QString* e) { return m_store.install(c, candidate, grants, e); }, &error), error);
@@ -1189,12 +1190,14 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
         return changed(true);
     }
     QString error; if (!withdraw(id)) return false;
+    if (enabled) m_crashes.remove(id);
     return changed(m_store.change([&](QString* e) { return m_store.setEnabled(id, enabled, e); },
         [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, id, enabled, e); }, &error), error);
 }
 bool AddonManager::rollback(const QString& id)
 { if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
   QString error; if (!withdraw(id)) return false;
+  m_crashes.remove(id);
   return changed(m_store.change([&](QString* e) { return m_store.rollback(id, e); },
       [&](const StoreProfileWriteContext& c, QString* e) { return m_store.rollback(c, id, e); }, &error), error); }
 bool AddonManager::setSafeMode(bool enabled)
@@ -1209,6 +1212,7 @@ bool AddonManager::setSafeMode(bool enabled)
 bool AddonManager::recoverPackage(const QString& id)
 { if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
   QString error; if (!withdraw(id)) return false;
+  m_crashes.remove(id);
   return changed(m_store.change([&](QString* e) { return m_store.recover(id, e); },
       [&](const StoreProfileWriteContext& c, QString* e) { return m_store.recover(c, id, e); }, &error), error); }
 QVariantList AddonManager::retainedGenerations(const QString& id) const
@@ -1260,8 +1264,48 @@ bool AddonManager::uninstall(const QString& id, bool removeData)
     return changed(true);
 }
 
+bool AddonManager::crashBackoff(const QString& id) const
+{
+    const auto ledger = m_crashes.constFind(id);
+    return ledger != m_crashes.cend() && m_crashClock.isValid() && m_crashClock.elapsed() < ledger->retryAfter;
+}
+void AddonManager::recordCrash(const QString& id, const QString& error)
+{
+    if (!m_crashClock.isValid())
+        m_crashClock.start();
+    const auto now = m_crashClock.elapsed();
+    auto& ledger = m_crashes[id];
+    while (!ledger.recent.isEmpty() && now - ledger.recent.first() > CrashWindowMs)
+        ledger.recent.removeFirst();
+    ledger.recent.append(now);
+    if (ledger.recent.size() < CrashLimit) {
+        // 2 s after the first crash, 4 s after the second.
+        ledger.retryAfter = now + (qint64(1000) << ledger.recent.size());
+        changed(false, error);
+        return;
+    }
+    m_crashes.remove(id);
+    QString name = id, refused;
+    InstalledPackage package;
+    if (m_store.installed(id, &package) && !package.manifest.name.isEmpty())
+        name = package.manifest.name;
+    // A quarantine is a saved decision, so every window applies it.
+    m_store.change([&](QString* e) { return m_store.setEnabled(id, false, e); },
+        [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, id, false, e); }, &refused);
+    changed(false, tr("%1 stopped after it failed three times in five minutes. It is now off. Turn it on again to retry.").arg(name));
+}
+QVariantMap AddonManager::health(const QString& id) const
+{
+    const auto ledger = m_crashes.constFind(id);
+    if (ledger == m_crashes.cend())
+        return {{"crashes", 0}, {"retryInMs", 0}};
+    const auto now = m_crashClock.isValid() ? m_crashClock.elapsed() : 0;
+    return {{"crashes", ledger->recent.size()}, {"retryInMs", qMax<qint64>(0, ledger->retryAfter - now)}};
+}
 AddonWorker* AddonManager::worker(const InstalledPackage& package)
 {
+    // A crashed package waits before its worker starts again (finding F3).
+    if (crashBackoff(package.manifest.id)) return nullptr;
     if (m_retiring || m_withdrawingPackages.contains(package.manifest.id)
         || m_removingPackages.contains(package.manifest.id) || m_store.packageRetiring(package.manifest.id)) return nullptr;
     if (auto* previous = m_workers.value(package.manifest.id)) {
@@ -1292,7 +1336,7 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
         if (m_workers.value(package) != owner.data()) { owner->deleteLater(); return; }
         const QPointer<AddonManager> alive(this);
         if (!withdraw(package) || !alive) return;
-        changed(false, failure);
+        recordCrash(package, failure);
     }, Qt::QueuedConnection);
     m_workers.insert(id, instance); return instance;
 }

@@ -2683,6 +2683,17 @@ test_qt_addon_profile_host_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM
 check_PROGRAMS += test_qt_addon_profile_host
 TESTS += test_qt_addon_profile_host
 
+test_qt_addon_worker_health_SOURCES = tests/test_addon_worker_health.cpp
+nodist_test_qt_addon_worker_health_SOURCES = tests/test_addon_worker_health.moc
+BUILT_SOURCES += tests/test_addon_worker_health.moc
+CLEANFILES += tests/test_addon_worker_health.moc
+test_qt_addon_worker_health_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_worker_health_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_worker_health_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_worker_health
+TESTS += test_qt_addon_worker_health
+
 test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.cpp
 nodist_test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.moc
 BUILT_SOURCES += tests/test_addon_store_profile_settings.moc

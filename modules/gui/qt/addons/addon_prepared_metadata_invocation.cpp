@@ -637,7 +637,8 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
     const auto data = prepared->m_data;
     const auto& slot = data->slot;
     if (data->owner != runtime->owner || !data->current() || (data->requiresAttempt && !attempt) || (attempt && !attempt->current())
-        || data->capturedExecutable != m_workerExecutable || m_withdrawingPackages.contains(slot.package.manifest.id)
+        || data->capturedExecutable != m_workerExecutable || crashBackoff(slot.package.manifest.id)
+        || m_withdrawingPackages.contains(slot.package.manifest.id)
         || m_removingPackages.contains(slot.package.manifest.id) || m_store.packageRetiring(slot.package.manifest.id)
         || (attempt && (attempt->m_capture.nativeSubject != data->subject || attempt->m_capture.ordinal != slot.ordinal))) return refuse();
     const QPointer<AddonManager> owner(this);
@@ -703,8 +704,13 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
         entry->terminal = true; entry->status = status; entry->result = result; entry->error = error;
         if (weak) weak->retirePrepared(false);
     });
-    connect(worker, &AddonWorker::unavailable, worker, [weak](const QString&) {
+    const auto crashedPackage = slot.package.manifest.id;
+    connect(worker, &AddonWorker::unavailable, worker, [weak, owner, crashedPackage](const QString& error) {
         if (weak) weak->retirePrepared(true);
+        // The shared ledger keeps a crashing package from restarting at once.
+        if (owner) QMetaObject::invokeMethod(owner, [owner, crashedPackage, error] {
+            if (owner) owner->recordCrash(crashedPackage, error);
+        }, Qt::QueuedConnection);
     });
     // Event-driven retirement, with no timer: the joined-work cancellation and
     // a store authority change wake this owner. The guard stays checked at each

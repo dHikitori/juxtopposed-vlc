@@ -13,6 +13,7 @@
 #include "addon_prepared_artwork_asset.hpp"
 #include "addon_metadata_coordinator.hpp"
 #include <QObject>
+#include <QElapsedTimer>
 #include <QVariantList>
 #include <atomic>
 
@@ -144,6 +145,9 @@ public:
     Q_INVOKABLE bool approvePendingPackage(bool enableAfterInstall = false);
     Q_INVOKABLE void discardPendingPackage();
     Q_INVOKABLE bool setEnabled(const QString& packageId, bool enabled);
+    // Worker health (finding F3): recent crashes and the restart wait. Memory
+    // only, per process.
+    Q_INVOKABLE QVariantMap health(const QString& packageId) const;
     Q_INVOKABLE bool rollback(const QString& packageId);
     Q_INVOKABLE bool setSafeMode(bool enabled);
     Q_INVOKABLE bool recoverPackage(const QString& packageId);
@@ -212,6 +216,20 @@ private:
     AddonHostServices m_hostServices;
     std::unique_ptr<AddonStorage> m_storage;
     QHash<QString, AddonWorker*> m_workers;
+    // Crash ledger (finding F3). A crash makes the next start wait 2 s, then
+    // 4 s. The third crash in five minutes turns the package off through the
+    // guarded writer, so every window applies it. Counts stay in memory and do
+    // not revoke other windows. An explicit enable, rollback, install or
+    // restore clears the entry.
+    struct CrashLedger { QList<qint64> recent; qint64 retryAfter = 0; };
+    QHash<QString, CrashLedger> m_crashes;
+    QElapsedTimer m_crashClock;
+    bool crashBackoff(const QString& packageId) const;
+    void recordCrash(const QString& packageId, const QString& error);
+public:
+    static constexpr int CrashLimit = 3;
+    static constexpr qint64 CrashWindowMs = 5 * 60 * 1000;
+private:
     QHash<QString, QString> m_invocationPackages, m_invocationContributions;
     QJsonObject m_providerOrder;
     QMap<QString, QVariantMap> m_builtinProviders;
