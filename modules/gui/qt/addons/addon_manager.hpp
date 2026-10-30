@@ -222,6 +222,14 @@ private:
     struct VerifiedPackage { StoreAuthorityToken token; InstalledPackage package; bool usable = false; };
     QHash<QString, VerifiedPackage> m_verified;
     bool verifiedPackage(const QString& id, InstalledPackage* package);
+    // The same idea for packages(), which lists every package and runs on
+    // the GUI thread: one verified read per package until the store changes.
+    // The stamp (size and time of state.json and its backup) also catches a
+    // change made to the files outside the store.
+    struct InstalledRead { StoreAuthorityToken token; QByteArray stamp; bool ok = false; InstalledPackage package; QString error; };
+    QByteArray installedStamp(const QString& id) const;
+    mutable QHash<QString, InstalledRead> m_installedReads;
+    bool installedCached(const QString& id, InstalledPackage* package, QString* error) const;
     // Crash ledger (finding F3). A crash makes the next start wait 2 s, then
     // 4 s. The third crash in five minutes turns the package off through the
     // guarded writer, so every window applies it. Counts stay in memory and do

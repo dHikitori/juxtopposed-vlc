@@ -11,7 +11,9 @@
 #include "addon_repository_cancellation.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -335,7 +337,7 @@ QVariantList AddonManager::packages() const
     const auto savedDataIds = m_store.savedDataIds();
     for (const auto& id : installedIds) {
         InstalledPackage package; QString error;
-        if (!m_store.installed(id, &package, &error)) {
+        if (!installedCached(id, &package, &error)) {
             result.append(QVariantMap{{"id", id}, {"name", id}, {"installed", true}, {"enabled", false},
                 {"configured", false}, {"recoveryRequired", true}, {"error", error}, {"removing", m_removingPackages.contains(id)}});
             continue;
@@ -1308,6 +1310,34 @@ QVariantMap AddonManager::health(const QString& id) const
     const auto now = m_crashClock.isValid() ? m_crashClock.elapsed() : 0;
     return {{"crashes", ledger->recent.size()}, {"retryInMs", qMax<qint64>(0, ledger->retryAfter - now)}};
 }
+QByteArray AddonManager::installedStamp(const QString& id) const
+{
+    QByteArray stamp;
+    const QDir folder(QDir(storageDirectory()).filePath(QStringLiteral("packages/") + id));
+    for (const auto* name : {"state.json", "state.json.backup"}) {
+        const QFileInfo file(folder.filePath(QLatin1String(name)));
+        stamp += QByteArray::number(file.exists() ? file.size() : -1) + ':'
+            + QByteArray::number(file.exists() ? file.lastModified().toMSecsSinceEpoch() : 0) + ';';
+    }
+    return stamp;
+}
+bool AddonManager::installedCached(const QString& id, InstalledPackage* package, QString* error) const
+{
+    const auto stamp = installedStamp(id);
+    const auto found = m_installedReads.constFind(id);
+    if (found == m_installedReads.cend() || !found->token.current() || found->stamp != stamp) {
+        InstalledRead read;
+        read.token = m_store.authorityToken();
+        read.stamp = stamp;
+        read.ok = m_store.installed(id, &read.package, &read.error);
+        if (m_installedReads.size() >= 256) m_installedReads.clear();
+        m_installedReads.insert(id, read);
+    }
+    const auto& read = m_installedReads[id];
+    *package = read.package;
+    if (error) *error = read.error;
+    return read.ok;
+}
 bool AddonManager::verifiedPackage(const QString& id, InstalledPackage* package)
 {
     // These states change without a store write, so they are checked each time.
@@ -1341,6 +1371,16 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
             || current.generation != package.generation || current.grants != package.grants || !configured(current)) return nullptr;
         if (auto* replacement = m_workers.value(package.manifest.id))
             return !replacement->failed() && replacement->configurationCurrent() ? replacement : nullptr;
+    }
+    // A new worker process loads the module from disk: verify the package
+    // again here, even when invoke used a cached verification.
+    {
+        InstalledPackage current;
+        if (!m_store.installed(package.manifest.id, &current) || current.digest != package.digest
+            || current.generation != package.generation) {
+            m_verified.remove(package.manifest.id);
+            return nullptr;
+        }
     }
     auto* instance = new AddonWorker(package, &m_network, this); instance->setExecutable(m_workerExecutable);
     instance->setPrecompiledCache(QDir(storageDirectory()).filePath(QStringLiteral("compiled")));
