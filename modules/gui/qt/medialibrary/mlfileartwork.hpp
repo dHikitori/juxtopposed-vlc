@@ -94,6 +94,11 @@ private:
     QSet<BaseAsyncTask*> m_persistentTasks;
     std::shared_ptr<std::atomic_bool> m_cancelled = std::make_shared<std::atomic_bool>(false);
     QFileSystemWatcher m_watcher;
+    QSet<QString> m_watched;
+    void watch(const QString& path);
+    // Drop one item's results, and its folder's collage, so the next
+    // request finds them again. Other items keep theirs.
+    void forget(const QString& mrl);
     QSet<QString> m_stateRequested;
     QSet<QString> m_attempted;
     std::deque<Work> m_pending;

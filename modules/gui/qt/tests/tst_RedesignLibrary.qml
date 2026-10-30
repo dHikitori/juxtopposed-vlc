@@ -1026,7 +1026,8 @@ TestCase {
         verifyArtworkPixel(artwork, 25, 16, "#222222")
         artwork.source = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="#00ff00"/></svg>')
         tryCompare(image, "status", Image.Ready)
-        compare(image.sourceSize, Qt.size(1, 1))
+        // Decoded at the tile size; a genuine one-pixel file is still artwork.
+        compare(image.sourceSize, Qt.size(Math.ceil(artwork.width * Screen.devicePixelRatio), Math.ceil(artwork.height * Screen.devicePixelRatio)))
         verify(artwork.hasArtwork)
         verifyArtworkPixel(artwork, 16, 16, "#00ff00")
         ignoreWarning(/QML (?:Image|QQuickImage): Cannot open: .*missing-library-cover-test.png/)

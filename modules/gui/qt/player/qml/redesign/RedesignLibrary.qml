@@ -301,6 +301,14 @@ RedesignLibraryView {
     showAddRow: category > 0 && category < 5 && !(category === 3 && network.linked) && (category !== 1 || !currentFolder || (folderLoader.item && folderLoader.item.directoryCount > 0))
     canEnqueue: !(category === 2 && musicSection === "" || category === 3 && network.atRoot)
     property var resolvedArtwork: ({})
+    // Results arrive one item at a time. Apply them once per frame: each
+    // assignment re-evaluates every visible tile's artwork binding.
+    property var pendingArtwork: ({})
+    function flushArtwork() {
+        const pending = pendingArtwork
+        pendingArtwork = ({})
+        if (Object.keys(pending).length) resolvedArtwork = Object.assign({}, resolvedArtwork, pending)
+    }
     function resolveArtwork(model) {
         const fallback = category === 2 && musicSection === "Genres" && !selectedCollection && !currentFolder
             ? model.coverNonBlur || "" : model.thumbnail || model.artwork || model.small_cover || model.cover || ""
@@ -685,14 +693,17 @@ RedesignLibraryView {
         }
         onArtworkChanged: (url, artwork) => {
             const identity = url.toString().startsWith("file:") ? folderPath.location(url) : url.toString()
-            if (root.resolvedArtwork[identity] !== artwork)
-                root.resolvedArtwork = Object.assign({}, root.resolvedArtwork, {[identity]: artwork})
+            if (root.resolvedArtwork[identity] !== artwork || identity in root.pendingArtwork) {
+                root.pendingArtwork[identity] = artwork
+                Qt.callLater(root.flushArtwork)
+            }
             if (folderLoader.item) folderLoader.item.setArtwork(url, artwork)
             const key = folderPath.location(url)
             const pin = pinStore.entries.find(entry => ["file", "folder"].includes(entry.kind) && entry.key === key)
             if (pin && pin.artwork !== artwork) pinStore.add(Object.assign({}, pin, {artwork: artwork}))
         }
         onInvalidated: {
+            root.pendingArtwork = ({})
             root.resolvedArtwork = ({})
             if (folderLoader.item) folderLoader.item.refresh()
             for (const pin of pinStore.entries)

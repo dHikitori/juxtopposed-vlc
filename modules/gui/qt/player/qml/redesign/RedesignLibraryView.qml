@@ -516,6 +516,9 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
             model: root.mediaModel
+            // Keep a screen of tiles built beyond the view, so scrolling back
+            // shows their artwork at once instead of loading it again.
+            cacheBuffer: Math.max(0, height)
             visible: !root.homeSectionsVisible && root.itemCount > 0
             cellWidth: root.expanded ? Math.min(width, theme.dp(root.grid ? root.squareCards ? 220 : 336 : 416)) : root.grid ? width / Math.max(1, Math.floor(width / theme.dp(130))) : width
             cellHeight: root.grid ? root.expanded ? (cellWidth - theme.dp(20)) * (root.squareCards ? 1 : 9 / 16) + theme.dp(root.category === 2 ? 88 : 79) : theme.dp(142) : theme.dp(root.podcastView ? 62 : 42)
