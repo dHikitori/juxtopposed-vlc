@@ -126,6 +126,19 @@ test('addon_test_registry', find_program('python3'),
     args: ['-B', files('check_addon_tests.py')],
     suite: ['addons'])
 
+# Full app runs. They measure idle CPU, so they do not run in parallel.
+if host_system == 'linux' and get_option('qt').allowed()
+    addon_app_smoke = [files('addon_app_smoke.py'), '--build', meson.project_build_root()]
+    test('addon_app_smoke', find_program('python3'),
+        args: ['-B', addon_app_smoke],
+        suite: ['addons', addon_test_labels['addon_app_smoke']],
+        is_parallel: false, timeout: 300)
+    test('addon_app_smoke_two_windows', find_program('python3'),
+        args: ['-B', addon_app_smoke, '--windows', '2'],
+        suite: ['addons', addon_test_labels['addon_app_smoke_two_windows']],
+        is_parallel: false, timeout: 300)
+endif
+
 libvlc_demux_defines = []
 libvlc_demux_deps = []
 # TODO support !HAVE_DYNAMIC_PLUGINS

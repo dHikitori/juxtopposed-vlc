@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 SYSTEMS = ('automake', 'meson', 'cmake')
-LABELS = ('profile', 'metadata', 'source', 'ui', 'session', 'visualizer')
+LABELS = ('profile', 'metadata', 'source', 'ui', 'session', 'visualizer', 'app')
 SELF = 'addon_test_registry'
 
 
@@ -138,7 +138,7 @@ def main():
         'automake': {name for name in automake
                      if name.startswith('test_qt_addon_') or name in table},
         'meson': set().union(*(meson_tests(path.read_text()) for path in (
-            qt / 'meson.build', root / 'test' / 'src' / 'meson.build',
+            qt / 'meson.build', root / 'test' / 'meson.build', root / 'test' / 'src' / 'meson.build',
             root / 'test' / 'modules' / 'meson.build'))),
         'cmake': cmake_tests((qt / 'addons' / 'CMakeLists.txt').read_text()),
     }

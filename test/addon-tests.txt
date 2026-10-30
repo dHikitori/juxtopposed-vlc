@@ -1,7 +1,8 @@
 # Add-on test labels.
 #
 # One row per test: <meson test name> <label> <build systems>.
-# Labels: profile, metadata, source, ui, session, visualizer.
+# Labels: profile, metadata, source, ui, session, visualizer, and app for
+# full app runs.
 # Build systems: all, or a comma-separated subset of automake, meson, cmake.
 # CMake names drop the test_qt_ prefix. "cmake" means the standalone project
 # in modules/gui/qt/addons/CMakeLists.txt.
@@ -150,3 +151,7 @@ test_qt_addon_visualizer_worker                 visualizer  all
 test_qt_addon_visualizer_worker_runtime         visualizer  all
 test_qt_addon_visualizers                       visualizer  all
 test_src_player_audio_samples_lifecycle         visualizer  automake,meson
+
+# app: the full app, started headless on a private profile
+addon_app_smoke                                 app         meson
+addon_app_smoke_two_windows                     app         meson

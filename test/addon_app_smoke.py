@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+"""Start the full app headless on a private profile, use it, and quit.
+
+The run starts `vlc -I qt` with the offscreen Qt platform and a temporary
+home, so it never reads or changes the user's profile. A `cli` control
+socket drives playback and quit. The run checks that the bundled add-ons
+are prepared, plays a local sample, stops, stays idle, and quits through
+the normal interface shutdown.
+
+It prints one JSON object with the measurements: start time, bundled
+add-on preparation time, idle CPU time and resident memory of the app and
+its helpers, quit time and, with --trace, the number of processes the app
+starts. With --windows 2, a second app process shares the profile, and the
+run quits the processes in both orders.
+
+Exit status 0 means every check passed, 77 means the build has no app.
+"""
+
+import argparse
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+BUNDLED = ('org.videolan.tvmaze', 'org.videolan.musicbrainz', 'org.videolan.lastfm',
+           'org.videolan.french-tv', 'org.videolan.google-images',
+           'org.hakone.radio-browser', 'org.hakone.thesubtitledb')
+CLOCK = os.sysconf('SC_CLK_TCK')
+PAGE = os.sysconf('SC_PAGE_SIZE')
+
+
+class Failure(Exception):
+    pass
+
+
+def wait_for(what, check, timeout):
+    deadline = time.monotonic() + timeout
+    while True:
+        result = check()
+        if result:
+            return result
+        if time.monotonic() > deadline:
+            raise Failure(f'timed out after {timeout} s waiting for {what}')
+        time.sleep(0.05)
+
+
+def process_tree(pid):
+    """Return pid and every live descendant."""
+    children = {}
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+        except OSError:
+            continue
+        children.setdefault(int(fields[1]), []).append(int(entry.name))
+    tree, pending = [], [pid]
+    while pending:
+        current = pending.pop()
+        tree.append(current)
+        pending.extend(children.get(current, []))
+    return tree
+
+
+def cpu_seconds(pids):
+    total = 0
+    for pid in pids:
+        try:
+            fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+        except OSError:
+            continue
+        total += int(fields[11]) + int(fields[12])
+    return total / CLOCK
+
+
+def resident_bytes(pids):
+    total = 0
+    for pid in pids:
+        try:
+            total += int(Path(f'/proc/{pid}/statm').read_text().split()[1]) * PAGE
+        except OSError:
+            continue
+    return total
+
+
+class App:
+    def __init__(self, args, home, name, trace):
+        self.name = name
+        # sockaddr_un limits the path length, so the socket gets a short directory.
+        self.socket_path = Path(tempfile.mkdtemp(prefix='hk-')) / 'control'
+        self.log_path = home / f'{name}.log'
+        self.trace_path = home / f'{name}.trace' if trace else None
+        command = [str(args.build / 'bin' / 'vlc'), '-I', 'qt', '--no-one-instance',
+                   '--extraintf', 'cli', '--rc-unix', str(self.socket_path),
+                   '--aout', 'adummy', '--vout', 'vdummy', '--no-qt-privacy-ask',
+                   '--no-metadata-network-access', '-vv', '--file-logging',
+                   '--logfile', str(self.log_path), '--log-verbose', '2']
+        if trace:
+            command = ['strace', '-f', '-qq', '-e', 'trace=execve', '-o',
+                       str(self.trace_path)] + command
+        self.started = time.monotonic()
+        self.process = subprocess.Popen(command, env=args.env, stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                        start_new_session=True)
+        self.connection = None
+
+    @property
+    def pid(self):
+        # Under strace the app is the tracer's child.
+        if self.trace_path:
+            tree = process_tree(self.process.pid)
+            return tree[1] if len(tree) > 1 else self.process.pid
+        return self.process.pid
+
+    def log(self):
+        try:
+            return self.log_path.read_text(errors='replace')
+        except OSError:
+            return ''
+
+    def connect(self, timeout):
+        def attempt():
+            if self.process.poll() is not None:
+                raise Failure(f'{self.name} exited with {self.process.returncode} at start')
+            connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                connection.connect(str(self.socket_path))
+            except OSError:
+                connection.close()
+                return None
+            return connection
+        self.connection = wait_for(f'{self.name} control socket', attempt, timeout)
+        self.connection.settimeout(10)
+
+    def send(self, command):
+        self.connection.sendall(command.encode() + b'\n')
+
+    def quit(self, timeout):
+        started = time.monotonic()
+        self.send('quit')
+        try:
+            code = self.process.wait(timeout)
+        except subprocess.TimeoutExpired:
+            self.process.send_signal(signal.SIGABRT)
+            self.process.wait(10)
+            raise Failure(f'{self.name} did not quit within {timeout} s')
+        if code != 0:
+            raise Failure(f'{self.name} quit with exit status {code}')
+        return time.monotonic() - started
+
+    def launches(self):
+        if not self.trace_path:
+            return None
+        programs = []
+        for line in self.trace_path.read_text(errors='replace').splitlines():
+            if 'execve(' in line and '= 0' in line:
+                programs.append(line.split('execve("', 1)[1].split('"', 1)[0])
+        return programs[2:]  # strace starts the app; the app may re-exec once.
+
+    def stop(self):
+        if self.process.poll() is None:
+            os.killpg(self.process.pid, signal.SIGKILL)
+            self.process.wait()
+
+
+def bundled_ready(store):
+    names = {entry.name for entry in store.rglob('*') if entry.is_dir()}
+    return all(any(name.startswith(package) for name in names) for package in BUNDLED)
+
+
+def run(args):
+    if not sys.platform.startswith('linux'):
+        print('the measurements read /proc', file=sys.stderr)
+        return 77
+    if not (args.build / 'bin' / 'vlc').exists():
+        print(f'{args.build}/bin/vlc does not exist', file=sys.stderr)
+        return 77
+    results = {}
+    home = Path(tempfile.mkdtemp(prefix='hakone-smoke-', dir=args.work))
+    os.chmod(home, 0o700)
+    for name in ('config', 'data', 'cache', 'runtime'):
+        (home / name).mkdir(mode=0o700)
+    args.env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / 'config'),
+                    XDG_DATA_HOME=str(home / 'data'), XDG_CACHE_HOME=str(home / 'cache'),
+                    XDG_RUNTIME_DIR=str(home / 'runtime'), QT_QPA_PLATFORM='offscreen',
+                    # Software GL: the same renderer on every host. The WSL D3D12
+                    # driver crashes in its own code after the app quits.
+                    LIBGL_ALWAYS_SOFTWARE='1',
+                    VLC_PLUGIN_PATH=str(args.build / 'modules'),
+                    VLC_DATA_PATH=str(args.build / 'share'),
+                    VLC_LIBEXEC_PATH=str(args.build / 'bin'))
+    args.env.pop('DBUS_SESSION_BUS_ADDRESS', None)
+    store = home / 'data' / 'vlc' / 'addons'
+    apps = []
+    try:
+        first = App(args, home, 'first', args.trace)
+        apps.append(first)
+        first.connect(args.timeout)
+        results['start_seconds'] = round(time.monotonic() - first.started, 3)
+        wait_for('bundled add-ons', lambda: store.exists() and bundled_ready(store), args.timeout)
+        results['bundled_ready_seconds'] = round(time.monotonic() - first.started, 3)
+
+        before_play = len(first.log())
+        first.send(f'add file://{args.sample}')
+        wait_for('playback', lambda: 'VLC_PLAYER_STATE_PLAYING' in first.log()[before_play:],
+                 args.timeout)
+        first.send('stop')
+        wait_for('stop', lambda: 'VLC_PLAYER_STATE_STOPPED' in first.log()[before_play:],
+                 args.timeout)
+
+        pids = process_tree(first.pid)
+        before = cpu_seconds(pids)
+        time.sleep(args.idle)
+        pids = process_tree(first.pid)
+        results['idle_seconds'] = args.idle
+        results['idle_cpu_seconds'] = round(cpu_seconds(pids) - before, 3)
+        results['idle_processes'] = len(pids)
+        results['resident_bytes'] = resident_bytes(pids)
+
+        if args.windows == 2:
+            second = App(args, home, 'second', False)
+            apps.append(second)
+            second.connect(args.timeout)
+            results['second_start_seconds'] = round(time.monotonic() - second.started, 3)
+            order = [second, first] if args.quit_second_first else [first, second]
+            results['quit_order'] = [app.name for app in order]
+            results['quit_seconds'] = [round(app.quit(args.timeout), 3) for app in order]
+        else:
+            results['quit_seconds'] = [round(first.quit(args.timeout), 3)]
+        if args.trace:
+            results['launches'] = first.launches()
+            results['launch_count'] = len(results['launches'])
+        for app in apps:
+            for line in app.log().splitlines():
+                if ' error: ' in line and 'addon' in line.lower():
+                    raise Failure(f'{app.name} logged an add-on error: {line}')
+        results['passed'] = True
+        return_code = 0
+    except Failure as error:
+        results['passed'] = False
+        results['failure'] = str(error)
+        return_code = 1
+    finally:
+        for app in apps:
+            app.stop()
+            shutil.rmtree(app.socket_path.parent, ignore_errors=True)
+            results.setdefault('stderr_tail', {})[app.name] = \
+                app.process.stderr.read().decode(errors='replace')[-2000:]
+        if args.keep or not results.get('passed'):
+            results['home'] = str(home)
+        else:
+            shutil.rmtree(home, ignore_errors=True)
+    if results.get('passed'):
+        results.pop('stderr_tail', None)
+    print(json.dumps(results, indent=2))
+    return return_code
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument('--build', type=Path, required=True, help='meson build directory')
+    parser.add_argument('--sample', type=Path,
+                        default=Path(__file__).resolve().parent / 'samples' / 'meta.mp3')
+    parser.add_argument('--windows', type=int, choices=(1, 2), default=1)
+    parser.add_argument('--quit-second-first', action='store_true')
+    parser.add_argument('--trace', action='store_true', help='count process launches with strace')
+    parser.add_argument('--idle', type=float, default=30.0, help='idle measurement in seconds')
+    parser.add_argument('--timeout', type=float, default=60.0)
+    parser.add_argument('--work', type=Path, default=None, help='parent of the temporary home')
+    parser.add_argument('--keep', action='store_true', help='keep the temporary home')
+    args = parser.parse_args()
+    args.build = args.build.resolve()
+    args.sample = args.sample.resolve()
+    return run(args)
+
+
+if __name__ == '__main__':
+    sys.exit(main())
