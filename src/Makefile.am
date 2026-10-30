@@ -787,6 +787,7 @@ test_input_es_out_SOURCES = input/test/es_out.c \
 	input/es_out.c input/es_out.h \
 	input/source.c input/source.h \
 	input/item.c input/item.h \
+	input/artwork_policy.c input/artwork_policy.h \
 	input/policy.c input/policy.h \
 	clock/clock.c clock/clock.h \
 	text/strings.c \

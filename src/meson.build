@@ -576,6 +576,8 @@ vlc_tests += {
         'input/source.h',
         'input/item.c',
         'input/item.h',
+        'input/artwork_policy.c',
+        'input/artwork_policy.h',
         'input/policy.c',
         'input/policy.h',
         'clock/clock.c',

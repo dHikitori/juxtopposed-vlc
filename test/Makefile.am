@@ -402,6 +402,7 @@ test_src_audio_output_dec_SOURCES = src/audio_output/dec.c \
 	../src/audio_output/meter.c \
 	../src/input/replay_gain.c \
 	../src/misc/objects.c \
+	../src/input/stream_observer.c \
 	../src/misc/variables.c \
 	../src/clock/clock.c \
 	../src/clock/clock_internal.c
