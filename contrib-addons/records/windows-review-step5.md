@@ -66,15 +66,15 @@ reported these problems; the fixes are in the next package.
 
 | Report | Cause | Fix |
 | --- | --- | --- |
-| TheSubtitleDB settings: "The required settings list is not correct" | Qt 6.8 gives JavaScript a list inside a C++ map as a sequence; `Array.isArray` is false, so every schema with `required` failed. Add-on views and themes had the same check. | `feebae871d`: settings, views and themes validate JSON copies of host data |
-| Other add-ons open an empty settings dialog | They have no settings, but Settings was always offered | `feebae871d`: rows report `hasSettings`; Settings is hidden or disabled without it |
-| Theme pack row: different help icon, Reset always shown | Its own help button; Reset also showed while the dropdown kept focus after a click | `22ef82d598`: the standard row's help button; Reset on hover or keyboard focus only |
-| Use automatic artwork refreshes the whole library | The per-item save ended in a global clear and model reset | `0cd9c4d6f7`: forget only that item and its folder collage |
-| Library artwork reloads when scrolling back, and stutters | Full-size decode, no tile buffer, and the whole result map copied and every tile binding re-run per result | `0cd9c4d6f7`: tile-size decode, a screen of buffered tiles, one update per frame, watcher set |
-| Network > Radio says "This source has no media" first | The network model ended loading as soon as discovery started | `ec0ed20176`: loading ends with the first item, a failure or 5 s; the empty text waits for it |
-| Radio Browser (add-on) hangs while it opens | Each invoke verified the whole package again, and every message re-read `state.json`; costly with the profile on the WSL share | `fa8a04bcca`: reuse under the store's memory token; the view starts as loading |
+| TheSubtitleDB settings: "The required settings list is not correct" | Qt 6.8 gives JavaScript a list inside a C++ map as a sequence; `Array.isArray` is false, so every schema with `required` failed. Add-on views and themes had the same check. | `62f92f6bad`: settings, views and themes validate JSON copies of host data |
+| Other add-ons open an empty settings dialog | They have no settings, but Settings was always offered | `62f92f6bad`: rows report `hasSettings`; Settings is hidden or disabled without it |
+| Theme pack row: different help icon, Reset always shown | Its own help button; Reset also showed while the dropdown kept focus after a click | `b8aaeb420c`: the standard row's help button; Reset on hover or keyboard focus only |
+| Use automatic artwork refreshes the whole library | The per-item save ended in a global clear and model reset | `b33227bbc2`: forget only that item and its folder collage |
+| Library artwork reloads when scrolling back, and stutters | Full-size decode, no tile buffer, and the whole result map copied and every tile binding re-run per result | `b33227bbc2`: tile-size decode, a screen of buffered tiles, one update per frame, watcher set |
+| Network > Radio says "This source has no media" first | The network model ended loading as soon as discovery started | `e4f8923a76`: loading ends with the first item, a failure or 5 s; the empty text waits for it |
+| Radio Browser (add-on) hangs while it opens | Each invoke verified the whole package again, and every message re-read `state.json`; costly with the profile on the WSL share | `5175de237e`: reuse under the store's memory token; the view starts as loading |
 
-The next package is `fa8a04bcca` (`vlc.exe`
+The next package is `5175de237e` (`vlc.exe`
 `ad71319384b920be392fdcf6efac3e4ee2d31c99b66cb26c7f3bb6eada454680`,
 `libqt_plugin.dll`
 `7bd30169e6afea2802764fca4daa3c291bb819361c177a27d8b0d1f8e2da1b37`). Its
