@@ -53,6 +53,7 @@ extern "C" char **environ;
 
 #include <QApplication>
 #include <QFontDatabase>
+#include <atomic>
 #include <QDate>
 #include <QMutex>
 #include <QScopeGuard>
@@ -1035,6 +1036,28 @@ static void *Thread( void *obj )
     } else {
         msg_Warn(p_intf, "Cannot load the bundled Inter interface font");
     }
+
+#ifdef _WIN32
+    // The first text that needs a fallback font (an international station
+    // name, say) makes Qt's DirectWrite font database read every installed
+    // family on the GUI thread; with hundreds of fonts and a cold cache that
+    // took 17 s. Read them here at low priority instead. The database locks
+    // per family, so the GUI waits for one family at most. Quitting stops it.
+    const auto fontWarmupStop = std::make_shared<std::atomic_bool>(false);
+    struct FontWarmupGuard {
+        std::shared_ptr<std::atomic_bool> stop;
+        ~FontWarmupGuard() { stop->store(true); }
+    } fontWarmupGuard{fontWarmupStop};
+    QThreadPool::globalInstance()->start([fontWarmupStop] {
+        const auto priority = QThread::currentThread()->priority();
+        QThread::currentThread()->setPriority(QThread::LowestPriority);
+        for (const auto& family : QFontDatabase::families()) {
+            if (fontWarmupStop->load()) break;
+            QFontDatabase::writingSystems(family);
+        }
+        QThread::currentThread()->setPriority(priority);
+    });
+#endif
 
     {
         // Install custom translator:
