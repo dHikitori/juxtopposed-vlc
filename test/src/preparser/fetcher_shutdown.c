@@ -47,7 +47,7 @@ static void blocked_stage(void *opaque)
     TaskLeave(task);
     int ret = Submit(ctx->fetcher, ctx->next, task->item, task->options,
                      task->cbs, task->userdata, ctx, FETCH_LEGACY,
-                     META_FETCHER_PROVIDER_ANY, NULL, NULL, NULL, task);
+                     META_FETCHER_PROVIDER_ANY, NULL, NULL, NULL, NULL, task);
     assert(ret == -EINTR);
     NotifyArtFetchEnded(task, false, -EINTR);
     FetcherRemoveTask(ctx->fetcher, task);
@@ -81,7 +81,7 @@ static void check_shutdown(vlc_object_t *owner, bool network_stage,
     struct task *task = TaskNew(ctx.fetcher, first, running,
                                VLC_PREPARSER_TYPE_FETCHMETA_ALL, &shutdown_callbacks, &ctx,
                                &ctx, FETCH_LEGACY, META_FETCHER_PROVIDER_ANY,
-                               NULL, NULL, NULL, &status);
+                               NULL, NULL, NULL, NULL, &status);
     assert(task);
     task->runnable.run = blocked_stage;
     vlc_mutex_lock(&ctx.fetcher->lock);
@@ -93,7 +93,7 @@ static void check_shutdown(vlc_object_t *owner, bool network_stage,
     assert(Submit(ctx.fetcher, first, ctx.queued,
                   VLC_PREPARSER_TYPE_FETCHMETA_ALL, &shutdown_callbacks, &ctx,
                   &ctx, FETCH_LEGACY, META_FETCHER_PROVIDER_ANY,
-                  NULL, NULL, NULL, NULL) == VLC_SUCCESS);
+                  NULL, NULL, NULL, NULL, NULL) == VLC_SUCCESS);
 
     vlc_thread_t deleting;
     int ret = vlc_clone(&deleting, delete_fetcher, ctx.fetcher);
