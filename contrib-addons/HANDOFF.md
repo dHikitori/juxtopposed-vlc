@@ -60,8 +60,9 @@ The user delegated decisions 2–4 to Claude.
   run with the discovery fixture.
 - **Step 2 in progress.** 2.1 coordinator (`5fd715edaa`) and 2.2 client
   (`7a8c17ed81`) are done; see `records/profile-coordinator.md` and
-  `records/profile-client.md`. **Next:** 2.3, the connection-bound write
-  permit. The
+  `records/profile-client.md`. 2.3 permit (`a61031e03a`) and 2.4 write
+  refusal (`8808838eee`) are done (`records/profile-write-permit.md`). **Next:** 2.5,
+  coordinator handover. The
   Step 1 remainder (Radio Browser playback, the F1 per-call measurement) can
   wait for Step 3.
 - **Then:** the rest of Step 2 (the connection-bound write permit, write
