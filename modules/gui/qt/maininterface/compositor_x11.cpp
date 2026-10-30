@@ -90,7 +90,10 @@ static bool checkExtensionPresent(qt_intf_t* intf, xcb_connection_t *conn, const
 
 bool CompositorX11::init()
 {
-    if (!qGuiApp->nativeInterface<QNativeInterface::QX11Application>())
+    // The offscreen platform can provide the X11 interface without an XCB
+    // connection. The render window needs Qt's connection.
+    const auto x11App = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+    if (!x11App || !x11App->connection())
     {
         msg_Info(m_intf, "not running an X11 platform");
         return false;
