@@ -699,6 +699,8 @@ libqt_plugin_la_SOURCES = \
 	util/model_recovery_agent.hpp \
 	util/vlcqtmessagehandler.cpp \
 	util/vlcqtmessagehandler.hpp \
+	util/hang_reporter.cpp \
+	util/hang_reporter.hpp \
 	util/colorizedsvgicon.cpp \
 	util/colorizedsvgicon.hpp \
 	util/textureproviderobserver.cpp \

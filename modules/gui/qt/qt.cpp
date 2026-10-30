@@ -65,6 +65,7 @@ extern "C" char **environ;
 #include <QLoggingCategory>
 #include <QQmlError>
 #include <QList>
+#include "util/hang_reporter.hpp"
 #include "util/interface_translator.hpp"
 
 #if __has_include(<rhi/qrhi.h>) // Qt 6.6
@@ -373,6 +374,9 @@ vlc_module_begin ()
     add_bool("qt-audio-waveform", false, N_("Show Audio Waveform on Seekbar"),
         N_("Read audio levels from a local file. Show them on the seekbar."))
     add_bool("qt-subtitle-timeline", false, N_("Show Subtitle Timeline on Seekbar"), nullptr)
+    add_bool("qt-hang-report", false, N_("Report interface stalls"),
+        N_("Windows only. When the interface stops responding for half a second, "
+           "write where it is waiting to vlc-hang-report.txt in the temporary folder."))
     add_bool("qt-seek-preview", true, N_("Show video previews on the seekbar"),
         N_("Show a video frame when you point to the seekbar."))
     add_bool("qt-buffering-custom", false, N_("Keep custom buffer values editable"),
@@ -979,6 +983,10 @@ static void *Thread( void *obj )
 
     /* Start the QApplication here */
     QApplication app( argc, argv );
+    // Declared after the app, so it also reports waits in the final cleanup.
+    std::unique_ptr<HangReporter> hangReporter;
+    if (var_InheritBool(p_intf, "qt-hang-report"))
+        hangReporter = HangReporter::start(VLC_OBJECT(p_intf));
     vlc::addons::AddonAppShutdown addonShutdown(app);
     const auto addonLifetime=addonShutdown.handle();
     g_addonAppShutdown=&addonShutdown;
