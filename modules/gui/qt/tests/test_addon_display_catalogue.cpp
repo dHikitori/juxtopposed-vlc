@@ -43,8 +43,10 @@ struct DisplayOpenBarrier {
 std::mutex displayOpenMutex;
 std::shared_ptr<DisplayOpenBarrier> displayOpenBarrier;
 }
+// With _FILE_OFFSET_BITS=64, glibc headers turn open() into open64().
 extern "C" int __real_open(const char*,int,...);
-extern "C" int __wrap_open(const char* path,int flags,...)
+extern "C" int __real_open64(const char*,int,...);
+static void holdDisplayOpen(const char* path)
 {
     std::shared_ptr<DisplayOpenBarrier> barrier;
     {std::lock_guard<std::mutex> lock(displayOpenMutex);barrier=displayOpenBarrier;}
@@ -52,11 +54,24 @@ extern "C" int __wrap_open(const char* path,int flags,...)
         ++barrier->held;
         barrier->hold->wait();
     }
+}
+extern "C" int __wrap_open(const char* path,int flags,...)
+{
+    holdDisplayOpen(path);
     if(flags&O_CREAT) {
         va_list arguments;va_start(arguments,flags);const auto mode=va_arg(arguments,int);va_end(arguments);
         return __real_open(path,flags,mode);
     }
     return __real_open(path,flags);
+}
+extern "C" int __wrap_open64(const char* path,int flags,...)
+{
+    holdDisplayOpen(path);
+    if(flags&O_CREAT) {
+        va_list arguments;va_start(arguments,flags);const auto mode=va_arg(arguments,int);va_end(arguments);
+        return __real_open64(path,flags,mode);
+    }
+    return __real_open64(path,flags);
 }
 #endif
 using namespace vlc::addons;

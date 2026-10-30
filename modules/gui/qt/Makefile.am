@@ -2728,7 +2728,7 @@ TESTS += test_qt_addon_display_catalogue
 
 if HAVE_LINUX
 test_qt_addon_display_catalogue_CPPFLAGS += -DHAKONE_DISPLAY_READER_LOCK_WRAP
-test_qt_addon_display_catalogue_LDFLAGS += -Wl,--wrap=open
+test_qt_addon_display_catalogue_LDFLAGS += -Wl,--wrap=open -Wl,--wrap=open64
 tests/test_addon_display_catalogue.moc: $(srcdir)/tests/test_addon_display_catalogue.cpp
 	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_DISPLAY_READER_LOCK_WRAP $< -o $@
 endif
@@ -2757,7 +2757,7 @@ test_qt_addon_metadata_catalogue_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_l
 test_qt_addon_metadata_catalogue_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 if HAVE_LINUX
 test_qt_addon_metadata_catalogue_CPPFLAGS += -DHAKONE_CATALOGUE_OPEN_PROBE
-test_qt_addon_metadata_catalogue_LDFLAGS += -Wl,--wrap=open
+test_qt_addon_metadata_catalogue_LDFLAGS += -Wl,--wrap=open -Wl,--wrap=open64
 tests/test_addon_metadata_catalogue.moc: $(srcdir)/tests/test_addon_metadata_catalogue.cpp
 	$(moc_verbose)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_CATALOGUE_OPEN_PROBE -o $@ $<
 endif

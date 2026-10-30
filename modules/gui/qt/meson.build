@@ -1517,7 +1517,8 @@ if qt6_dep.found()
     prog_python = find_program('python3')
     # Build the application worker separately from experimental Rust VLC modules.
     addon_worker_dependencies = []
-    addon_worker_environment = []
+    # Tests that start LibVLC load the plug-ins of this build.
+    addon_worker_environment = {'VLC_PLUGIN_PATH': vlc_build_root / 'modules'}
     if not get_option('addon-runtime').disabled()
         addon_cargo = find_program('cargo', native: true, required: get_option('addon-runtime'))
         if addon_cargo.found()
@@ -1546,7 +1547,7 @@ if qt6_dep.found()
                 output: addon_worker_name, command: addon_worker_command,
                 build_by_default: true, install: true, install_dir: bindir_path)
             addon_worker_dependencies += addon_worker_target
-            addon_worker_environment = {'VLC_ADDON_WORKER': addon_worker_target.full_path()}
+            addon_worker_environment += {'VLC_ADDON_WORKER': addon_worker_target.full_path()}
             qt_cppargs += '-DVLC_ADDON_WORKER_BUILD_PATH="' + addon_worker_target.full_path() + '"'
         endif
     endif
@@ -1946,7 +1947,7 @@ if qt6_dep.found()
         addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
         foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
             native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
-            addon_timeout = addon_test in ['catalogue_view', 'display_catalogue', 'package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle'] ? 90 : 30
+            addon_timeout = addon_test in ['catalogue_view', 'display_catalogue', 'package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'playable_gate'] ? 90 : 30
             if addon_test in ['display_integration', 'distribution_bootstrap']
                 addon_timeout = 180
             endif
@@ -1968,7 +1969,7 @@ if qt6_dep.found()
             endif
             if addon_test == 'display_catalogue' and host_system == 'linux'
                 display_defines += ['-DHAKONE_DISPLAY_READER_LOCK_WRAP']
-                display_links += ['-Wl,--wrap=open']
+                display_links += ['-Wl,--wrap=open', '-Wl,--wrap=open64']
             endif
             if addon_test in ['store_profile_packages', 'store_profile_lifecycle'] and host_system == 'linux'
                 display_defines += ['-DHAKONE_PROFILE_SAVEFILE_WRAP']
@@ -2006,7 +2007,7 @@ if qt6_dep.found()
             'timeout': 90,
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-            'link_args': qt_link_args + (host_system == 'linux' ? ['-Wl,--wrap=open'] : []),
+            'link_args': qt_link_args + (host_system == 'linux' ? ['-Wl,--wrap=open', '-Wl,--wrap=open64'] : []),
         }
         if host_system == 'linux' and addon_worker_dependencies != [] and not meson.is_cross_build()
             addon_metadata_attempt_process = executable('addon_metadata_attempt_process',

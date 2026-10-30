@@ -66,7 +66,7 @@ set_tests_properties(addon_display_integration addon_distribution_bootstrap PROP
 set_tests_properties(addon_catalogue_view addon_display_catalogue addon_package_summaries PROPERTIES TIMEOUT 90)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_compile_definitions(test_addon_display_catalogue PRIVATE HAKONE_DISPLAY_READER_LOCK_WRAP)
-    target_link_options(test_addon_display_catalogue PRIVATE "-Wl,--wrap=open")
+    target_link_options(test_addon_display_catalogue PRIVATE "-Wl,--wrap=open" "-Wl,--wrap=open64")
     target_compile_definitions(test_addon_display_integration PRIVATE HAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP HAKONE_DISPLAY_ACQUIRE_WRAP)
     target_link_options(test_addon_display_integration PRIVATE
         "-Wl,--wrap=_ZN3vlc6addons15CredentialStore6createERK7QStringS4_RK10QByteArrayb"
@@ -79,7 +79,7 @@ add_executable(test_addon_metadata_catalogue "../tests/test_addon_metadata_catal
 target_link_libraries(test_addon_metadata_catalogue PRIVATE vlc_addon_host Qt6::Test)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_compile_definitions(test_addon_metadata_catalogue PRIVATE HAKONE_CATALOGUE_OPEN_PROBE)
-    target_link_options(test_addon_metadata_catalogue PRIVATE "-Wl,--wrap=open")
+    target_link_options(test_addon_metadata_catalogue PRIVATE "-Wl,--wrap=open" "-Wl,--wrap=open64")
 endif()
 add_test(NAME addon_metadata_catalogue COMMAND test_addon_metadata_catalogue)
 set_tests_properties(addon_metadata_catalogue PROPERTIES TIMEOUT 90)

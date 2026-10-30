@@ -181,9 +181,13 @@ private slots:
         gate.authorize(source(), proposal(), [&](const auto& value, const auto&) { handle = value; });
         transport.ready(transport.result()); QTRY_VERIFY(!handle.isEmpty()); transport.permission = false;
         QVERIFY(!gate.consume(handle, QStringLiteral("play"), [](auto*) { return true; })); QCOMPARE(transport.releases, 1);
-        transport.permission = true; handle.clear(); auto input = proposal(); input.insert("expiresAt", QDateTime::currentMSecsSinceEpoch() + 200);
+        // Preparation must finish inside the expiry window, also on a slow
+        // host. The wait then runs until the expiry has passed.
+        transport.permission = true; handle.clear(); auto input = proposal();
+        const qint64 expiresAt = QDateTime::currentMSecsSinceEpoch() + 2000; input.insert("expiresAt", expiresAt);
         gate.authorize(source(), input, [&](const auto& value, const auto&) { handle = value; });
-        transport.ready(transport.result()); QTRY_VERIFY(!handle.isEmpty()); QTest::qWait(250);
+        transport.ready(transport.result()); QTRY_VERIFY(!handle.isEmpty());
+        QTest::qWait(int(qMax<qint64>(0, expiresAt - QDateTime::currentMSecsSinceEpoch())) + 50);
         QVERIFY(!gate.consume(handle, QStringLiteral("play"), [](auto*) { return true; })); QCOMPARE(transport.releases, 2);
     }
     void lateLeaseAfterCloseStillHasCleanup() {
