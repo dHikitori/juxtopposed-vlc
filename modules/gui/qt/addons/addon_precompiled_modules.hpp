@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include <atomic>
 #include <QStringList>
 
 namespace vlc::addons {
@@ -21,7 +22,9 @@ QStringList arguments(const QString& directory, const QString& executable,
 // Joined work only: runs the worker once in precompile mode and publishes the
 // entry. Other processes can write the same entry; the digest check keeps a
 // mixed pair from loading.
-bool precompile(const QString& directory, const QString& executable, const InstalledPackage&);
+// A set cancelled flag stops the compile within about 50 ms.
+bool precompile(const QString& directory, const QString& executable, const InstalledPackage&,
+                const std::atomic_bool* cancelled = nullptr);
 // Starts precompile() on the application's joined work, once per entry.
 void schedule(const QString& directory, const QString& executable, const InstalledPackage&);
 }

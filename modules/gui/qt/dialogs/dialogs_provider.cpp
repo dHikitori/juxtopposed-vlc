@@ -97,6 +97,8 @@
 #include <QLabel>
 #include <QTimer>
 #include <QStyle>
+#include <QGuiApplication>
+#include <QWindow>
 #include <algorithm>
 #include <utility>
 
@@ -639,6 +641,10 @@ void DialogsProvider::quit()
     b_isDying = true;
     assert(qApp);
     const QPointer<DialogsProvider> alive(this);
+    // The rest of the quit can wait for playback, a network read or add-on
+    // work to stop. Do not show a frozen window meanwhile.
+    for (QWindow* window : QGuiApplication::topLevelWindows())
+        window->hide();
     // A real quit stops playback before joined add-on cleanup. Window-close
     // to the system tray does not call this path.
     if(p_intf->p_mi) p_intf->p_mi->addonStreamLifetime().close();

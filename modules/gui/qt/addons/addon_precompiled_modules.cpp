@@ -10,11 +10,13 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
+#include <memory>
 #include <mutex>
 
 namespace vlc::addons::AddonPrecompiledModules {
@@ -68,7 +70,8 @@ QStringList arguments(const QString& directory, const QString& executable, const
     return {QStringLiteral("--precompiled"), base + QStringLiteral(".cwasm"), QString::fromLatin1(digest), module};
 }
 
-bool precompile(const QString& directory, const QString& executable, const InstalledPackage& package)
+bool precompile(const QString& directory, const QString& executable, const InstalledPackage& package,
+                const std::atomic_bool* cancelled)
 {
     const auto base = entry(directory, executable, package);
     if (base.isEmpty() || !QDir().mkpath(directory))
@@ -80,7 +83,13 @@ bool precompile(const QString& directory, const QString& executable, const Insta
     // for messages instead of holding this job to its time limit.
     process.setStandardInputFile(QProcess::nullDevice());
     process.start(executable, {QStringLiteral("--precompile"), modulePath(package), temporary});
-    const bool done = process.waitForFinished(30000);
+    // Wait in short steps, so app shutdown can stop the compile at once.
+    QElapsedTimer clock;
+    clock.start();
+    bool done = false;
+    while (!(done = process.waitForFinished(50)) && process.state() != QProcess::NotRunning
+           && clock.elapsed() < 30000 && !(cancelled && cancelled->load()))
+        ;
     if (!done) {
         process.kill();
         process.waitForFinished(1000);
@@ -131,12 +140,13 @@ void schedule(const QString& directory, const QString& executable, const Install
         std::lock_guard<std::mutex> lock(pendingMutex);
         pending.remove(base);
     };
+    const auto cancelled = std::make_shared<std::atomic_bool>(false);
     const bool started = AddonStreamLifetime::applicationHandle().startQtWork(
-        [directory, executable, package, release] {
-            precompile(directory, executable, package);
+        [directory, executable, package, release, cancelled] {
+            precompile(directory, executable, package, cancelled.get());
             release();
         },
-        [] {});
+        [cancelled] { cancelled->store(true); });
     if (!started)
         release();
 }
