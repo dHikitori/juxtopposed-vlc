@@ -58,12 +58,12 @@ The user delegated decisions 2–4 to Claude.
   option `addon-test-driver`, off by default, on in `build-redesign`.
   `meson test --suite app` runs three full app tests, including the driver
   run with the discovery fixture.
-- **Next:** Step 2. The Step 1 remainder (Radio Browser playback, the F1
-  per-call measurement) can wait for Step 3, or needs a decision on a live
-  or test-build network exception.
-- **Then:** Step 2 (the coordinator and client owners, the
-  connection-bound write permit, write refusal, coordinator handover, the
-  app mount and the crash matrix).
+- **Step 2 started.** 2.1, the coordinator owner, is done in `5fd715edaa`
+  (`records/profile-coordinator.md`). **Next:** 2.2, the client owner. The
+  Step 1 remainder (Radio Browser playback, the F1 per-call measurement) can
+  wait for Step 3.
+- **Then:** the rest of Step 2 (the connection-bound write permit, write
+  refusal, coordinator handover, the app mount and the crash matrix).
 - **Do not** activate the native metadata owner before Step 2 passes.
 
 ## Environment notes
