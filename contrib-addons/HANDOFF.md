@@ -54,10 +54,13 @@ The user delegated decisions 2–4 to Claude.
   `.design-reference/native-build/build-env.sh` sourced (it adds include and
   library paths the full build needs). projectM is disabled in
   `build-redesign` because its library is gone.
-- **Next:** the in-app test driver for the rest of the Step 1 smoke test
-  (Extensions model, provider invocation, Radio Browser fixture playback,
-  worker numbers). It needs a decision from the user on how the driver is
-  built. Step 2 can start in parallel.
+- **Step 1 test driver is done** (`7ddc4b28ee`, fix `74d63a50da`). Meson
+  option `addon-test-driver`, off by default, on in `build-redesign`.
+  `meson test --suite app` runs three full app tests, including the driver
+  run with the discovery fixture.
+- **Next:** Step 2. The Step 1 remainder (Radio Browser playback, the F1
+  per-call measurement) can wait for Step 3, or needs a decision on a live
+  or test-build network exception.
 - **Then:** Step 2 (the coordinator and client owners, the
   connection-bound write permit, write refusal, coordinator handover, the
   app mount and the crash matrix).

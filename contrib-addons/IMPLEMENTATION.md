@@ -58,12 +58,16 @@ Add one row for each label run that a record or a decision relies on.
 | `375f9dba89` | `session` | 4 tests, 28 cases. 0 failed, 0 skipped. | Linux, meson debug |
 | `375f9dba89` | `visualizer` | 12 tests, 116 cases. 0 failed, 0 skipped. | Linux, meson debug |
 | `375f9dba89` | `app` | 2 tests (one and two windows). 0 failed. | Linux, meson debug, offscreen Qt, Mesa llvmpipe |
+| `7ddc4b28ee` | `source` | 22 tests, 291 cases. 0 failed, 1 skipped. | Linux, meson debug |
+| `7ddc4b28ee` | `ui` | 7 tests, 170 cases. 0 failed, 0 skipped. | Linux, meson debug |
+| `7ddc4b28ee` | `session` | 4 tests, 28 cases. 0 failed, 0 skipped. | Linux, meson debug |
+| `7ddc4b28ee` | `app` | 3 tests (one window, two windows, driver). 0 failed. | Linux, meson debug with `-Daddon-test-driver=true`, offscreen Qt, Mesa llvmpipe |
 
 ## Cross-cutting gates
 
 | Gate | State | Evidence |
 | --- | --- | --- |
-| Full Linux app build and scripted smoke test | Builds and runs. Start, bundled preparation, playback, idle and quit pass in one and two windows. Extensions model, provider invocation, Radio Browser playback and Phase 0 worker numbers are open. Quit crashes in the WSL D3D12 GPU driver; the test uses llvmpipe. | [Linux smoke test](records/app-smoke-linux.md) |
+| Full Linux app build and scripted smoke test | Builds and runs. Start, bundled preparation, playback, idle and quit pass in one and two windows. With the test driver (`-Daddon-test-driver=true`), the Extensions list and a discovery source through the real worker pass, and the worker numbers are recorded. Radio Browser playback and the prepared-invocation cost (F1) are open. Quit crashes in the WSL D3D12 GPU driver; the test uses llvmpipe. | [Linux smoke test](records/app-smoke-linux.md) |
 | Performance: no idle work, no package I/O in basic UI, worker cold and repeated cost | Open. Focused idle regressions pass. No full app measurement. Plan findings F1–F3 apply. | [performance contract](performance-contract.md) |
 | Windows GUI checks of the current review package (`74ae4267fc`) | Open, with the user. | [Windows artwork build](records/windows-artwork-build-2026-10-30.md) |
 | Windows cursor report | Open, with the user. Plan F4 gives the hypothesis and the live check. | [cursor report](records/windows-cursor-feedback.md) |
@@ -119,7 +123,7 @@ Add one row for each label run that a record or a decision relies on.
 
 | Requirement | Maturity | Evidence | Open |
 | --- | --- | --- | --- |
-| Discovery browser: roots, browse, search, cursors, stable admissions | mounted | `source`: `test_qt_addon_discovery`, `test_qt_addon_discovery_service`, `test_qt_addon_source_admissions`, `test_qt_addon_queue_transactions` | Full app check. |
+| Discovery browser: roots, browse, search, cursors, stable admissions | mounted | `source`: `test_qt_addon_discovery`, `test_qt_addon_discovery_service`, `test_qt_addon_source_admissions`, `test_qt_addon_queue_transactions`; `app`: `addon_app_smoke_driver` opens, browses and searches the fixture source in the full app | Playback and queue actions in the full app. |
 | Native source route: owner, resolver, consent, contained stream proxy, input policy | mounted | `source`: `test_qt_addon_discovery_source_owner`, `test_qt_addon_native_source_resolver`, `test_qt_addon_source_consent*`, `test_qt_addon_stream_*`, `test_src_input_*`; [source owner](discovery-source-owner-contract.md), [resolver](native-source-resolver-contract.md), [consent](native-source-consent-contract.md), [stream proxy](records/native-contained-stream-proxy.md) | Full app playback, revoke and quit. |
 | Radio Browser reference source | mounted | `source`: `addon_radio_browser_worker`; [record](records/radio-browser-source.md). A Linux live probe decoded 30 HLS blocks. | Full app and other platforms. |
 | Adaptive manifests: HLS and static DASH | component-tested | `source`: `test_qt_addon_stream_manifest`; [DASH](native-dash-manifest-contract.md), [manifests](native-stream-manifest-contract.md) | Actual adaptive playback in the app. |

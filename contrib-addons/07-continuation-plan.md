@@ -356,10 +356,14 @@ The full app builds and starts headless. `addon_app_smoke` and
 local playback, 30 s idle and quit, with two windows quit in both orders.
 Idle CPU is about 0.2 s per 30 s and memory about 280 MB, with no add-on
 worker running. All seven labels pass in the VLC build after fixes, including
-a Core thumbnail status regression. Open: the Extensions model, a provider
-invocation against a local fixture, Radio Browser fixture playback and the
-worker numbers. These need an in-app test driver. A quit crash inside the WSL
-D3D12 GPU driver is also open; the smoke test uses llvmpipe.
+a Core thumbnail status regression. The off-by-default test driver
+(`-Daddon-test-driver=true`, decided by the user) adds the Extensions list
+and a discovery source through the real worker: worker start and first call
+144 ms, warm calls 3–4 ms, one worker for both opens, no worker at idle. It
+also found and fixed a Discovery Back/repeat-search defect. Open: Radio
+Browser playback in the app (no local fixture exists), the per-call cost of
+prepared metadata invocations (F1), and a quit crash inside the WSL D3D12
+GPU driver (the smoke test uses llvmpipe).
 
 ### Step 2. Profile peer protocol owners
 

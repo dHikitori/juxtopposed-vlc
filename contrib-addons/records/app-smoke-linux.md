@@ -123,10 +123,67 @@ some dependency `.pc` files and Debian multiarch headers do not supply. The
 removed the copies that the build used. projectM is disabled in this local
 build: its library was removed, and no matching package exists.
 
+## Add-on test driver
+
+Decided on 30 October 2026 by the user: the driver is a build option that is
+off by default. `meson configure <build> -Daddon-test-driver=true` builds
+`AddonTestDriver` (`modules/gui/qt/addons/addon_test_driver.*`) into the Qt
+module (`7ddc4b28ee`). It starts only when `VLC_ADDON_TEST_DRIVER_SOCKET`
+names a socket path. With the option off, the module has no driver symbols
+and no reference to that variable, and meson does not register the driver
+test. `build-redesign` has the option on.
+
+The driver answers one line command at a time with one JSON line:
+
+| Command | Action |
+| --- | --- |
+| `extensions` | Refresh the Extensions package list and wait until it is ready |
+| `install <directory>` | Install a local package with its required grants, and enable it |
+| `discover <package> <query>` | Open the package's discovery source, load its roots, search, go Back, search again |
+
+`addon_app_smoke.py --driver` (meson test `addon_app_smoke_driver`) runs
+these with the synthetic `discovery-fixture` package. That package has no
+network, credential or file access, so the run needs no network exception.
+
+Results at `7ddc4b28ee`, same platform as above, 30 s idle:
+
+| Measure | Value |
+| --- | ---: |
+| Extensions list ready, 7 rows | 18 ms |
+| Install and enable the fixture | 61 ms |
+| Worker start and first call (roots) | 144 ms |
+| Warm call (search) | 3–4 ms |
+| Second open of the source (roots) | 4 ms |
+| Worker processes started (strace) | 1 for both opens |
+| Workers after use and at idle | 0 |
+| Idle CPU after add-on use, 30 s | 0.15 s |
+| Resident memory | 294 MB |
+
+The discovery worker is reused across views and stops when no display
+holds the source. These are the long-lived discovery worker numbers. The
+prepared metadata path still starts a new process and compiles the module
+for each call (plan F1); this run does not measure it.
+
+Two findings came from this run:
+
+1. **Discovery rows disappeared after Back or a repeated search** (fixed in
+   `74d63a50da`). The coordinator reported rows the view had already shown
+   as updates, and the service cleared them for a new page. A repeated
+   search of the fixture showed no rows. Two regression tests cover Back,
+   a repeated search and Load more.
+2. **Installation refuses a busy store.** `installLocalPackage` takes the
+   store lock with `tryLock(0)`. While the bundled add-ons are prepared at
+   startup, or while another owner holds the lock, installation fails with
+   "The add-on store is busy." This is by design, but a user who installs
+   during startup sees it. The driver waits and retries. Consider a queued
+   install in the Extensions UI.
+
 ## Open for Step 1
 
-The plan's smoke test also opens the Extensions model, runs one portable
-provider invocation against a local fixture, and plays the Radio Browser
-fixture source. The app has no headless way to do these, so they need an
-in-app driver. The Phase 0 worker numbers (worker start, first call,
-repeated call) depend on that provider invocation.
+- Radio Browser playback in the app. No local Radio Browser fixture exists:
+  its probe uses the live public service, and the public HTTPS policy
+  refuses a loopback fixture. Either add a live, opt-in smoke step or a
+  test-build network exception behind the same option.
+- A per-call measurement of prepared metadata invocations (F1), before and
+  after the precompiled module change in Step 3.
+- The WSL D3D12 quit crash (above).
