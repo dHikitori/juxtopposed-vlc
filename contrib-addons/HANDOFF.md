@@ -63,9 +63,15 @@ The user delegated decisions 2–4 to Claude.
   `profile-write-permit.md`, `profile-mount.md`. The app mounts the shared
   profile (`AddonProfileHost`); every store write goes through permits. Not
   run yet for the new units: Windows, ASAN/UBSAN, standalone CMake.
-- **Next:** Step 3 (performance: precompiled modules F1, cancellation event
-  F2, crash backoff F3, launch feedback F4). Step 4 (native owner
-  activation) is now unblocked by Step 2.
+- **Step 3 is mostly done** (`e62f9813f8` to `097c2d5fd5`); see
+  `records/performance-step3.md`. A Linux pre-add-on baseline is built in
+  the worktree `../vlc-baseline/build` (source `619b57dd85`, with the
+  offscreen compositor fix applied locally and a `bin/vlc-qt-check` link;
+  neither is committed). Compare with `test/addon_app_smoke.py --build
+  ../vlc-baseline/build --no-addons --no-playback`.
+- **Next:** Step 4 (native owner activation), now unblocked by Step 2.
+  Step 3 leftovers: the Extensions health row, startup on a normal Linux
+  install.
 - **Do not** activate the native metadata owner before Step 2 passes.
 
 ## Environment notes

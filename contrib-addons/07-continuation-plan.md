@@ -129,6 +129,13 @@ Recommended change:
   invocation. The receipt requires that message, a current guard, and no
   outstanding host calls. A worker crash or a protocol error in this sequence
   retires the process and fails the invocation closed.
+- Revised (30 October 2026, after measurement): the precompiled module alone
+  brings a complete prepared invocation (process start, one call, clean EOF)
+  from 140 ms to 2.1 ms (median; p90 2.4 ms). A warm process would save about
+  2 ms more per lookup, but would replace the process-exit proof with the
+  weaker instance-release proof. Prepared invocations therefore keep one
+  precompiled process per call and the clean-EOF receipt. Revisit the warm
+  process only if an in-app measurement exceeds the repeated-lookup budget.
 
 ### F2. Cancellation polling during each prepared invocation
 
@@ -427,6 +434,13 @@ error and no idle cost in either window.
 - **Exit:** idle CPU and basic UI timings are within noise of the
   pre-add-on baseline in `performance-contract.md`. The repeated-lookup cost
   is reported as a number.
+
+Step 3 status, 30 October 2026; see [the record](records/performance-step3.md).
+F1 (precompiled modules), F2, F3 and F4 are done; the warm worker is not built
+(revised decision in F1). Idle CPU is within the Linux pre-add-on baseline,
+and the repeated-lookup cost is 2.1 ms per prepared invocation. Open: the
+Extensions health row, basic UI timings, a 0.35 s slower startup on this
+machine (partly explained), and the Windows cursor check.
 
 ### Step 4. Activate the native metadata owner
 
