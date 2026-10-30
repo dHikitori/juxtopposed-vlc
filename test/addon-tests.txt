@@ -1,0 +1,152 @@
+# Add-on test labels.
+#
+# One row per test: <meson test name> <label> <build systems>.
+# Labels: profile, metadata, source, ui, session, visualizer.
+# Build systems: all, or a comma-separated subset of automake, meson, cmake.
+# CMake names drop the test_qt_ prefix. "cmake" means the standalone project
+# in modules/gui/qt/addons/CMakeLists.txt.
+#
+# meson and CMake read the labels from this file. check_addon_tests.py
+# compares this file with the three build systems. Run one label with
+#   meson test -C <build> --suite <label>
+#   ctest --test-dir <build> -L <label>
+
+# profile: package store, profile authority, workers and repositories
+test_qt_addon_app_shutdown                      profile     all
+test_qt_addon_broker                            profile     all
+test_qt_addon_catalogue_native                  profile     all
+test_qt_addon_distribution_bootstrap            profile     all
+test_qt_addon_git_objects                       profile     cmake
+test_qt_addon_host_services                     profile     all
+test_qt_addon_invocation_guard                  profile     cmake
+test_qt_addon_native_authority                  profile     all
+test_qt_addon_native_notifications              profile     all
+test_qt_addon_packages                          profile     all
+test_qt_addon_repository_jobs                   profile     all
+test_qt_addon_repository_updates                profile     all
+test_qt_addon_runtime                           profile     all
+test_qt_addon_storage                           profile     all
+test_qt_addon_store_authority                   profile     all
+test_qt_addon_store_process_fence               profile     all
+test_qt_addon_store_profile_generation          profile     all
+test_qt_addon_store_profile_lifecycle           profile     all
+test_qt_addon_store_profile_packages            profile     all
+test_qt_addon_store_profile_peer                profile     all
+test_qt_addon_store_profile_protocol            profile     all
+test_qt_addon_store_profile_settings            profile     all
+test_qt_addon_store_profile_socket              profile     all
+
+# metadata: identification, artwork and the native metadata pipeline
+test_qt_addon_artwork_assets                    metadata    all
+test_qt_addon_artwork_attempt_aggregate         metadata    all
+test_qt_addon_artwork_attempt_keeper            metadata    all
+test_qt_addon_artwork_attempt_plan              metadata    all
+test_qt_addon_artwork_image                     metadata    all
+test_qt_addon_metadata                          metadata    all
+test_qt_addon_metadata_attempt                  metadata    all
+test_qt_addon_metadata_catalogue                metadata    all
+test_qt_addon_metadata_choices                  metadata    all
+test_qt_addon_metadata_family_plan              metadata    cmake
+test_qt_addon_metadata_registry_epoch           metadata    all
+test_qt_addon_metadata_service                  metadata    all
+test_qt_addon_native_artwork_assets             metadata    all
+test_qt_addon_native_library_store              metadata    cmake
+test_qt_addon_native_metadata_owner             metadata    all
+test_qt_addon_native_provider_context           metadata    all
+test_qt_addon_prepared_metadata_invocation      metadata    all
+test_qt_artwork_selected_image                  metadata    all
+test_qt_artwork_selection                       metadata    all
+test_qt_metadata_backend                        metadata    cmake
+test_qt_ml_joined_runner                        metadata    all
+test_modules_lua_meta_art_outcome               metadata    automake,meson
+test_modules_lua_meta_art_scripts               metadata    automake,meson
+test_modules_lua_meta_art_stream                metadata    automake,meson
+test_modules_lua_meta_selector                  metadata    automake,meson
+test_modules_lua_meta_selector_runtime          metadata    automake,meson
+test_src_input_artwork_fetcher                  metadata    automake,meson
+test_src_input_artwork_policy                   metadata    automake,meson
+test_src_misc_addon_medialibrary                metadata    automake,meson
+test_src_misc_medialibrary_work                 metadata    automake,meson
+test_src_misc_metadata_artwork                  metadata    automake,meson
+test_src_misc_metadata_artwork_admission        metadata    automake,meson
+test_src_misc_metadata_backend                  metadata    automake,meson
+test_src_misc_metadata_commit                   metadata    automake,meson
+test_src_misc_metadata_commit_limit             metadata    automake,meson
+test_src_misc_metadata_fetcher                  metadata    automake,meson
+test_src_misc_metadata_local                    metadata    automake,meson
+test_src_misc_metadata_local_current            metadata    automake,meson
+test_src_misc_metadata_local_limit              metadata    automake,meson
+test_src_misc_metadata_native_provider          metadata    automake,meson
+test_src_misc_metadata_owner                    metadata    automake,meson
+test_src_misc_metadata_pipeline                 metadata    automake,meson
+test_src_misc_metadata_pipeline_key             metadata    automake,meson
+test_src_misc_metadata_preparser_internal       metadata    automake,meson
+test_src_misc_metadata_preparser_runtime        metadata    automake,meson
+test_src_misc_metadata_request_events           metadata    automake,meson
+test_src_misc_metadata_request_guard            metadata    automake,meson
+test_src_misc_metadata_requests                 metadata    automake,meson
+test_src_misc_metadata_revision                 metadata    automake,meson
+test_src_preparser_native_import                metadata    automake,meson
+test_src_preparser_native_ipc                   metadata    automake,meson
+test_src_preparser_owned_pipeline               metadata    automake,meson
+test_src_text_filesystem_sort                   metadata    automake,meson
+
+# source: discovery, consent, queues and contained streams
+addon_radio_browser_worker                      source      meson,cmake
+test_qt_addon_discovery                         source      all
+test_qt_addon_discovery_service                 source      all
+test_qt_addon_discovery_source_owner            source      all
+test_qt_addon_native_queue_store                source      all
+test_qt_addon_native_source_resolver            source      all
+test_qt_addon_playable_gate                     source      all
+test_qt_addon_queue_transactions                source      all
+test_qt_addon_source_admissions                 source      all
+test_qt_addon_source_consent                    source      all
+test_qt_addon_source_consent_ui                 source      cmake
+test_qt_addon_source_consent_ui_owner           source      all
+test_qt_addon_stream_http                       source      all
+test_qt_addon_stream_manifest                   source      all
+test_qt_addon_stream_native                     source      cmake
+test_qt_addon_stream_proxy                      source      all
+test_qt_addon_stream_shutdown                   source      all
+test_src_input_addon_source                     source      automake,meson
+test_src_input_addon_source_playback            source      automake,meson
+test_src_input_policy                           source      automake,meson
+test_src_input_source_backend                   source      automake,meson
+test_src_input_source_owner                     source      automake,meson
+test_src_input_stream_observer                  source      automake,meson
+test_src_input_ytdl_policy                      source      automake,meson
+
+# ui: Extensions catalogue, display rows, themes and UI contributions
+test_qt_addon_catalogue_view                    ui          all
+test_qt_addon_display_catalogue                 ui          all
+test_qt_addon_display_integration               ui          all
+test_qt_addon_package_summaries                 ui          all
+test_qt_addon_theme                             ui          all
+test_qt_addon_ui_assets                         ui          all
+test_qt_addon_ui_registry                       ui          all
+
+# session: shared playback sessions
+test_qt_addon_native_session_player             session     cmake
+test_qt_addon_player_sessions                   session     cmake
+test_qt_addon_session_host                      session     cmake
+test_qt_addon_session_ui                        session     cmake
+test_qt_addon_session_websocket                 session     cmake
+test_qt_addon_sessions                          session     all
+test_qt_addon_websocket_codec                   session     all
+test_src_player_addon_session                   session     automake,meson
+test_src_player_addon_session_state             session     automake,meson
+
+# visualizer: audio analysis, scenes, workers and rendering
+test_qt_addon_audio_analysis                    visualizer  all
+test_qt_addon_native_player_analysis            visualizer  all
+test_qt_addon_visual_scene                      visualizer  all
+test_qt_addon_visualizer_clock                  visualizer  all
+test_qt_addon_visualizer_parameters             visualizer  all
+test_qt_addon_visualizer_render_queue           visualizer  all
+test_qt_addon_visualizer_resources              visualizer  all
+test_qt_addon_visualizer_surface                visualizer  all
+test_qt_addon_visualizer_worker                 visualizer  all
+test_qt_addon_visualizer_worker_runtime         visualizer  all
+test_qt_addon_visualizers                       visualizer  all
+test_src_player_audio_samples_lifecycle         visualizer  automake,meson

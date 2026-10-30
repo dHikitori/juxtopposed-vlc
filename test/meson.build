@@ -106,7 +106,7 @@ foreach vlc_test: vlc_tests
                 args: [test_exe],
                 env: vlc_test.get('env', []),
                 timeout: vlc_test.get('timeout', 30),
-                suite: [vlc_test.get('suite', []), 'test'],
+                suite: [vlc_test.get('suite', []), 'test', addon_test_labels.get(vlc_test['name'], [])],
                 depends: [test_modules_deps])
         else
             warning('Test \'@0@\' skipped: wrapper not found'.format(
@@ -117,10 +117,14 @@ foreach vlc_test: vlc_tests
             test_exe,
             env: vlc_test.get('env', []),
             timeout: vlc_test.get('timeout', 30),
-            suite: [vlc_test.get('suite', []), 'test'],
+            suite: [vlc_test.get('suite', []), 'test', addon_test_labels.get(vlc_test['name'], [])],
             depends: [test_modules_deps])
     endif
 endforeach
+
+test('addon_test_registry', find_program('python3'),
+    args: ['-B', files('check_addon_tests.py')],
+    suite: ['addons'])
 
 libvlc_demux_defines = []
 libvlc_demux_deps = []

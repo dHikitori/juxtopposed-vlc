@@ -366,3 +366,18 @@ else()
 endif()
 
 set_tests_properties(addon_stream_http addon_stream_proxy addon_stream_shutdown addon_app_shutdown addon_repository_jobs addon_native_authority PROPERTIES TIMEOUT 90)
+
+# Labels come from test/addon-tests.txt, which also lists the build systems
+# that register each test. Run one label with `ctest -L <label>`.
+file(STRINGS "${VLC_SOURCE_ROOT}/test/addon-tests.txt" addon_test_rows REGEX "^[a-z]")
+foreach(row IN LISTS addon_test_rows)
+    string(REGEX MATCH "^([a-z0-9_]+) +([a-z]+)" row "${row}")
+    string(REGEX REPLACE "^test_qt_" "" name "${CMAKE_MATCH_1}")
+    if(TEST ${name})
+        set_tests_properties(${name} PROPERTIES LABELS ${CMAKE_MATCH_2})
+    endif()
+endforeach()
+find_package(Python3 QUIET COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME addon_test_registry COMMAND "${Python3_EXECUTABLE}" -B "${VLC_SOURCE_ROOT}/test/check_addon_tests.py")
+endif()

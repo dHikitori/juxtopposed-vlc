@@ -2612,6 +2612,53 @@ test_qt_addon_store_profile_socket_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_
 check_PROGRAMS += test_qt_addon_store_profile_socket
 TESTS += test_qt_addon_store_profile_socket
 
+test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.cpp
+nodist_test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.moc
+BUILT_SOURCES += tests/test_addon_store_profile_settings.moc
+CLEANFILES += tests/test_addon_store_profile_settings.moc
+test_qt_addon_store_profile_settings_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_profile_settings_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_settings_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_settings_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_settings
+TESTS += test_qt_addon_store_profile_settings
+
+test_qt_addon_store_profile_packages_SOURCES = tests/test_addon_store_profile_packages.cpp
+nodist_test_qt_addon_store_profile_packages_SOURCES = tests/test_addon_store_profile_packages.moc
+BUILT_SOURCES += tests/test_addon_store_profile_packages.moc
+CLEANFILES += tests/test_addon_store_profile_packages.moc
+test_qt_addon_store_profile_packages_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_profile_packages_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_packages_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_packages_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_packages
+TESTS += test_qt_addon_store_profile_packages
+
+if HAVE_LINUX
+test_qt_addon_store_profile_packages_CPPFLAGS += -DHAKONE_PROFILE_SAVEFILE_WRAP
+test_qt_addon_store_profile_packages_LDFLAGS += -Wl,--wrap=_ZN9QSaveFile6commitEv
+tests/test_addon_store_profile_packages.moc: $(srcdir)/tests/test_addon_store_profile_packages.cpp
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_PROFILE_SAVEFILE_WRAP $< -o $@
+endif
+
+test_qt_addon_store_profile_lifecycle_SOURCES = tests/test_addon_store_profile_lifecycle.cpp
+nodist_test_qt_addon_store_profile_lifecycle_SOURCES = tests/test_addon_store_profile_lifecycle.moc
+BUILT_SOURCES += tests/test_addon_store_profile_lifecycle.moc
+CLEANFILES += tests/test_addon_store_profile_lifecycle.moc
+test_qt_addon_store_profile_lifecycle_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_profile_lifecycle_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_lifecycle_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_lifecycle_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_lifecycle
+TESTS += test_qt_addon_store_profile_lifecycle
+
+if HAVE_LINUX
+test_qt_addon_store_profile_lifecycle_CPPFLAGS += -DHAKONE_PROFILE_SAVEFILE_WRAP
+test_qt_addon_store_profile_lifecycle_LDFLAGS += -Wl,--wrap=_ZN9QSaveFile6commitEv
+tests/test_addon_store_profile_lifecycle.moc: $(srcdir)/tests/test_addon_store_profile_lifecycle.cpp
+	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_PROFILE_SAVEFILE_WRAP $< -o $@
+endif
+
 test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.cpp
 nodist_test_qt_addon_catalogue_native_SOURCES = tests/test_addon_catalogue_native.moc
 BUILT_SOURCES += tests/test_addon_catalogue_native.moc
