@@ -4,15 +4,15 @@ Multiple app processes must be able to use one local add-on profile. A change
 to that profile must revoke old native write authority in every process.
 The full gate remains open. The native fence below is implemented and tested.
 The saved generation and guarded writer helper are now implemented. See
-[guarded generations](profile-generation-transactions.md). Store policy,
+[guarded generations](records/profile-generation-transactions.md). Store policy,
 package state and lifecycle methods now have tested guarded bindings. See
-[guarded settings](profile-store-settings.md) and
-[package state writes](profile-package-writes.md), plus
-[lifecycle writes](profile-lifecycle-writes.md). A
-[retained writer scope](profile-writer-scope.md) now holds the store lock
+[guarded settings](records/profile-store-settings.md) and
+[package state writes](records/profile-package-writes.md), plus
+[lifecycle writes](records/profile-lifecycle-writes.md). A
+[retained writer scope](records/profile-writer-scope.md) now holds the store lock
 during ticket negotiation. The [message format and coordinator
 policy](profile-control-protocol.md) are also implemented. A
-[native peer readiness helper](profile-native-peer.md) now closes local
+[native peer readiness helper](records/profile-native-peer.md) now closes local
 admission and retains the fence through native drain. Both socket roles,
 same-user authentication, complete profile recovery and the production mount
 are not implemented yet.

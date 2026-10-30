@@ -1,6 +1,6 @@
 # Radio Browser reference source
 
-The package is in [examples/radio-browser](examples/radio-browser/README.md).
+The package is in [examples/radio-browser](../examples/radio-browser/README.md).
 Its ID is `org.hakone.radio-browser`. Version `0.1.0` uses `discovery@1`.
 The repository address under `github.com/hakone-org/` is a proposed address.
 This change does not create or publish that repository.

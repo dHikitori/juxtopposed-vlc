@@ -48,11 +48,11 @@ A ready saved record is not local native authority. Peers must complete the
 coordinator join confirmation before they can publish current native tokens.
 The one-call static `write` helper is for synchronous use. Runtime ticket
 negotiation must call `prepareWriter` before it sends the ticket request.
-The [bounded message format and coordinator policy](profile-control-protocol.md)
+The [bounded message format and coordinator policy](../profile-control-protocol.md)
 are now tested. Runtime connection binding, native cancellation
 acknowledgements, complete profile recovery, and the local authority admission
 gate remain required.
-See [the complete protocol](profile-authority-coordination.md).
+See [the complete protocol](../profile-authority-coordination.md).
 
 ## Verification
 

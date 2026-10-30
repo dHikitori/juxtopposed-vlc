@@ -4,7 +4,7 @@
 message format and coordinator policy for profile authority. They are
 host-only code. They expose no add-on method and grant no native token.
 
-The [native readiness helper](profile-native-peer.md) now binds Store tokens
+The [native readiness helper](records/profile-native-peer.md) now binds Store tokens
 to local readiness and joined cancellation. The socket owner, client protocol
 owner, same-user authentication, complete profile recovery, and app mount
 remain open. Native metadata
@@ -75,7 +75,7 @@ A candidate is not current native authority. A late confirmation during
 revocation cannot send a new ready message.
 
 The actual writer must hold the
-[prepared writer scope](profile-writer-scope.md) before it sends `Begin`.
+[prepared writer scope](records/profile-writer-scope.md) before it sends `Begin`.
 The coordinator accepts one pending write. It binds that write to its
 accepted connection, exact generation and revision, request, and deadline.
 The deadline must be ahead of current time and within 30 seconds. The
@@ -170,7 +170,7 @@ bytes. The final check left 7,584,313,344 bytes free. Protected Core and local
 Windows package hashes match. No Docker cache or user profile is changed.
 
 The native readiness binding now has its own
-[checked component cohort](profile-native-peer.md). Same-user socket
+[checked component cohort](records/profile-native-peer.md). Same-user socket
 authentication, client protocol state, cross-process Core Apply, macOS
 runtime, and full app performance checks remain required.
 The local Windows review package is unchanged.

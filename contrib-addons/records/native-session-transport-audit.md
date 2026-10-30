@@ -6,10 +6,10 @@ The native API is separate from the room protocol and the session interface.
 
 ## Private state implementation
 
-The new [state code](../src/player/addon_session_state.c) and
-[private API](../src/player/addon_session_state.h) define the native authority record.
-The [state tests](../test/src/player/addon_session_state.c) run without Qt.
-The [native fixture](../test/src/player/addon_session.c) uses a builtin audio demux
+The new [state code](../../src/player/addon_session_state.c) and
+[private API](../../src/player/addon_session_state.h) define the native authority record.
+The [state tests](../../test/src/player/addon_session_state.c) run without Qt.
+The [native fixture](../../test/src/player/addon_session.c) uses a builtin audio demux
 and the real player and input threads.
 Its normal Core build and runtime result must pass before this mount is accepted.
 The state tests alone do not prove local priority in the real input FIFO.
@@ -54,7 +54,7 @@ Restore success means that the observed rate equals the saved base rate.
 The generic `Control` return value reports a required update; it does not prove that result.
 A failed restore waits at least 250 milliseconds before its next attempt.
 
-The [public native API](../include/vlc_addon_player.h) requires the player lock.
+The [public native API](../../include/vlc_addon_player.h) requires the player lock.
 It accepts typed playback values; it does not accept a URL or variable name.
 `Apply` success means that the native FIFO accepted the command.
 An executed command sends its captured completion through a separate listener.

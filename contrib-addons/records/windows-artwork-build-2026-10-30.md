@@ -24,7 +24,7 @@ metadata owner activation remains off.
 - The portable artwork cohort previously passed 271 normal and 271
   ASAN/UBSAN checks. The profile generation cohort passed 70 normal, 70
   ASAN/UBSAN and 66 native Windows checks. See the linked component records
-  in [implementation status](IMPLEMENTATION.md) for their scope and limits.
+  in [implementation status](../IMPLEMENTATION.md) for their scope and limits.
 
 Publication replaced 417 managed files with atomic hardlink replacement.
 Portable profile contents were not read or changed. The portable directory

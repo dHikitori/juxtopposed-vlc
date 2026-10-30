@@ -8,7 +8,7 @@ Updated 27 October 2026. The user has approved code edits, fixes, builds, stagin
 - SDK credential capacity: nine Rust cases and four real-worker cases pass. The SDK accepts the host's 64 credential presence fields. All four artwork packages have now been built with that SDK change. All five artwork worker fixtures pass.
 - Typed interface and recovery: nine native registry cases pass. The normal app and QML runner builds pass. The compiled runner passes 707 cases in 27 suites, including all 28 typed-dialog cases, with no failures or skips. It used a committed-source snapshot to exclude the next image feature's edits. The prior 548-pass/one-failure result remains historical evidence.
 
-The [implementation record](IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) is now approved. No earlier rejected database change ran.
+The [implementation record](../IMPLEMENTATION.md) lists the committed boundaries. The [playlist plan](native-playlist-cas.md) is now approved. No earlier rejected database change ran.
 
 The latest integrated app build passes. Its compiled UI run passes 709 cases in 27 suites, with no failures or skips. The normal image suite passes 25 cases; the metadata service passes 14; actual artwork consumers pass nine; the real library dispatcher suite passes 21. These results include the image and library mounts that were excluded from the earlier snapshot.
 
@@ -83,7 +83,7 @@ The core helper exports and normal native tests pass, including 16 concurrent so
 
 The native input owns the transport lease. Stop and playback end cancel it. A manifest, segment, or key EOF keeps it active. Keep the queue item's source-only policy intact for replay.
 
-The [stream contract](native-discovery-stream-contract.md) specifies the remaining host resolver, source consent, native intent, public HTTPS transport, nested media, and revocation tests. Production Play and Enqueue remain unavailable. The [artwork approval contract](native-artwork-approval-contract.md) records the tested native record, consumers, and proof transfer; its owned preparser/provider cutover remains open.
+The [stream contract](../native-discovery-stream-contract.md) specifies the remaining host resolver, source consent, native intent, public HTTPS transport, nested media, and revocation tests. Production Play and Enqueue remain unavailable. The [artwork approval contract](../native-artwork-approval-contract.md) records the tested native record, consumers, and proof transfer; its owned preparser/provider cutover remains open.
 
 ## Metadata handover
 

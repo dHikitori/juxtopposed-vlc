@@ -155,7 +155,7 @@ explicit retry. This also partly provides the per-contribution health state in
 
 ### F4. Windows cursor report: a testable hypothesis
 
-`windows-cursor-feedback.md` records a spinner cursor for the whole session,
+`records/windows-cursor-feedback.md` records a spinner cursor for the whole session,
 **also outside the VLC window**. That detail is important:
 
 - A Qt override cursor applies only over the application's own windows.
@@ -301,7 +301,7 @@ This is the order of work. Each step has an exit condition.
 ### Step 0. Close the socket step
 
 Done on 30 October 2026, except note 3, which moves to Step 2. See
-[the socket record](profile-socket.md).
+[the socket record](records/profile-socket.md).
 
 - Fix the Windows link. In the component harness, use
   `qt_import_plugins(<target> NO_DEFAULT)` or exclude the `networkinformation`

@@ -5,7 +5,7 @@ supply the local transport for the [profile control
 protocol](profile-control-protocol.md). They are host-only. They carry the
 fixed 96-byte frames and grant no native authority. The coordinator owner,
 client owner, connection-bound write permit and app mount are not
-implemented yet. See [the continuation plan](07-continuation-plan.md),
+implemented yet. See [the continuation plan](../07-continuation-plan.md),
 Step 2.
 
 ## Endpoint

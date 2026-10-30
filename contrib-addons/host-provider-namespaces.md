@@ -26,6 +26,6 @@ The focused recipe compiles the actual manifest source and package tests. A
 coherent normal host archive supplies the other components. Only the parser
 and test sources use memory instrumentation. Source and artifact hashes, build
 records, and results are in `/tmp/hakone-package-namespaces-validation.json`.
-The [builtin name migration](builtin-provider-id-migration.md) records the
+The [builtin name migration](records/builtin-provider-id-migration.md) records the
 Hakone IDs and saved-preference handling. The fresh full app build remains
 open.

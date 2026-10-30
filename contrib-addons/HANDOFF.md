@@ -10,13 +10,13 @@ Read these in order:
 
 1. [Continuation plan](07-continuation-plan.md). It has the findings, the
    decisions and the ordered steps. Its §5 is the work queue.
-2. [Profile socket record](profile-socket.md). This is the step just
+2. [Profile socket record](records/profile-socket.md). This is the step just
    finished.
 3. [Completion backlog](completion-backlog.md). It lists the open
    requirement rows, with source references.
 4. For Step 2: [profile authority coordination](profile-authority-coordination.md),
    [control protocol](profile-control-protocol.md) and
-   [native peer readiness](profile-native-peer.md).
+   [native peer readiness](records/profile-native-peer.md).
 
 `README.md` and `01`–`06` are the design. `IMPLEMENTATION.md` is the
 existing narrative status. Step 0b replaces it with a matrix.
@@ -95,7 +95,7 @@ These matter on this machine (WSL2 on Windows):
 
 - Manual Windows GUI checks of the current review package (source
   `74ae4267fc`; it does not include the profile or socket work).
-- The Windows cursor report (`windows-cursor-feedback.md`). Plan F4 gives
+- The Windows cursor report (`records/windows-cursor-feedback.md`). Plan F4 gives
   the hypothesis (global startup-feedback cursor from repeated helper
   launches) and the live check to run.
 

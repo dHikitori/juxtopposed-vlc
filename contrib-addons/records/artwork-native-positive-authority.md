@@ -109,5 +109,5 @@ Connect the serial Service runner to prepared portable calls, `probeOutcome`,
 actual image brokers and both source seals. Recheck saved configuration on
 joined work before final host admission. Verify every retained provider, local
 work, cancellation, status bit and legacy-bypass rule before enabling the owner.
-The complete [completion backlog](completion-backlog.md) remains active.
+The complete [completion backlog](../completion-backlog.md) remains active.
 The local Windows review package remains clean source `335ac989d0`.

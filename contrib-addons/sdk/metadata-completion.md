@@ -53,7 +53,7 @@ can permit a later provider but cannot become a negative lookup result.
 The current portable artwork aggregate keeps the slot reserved during consumer
 acceptance and image work. It can transfer native Store watches and admission
 into Core after the caller has an approved local image. No receipt grants that
-image approval. See [the host transfer contract](../artwork-positive-host-transfer.md).
+image approval. See [the host transfer contract](../records/artwork-positive-host-transfer.md).
 
 ## HTTP status policy
 
@@ -140,5 +140,5 @@ respectively, both normally and with sanitizers. It verifies portable positive
 source transfer through final Core Apply. Native source and image consent
 transfer now pass 69 aggregate and 36 native image checks in each build.
 The serial Service runner and mounted owner remain integration gates. See
-[portable evidence](../artwork-positive-host-transfer.md) and
-[native evidence](../artwork-native-positive-authority.md).
+[portable evidence](../records/artwork-positive-host-transfer.md) and
+[native evidence](../records/artwork-native-positive-authority.md).

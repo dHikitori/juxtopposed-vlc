@@ -121,6 +121,6 @@ drain on joined work. Full app performance, Windows cursor behavior, supported
 targets, preserved Core providers and native final Apply remain open. The
 current Windows review package is unchanged.
 
-See [profile coordination](profile-authority-coordination.md),
+See [profile coordination](../profile-authority-coordination.md),
 [package state writes](profile-package-writes.md) and
 [guarded generations](profile-generation-transactions.md).

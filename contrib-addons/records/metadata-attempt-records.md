@@ -29,7 +29,7 @@ A body at the limit, a truncated response, HTTP 206, an aborted transfer, or an
 unfinished connection cannot qualify. An installed contribution can declare
 HTTP 404 or 410 as an empty lookup for an exact feature and operation. An absent
 policy permits neither status. Guest output cannot change that policy. See
-[the SDK guide and schema](sdk/metadata-completion.md).
+[the SDK guide and schema](../sdk/metadata-completion.md).
 
 `NoMatch` records use strict negative validation. Positive `Match` and `Partial`
 records bind the exact nonempty bounded result object after completed host work.

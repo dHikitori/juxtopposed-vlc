@@ -108,6 +108,6 @@ Then mount startup, reconnect, refresh and drain on joined work.
 
 No idle timer, polling loop, thread or worker process is added. The current
 Windows review package is unchanged. Full app performance and cursor checks
-remain open. See [profile coordination](profile-authority-coordination.md),
+remain open. See [profile coordination](../profile-authority-coordination.md),
 [guarded generations](profile-generation-transactions.md) and
 [guarded policy writes](profile-store-settings.md).

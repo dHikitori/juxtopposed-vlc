@@ -34,7 +34,7 @@ The matching shared host passes 551 normal and 551 ASAN/UBSAN checks across
 18 suites, with no warnings or skips. Related native checks pass 103 cases.
 The QML checks pass 302 cases; two exact, previously reproduced Qt animation
 warnings remain recorded. The actual MainUI object also compiles against the
-matching headers. See [the performance contract](performance-contract.md).
+matching headers. See [the performance contract](../performance-contract.md).
 
 These checks do not measure full app responsiveness. GUI automation could
 not initialize because its tool rejected this WSL workspace URI. No GUI app

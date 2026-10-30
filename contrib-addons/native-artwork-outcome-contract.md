@@ -2,7 +2,7 @@
 
 This file defines the negative artwork result and its remaining aggregate.
 The native receipt and input completion evidence are implemented. See
-[completion evidence](native-artwork-completion.md). The final negative
+[completion evidence](records/native-artwork-completion.md). The final negative
 transaction is not active in the app.
 
 The positive native helper is separate. It accepts a changed artwork field
@@ -78,7 +78,7 @@ attempt record from its exact admitted invocation. The host must validate its
 completion against the captured plan and result contract. That portable
 record and its complete plan integration remain implementation work. The
 native sealed staging helper and final transaction now pass focused checks.
-See [the native transaction](native-artwork-outcome.md).
+See [the native transaction](records/native-artwork-outcome.md).
 
 The final helper must join the negative status with the parent's prepared
 delta under the original artwork, status and identity tokens. It must prepare

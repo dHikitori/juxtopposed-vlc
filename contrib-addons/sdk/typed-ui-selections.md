@@ -2,7 +2,7 @@
 
 This page describes the host selection adapter. The subtitle and playlist dialogs can use an explicitly selected replacement. Core keeps the built-in body available.
 
-The adapter code remains in the working tree. Native registry tests pass. A playlist recovery regression in the broader interface test run remains open. See [the pending review](../pending-implementation-review.md).
+The adapter code remains in the working tree. Native registry tests pass. A playlist recovery regression in the broader interface test run remains open. See [the pending review](../records/pending-implementation-review.md).
 
 ## Host choices
 

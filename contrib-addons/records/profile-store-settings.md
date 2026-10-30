@@ -107,5 +107,5 @@ joining peers, and close local readiness on channel loss. The application
 must then mount startup, reconnect, refresh and drain without a GUI wait.
 
 Full app performance, Windows cursor behavior and native Core final Apply
-remain separate checks. See [profile coordination](profile-authority-coordination.md)
+remain separate checks. See [profile coordination](../profile-authority-coordination.md)
 and [guarded generations](profile-generation-transactions.md).

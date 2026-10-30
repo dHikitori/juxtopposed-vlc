@@ -165,4 +165,4 @@ write entry points once runtime peer mode is active. Complete whole-profile
 recovery, then mount the owner before consumers. Verify all native final
 Apply paths and preserved providers. App idle cost, response time, cursor,
 quit behavior, and supported-platform checks remain open. See
-[profile coordination](profile-authority-coordination.md).
+[profile coordination](../profile-authority-coordination.md).

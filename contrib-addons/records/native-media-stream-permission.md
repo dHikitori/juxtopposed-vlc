@@ -24,8 +24,8 @@ package authority before it prepares a contained transport.
 The profile permits public HTTPS media on port 443. The host transport checks
 each redirect, manifest, segment, map, and key. A changed CDN host does not permit
 a private address or an unsupported protocol. The transport does not use API
-credentials. See [the native stream contract](native-discovery-stream-contract.md)
-and [saved source consent](native-source-consent-contract.md).
+credentials. See [the native stream contract](../native-discovery-stream-contract.md)
+and [saved source consent](../native-source-consent-contract.md).
 
 `mediaStreamAvailable` reports the mounted host capability. It is false before
 the native source owner becomes active and during retirement. The install

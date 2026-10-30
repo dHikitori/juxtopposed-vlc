@@ -80,7 +80,7 @@ costs. It is not accepted against this contract.
 
 The earlier 15–17 second app startup observations disabled the plug-in cache
 and used software rendering. They are not a controlled normal-launch baseline.
-See [the Windows record](windows-local-build.md).
+See [the Windows record](records/windows-local-build.md).
 
 ## Controlled Windows baseline
 
@@ -564,7 +564,7 @@ private Snapshot header; its proof is
 The final integration audit found no source or registration drift. The local
 Windows build is now published in the usual local folder. Its 416 executable
 and library checks, seven bundles, and native packaged-worker ABI check pass.
-See [the 29 October build record](windows-performance-build-2026-10-29.md).
+See [the 29 October build record](records/windows-performance-build-2026-10-29.md).
 GUI automation could not initialize from the WSL workspace. Actual UI
 responsiveness, Extensions navigation, and the full app comparison remain
 open; the unit and package results do not establish a performance budget.
@@ -579,11 +579,11 @@ decoder is blocked. The owner event loop still processes its heartbeat.
 The image path starts no worker, timer, or scan while idle. Manager retirement
 closes surviving services and cancels pending image work.
 
-See [the image evidence](portable-artwork-background.md) for the exact test
+See [the image evidence](records/portable-artwork-background.md) for the exact test
 cohort and limitations. These component checks do not measure the whole app.
 The current Windows package predates this change. Startup, idle CPU, ordinary
 UI response, and quit comparisons remain open. The persistent
-[Windows cursor report](windows-cursor-feedback.md) also remains open; no
+[Windows cursor report](records/windows-cursor-feedback.md) also remains open; no
 CPU or helper-launch sample establishes its cause yet.
 
 
@@ -601,7 +601,7 @@ component does not establish full app idle CPU or UI response. The Windows
 player package is unchanged.
 
 
-The [generation and writer layer](profile-generation-transactions.md) now
+The [generation and writer layer](records/profile-generation-transactions.md) now
 keeps profile election, saved stamps, and transaction callbacks on joined
 work. Its guard checks native/memory state and a monotonic deadline. A
 callback can retire the owner without leaving a live guard or freed state.
@@ -615,7 +615,7 @@ store lock is released and before the exclusive fence ends. The previous
 lock code fails that refresh regression. The current cohort passes 103
 normal, 103 ASAN/UBSAN and 94 native Windows cases. No idle timer, polling
 loop, thread or worker process is added. See
-[guarded settings](profile-store-settings.md). The peer channel and remaining
+[guarded settings](records/profile-store-settings.md). The peer channel and remaining
 store bindings are still required before application activation. These checks
 do not measure app startup, idle CPU, cursor behavior or UI response.
 
@@ -625,7 +625,7 @@ state reads stay inside explicit joined work. The cohort passes 124 normal,
 124 ASAN/UBSAN and 117 native Windows checks. It includes cancellation after
 the real backup commit and before primary publication. No new idle timer,
 polling loop, thread or worker process is added. See
-[package state writes](profile-package-writes.md). The peer channel and
+[package state writes](records/profile-package-writes.md). The peer channel and
 application mount remain open. Full app performance is not established by
 these component checks.
 
@@ -635,7 +635,7 @@ normal, 155 ASAN/UBSAN and 147 native Windows checks. It covers private data
 retention, real publication failure, junction refusal, native cancellation
 and initial bundle enable in one state commit. No idle task, timer, polling
 loop, thread or worker process is added. See
-[lifecycle writes](profile-lifecycle-writes.md). The application has not mounted
+[lifecycle writes](records/profile-lifecycle-writes.md). The application has not mounted
 the peer flow. Full app idle CPU, response, cursor and shutdown checks remain open.
 
 
@@ -646,7 +646,7 @@ one joined background task. Expiry does not release the scope by itself;
 its owner must still cancel or finish work and destroy it. The initial full
 store cohort passes 184/184/176 normal, sanitizer, and native Windows checks.
 A control-check retirement repair then passes 122/122/120 current generation
-and package checks. See [the writer record](profile-writer-scope.md). These
+and package checks. See [the writer record](records/profile-writer-scope.md). These
 component checks do not establish full app performance or resolve the Windows
 cursor report. The native owner remains unmounted and the Windows review
 package is unchanged.
@@ -673,6 +673,6 @@ they belong on joined background work, independent of the socket and GUI.
 The helper owns no timer, thread, or polling loop. Its four-suite cohort
 passes 193 normal, 193 ASAN/UBSAN and 193 native Windows checks, including a
 real child-process drain and rejoin. See
-[the native peer record](profile-native-peer.md). Full app impact, the actual
+[the native peer record](records/profile-native-peer.md). Full app impact, the actual
 socket owner, cursor behavior and native final Apply remain unverified by
 this component step. The Windows review package is unchanged.

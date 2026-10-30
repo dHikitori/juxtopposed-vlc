@@ -103,7 +103,7 @@ passes 12 fresh-Core normal and eight focused sanitizer suites. The Qt host
 still needs to supply the complete plan and its retained authority. An
 unavailable, missing, canceled, denied, invalid or stale attempt blocks that
 result. Image failure also blocks it. At least one applicable lookup must occur.
-See [the aggregate contract](native-artwork-outcome-contract.md).
+See [the aggregate contract](../native-artwork-outcome-contract.md).
 
 Keep every working Core provider until its add-on path passes the complete
 consumer, provider and app checks. This change removes no provider.

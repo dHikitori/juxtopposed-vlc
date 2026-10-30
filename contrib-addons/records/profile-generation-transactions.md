@@ -140,7 +140,7 @@ No Windows player package is replaced by this component check.
 
 ## Remaining integration
 
-- Mount the [tested control protocol](profile-control-protocol.md), peer
+- Mount the [tested control protocol](../profile-control-protocol.md), peer
   owner, and connection-bound ticket.
 - Bind the prepared peer fence to local token readiness and native revocation.
 - Connect the [retained writer scope](profile-writer-scope.md) to ticket
@@ -150,5 +150,5 @@ No Windows player package is replaced by this component check.
 - Test control-channel loss and late replies at every publication boundary.
 - Verify native final Apply, supported app targets, and full app idle performance.
 
-See [profile coordination](profile-authority-coordination.md) for the complete
+See [profile coordination](../profile-authority-coordination.md) for the complete
 multi-process contract. This component does not close those remaining gates.
