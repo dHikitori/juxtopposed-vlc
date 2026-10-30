@@ -166,6 +166,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_credentials.hpp \
 	addons/addon_device_authorization.cpp \
 	addons/addon_manager_accounts.cpp \
+	addons/addon_guest_projections.cpp \
+	addons/addon_guest_projections.hpp \
 	addons/addon_account_setup.cpp \
 	addons/addon_account_setup.hpp \
 	addons/addon_device_authorization.hpp \
@@ -339,6 +341,7 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_metadata_coordinator.moc.cpp \
 	addons/addon_device_authorization.moc.cpp \
 	addons/addon_account_setup.moc.cpp \
+	addons/addon_guest_projections.moc.cpp \
 	addons/addon_ui_registry.moc.cpp \
 	addons/addon_ui_assets.moc.cpp \
 	addons/addon_metadata_service.moc.cpp \
@@ -495,6 +498,8 @@ libqt_plugin_la_SOURCES = \
 	maininterface/window_csd_geometry.hpp \
 	maininterface/mainctx_submodels.cpp maininterface/mainctx_submodels.hpp \
 	maininterface/mainui.cpp \
+	maininterface/addon_guest_sources.cpp \
+	maininterface/addon_guest_sources.hpp \
 	addons/addon_asset_image_provider.cpp \
 	addons/addon_asset_image_provider.hpp \
 	maininterface/mainui.hpp \
@@ -2714,6 +2719,17 @@ test_qt_addon_worker_health_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd)
 test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_worker_health
 TESTS += test_qt_addon_worker_health
+
+test_qt_addon_guest_projections_SOURCES = tests/test_addon_guest_projections.cpp
+nodist_test_qt_addon_guest_projections_SOURCES = tests/test_addon_guest_projections.moc
+BUILT_SOURCES += tests/test_addon_guest_projections.moc
+CLEANFILES += tests/test_addon_guest_projections.moc
+test_qt_addon_guest_projections_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_guest_projections_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_guest_projections_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_guest_projections_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_guest_projections
+TESTS += test_qt_addon_guest_projections
 
 test_qt_addon_accounts_SOURCES = tests/test_addon_accounts.cpp
 nodist_test_qt_addon_accounts_SOURCES = tests/test_addon_accounts.moc

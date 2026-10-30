@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manifest.hpp"
 #include "addon_device_authorization.hpp"
+#include "addon_guest_projections.hpp"
 #include "addon_metadata_completion_policy.hpp"
 #include "addon_settings_migrations.hpp"
 #include "addon_storage_data.hpp"
@@ -117,6 +118,19 @@ bool permissions(const QJsonObject& value, QString* error)
             } else if (item.key() != QStringLiteral("bindings")) {
                 QStringList list;
                 if (!strings(item.value(), &list, error, it.key() + QLatin1Char('.') + item.key(), true)) return false;
+                // The host projects only these collections, fields and hashes.
+                if (it.key() == QStringLiteral("library.read") && item.key() == QStringLiteral("collections")) {
+                    for (const auto& name : list) if (!AddonGuestProjections::libraryFields().contains(name))
+                        return fail(error, QStringLiteral("The library collection is not supported: ") + name);
+                } else if (it.key() == QStringLiteral("library.read") && item.key() == QStringLiteral("fields")) {
+                    QSet<QString> known;
+                    for (const auto& names : AddonGuestProjections::libraryFields()) for (const auto& name : names) known.insert(name);
+                    for (const auto& name : list) if (!known.contains(name))
+                        return fail(error, QStringLiteral("The library field is not supported: ") + name);
+                } else if (it.key() == QStringLiteral("media.fingerprint") && item.key() == QStringLiteral("algorithms")) {
+                    for (const auto& name : list) if (!AddonGuestProjections::fingerprintAlgorithms().contains(name))
+                        return fail(error, QStringLiteral("The fingerprint algorithm is not supported: ") + name);
+                }
                 if (item.key() == QStringLiteral("assetRedirectProfiles")) {
                     for (const auto& profile : list) if (profile != QStringLiteral("internet-archive-images@1"))
                         return fail(error, QStringLiteral("The image redirect profile is not supported."));

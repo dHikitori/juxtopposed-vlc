@@ -107,6 +107,7 @@ test_src_text_filesystem_sort                   metadata    automake,meson
 addon_radio_browser_worker                      source      meson,cmake
 test_qt_addon_discovery                         source      all
 test_qt_addon_discovery_service                 source      all
+test_qt_addon_guest_projections                 source      all
 test_qt_addon_discovery_source_owner            source      all
 test_qt_addon_native_queue_store                source      all
 test_qt_addon_native_source_resolver            source      all

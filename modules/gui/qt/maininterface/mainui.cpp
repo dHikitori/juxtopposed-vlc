@@ -37,6 +37,7 @@
 #include "player/delay_estimator.hpp"
 #include "addons/addon_profile_host.hpp"
 #include "addons/addon_account_setup.hpp"
+#include "maininterface/addon_guest_sources.hpp"
 #include <QFileDialog>
 #ifdef VLC_ADDON_TEST_DRIVER
 #include "addons/addon_test_driver.hpp"
@@ -422,6 +423,8 @@ void MainUI::registerQMLTypes()
                 QObject::connect(dialog, &QDialog::finished, dialog, [done, answered] { if (!*answered) done({}); });
                 dialog->open();
             });
+            // Read-only queue, library and playing-file projections for add-ons.
+            mountAddonGuestSources(m_intf, m_mainCtx, addonManager->hostServices(), this);
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
             const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
             free(sharedDirectory);
