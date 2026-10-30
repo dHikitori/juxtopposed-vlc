@@ -72,10 +72,23 @@ struct ProcessCompletion {
     std::mutex mutex;
     std::condition_variable changed;
     bool done = false;
+    // The owner's native wake. Cancellation signals it, so the owner retires
+    // the worker without polling.
+    std::function<void()> wake;
     explicit ProcessCompletion(std::shared_ptr<ProcessPermit> value) : permit(std::move(value)) {}
+    void setWake(std::function<void()> value) {
+        { std::lock_guard<std::mutex> lock(mutex); wake = std::move(value); }
+        if (canceled.load(std::memory_order_acquire)) signal();
+    }
+    void signal() noexcept {
+        std::function<void()> value;
+        { std::lock_guard<std::mutex> lock(mutex); value = wake; }
+        try { if (value) value(); } catch (...) {}
+    }
     void cancel() noexcept {
         canceled.store(true, std::memory_order_release);
         if (const auto value = gate.lock()) value->revoke();
+        signal();
     }
     void finish() noexcept {
         { std::lock_guard<std::mutex> lock(mutex); done = true; }
@@ -191,6 +204,8 @@ struct PreparedMetadataRuntime {
         QString status, error;
         QJsonObject result;
         bool terminal = false, canceled = false;
+        // Store authority changes wake the owner through these watches.
+        std::vector<StoreAuthorityWatch> watches;
     };
     struct Gate { QString package; std::weak_ptr<AddonMetadataNativeAdmission> admission; };
     struct Preparation {
@@ -689,11 +704,17 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
     connect(worker, &AddonWorker::unavailable, worker, [weak](const QString&) {
         if (weak) weak->retirePrepared(true);
     });
-    auto* poll = new QTimer(worker); poll->setInterval(25);
-    connect(poll, &QTimer::timeout, worker, [weak, completion, current] {
+    // Event-driven retirement, with no timer: the joined-work cancellation and
+    // a store authority change wake this owner. The guard stays checked at each
+    // host call and at the result.
+    auto* wake = new AddonNativeWake([weak, completion, current] {
         if (completion->canceled.load(std::memory_order_acquire) || !NetworkBroker::guardCurrent(current))
             if (weak) weak->retirePrepared(true);
-    });
+    }, worker);
+    const auto signal = wake->nativeCallback();
+    for (const auto* token : {&data->sourceToken, &data->catalogueToken, &data->preparationToken})
+        entry->watches.push_back(token->onInvalidated(signal));
+    completion->setWake(signal);
     // Both callbacks share the same capture. The native join ends only after
     // the signal connection and its queued delivery release all Qt values.
     const auto delivery = std::make_shared<PreparedDelivery>();
@@ -727,7 +748,6 @@ QString AddonManager::invokePreparedMetadata(std::unique_ptr<PreparedMetadataInv
             emit owner->operationFinished(publicRequest, contribution, status, permitted ? result.toVariantMap() : QVariantMap{}, error);
         });
     });
-    poll->start();
     unfinished.dismiss(); // The preparedRetired cleanup now owns this obligation.
     const auto request = worker->invoke(slot.declaration.id, slot.operation, slot.projectedContext, current, attempt);
     if (!runtime->owner->open.load(std::memory_order_acquire) || !owner || !weak) return {};
