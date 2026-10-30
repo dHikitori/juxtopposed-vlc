@@ -392,11 +392,19 @@ void AddonDiscoveryService::completed(const QString& request, const QString& sta
     if (!viewCurrent(*it)) { emit viewChanged(id); return; }
     if (status != QLatin1String("match") && status != QLatin1String("partial") && status != QLatin1String("no_match")) it->error = error.isEmpty() ? tr("The discovery source did not return a result.") : error.left(512);
     else {
-        if (!it->append) it->items.clear();
-        for (const auto& value : data.value("updates").toList()) {
-            const auto row = value.toMap(); for (auto& existing : it->items) if (existing.toMap().value("ref") == row.value("ref")) existing = row;
+        QVariantList items;
+        if (it->append) {
+            // A later page can repeat a row that an earlier page showed.
+            for (const auto& value : data.value("updates").toList()) {
+                const auto row = value.toMap(); for (auto& existing : it->items) if (existing.toMap().value("ref") == row.value("ref")) existing = row;
+            }
+            items = data.value("items").toList();
+        } else {
+            // A new page replaces the view, including rows that the view showed
+            // before, for example after Back or a repeated search.
+            it->items.clear();
+            items = data.value("page").toList();
         }
-        const auto items = data.value("items").toList();
         if (it->items.size() + items.size() > 1000) it->error = tr("The view has 1000 items. Use search to reduce the result list.");
         else { it->items.append(items); it->cursor = data.value("cursor").toString(); }
     }

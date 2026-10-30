@@ -335,6 +335,38 @@ private slots:
         fixture.complete(service, 2, {{"url", "https://example.org/second"}});
         QTRY_COMPARE(played, QStringLiteral("second"));
     }
+    void backAndRepeatedRequestsShowRowsTheViewHasSeen() {
+        Fixture fixture; AddonDiscoveryService service(fixture.backend(), {});
+        const auto view = service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 1);
+        fixture.complete(service, 0, {{"items", QVariantList{Fixture::item("root", "node")}}});
+        QTRY_COMPARE(items(service, view).size(), 1);
+        const auto ref = items(service, view)[0].toMap().value("ref").toString();
+        QVERIFY(service.browse(view, ref)); QTRY_COMPARE(fixture.calls.size(), 2);
+        fixture.complete(service, 1, {{"items", QVariantList{Fixture::item("station")}}});
+        QTRY_COMPARE(items(service, view).size(), 1);
+        // Back shows the seen node again, with its reference, in source order.
+        QVERIFY(service.back(view)); QTRY_COMPARE(fixture.calls.size(), 3);
+        fixture.complete(service, 2, {{"items", QVariantList{Fixture::item("new"), Fixture::item("root", "node")}}});
+        QTRY_COMPARE(items(service, view).size(), 2);
+        QCOMPARE(items(service, view)[1].toMap().value("ref").toString(), ref);
+        for (int round = 0; round < 2; ++round) {
+            QVERIFY(service.search(view, "query")); QTRY_COMPARE(fixture.calls.size(), 4 + round);
+            fixture.complete(service, 3 + round, {{"items", QVariantList{Fixture::item("station")}}});
+            QTRY_VERIFY(!service.view(view).value("busy").toBool());
+            QCOMPARE(items(service, view).size(), 1);
+        }
+    }
+    void loadMoreRefreshesARowThatAnEarlierPageShowed() {
+        Fixture fixture; AddonDiscoveryService service(fixture.backend(), {});
+        const auto view = service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 1);
+        fixture.complete(service, 0, {{"items", QVariantList{Fixture::item("first")}}, {"cursor", QVariantMap{{"offset", 1}}}});
+        QTRY_COMPARE(items(service, view).size(), 1);
+        QVERIFY(service.loadMore(view)); QTRY_COMPARE(fixture.calls.size(), 2);
+        auto again = Fixture::item("first"); again.insert("title", QStringLiteral("Renamed"));
+        fixture.complete(service, 1, {{"items", QVariantList{again, Fixture::item("second")}}});
+        QTRY_COMPARE(items(service, view).size(), 2);
+        QCOMPARE(items(service, view)[0].toMap().value("title").toString(), QStringLiteral("Renamed"));
+    }
     void rootPagesAppendWithoutExposingTheProviderCursor() {
         Fixture fixture; AddonDiscoveryService service(fixture.backend(), {});
         const auto view = service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 1);

@@ -272,7 +272,9 @@ void AddonDiscoveryCoordinator::page(const QString& request, const QVariantMap& 
     if (entries.size() > MaxPage || (job.operation == QLatin1String("suggest") && entries.size() > job.context.value(QStringLiteral("limit")).toInt())) {
         finish(request, QStringLiteral("error"), {}, tr("The discovery source returned too many items.")); return;
     }
-    QVariantList items, updates;
+    // items: rows new to this view; updates: rows that it showed before.
+    // page: every row in source order, for a page that replaces the view.
+    QVariantList items, updates, page;
     QHash<QString, Handle> stagedHandles;
     QHash<QString, QString> stagedStable;
     int newHandles = 0;
@@ -303,8 +305,9 @@ void AddonDiscoveryCoordinator::page(const QString& request, const QVariantMap& 
         if (!wasExisting) ++newHandles;
         stagedHandles.insert(ref, handle); stagedStable.insert(stable, ref);
         if (wasExisting) updates.append(display); else items.append(display);
+        page.append(display);
     }
-    QVariantMap result{{QStringLiteral("items"), items}, {QStringLiteral("updates"), updates}};
+    QVariantMap result{{QStringLiteral("items"), items}, {QStringLiteral("updates"), updates}, {QStringLiteral("page"), page}};
     const auto rawCursor = data.value(QStringLiteral("cursor"));
     if (rawCursor.isValid() && !rawCursor.isNull()
         && (rawCursor.metaType().id() != QMetaType::QString || !rawCursor.toString().isEmpty())) {
