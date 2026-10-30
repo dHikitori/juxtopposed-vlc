@@ -147,6 +147,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_store_profile_control.hpp \
 	addons/addon_store_profile_client.cpp \
 	addons/addon_store_profile_client.hpp \
+	addons/addon_store_profile_session.cpp \
+	addons/addon_store_profile_session.hpp \
 	addons/addon_native_wake.cpp \
 	addons/addon_native_wake.hpp \
 	addons/addon_native_notifications.cpp \
@@ -2652,6 +2654,17 @@ test_qt_addon_store_profile_writes_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON
 test_qt_addon_store_profile_writes_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_store_profile_writes
 TESTS += test_qt_addon_store_profile_writes
+
+test_qt_addon_store_profile_session_SOURCES = tests/test_addon_store_profile_session.cpp
+nodist_test_qt_addon_store_profile_session_SOURCES = tests/test_addon_store_profile_session.moc
+BUILT_SOURCES += tests/test_addon_store_profile_session.moc
+CLEANFILES += tests/test_addon_store_profile_session.moc
+test_qt_addon_store_profile_session_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_store_profile_session_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_store_profile_session_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_store_profile_session_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_store_profile_session
+TESTS += test_qt_addon_store_profile_session
 
 test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.cpp
 nodist_test_qt_addon_store_profile_settings_SOURCES = tests/test_addon_store_profile_settings.moc

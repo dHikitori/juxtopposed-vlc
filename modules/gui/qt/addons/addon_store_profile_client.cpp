@@ -570,6 +570,14 @@ void StoreProfileClient::lost()
     revoke(std::nullopt);
 }
 
+void StoreProfileClient::retry()
+{
+    if (m_state != State::Unavailable || m_socket || m_revoking || !m_endpoint)
+        return;
+    m_reconnectUntil = Generation::now() + m_options.reconnectLimit;
+    connectToCoordinator();
+}
+
 void StoreProfileClient::scheduleReconnect()
 {
     if (m_state == State::Closed || m_socket)

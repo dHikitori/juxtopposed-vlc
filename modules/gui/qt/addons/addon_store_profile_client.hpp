@@ -81,6 +81,9 @@ public:
     ~StoreProfileClient() override;
     bool start();
     void close();
+    // After Unavailable, try the coordinator again for reconnectLimit. The
+    // session calls it after it takes over the coordinator role.
+    void retry();
     State state() const noexcept { return m_state; }
     // The current ready epoch, only while admitted.
     std::optional<Epoch> epoch() const;
