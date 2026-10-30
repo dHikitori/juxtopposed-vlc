@@ -618,7 +618,7 @@ private:
 bool credentialSettingsValid(const Manifest& manifest, const QJsonObject& schema,
                              const QJsonObject& settings, QString* error)
 {
-    QSet<QString> secretFields;
+    QSet<QString> secretFields, referenceFields;
     for (const auto& binding : manifest.permissionScope(QStringLiteral("credentials.use")).value("bindings").toArray())
         secretFields.insert(binding.toObject().value("field").toString());
     const auto properties = schema.value("properties").toObject();
@@ -626,14 +626,18 @@ bool credentialSettingsValid(const Manifest& manifest, const QJsonObject& schema
         const auto field = it.value().toObject();
         if (field.value("x-hakone-secret").toBool() || field.value("writeOnly").toBool()
             || field.value("format").toString() == QLatin1String("password")) secretFields.insert(it.key());
+        // An account keeps its refresh token under a second reference.
+        if (field.value("x-hakone-control").toString() == QLatin1String("account"))
+            referenceFields.insert(it.key() + QStringLiteral(".refresh"));
     }
+    referenceFields.unite(secretFields);
     if (settings.contains("_credentials")) {
         if (!settings.value("_credentials").isObject())
             return fail(error, QStringLiteral("The host credential reference object is not correct."));
         const auto references = settings.value("_credentials").toObject();
         static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
         for (auto it = references.begin(); it != references.end(); ++it)
-            if (!secretFields.contains(it.key()) || !it.value().isString()
+            if (!referenceFields.contains(it.key()) || !it.value().isString()
                 || !uuid.match(it.value().toString()).hasMatch())
                 return fail(error, QStringLiteral("The protected credential reference is not correct."));
     }

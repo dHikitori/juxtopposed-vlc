@@ -19,6 +19,17 @@ TestCase {
         property int saveCount: 0
         property var lastValues: ({})
         property var lastOperations: ({})
+        property var handles: ({})
+        property var session: ({})
+        property int pickCount: 0
+        signal settingsPathPicked(string packageId, string field, string handle, string name)
+        function pickSettingsPath(id, name) { pickCount++; return true }
+        function settingsHandleNames(id) { return handles }
+        function sessionSettings(id) { return session }
+        function setSessionSettings(id, nextValues) {
+            if (Object.keys(nextValues).some(name => !Contract.own(schema.properties, name) || Contract.fieldSecret(schema.properties[name]))) return false
+            session = Contract.clone(nextValues); return true
+        }
         function settingsSchema(id) { return schema }
         function settingsValues(id) { return values }
         function settingsSecretStatus(id) { return secrets }
@@ -182,6 +193,7 @@ TestCase {
                 optionalKey: {type: "string", "x-hakone-secret": true}}, required: ["apiKey"]}
         backend.values = {enabled: true, count: 3}
         backend.secrets = {apiKey: {present: true}, optionalKey: {present: true, sessionOnly: true}}
+        backend.handles = ({}); backend.session = ({}); backend.pickCount = 0
         backend.saveCount = 0; backend.acceptSave = true; backend.credentialPersistenceAvailable = true; backend.lastOperations = ({}); backend.lastValues = ({})
         settings.width = 450; settings.lightTheme = false; settings.reload()
         view.document = null; view.state = ({}); view.messages = ({}); view.assetUrls = ({})
@@ -190,6 +202,61 @@ TestCase {
         providers.providers = []
         commandSpy.clear(); enabledSpy.clear(); moveSpy.clear(); configureSpy.clear()
         wait(20)
+    }
+    function accountSchema() {
+        backend.schema = {type: "object", additionalProperties: false, properties: {
+            account: {type: "string", "x-hakone-secret": true, "x-hakone-control": "account",
+                "x-hakone-account": {recipe: "oauth-device", deviceAuthorizationUrl: "https://auth.example.org/device",
+                    tokenUrl: "https://auth.example.org/token", clientId: "test"}},
+            folder: {type: "string", "x-hakone-control": "folder"},
+            count: {type: "integer", minimum: 1, maximum: 9, default: 3}}, required: ["account"]}
+        backend.values = {count: 3}
+        backend.secrets = {account: {present: true, account: true}}
+        backend.revision++; settings.reload()
+        verify(settings.validSchema)
+    }
+    function test_anAccountIsConnectedOrDisconnectedButNeverTyped() {
+        accountSchema()
+        compare(field("addonAccountStatus_account").text, "The account is connected.")
+        verify(!field("addonSecretInput_account").visible)
+        verify(field("addonAccountDisconnect_account").visible)
+        settings.editSecret("account", "delete", "")
+        compare(field("addonAccountStatus_account").text, "When you select Save, the app disconnects this account.")
+        verify(field("addonAccountKeep_account").visible)
+        verify(settings.save()); compare(backend.lastOperations.account.operation, "delete")
+        compare(field("addonAccountStatus_account").text, "The account is not connected.")
+        settings.setValue("count", 4)
+        verify(!settings.save()); compare(settings.fieldErrors.account, "Connect the account.")
+    }
+    function test_accountConnectionWaitsForSavedEdits() {
+        accountSchema()
+        settings.setValue("count", 5)
+        settings.connectAccount("account")
+        compare(settings.errorMessage, "Save or cancel your changes before you connect an account.")
+    }
+    function test_aPickedFolderShowsItsNameAndSavesTheHandle() {
+        accountSchema()
+        compare(field("addonPicked_folder").text, "No folder selected.")
+        mouseClick(field("addonPick_folder"))
+        compare(backend.pickCount, 1)
+        backend.settingsPathPicked("org.example.radio", "folder", "handle:abc", "Music")
+        compare(settings.draftValues.folder, "handle:abc")
+        compare(field("addonPicked_folder").text, "Music")
+        backend.settingsPathPicked("org.example.other", "folder", "handle:other", "Other")
+        compare(settings.draftValues.folder, "handle:abc")
+        verify(settings.save()); compare(backend.lastValues.folder, "handle:abc")
+        mouseClick(field("addonPickClear_folder"))
+        compare(settings.draftValues.folder, "")
+    }
+    function test_temporarySettingsApplyOnlyChangedOrdinaryValues() {
+        settings.setValue("count", 7)
+        verify(settings.applyForSession())
+        compare(backend.session.count, 7); verify(!Contract.own(backend.session, "enabled"))
+        compare(backend.saveCount, 0); verify(!settings.dirty)
+        verify(field("addonSettingsSessionNote").visible)
+        mouseClick(field("addonSettingsStopSession"))
+        compare(Object.keys(backend.session).length, 0)
+        verify(!field("addonSettingsSessionNote").visible)
     }
     function test_draftsAndCancelNeverSave() {
         verify(settings.validSchema); verify(!settings.dirty)

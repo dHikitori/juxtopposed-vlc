@@ -139,7 +139,7 @@ Add one row for each label run that a record or a decision relies on.
 | UI hooks: interface sessions, commands, home replacement, typed modal shells | mounted | `ui`: `test_qt_addon_ui_registry`; [review record](records/pending-implementation-review.md) | Full app check. |
 | Static UI images | mounted | `ui`: `test_qt_addon_ui_assets` | Full app check. |
 | Extensions list, generated settings and install approval | mounted | `ui`: `test_qt_addon_catalogue_view`, `test_qt_addon_display_catalogue`, `test_qt_addon_package_summaries`; [Extensions](records/extensions-settings-ui.md), [package list](records/package-summary-ui.md) | Windows Extensions click (user). |
-| File, folder and account pickers; account recipes; settings layers | designed | Controls emit signals with no consumer. [Backlog](completion-backlog.md) | Step 6. |
+| File, folder and account pickers; account recipes; settings layers | mounted | `profile`: `test_qt_addon_accounts`; `tst_AddonUi`; [record](records/settings-accounts.md), [SDK](sdk/settings-accounts.md) | Account-scoped value layer; PKCE recipe; guest operation for picked handles; live sign-in run. |
 | Theme and UI preview harness | designed | — | Step 7. |
 
 ## Visualizers and sessions (`05-visualizers-and-sessions.md`)

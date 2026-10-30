@@ -50,6 +50,7 @@ C.Dialog {
                 objectName: "addonSettingsDialogForm"
                 Layout.fillWidth: true
                 backend: root.backend; packageId: root.packageId
+                videoBackdropContent: root.videoBackdropContent
                 messages: {
                     if (!form.ready) return root.messages
                     if (form.displayMode) {

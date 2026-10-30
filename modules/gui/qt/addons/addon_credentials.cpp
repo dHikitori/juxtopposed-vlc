@@ -81,6 +81,15 @@ QByteArray CredentialStore::read(const QString& package, const QString& referenc
     m_session.insert(reference, {package, value, true});
     return value;
 }
+bool CredentialStore::replace(const QString& package, const QString& reference, const QByteArray& value)
+{
+    if (value.isEmpty() || value.size() > 4096 || value.contains('\r') || value.contains('\n') || value.contains('\0')
+        || read(package, reference).isEmpty()) return false;
+    auto& secret = m_session[reference];
+    if (secret.persistent && !platformWrite(package, reference, value)) return false;
+    secret.value = value;
+    return true;
+}
 bool CredentialStore::present(const QString& package, const QString& reference) const
 { return !read(package, reference).isEmpty(); }
 bool CredentialStore::sessionOnly(const QString& reference) const

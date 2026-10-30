@@ -164,6 +164,11 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_catalogue_store_lock.hpp \
 	addons/addon_credentials.cpp \
 	addons/addon_credentials.hpp \
+	addons/addon_device_authorization.cpp \
+	addons/addon_manager_accounts.cpp \
+	addons/addon_account_setup.cpp \
+	addons/addon_account_setup.hpp \
+	addons/addon_device_authorization.hpp \
 	addons/addon_manager.cpp \
 	addons/addon_manager.hpp \
 	addons/addon_package_reader.hpp \
@@ -332,6 +337,8 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_network.moc.cpp \
 	addons/addon_worker.moc.cpp \
 	addons/addon_metadata_coordinator.moc.cpp \
+	addons/addon_device_authorization.moc.cpp \
+	addons/addon_account_setup.moc.cpp \
 	addons/addon_ui_registry.moc.cpp \
 	addons/addon_ui_assets.moc.cpp \
 	addons/addon_metadata_service.moc.cpp \
@@ -1612,6 +1619,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddons.qml \
 	player/qml/redesign/RedesignAddonChild.qml \
 	player/qml/redesign/RedesignAddonField.qml \
+	player/qml/redesign/RedesignAccountSetupDialog.qml \
 	player/qml/redesign/RedesignAddonManagement.qml \
 	player/qml/redesign/RedesignAddonDiscovery.qml \
 	player/qml/redesign/RedesignAddonDiscoveryWindow.qml \
@@ -2706,6 +2714,17 @@ test_qt_addon_worker_health_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd)
 test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_worker_health
 TESTS += test_qt_addon_worker_health
+
+test_qt_addon_accounts_SOURCES = tests/test_addon_accounts.cpp
+nodist_test_qt_addon_accounts_SOURCES = tests/test_addon_accounts.moc
+BUILT_SOURCES += tests/test_addon_accounts.moc
+CLEANFILES += tests/test_addon_accounts.moc
+test_qt_addon_accounts_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_accounts_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_accounts_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_accounts_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_accounts
+TESTS += test_qt_addon_accounts
 
 test_qt_addon_candidate_check_SOURCES = tests/test_addon_candidate_check.cpp
 nodist_test_qt_addon_candidate_check_SOURCES = tests/test_addon_candidate_check.moc

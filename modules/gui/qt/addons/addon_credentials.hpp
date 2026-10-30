@@ -17,6 +17,9 @@ public:
     Created create(const QString& packageId, const QString& field, const QByteArray& value, bool allowSessionOnly = false);
     static bool persistentAvailable();
     QByteArray read(const QString& packageId, const QString& reference) const;
+    // A new value under an existing reference, kept where the old one was
+    // (an account token refresh keeps its reference and account identity).
+    bool replace(const QString& packageId, const QString& reference, const QByteArray& value);
     bool present(const QString& packageId, const QString& reference) const;
     bool sessionOnly(const QString& reference) const;
     QHash<QString, QHash<QString, bool>> presenceSnapshot() const;

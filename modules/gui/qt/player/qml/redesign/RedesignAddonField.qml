@@ -15,6 +15,8 @@ ColumnLayout {
     property bool sessionOnly: false
     property bool credentialPersistenceAvailable: true
     property string validationError: ""
+    // The display name of a picked file or folder; the value is a handle.
+    property string handleName: ""
     property int resetGeneration: 0
     property real scaleFactor: 1
     property color accentColor: "#d37918"
@@ -22,6 +24,7 @@ ColumnLayout {
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property bool secret: Contract.fieldSecret(definition)
     readonly property string control: definition["x-hakone-control"] || ""
+    readonly property bool account: secret && control === "account"
     readonly property string label: localize(definition["x-hakone-label"] || definition.title || fieldName)
     readonly property string help: localize(definition["x-hakone-help"] || definition.description || "")
     readonly property var choices: definition.enum || []
@@ -118,16 +121,71 @@ ColumnLayout {
             }
         }
     }
-    RedesignButton {
-        visible: !root.secret && ["file", "folder", "account"].includes(root.control)
+    Text {
+        objectName: "addonPicked_" + root.fieldName
         Layout.fillWidth: true
-        caption: root.control === "account" ? qsTr("Connect account…") : qsTr("Select %1…").arg(root.control === "folder" ? qsTr("folder") : qsTr("file"))
-        text: root.label + ": " + caption; tooltipTextFormat: Text.PlainText
-        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-        onClicked: root.control === "account" ? root.connectionRequested(root.fieldName) : root.pickerRequested(root.fieldName, root.control)
+        visible: !root.secret && ["file", "folder"].includes(root.control)
+        text: root.currentValue ? (root.handleName.length ? root.handleName : qsTr("Selected")) : root.control === "folder" ? qsTr("No folder selected.") : qsTr("No file selected.")
+        textFormat: Text.PlainText; elide: Text.ElideMiddle
+        color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+    }
+    Flow {
+        Layout.fillWidth: true; spacing: root.theme.dp(6)
+        visible: !root.secret && ["file", "folder", "account"].includes(root.control)
+        RedesignButton {
+            objectName: "addonPick_" + root.fieldName
+            caption: root.control === "account" ? qsTr("Connect account…") : qsTr("Select %1…").arg(root.control === "folder" ? qsTr("folder") : qsTr("file"))
+            text: root.label + ": " + caption; tooltipTextFormat: Text.PlainText
+            scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+            onClicked: root.control === "account" ? root.connectionRequested(root.fieldName) : root.pickerRequested(root.fieldName, root.control)
+        }
+        RedesignButton {
+            objectName: "addonPickClear_" + root.fieldName
+            visible: ["file", "folder"].includes(root.control) && !!root.currentValue
+            caption: qsTr("Clear"); text: root.label + ": " + caption; tooltipTextFormat: Text.PlainText
+            scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+            onClicked: root.valueEdited("")
+        }
+    }
+    // An account: the app signs in; no token is typed or shown.
+    ColumnLayout {
+        visible: root.account
+        Layout.fillWidth: true; spacing: root.theme.dp(6)
+        Text {
+            objectName: "addonAccountStatus_" + root.fieldName
+            Layout.fillWidth: true; textFormat: Text.PlainText; wrapMode: Text.Wrap
+            text: root.secretOperation === "delete" ? qsTr("When you select Save, the app disconnects this account.")
+                : root.secretStatus.present ? root.secretStatus.sessionOnly ? qsTr("The account is connected for this session.") : qsTr("The account is connected.")
+                : qsTr("The account is not connected.")
+            color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+        }
+        Flow {
+            Layout.fillWidth: true; spacing: root.theme.dp(6)
+            RedesignButton {
+                objectName: "addonAccountConnect_" + root.fieldName
+                visible: root.secretOperation !== "delete"
+                caption: root.secretStatus.present ? qsTr("Connect again…") : qsTr("Connect account…"); text: caption
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onClicked: root.connectionRequested(root.fieldName)
+            }
+            RedesignButton {
+                objectName: "addonAccountDisconnect_" + root.fieldName
+                visible: root.secretStatus.present === true && root.secretOperation !== "delete"
+                caption: qsTr("Disconnect"); text: caption
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onClicked: root.secretEdited("delete", "", false)
+            }
+            RedesignButton {
+                objectName: "addonAccountKeep_" + root.fieldName
+                visible: root.secretOperation === "delete"
+                caption: qsTr("Keep the account"); text: caption
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onClicked: root.secretEdited("keep", "", false)
+            }
+        }
     }
     ColumnLayout {
-        visible: root.secret
+        visible: root.secret && !root.account
         Layout.fillWidth: true; spacing: root.theme.dp(6)
         Text {
             objectName: "addonSecretStatus_" + root.fieldName

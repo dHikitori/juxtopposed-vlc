@@ -15,6 +15,7 @@ Use these guides for the current host contracts. The [architecture documents](..
 | [Typed UI selections](typed-ui-selections.md) | Typed subtitle and playlist bodies, core confirmation, and recovery. The normal app build and compiled UI tests pass. Core keeps the built-in bodies available. |
 | [Shared playback sessions](sessions.md) | MainUI connects the native bridge, controller, and host review panel. Focused UI and actual-player checks pass. The fresh full app and platform runs remain open. |
 | [Guest private storage](../guest-storage-contract.md) | Mounted private storage, account partitions, pure migrations, and recovery snapshots. All 18 focused tests pass. |
+| [Accounts, picked files and temporary settings](settings-accounts.md) | Device-code account sign-in with refresh, file and folder handles, and session settings. Handles have no guest operation yet. |
 | [Terminology](terminology.md) | Technical terms and English text rules for this project. |
 
 Declare each contract and operation that the package uses. A declared permission does not mean that the host has a handler for that function. The host capability view reports the available functions. Unsupported functions fail before a core operation starts.

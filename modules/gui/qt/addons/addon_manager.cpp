@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace vlc::addons {
 namespace {
@@ -90,6 +91,7 @@ AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAcc
 AddonManager::~AddonManager()
 {
     m_retiring = true;
+    for (const auto& cancel : std::exchange(m_accountRefreshes, {})) if (cancel) cancel();
     retirePreparedMetadata();
     // All public outer requests are dead before any member teardown. Detached
     // QObject-owned destroyed hooks still release their exact weak View; they
@@ -253,7 +255,9 @@ QVariantMap AddonManager::settingsSecretStatus(const QString& id) const
     const auto references = savedSettings(id).value("_credentials").toObject(); QVariantMap status;
     for (auto it = properties.begin(); it != properties.end(); ++it) if (secretField(it.value().toObject())) {
         const auto reference = references.value(it.key()).toString();
-        status.insert(it.key(), QVariantMap{{"present", m_secrets.present(id, reference)}, {"sessionOnly", m_secrets.sessionOnly(reference)}});
+        QVariantMap entry{{"present", m_secrets.present(id, reference)}, {"sessionOnly", m_secrets.sessionOnly(reference)}};
+        if (it.value().toObject().value("x-hakone-control").toString() == QLatin1String("account")) entry.insert("account", true);
+        status.insert(it.key(), entry);
     }
     return status;
 }
@@ -292,18 +296,48 @@ bool AddonManager::saveSettingsImpl(const QString& id,const QVariantMap& input,c
     QStringList created, deletedFields;
     auto reject = [&](const QString& message) { for (const auto& ref : created) m_secrets.remove(id, ref); return changed(false, message); };
     const auto incoming = QJsonObject::fromVariantMap(input);
+    const auto savedHandles = saved.value("_handles").toObject();
+    QJsonObject handles;
     for (auto it = incoming.begin(); it != incoming.end(); ++it) {
         const auto field = properties.value(it.key()).toObject();
+        const auto control = field.value("x-hakone-control").toString();
+        if (!it.key().startsWith('_') && !field.isEmpty() && !secretField(field)
+                && (control == QLatin1String("file") || control == QLatin1String("folder"))) {
+            // A picked path is kept by the host. The value is its handle:
+            // one saved for this field, or one picked in this session.
+            const auto handle = it.value().toString();
+            if (!it.value().isString()) return reject(tr("Make sure that the add-on settings are correct."));
+            if (!handle.isEmpty()) {
+                const auto savedHandle = savedHandles.value(handle).toObject();
+                const auto picked = m_pickedPaths.constFind(handle);
+                if (savedHandle.value("field").toString() == it.key()) handles.insert(handle, savedHandle);
+                else if (picked != m_pickedPaths.cend() && picked->packageId == id && picked->field == it.key())
+                    handles.insert(handle, QJsonObject{{"field", it.key()}, {"kind", picked->kind}, {"path", picked->path}, {"name", picked->name}});
+                else return reject(tr("Select the file or folder again."));
+            }
+            values.insert(it.key(), handle);
+            continue;
+        }
         if (it.key().startsWith('_') || field.isEmpty() || secretField(field) || !valueValid(it.value(), field))
             return reject(tr("Make sure that the add-on settings are correct."));
         values.insert(it.key(), it.value());
     }
+    auto accounts = saved.value("_accounts").toArray();
     for (auto it = secretOperations.begin(); it != secretOperations.end(); ++it) {
         const auto field = properties.value(it.key()).toObject(); const auto operation = it.value().toMap();
         const auto action = operation.value("operation").toString();
         if (!secretField(field) || (action != QLatin1String("keep") && action != QLatin1String("replace") && action != QLatin1String("delete")))
             return reject(tr("The app cannot use this credential operation."));
-        if (action == QLatin1String("delete")) { references.remove(it.key()); deletedFields.append(it.key()); }
+        // An account token comes only from the app's sign-in.
+        if (action == QLatin1String("replace") && field.value("x-hakone-control").toString() == QLatin1String("account"))
+            return reject(tr("Connect the account to sign in."));
+        if (action == QLatin1String("delete")) {
+            // Disconnecting an account also removes its refresh token.
+            references.remove(it.key()); references.remove(it.key() + QStringLiteral(".refresh"));
+            for (qsizetype i = accounts.size() - 1; i >= 0; --i)
+                if (accounts.at(i).toObject().value("field").toString() == it.key()) accounts.removeAt(i);
+            deletedFields.append(it.key());
+        }
         if (action == QLatin1String("replace")) {
             if (!valueValid(QJsonValue::fromVariant(operation.value("value")), field)) return reject(tr("Make sure that the credential is correct."));
             const auto result = m_secrets.create(id, it.key(), operation.value("value").toString().toUtf8(), operation.value("sessionOnly").toBool());
@@ -321,13 +355,19 @@ bool AddonManager::saveSettingsImpl(const QString& id,const QVariantMap& input,c
         }
     }
     values.insert("_credentials", references);
+    if (!accounts.isEmpty()) values.insert("_accounts", accounts);
+    if (!handles.isEmpty()) values.insert("_handles", handles);
     if (!m_store.change([&](QString* e) { return m_store.saveSettings(id, values, expectedRevision, expectedStamp, e); },
             [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveSettings(c, id, values, expectedRevision, expectedStamp, e); },
             &error)) return reject(error);
     // Keep old credentials for rollback. Explicit account deletion revokes all generations.
     if (!withdraw(id)) return false;
     for (const auto& field : deletedFields)
-        for (const auto& reference : m_store.credentialReferences(id, field)) m_secrets.remove(id, reference);
+        for (const auto& name : QStringList{field, field + QStringLiteral(".refresh")})
+            for (const auto& reference : m_store.credentialReferences(id, name)) m_secrets.remove(id, reference);
+    for (auto it = m_pickedPaths.begin(); it != m_pickedPaths.end();)
+        it = it->packageId == id ? m_pickedPaths.erase(it) : std::next(it);
+    if (!deletedFields.isEmpty()) emit accountsChanged(id);
     return changed(true);
 }
 
@@ -706,7 +746,7 @@ QVariantList AddonManager::contributionsOfType(const QString& type, bool include
                 {"name", contribution.document.value("name").toString(package.manifest.name)}, {"enabled", package.enabled},
                 {"document", contribution.document.toVariantMap()},
                 {"accountReference", account}, {"configured", configured(package)},
-                {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation))}});
+                {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + sessionPartition(id))}});
         }
     }
     return result;
@@ -902,7 +942,7 @@ QVariantList AddonManager::providersForFeature(const QString& feature) const
                 {"operations", contribution.operations},
                 {"accountReference", account},
                 {"mediaKinds", contribution.mediaKinds}, {"status", !package.enabled ? tr("Disabled") : configured(package) ? tr("Ready") : tr("Setup required")},
-                {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + ':' + QString::number(settingsRevision))}});
+                {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + ':' + QString::number(settingsRevision) + sessionPartition(id))}});
         }
     }
     for (const auto& builtin : m_builtinProviders)
@@ -1420,13 +1460,17 @@ AddonWorker* AddonManager::worker(const InstalledPackage& package)
     const auto id = package.manifest.id;
     NetworkBroker::RequestGuard current;
     auto resolver = credentialResolver(package, &current);
-    instance->setConfiguration(QJsonObject::fromVariantMap(settingsValues(id)), QJsonObject::fromVariantMap(settingsSecretStatus(id)), std::move(resolver));
+    instance->setConfiguration(QJsonObject::fromVariantMap(effectiveSettings(id)), QJsonObject::fromVariantMap(settingsSecretStatus(id)), std::move(resolver));
+    // An account whose access token has expired is refreshed in the
+    // background; the first call may still ask for sign-in.
+    refreshAccounts(id, true);
     instance->setRequestGuard(std::move(current));
     connect(instance, &AddonWorker::completed, this, [this](const QString& request, const QString& status, const QJsonObject& data, const QString& error) {
         const auto contribution = m_invocationContributions.take(request); m_invocationPackages.remove(request);
         // An answer from the updated release ends its health period.
         if (!contribution.isEmpty() && status != QLatin1String("error") && status != QLatin1String("denied"))
             m_observing.remove(packagePart(contribution));
+        if (!contribution.isEmpty() && status == QLatin1String("auth_required")) refreshAccounts(packagePart(contribution));
         if (!contribution.isEmpty()) emit operationFinished(request, contribution, status, data.toVariantMap(), error);
     });
     connect(instance, &AddonWorker::unavailable, this, [this, id, owner=QPointer<AddonWorker>(instance)](const QString& error) {

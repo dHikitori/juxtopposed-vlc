@@ -194,7 +194,7 @@ function validateSettingsSchema(schema) {
     var topKeys = ["$schema", "type", "properties", "required", "additionalProperties", "title", "description"]
     if (Object.keys(schema).some(key => !topKeys.includes(key))) return "The app cannot use this schema keyword."
     if (schema.required !== undefined && (!Array.isArray(schema.required) || schema.required.some(key => !own(schema.properties, key)))) return "The required settings list is not correct."
-    var fieldKeys = ["writeOnly", "pattern", "type", "title", "description", "default", "enum", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "items", "format", "x-hakone-control", "x-hakone-label", "x-hakone-help", "x-hakone-secret", "x-hakone-visibleWhen", "x-hakone-restartRequired"]
+    var fieldKeys = ["writeOnly", "pattern", "type", "title", "description", "default", "enum", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "items", "format", "x-hakone-control", "x-hakone-label", "x-hakone-help", "x-hakone-secret", "x-hakone-visibleWhen", "x-hakone-restartRequired", "x-hakone-account"]
     for (var name of Object.keys(schema.properties)) {
         var field = schema.properties[name]
         if (!safeKey(name) || !record(field) || !["boolean", "string", "integer", "number", "array"].includes(field.type)) return "The app cannot use this settings field type."
@@ -209,6 +209,7 @@ function validateSettingsSchema(schema) {
         if (field.pattern !== undefined && field.pattern !== "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$") return "The app cannot use this settings pattern."
         if (field.format !== undefined && !["password", "uri", "color", "language"].includes(field.format)) return "The app cannot use this settings format."
         if (fieldSecret(field) && field.type !== "string") return "Use the protected editor for a secret field."
+        if ((field["x-hakone-control"] === "account") !== (field["x-hakone-account"] !== undefined) || field["x-hakone-control"] === "account" && (!fieldSecret(field) || !record(field["x-hakone-account"]))) return "The app cannot use this account field."
         if (fieldSecret(field) && field.default !== undefined) return "Do not set a default value for a secret field."
         if (field.type === "array" && (!record(field.items) || field.items.type !== "string" || Object.keys(field.items).some(key => !["type", "enum"].includes(key)))) return "Use a string list that is within the size limit."
         if (field.enum !== undefined && (!Array.isArray(field.enum) || !field.enum.length || field.enum.length > 64 || field.enum.some(value => !["string", "number", "boolean"].includes(typeof value)))) return "The setting choices are not correct."
@@ -276,7 +277,8 @@ function settingsErrors(schema, values, secrets, operations, credentialPersisten
             else if (operation.operation === "replace") {
                 if (fieldError(field, operation.value, true)) errors[name] = "Enter a correct replacement credential."
                 else if (credentialPersistenceAvailable === false && operation.sessionOnly !== true) errors[name] = "Select storage for this session. The secure credential store is not available."
-            } else if (operation.operation === "keep" && required.includes(name) && !(secrets[name] && secrets[name].present)) errors[name] = "Enter a credential, or keep the saved credential."
+            } else if (operation.operation === "keep" && required.includes(name) && !(secrets[name] && secrets[name].present))
+                errors[name] = field["x-hakone-control"] === "account" ? "Connect the account." : "Enter a credential, or keep the saved credential."
         } else {
             var error = fieldError(field, values[name], required.includes(name))
             if (error) errors[name] = error

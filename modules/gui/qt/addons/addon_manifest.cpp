@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manifest.hpp"
+#include "addon_device_authorization.hpp"
 #include "addon_metadata_completion_policy.hpp"
 #include "addon_settings_migrations.hpp"
 #include "addon_storage_data.hpp"
@@ -509,6 +510,19 @@ bool Manifest::validateContents(const Manifest& manifest,
                 || !QStringList{QStringLiteral("string"), QStringLiteral("number"), QStringLiteral("integer"), QStringLiteral("boolean")}
                     .contains(property.value("type").toString()))
                 return fail(error, QStringLiteral("An account field must be a declared nonsecret scalar setting."));
+        }
+        QStringList origins;
+        for (const auto& value : manifest.permissionScope(QStringLiteral("network.http")).value("origins").toArray()) origins.append(value.toString());
+        for (auto it = properties.begin(); it != properties.end(); ++it) {
+            const auto property = it.value().toObject();
+            const bool account = property.value("x-hakone-control").toString() == QLatin1String("account");
+            if (account != property.contains("x-hakone-account"))
+                return fail(error, QStringLiteral("An account field needs an account recipe, and only an account field can have one."));
+            if (!account) continue;
+            // The access token is the field's credential.
+            if (!property.value("x-hakone-secret").toBool() || property.value("type") != QStringLiteral("string"))
+                return fail(error, QStringLiteral("An account field must be a secret string."));
+            if (!DeviceRecipe::from(property.value("x-hakone-account").toObject(), origins, error)) return false;
         }
         for (const auto& binding : manifest.permissionScope("credentials.use").value("bindings").toArray()) {
             const auto property = properties.value(binding.toObject().value("field").toString()).toObject();

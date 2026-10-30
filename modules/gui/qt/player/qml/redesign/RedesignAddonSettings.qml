@@ -40,6 +40,11 @@ ColumnLayout {
     property string ticketPackage: ""
     property string capturedStamp: ""
     property var preparedMessages: ({})
+    // Display names of picked files and folders, by handle.
+    property var handleNames: ({})
+    property var sessionValues: ({})
+    property Component videoBackdropContent
+    readonly property bool sessionSupported: !!backend && typeof backend.setSessionSettings === "function"
     readonly property bool dataReady: {
         if (!displayMode) return true
         if (!backend || !settingsTicket.length || retired) return false
@@ -63,6 +68,46 @@ ColumnLayout {
         const owner = ticketOwner, ticket = settingsTicket
         settingsTicket = ""; ticketOwner = null; ticketPackage = ""; preparing = false
         try { if (owner && ticket.length && typeof owner.releaseDisplayRequest === "function") owner.releaseDisplayRequest(ticket) } catch (error) {}
+    }
+    function readHandles() {
+        handleNames = backend && typeof backend.settingsHandleNames === "function" ? Contract.plain(backend.settingsHandleNames(packageId), {}) : ({})
+        sessionValues = sessionSupported ? Contract.plain(backend.sessionSettings(packageId), {}) : ({})
+    }
+    function pickPath(name) {
+        if (!backend || typeof backend.pickSettingsPath !== "function" || !backend.pickSettingsPath(packageId, name))
+            errorMessage = qsTr("The app cannot open a file selection here.")
+    }
+    function connectAccount(name) {
+        if (dirty) { errorMessage = qsTr("Save or cancel your changes before you connect an account."); return }
+        let setup = null
+        try { setup = Qt.createQmlObject("import VLC.Dialogs\nAddonAccountSetup {}", root, "addonAccountSetup") } catch (error) { setup = null }
+        if (!setup) { errorMessage = qsTr("The app cannot connect accounts here."); return }
+        setup.manager = backend; setup.packageId = packageId; setup.field = name
+        const field = schema.properties[name] || {}
+        accountDialog.setup = setup
+        accountDialog.accountLabel = String(Contract.own(messages, field["x-hakone-label"]) ? messages[field["x-hakone-label"]] : field["x-hakone-label"] || field.title || name)
+        accountDialog.open()
+    }
+    function applyForSession() {
+        if (!sessionSupported || conflict || saving) return false
+        const changed = {}
+        for (const name of Object.keys(schema.properties)) {
+            const field = schema.properties[name]
+            if (Contract.fieldSecret(field) || ["file", "folder"].includes(field["x-hakone-control"])) continue
+            if (JSON.stringify(draftValues[name]) !== JSON.stringify(initialValues[name])) changed[name] = draftValues[name]
+        }
+        fieldErrors = Contract.settingsErrors(schema, draftValues, secretStatus, {}, credentialPersistenceAvailable)
+        for (const name of Object.keys(fieldErrors)) if (!Contract.own(changed, name)) delete fieldErrors[name]
+        if (Object.keys(fieldErrors).length) { errorMessage = qsTr("Do a check of the highlighted settings."); return false }
+        if (!backend.setSessionSettings(packageId, Object.assign({}, sessionValues, changed))) {
+            errorMessage = qsTr("The app cannot use these settings for this session."); return false
+        }
+        sessionValues = Contract.plain(backend.sessionSettings(packageId), {})
+        draftValues = Contract.clone(initialValues); secretOperations = ({}); errorMessage = ""
+        return true
+    }
+    function stopSessionValues() {
+        if (sessionSupported && backend.setSessionSettings(packageId, {})) sessionValues = ({})
     }
     function clearDraft() {
         secretOperations = ({}); fieldErrors = ({}); draftValues = ({}); initialValues = ({}); initialBackendValues = ({}); secretStatus = ({})
@@ -116,6 +161,7 @@ ColumnLayout {
         initialBackendValues = Contract.clone(backend.displaySettingsValues(packageId) || {})
         secretStatus = Contract.clone(backend.displaySettingsSecretStatus(packageId) || {})
         initialValues = Contract.defaults(schema, initialBackendValues); draftValues = Contract.clone(initialValues); loaded = true
+        readHandles()
     }
     function currentForSave() {
         return !displayMode || !!backend && settingsTicket.length > 0 && !retired
@@ -149,6 +195,7 @@ ColumnLayout {
         secretStatus = Contract.clone(backend.settingsSecretStatus(packageId) || {})
         initialValues = Contract.defaults(schema, initialBackendValues)
         draftValues = Contract.clone(initialValues)
+        readHandles()
     }
     function observeLegacy() {
         if (!ready || saving || !backend || !packageId.length) return
@@ -211,6 +258,20 @@ ColumnLayout {
         function onCatalogueFreshnessChanged() { root.observeBackend() }
         function onPackageWithdrawn(id) { root.retirePackage(id) }
         function onRetiring() { root.retirePackage(root.packageId) }
+        function onSettingsPathPicked(id, field, handle, name) {
+            if (id !== root.packageId || !Contract.own(root.schema.properties, field)) return
+            root.handleNames = Object.assign({}, root.handleNames, {[handle]: name})
+            root.setValue(field, handle)
+        }
+    }
+    RedesignAccountSetupDialog {
+        id: accountDialog
+        parent: root.Window.contentItem || root
+        credentialPersistenceAvailable: root.credentialPersistenceAvailable
+        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+        videoBackdropContent: root.videoBackdropContent
+        onConnected: root.reload()
+        onClosed: { if (setup) setup.destroy(); setup = null }
     }
     Text {
         objectName: "addonSettingsLoading"
@@ -238,9 +299,18 @@ ColumnLayout {
             visible: !definition["x-hakone-visibleWhen"] || root.draftValues[definition["x-hakone-visibleWhen"].field] === definition["x-hakone-visibleWhen"].equals
             onValueEdited: value => root.setValue(fieldName, value)
             onSecretEdited: (operation, value, sessionOnly) => root.editSecret(fieldName, operation, value, sessionOnly)
-            onPickerRequested: (name, kind) => root.pickerRequested(name, kind)
-            onConnectionRequested: name => root.connectionRequested(name)
+            handleName: typeof currentValue === "string" && Contract.own(root.handleNames, currentValue) ? String(root.handleNames[currentValue]) : ""
+            onPickerRequested: (name, kind) => { root.pickPath(name); root.pickerRequested(name, kind) }
+            onConnectionRequested: name => { root.connectAccount(name); root.connectionRequested(name) }
         }
+    }
+    Text {
+        objectName: "addonSettingsSessionNote"
+        Layout.fillWidth: true
+        visible: root.sessionSupported && Object.keys(root.sessionValues).length > 0
+        text: qsTr("Temporary settings are in use until the app closes. They are not saved.")
+        textFormat: Text.PlainText; wrapMode: Text.Wrap
+        color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
     }
     Text {
         objectName: "addonSettingsError"
@@ -257,6 +327,22 @@ ColumnLayout {
             enabled: root.validSchema && root.dirty && !root.conflict && !root.saving && (!root.displayMode || root.dataReady)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             onClicked: root.save()
+        }
+        RedesignButton {
+            objectName: "addonSettingsSession"
+            visible: root.sessionSupported
+            caption: qsTr("Use until the app closes"); text: caption
+            enabled: root.validSchema && root.dirty && !root.conflict && !root.saving && Object.keys(root.secretOperations).length === 0
+                && (!root.displayMode || root.dataReady)
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            onClicked: root.applyForSession()
+        }
+        RedesignButton {
+            objectName: "addonSettingsStopSession"
+            visible: root.sessionSupported && Object.keys(root.sessionValues).length > 0
+            caption: qsTr("Stop temporary settings"); text: caption; enabled: !root.saving
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            onClicked: root.stopSessionValues()
         }
         RedesignButton {
             objectName: "addonSettingsCancel"

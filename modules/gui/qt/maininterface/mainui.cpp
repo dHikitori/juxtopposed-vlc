@@ -36,6 +36,8 @@
 #include "player/control_list_filter.hpp"
 #include "player/delay_estimator.hpp"
 #include "addons/addon_profile_host.hpp"
+#include "addons/addon_account_setup.hpp"
+#include <QFileDialog>
 #ifdef VLC_ADDON_TEST_DRIVER
 #include "addons/addon_test_driver.hpp"
 #endif
@@ -341,6 +343,7 @@ void MainUI::registerQMLTypes()
 
         // @uri VLC.Dialogs
         qmlRegisterType<RedesignPreferences>(uri, versionMajor, versionMinor, "RedesignPreferences");
+        qmlRegisterType<vlc::addons::AddonAccountSetup>(uri, versionMajor, versionMinor, "AddonAccountSetup");
         qmlRegisterType<FirstRunWizard>(uri, versionMajor, versionMinor, "RedesignFirstRunSetup");
         qmlRegisterType<RedesignFolderModel>(uri, versionMajor, versionMinor, "RedesignFolderModel");
         qmlRegisterType<SeriesModel>(uri, versionMajor, versionMinor, "SeriesModel");
@@ -407,6 +410,18 @@ void MainUI::registerQMLTypes()
                 msg_Warn(m_intf, "Cannot share the add-on profile with other app windows");
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
             addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
+            // File and folder settings use the app's own dialog; the add-on
+            // gets a handle, not the path.
+            addonManager->setPathPicker([](const QString& kind, std::function<void(const QString&)> done) {
+                auto* dialog = new QFileDialog(nullptr, kind == QLatin1String("folder") ? qtr("Select a folder") : qtr("Select a file"));
+                dialog->setAttribute(Qt::WA_DeleteOnClose);
+                dialog->setFileMode(kind == QLatin1String("folder") ? QFileDialog::Directory : QFileDialog::ExistingFile);
+                if (kind == QLatin1String("folder")) dialog->setOption(QFileDialog::ShowDirsOnly);
+                auto answered = std::make_shared<bool>(false);
+                QObject::connect(dialog, &QFileDialog::fileSelected, dialog, [done, answered](const QString& path) { *answered = true; done(path); });
+                QObject::connect(dialog, &QDialog::finished, dialog, [done, answered] { if (!*answered) done({}); });
+                dialog->open();
+            });
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
             const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
             free(sharedDirectory);

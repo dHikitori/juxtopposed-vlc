@@ -2,6 +2,7 @@
 #pragma once
 #include "addon_package_store.hpp"
 #include "addon_credentials.hpp"
+#include "addon_device_authorization.hpp"
 #include "addon_network.hpp"
 #include "addon_worker.hpp"
 #include "addon_native_authority.hpp"
@@ -169,6 +170,39 @@ public:
     // C++ only. The resolver keeps the release, permission, and account scope.
     NetworkBroker::CredentialResolver credentialResolver(const InstalledPackage&, NetworkBroker::RequestGuard* current = nullptr) const;
     AddonHostServices* hostServices() { return &m_hostServices; }
+
+    // Account recipes (settings fields with x-hakone-control "account").
+    // C++ only: the app's setup view drives the sign-in; tokens never reach
+    // QML or the add-on.
+    std::optional<DeviceRecipe> accountRecipe(const QString& packageId, const QString& field) const;
+    bool connectAccount(const QString& packageId, const QString& field, const DeviceTokens&, bool sessionOnly,
+                        QString* error = nullptr);
+    DevicePost accountTransport();
+    // Native construction and tests only.
+    void setAccountTransport(DevicePost);
+    // A provider asked for sign-in: exchange each saved refresh token once a
+    // minute at most. This runs on demand only.
+    void refreshAccounts(const QString& packageId, bool expiredOnly = false);
+
+    // File and folder settings. The app's picker registers the chosen path
+    // and gets an opaque handle; the add-on sees only the handle. A pick is
+    // a draft until Save.
+    QVariantMap registerPickedPath(const QString& packageId, const QString& field, const QString& localPath);
+    // The app installs the native file dialog. done receives the chosen
+    // local path, or an empty one when the user cancels.
+    using PathPicker = std::function<void(const QString& kind, std::function<void(const QString& localPath)> done)>;
+    void setPathPicker(PathPicker picker) { m_pathPicker = std::move(picker); }
+    // Opens the picker for a file or folder field; the result arrives as
+    // settingsPathPicked.
+    Q_INVOKABLE bool pickSettingsPath(const QString& packageId, const QString& field);
+    Q_INVOKABLE QVariantMap settingsHandleNames(const QString& packageId) const;
+
+    // Temporary settings for this session, over the saved ones. They are
+    // not saved and end when the app closes. An empty map clears them.
+    Q_INVOKABLE bool setSessionSettings(const QString& packageId, const QVariantMap& values);
+    Q_INVOKABLE QVariantMap sessionSettings(const QString& packageId) const { return m_sessionSettings.value(packageId); }
+    // Saved values with this session's values over them, for the worker.
+    QVariantMap effectiveSettings(const QString& packageId) const;
 signals:
     // Direct owner-thread teardown runs before worker shutdown waits.
     void retiring();
@@ -180,6 +214,8 @@ signals:
     void packageWithdrawn(const QString& packageId);
     void operationFinished(const QString& invocation, const QString& contribution, const QString& status,
                            const QVariantMap& data, const QString& error);
+    void accountsChanged(const QString& packageId);
+    void settingsPathPicked(const QString& packageId, const QString& field, const QString& handle, const QString& name);
 private:
     friend class ArtworkLookupRunner;
     friend class ::AddonArtworkAssets;
@@ -270,5 +306,17 @@ private:
     QPointer<QObject> m_mediaCapabilitiesSource;
     QList<QMetaObject::Connection> m_mediaCapabilityConnections;
     QVariantMap m_updateResult;
+    struct PickedPath { QString packageId, field, kind, path, name; };
+    QHash<QString, PickedPath> m_pickedPaths;
+    PathPicker m_pathPicker;
+    QHash<QString, QVariantMap> m_sessionSettings;
+    QHash<QString, quint64> m_sessionGenerations;
+    QString sessionPartition(const QString& packageId) const;
+    QHash<QString, std::function<void()>> m_accountRefreshes;
+    QHash<QString, qint64> m_accountRefreshTried;
+    QHash<QString, qint64> m_accountExpiry;
+    QElapsedTimer m_accountClock;
+    std::unique_ptr<QNetworkAccessManager> m_accountNetwork;
+    DevicePost m_accountPost;
 };
 }
