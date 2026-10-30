@@ -355,6 +355,8 @@ if HAVE_OSX
 ADDON_PLATFORM_LDFLAGS += -framework Security
 endif
 
+# Built only by meson -Daddon-test-driver=true for the full app smoke test.
+EXTRA_DIST += addons/addon_test_driver.cpp addons/addon_test_driver.hpp
 EXTRA_DIST += addons/worker/Cargo.toml addons/worker/Cargo.lock addons/worker/src/main.rs \
 	tests/fixtures/addon-worker-fixture.py
 bin_SCRIPTS =

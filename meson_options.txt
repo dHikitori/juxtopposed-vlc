@@ -40,6 +40,11 @@ option('addon_manager',
     value : true,
     description : 'Build the VLC add-on manager modules')
 
+option('addon-test-driver',
+    type : 'boolean',
+    value : false,
+    description : 'Build the add-on driver for the full app smoke test. Do not enable it in a release build.')
+
 option('addon-runtime',
     type : 'feature',
     value : 'enabled',

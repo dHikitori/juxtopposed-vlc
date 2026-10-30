@@ -137,6 +137,12 @@ if host_system == 'linux' and get_option('qt').allowed()
         args: ['-B', addon_app_smoke, '--windows', '2'],
         suite: ['addons', addon_test_labels['addon_app_smoke_two_windows']],
         is_parallel: false, timeout: 300)
+    if get_option('addon-test-driver')
+        test('addon_app_smoke_driver', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver'],
+            suite: ['addons', addon_test_labels['addon_app_smoke_driver']],
+            is_parallel: false, timeout: 300)
+    endif
 endif
 
 libvlc_demux_defines = []

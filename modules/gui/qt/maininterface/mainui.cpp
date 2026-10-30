@@ -35,6 +35,9 @@
 #include "player/control_list_model.hpp"
 #include "player/control_list_filter.hpp"
 #include "player/delay_estimator.hpp"
+#ifdef VLC_ADDON_TEST_DRIVER
+#include "addons/addon_test_driver.hpp"
+#endif
 
 #include "dialogs/toolbar/controlbar_profile_model.hpp"
 #include "dialogs/toolbar/controlbar_profile.hpp"
@@ -519,6 +522,10 @@ void MainUI::registerQMLTypes()
             auto* discovery = vlc::addons::createPlayerDiscoveryWithSources(addonManager, sourceOwner, std::move(nativeBackend), this);
             if (libraryTargets) discovery->setPlaylistBackend(libraryTargets->backend());
             qmlRegisterSingletonInstance<vlc::addons::AddonDiscoveryService>(uri, versionMajor, versionMinor, "AddonDiscovery", discovery);
+#ifdef VLC_ADDON_TEST_DRIVER
+            if (auto* driver = vlc::addons::AddonTestDriver::create(addonManager, packageSummaries, discovery, this))
+                connect(m_mainCtx, &MainCtx::addonWorkRetiring, driver, [driver] { driver->close(); }, Qt::DirectConnection);
+#endif
         }
         qmlRegisterType<vlc::addons::AddonVisualizerSurface>(uri, versionMajor, versionMinor, "AddonVisualizerSurface");
         auto* subtitleSources = new SubtitleSourceService(this);

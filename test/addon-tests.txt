@@ -155,3 +155,4 @@ test_src_player_audio_samples_lifecycle         visualizer  automake,meson
 # app: the full app, started headless on a private profile
 addon_app_smoke                                 app         meson
 addon_app_smoke_two_windows                     app         meson
+addon_app_smoke_driver                          app         meson

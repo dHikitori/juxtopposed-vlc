@@ -1910,6 +1910,12 @@ if qt6_dep.found()
 
     # TODO support qmlcachegen
 
+    # Test builds only: the smoke test drives add-on actions through this owner.
+    if get_option('addon-test-driver')
+        qt_plugin_sources += files('addons/addon_test_driver.cpp', 'addons/addon_test_driver.hpp')
+        qt_cppargs += '-DVLC_ADDON_TEST_DRIVER'
+    endif
+
     vlc_modules += {
         'name' : 'qt',
         'sources' : [qt6pre_files, qt6pre_qrc, shader_targets, shaders_processed, qt_sources, qt_plugin_sources, subtitle_consumer_key, addon_distribution_paths],

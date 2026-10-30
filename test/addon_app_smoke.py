@@ -13,6 +13,11 @@ its helpers, quit time and, with --trace, the number of processes the app
 starts. With --windows 2, a second app process shares the profile, and the
 run quits the processes in both orders.
 
+With --driver, the app must be built with meson -Daddon-test-driver=true.
+The run then also loads the Extensions list, installs the synthetic
+discovery fixture package, and opens, browses and searches it twice through
+the add-on worker. The fixture has no network, credential or file access.
+
 Exit status 0 means every check passed, 77 means the build has no app.
 """
 
@@ -91,10 +96,12 @@ def resident_bytes(pids):
 
 
 class App:
-    def __init__(self, args, home, name, trace):
+    def __init__(self, args, home, name, trace, driver=False):
         self.name = name
         # sockaddr_un limits the path length, so the socket gets a short directory.
         self.socket_path = Path(tempfile.mkdtemp(prefix='hk-')) / 'control'
+        self.driver_path = self.socket_path.parent / 'driver' if driver else None
+        self.driver = None
         self.log_path = home / f'{name}.log'
         self.trace_path = home / f'{name}.trace' if trace else None
         command = [str(args.build / 'bin' / 'vlc'), '-I', 'qt', '--no-one-instance',
@@ -106,7 +113,10 @@ class App:
             command = ['strace', '-f', '-qq', '-e', 'trace=execve', '-o',
                        str(self.trace_path)] + command
         self.started = time.monotonic()
-        self.process = subprocess.Popen(command, env=args.env, stdin=subprocess.DEVNULL,
+        env = dict(args.env)
+        if self.driver_path:
+            env['VLC_ADDON_TEST_DRIVER_SOCKET'] = str(self.driver_path)
+        self.process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                         start_new_session=True)
         self.connection = None
@@ -142,6 +152,29 @@ class App:
     def send(self, command):
         self.connection.sendall(command.encode() + b'\n')
 
+    def drive(self, command, timeout):
+        """Send one driver command and return its JSON reply."""
+        if self.driver is None:
+            def attempt():
+                connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                try:
+                    connection.connect(str(self.driver_path))
+                except OSError:
+                    connection.close()
+                    return None
+                return connection
+            try:
+                self.driver = wait_for('the add-on test driver', attempt, 10)
+            except Failure:
+                raise Failure('the app has no add-on test driver; build with -Daddon-test-driver=true')
+            self.driver.settimeout(timeout)
+            self.driver_input = self.driver.makefile('rb')
+        self.driver.sendall(command.encode() + b'\n')
+        line = self.driver_input.readline()
+        if not line:
+            raise Failure(f'the add-on test driver closed during "{command}"')
+        return json.loads(line)
+
     def quit(self, timeout):
         started = time.monotonic()
         self.send('quit')
@@ -168,6 +201,13 @@ class App:
         if self.process.poll() is None:
             os.killpg(self.process.pid, signal.SIGKILL)
             self.process.wait()
+
+
+def worker_process(pid):
+    try:
+        return Path(f'/proc/{pid}/exe').resolve().name.startswith('vlc-addon-worker')
+    except OSError:
+        return False
 
 
 def bundled_ready(store):
@@ -200,7 +240,7 @@ def run(args):
     store = home / 'data' / 'vlc' / 'addons'
     apps = []
     try:
-        first = App(args, home, 'first', args.trace)
+        first = App(args, home, 'first', args.trace, args.driver)
         apps.append(first)
         first.connect(args.timeout)
         results['start_seconds'] = round(time.monotonic() - first.started, 3)
@@ -215,6 +255,29 @@ def run(args):
         wait_for('stop', lambda: 'VLC_PLAYER_STATE_STOPPED' in first.log()[before_play:],
                  args.timeout)
 
+        if args.driver:
+            reply = first.drive('extensions', args.timeout)
+            if not reply.get('ok'):
+                raise Failure(f'the Extensions list did not load: {reply}')
+            results['extensions'] = reply
+            reply = first.drive(f'install {args.fixture}', args.timeout)
+            if not reply.get('ok'):
+                raise Failure(f'the discovery fixture did not install: {reply}')
+            results['fixture_install_ms'] = reply['ms']
+            package = reply['id']
+            # The first open includes the worker start. The second shows
+            # whether the worker is reused.
+            for key in ('discovery_first', 'discovery_second'):
+                reply = first.drive(f'discover {package} {args.query}', args.timeout)
+                if not reply.get('ok') or not reply.get('searchItems'):
+                    raise Failure(f'the discovery fixture did not answer: {reply}')
+                if reply.get('repeatSearchItems') != reply['searchItems']:
+                    raise Failure(f'a repeated search showed different rows: {reply}')
+                results[key] = {name: reply[name] for name in
+                                ('rootsMs', 'searchMs', 'repeatSearchMs', 'rootsItems', 'searchItems')}
+            results['workers_after_use'] = sum(
+                1 for pid in process_tree(first.pid) if worker_process(pid))
+
         pids = process_tree(first.pid)
         before = cpu_seconds(pids)
         time.sleep(args.idle)
@@ -222,6 +285,7 @@ def run(args):
         results['idle_seconds'] = args.idle
         results['idle_cpu_seconds'] = round(cpu_seconds(pids) - before, 3)
         results['idle_processes'] = len(pids)
+        results['idle_workers'] = sum(1 for pid in pids if worker_process(pid))
         results['resident_bytes'] = resident_bytes(pids)
 
         if args.windows == 2:
@@ -250,6 +314,9 @@ def run(args):
     finally:
         for app in apps:
             app.stop()
+            if app.driver:
+                app.driver_input.close()
+                app.driver.close()
             shutil.rmtree(app.socket_path.parent, ignore_errors=True)
             results.setdefault('stderr_tail', {})[app.name] = \
                 app.process.stderr.read().decode(errors='replace')[-2000:]
@@ -271,6 +338,11 @@ def main():
     parser.add_argument('--windows', type=int, choices=(1, 2), default=1)
     parser.add_argument('--quit-second-first', action='store_true')
     parser.add_argument('--trace', action='store_true', help='count process launches with strace')
+    parser.add_argument('--driver', action='store_true',
+                        help='use the add-on test driver (needs -Daddon-test-driver=true)')
+    parser.add_argument('--fixture', type=Path,
+                        default=Path(__file__).resolve().parent.parent / 'contrib-addons' / 'examples' / 'discovery-fixture')
+    parser.add_argument('--query', default='a', help='discovery fixture search text')
     parser.add_argument('--idle', type=float, default=30.0, help='idle measurement in seconds')
     parser.add_argument('--timeout', type=float, default=60.0)
     parser.add_argument('--work', type=Path, default=None, help='parent of the temporary home')
@@ -278,6 +350,7 @@ def main():
     args = parser.parse_args()
     args.build = args.build.resolve()
     args.sample = args.sample.resolve()
+    args.fixture = args.fixture.resolve()
     return run(args)
 
 
