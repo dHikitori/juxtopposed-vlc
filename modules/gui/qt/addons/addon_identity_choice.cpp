@@ -205,7 +205,7 @@ bool AddonIdentityChoice::choose(int index)
         fail(tr("This choice is no longer current. Search again."));
         return false;
     }
-    set(QStringLiteral("applying"), tr("Saving your choice…"));
+    set(QStringLiteral("applying"), tr("The app saves your choice…"));
     return true;
 }
 

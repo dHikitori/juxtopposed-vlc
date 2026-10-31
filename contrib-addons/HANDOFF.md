@@ -1,87 +1,36 @@
 # Session handoff
 
-Written 30 October 2026 for continuing this work in the Claude Code desktop
-app. Branch `addons`; last commit `5f1f99bc54`. The working tree was clean at
-handoff.
+Updated 31 October 2026. Branch `addons`; local commits only, nothing
+pushed. The continuation plan (`07-continuation-plan.md` §5, Steps 0b–7) is
+done except macOS, which needs a macOS host.
 
 ## Start here
 
-Read these in order:
-
-1. [Continuation plan](07-continuation-plan.md). It has the findings, the
-   decisions and the ordered steps. Its §5 is the work queue.
-2. [Profile socket record](records/profile-socket.md). This is the step just
-   finished.
-3. [Completion backlog](completion-backlog.md). It lists the open
-   requirement rows, with source references.
-4. For Step 2: [profile authority coordination](profile-authority-coordination.md),
-   [control protocol](profile-control-protocol.md) and
-   [native peer readiness](records/profile-native-peer.md).
-
-`README.md` and `01`–`06` are the design. `IMPLEMENTATION.md` is the
-existing narrative status. Step 0b replaces it with a matrix.
-
-## Decisions already made (30 October 2026)
-
-1. **Several windows share one add-on profile**, with live cross-process
-   revocation. This was the user's decision. The "first window owns add-ons"
-   mode was refused.
-2. **Worker reuse.** First precompile modules at install and measure. Then
-   use a warm worker process with a fresh Wasm instance per invocation,
-   using the receipt rules in plan F1.
-3. **Evidence.** Use labelled test suites in the repository. New records
-   cite test targets, not `/tmp` proof archives. Keep negative controls for
-   security boundaries.
-4. **Documents.** Move the records to `records/` in one commit that changes
-   only paths and links. `IMPLEMENTATION.md` becomes a maturity matrix.
-
-The user delegated decisions 2–4 to Claude.
+1. [Requirements comparison](records/v1-requirements-comparison.md): what
+   is open against `01`–`05`, by section.
+2. [Maturity matrix](IMPLEMENTATION.md): evidence for every row.
+3. [Windows review](records/windows-review-step5.md): the user's live
+   rounds and the fixes after each one.
 
 ## Where the work is
 
-- **Step 0 (socket) is done** in `5f1f99bc54`. Linux normal 41/41 and
-  ASAN/UBSAN 41/41 socket cases pass, plus 16/16 peer cases in each build.
-  Native Windows passes 32/32 socket and 16/16 peer cases. Four negative
-  controls fail as intended. Note 3 (the handshake deadline) moves to the
-  Step 2 coordinator owner.
-- **Step 0b is done** in `81e29bc6d0`, `992463f6f5` and the matrix commit
-  after them. Run a label with `meson test -C build-redesign --suite <label>`
-  after sourcing `.design-reference/native-build/env.sh`. Records are now in
-  `records/`. `IMPLEMENTATION.md` is the maturity matrix.
-- **Step 1 is partly done** (`818c1032a7` to `375f9dba89`). See
-  `records/app-smoke-linux.md`. The full app builds, `meson test --suite app`
-  passes, and all seven labels pass. Build with
-  `.design-reference/native-build/build-env.sh` sourced (it adds include and
-  library paths the full build needs). projectM is disabled in
-  `build-redesign` because its library is gone.
-- **Step 1 test driver is done** (`7ddc4b28ee`, fix `74d63a50da`). Meson
-  option `addon-test-driver`, off by default, on in `build-redesign`.
-  `meson test --suite app` runs three full app tests, including the driver
-  run with the discovery fixture.
-- **Step 2 is done on Linux** (`5fd715edaa` to `3ad4ffc6a2`). Records:
-  `records/profile-coordinator.md`, `profile-client.md`,
-  `profile-write-permit.md`, `profile-mount.md`. The app mounts the shared
-  profile (`AddonProfileHost`); every store write goes through permits. Not
-  run yet for the new units: Windows, ASAN/UBSAN, standalone CMake.
-- **Step 3 is mostly done** (`e62f9813f8` to `097c2d5fd5`); see
-  `records/performance-step3.md`. A Linux pre-add-on baseline is built in
-  the worktree `../vlc-baseline/build` (source `619b57dd85`, with the
-  offscreen compositor fix applied locally and a `bin/vlc-qt-check` link;
-  neither is committed). Compare with `test/addon_app_smoke.py --build
-  ../vlc-baseline/build --no-addons --no-playback`.
-- **Step 3 health row is done** (`2a34a12779`). The QML test runner links
-  again.
-- **Step 4 is done on Linux**; see `records/metadata-owner-activation.md`.
-  The Core option `metadata-native-owner` (off by default) mounts the owner.
-  `addon_artwork_parity` compares each Lua art script with its add-on; all
-  four pass, so the owner offers no built-in Lua member. `meson test
-  --suite app` includes owner-on runs in one and two windows.
-- **Step 5 package is built** (`build-windows/vlc-win64`, core `8b78e46210`,
-  Qt `62bfe1513e`); see `records/windows-review-step5.md`. The packaged
-  worker passes its precompile checks natively on Windows. **Waiting for the
-  user's live checks** listed in that record. Keep the owner default off
-  until they pass. Step 3 leftover: startup on a
-  normal Linux install.
+- **Steps 0b–5** are done; see the plan and the matrix.
+- **Step 6** rows 1–6 are mounted: identity choice, offline self-test and
+  health period, result retention, device-code accounts with picked paths
+  and session settings, read-only guest projections, discovery change feeds
+  and queue filling. Records are in `records/` (one per row).
+- **Step 7**: normative schemas with a shared host/schema corpus, the
+  package validator, preview tool, templates and generated Rust types
+  (`records/schemas-and-author-tools.md`); the drift experiment
+  (`records/session-drift-experiment.md`); the text audit and the
+  requirements comparison.
+- **Windows:** a package with every change up to the end of Step 7 is built
+  for the user's final check. The native metadata owner stays off by
+  default until that check passes.
+- **Tool environment:** the schema corpus check needs jsonschema 4.23.0
+  (`python3 -m venv` in the scratchpad, then `pip install
+  jsonschema==4.23.0`). Under the system jsonschema 3.2 the meson test
+  skips.
 
 ## Environment notes
 
@@ -131,11 +80,11 @@ These matter on this machine (WSL2 on Windows):
 
 ## Open items owned by the user
 
-- Manual Windows GUI checks of the current review package (source
-  `74ae4267fc`; it does not include the profile or socket work).
-- The Windows cursor report (`records/windows-cursor-feedback.md`). Plan F4 gives
-  the hypothesis (global startup-feedback cursor from repeated helper
-  launches) and the live check to run.
+- The final Windows check of the package built at the end of Step 7.
+- The decision to turn the native metadata owner on by default after it.
+- Optional clean-up: the local branch `backup/addons-before-target-removal`
+  and `refs/original` from the history rewrite that removed a committed
+  Cargo `target` folder. Ask before deleting them.
 
 ## Rules to keep
 

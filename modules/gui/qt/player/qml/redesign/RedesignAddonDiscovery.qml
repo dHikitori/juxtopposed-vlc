@@ -198,7 +198,7 @@ FocusScope {
         Text {
             objectName: "addonDiscoveryLoading"
             Layout.fillWidth: true; visible: root.displayLoading || !root.displayAvailable || root.sourceChecking
-            text: (root.backend && root.backend.preparationError) || (root.displayLoading ? qsTr("Updating sources…") : root.sourceChecking ? qsTr("Checking source settings…") : qsTr("Sources are not available yet."))
+            text: (root.backend && root.backend.preparationError) || (root.displayLoading ? qsTr("The app updates the sources…") : root.sourceChecking ? qsTr("The app checks the source settings…") : qsTr("Sources are not available yet."))
             textFormat: Text.PlainText; wrapMode: Text.Wrap
             color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
         }

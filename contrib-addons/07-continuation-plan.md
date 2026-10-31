@@ -503,6 +503,11 @@ starts.
 
 ### Step 7. Stabilize v1
 
+Done on 31 October 2026, except macOS (no macOS host here): see
+[schemas and tools](records/schemas-and-author-tools.md),
+[drift experiment](records/session-drift-experiment.md) and
+[requirements comparison and text audit](records/v1-requirements-comparison.md).
+
 - Normative schemas (manifest, UI, metadata, discovery, visualizer, optional
   contracts), with a shared positive/negative corpus checked by the host and
   by the schema validator.
