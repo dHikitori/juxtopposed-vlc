@@ -215,33 +215,39 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `14953b093d`: `vlc.exe`
-`0e67ec1f53c02fc1fb64e73c38a8ed88b1f4b95f1d9da00d8962ca85d7de2dcb`,
+Package `94413e6591`: `vlc.exe`
+`01e941364ed0cc318d8452b6adfa0a59bfd95da01a312581aca2a6f8301e5609`,
 `libqt_plugin.dll`
-`85defe0ed88ac3da0dac8011ef81f7284e91cdab49830de6d6a7ac4fb5f62f5d`.
+`10eafe99eb53468ecdef8c201f405962b652790fa5f64b43bacd10b3f8eab580`.
 `BUILD-INFO.json` says `dirty` only because untracked worktree folders are
 under `.claude/`; the source copy takes files only, so the build is the
 committed tree. The Episodes panel is the bundled add-on
-`org.videolan.episodes` 1.0.1 ([record](player-panels-design.md)).
+`org.videolan.episodes` 1.0.2 ([record](player-panels-design.md)).
 
-The `05b791e4a2` package (`vlc.exe` `c32d8a6f…`) showed no Episodes
-button: Episodes 1.0.0 did not list its command operations, so the worker
-refused every call. 1.0.1 fixes that. Bundled packages install once, so a
-profile that has 1.0.0 needs the update first (check 0).
+Earlier packages of this section: `05b791e4a2` showed no button (1.0.0
+listed no command operations); `14953b093d` (1.0.1) showed the button, but
+the panel filled late, no other episode opened, and it looked plainer than
+the built-in view. 1.0.2 and this app fix all three; the record has the
+side-by-side comparison.
 
 The checks above apply again; check 1 now goes through the add-on's menu.
 New checks:
 
-0. **Update.** Extensions › Episodes offers the bundled update to 1.0.1
-   with no new permissions. Update it. A new profile gets 1.0.1 directly.
+0. **Update.** The Extensions row for Episodes says "Update to 1.0.2
+   available". Select it, review the app version (no new permissions) and
+   update. A new profile gets 1.0.2 directly.
 1. **Button.** Play an episode file from a series folder (a local folder
    and an SMB share). The Episodes button appears between Playback
    settings and Queue, with the same icon as before. It does not appear
    for a movie or a song.
-2. **Panel.** Open it. The show title, the season choice and the episode
-   list appear; the playing episode is open, marked "Now playing", with
-   its versions, file name and "Playing". Watched episodes say "Watched".
-   Another season, another row, and "Play" or "Play from beginning" work.
+2. **Panel.** Open it right after the episode starts. It fills without
+   waiting and looks like the built-in panel did: one header with the show
+   and season, "…" and close, and no second "Episodes" title. The playing
+   episode is highlighted and open, marked "Now playing", with its artwork
+   across the width, its versions, file name and "Playing"; watched
+   episodes say "Watched". Other rows open and close, and "Play" or "Play
+   from beginning" work. With several seasons the header opens the season
+   list (a ✓ on the playing season), and a season returns to its episodes.
    Escape and the close button close the panel; Queue and Playback
    settings close it too.
 3. **Menu.** "Episode options" › Refresh, "Choose series folder…" and
