@@ -962,6 +962,17 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_player_addon_session_drift',
+    'sources': files('player/addon_session_drift.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['araw', 'adummy', 'demux_mock'],
+    'env': ['VLC_TEST_TIMEOUT=90'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
     'name': 'test_src_player_addon_session',
     'sources': files('player/addon_session.c'),
     'include_directories': include_directories('../../src'),

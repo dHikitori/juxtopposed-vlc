@@ -151,7 +151,7 @@ Add one row for each label run that a record or a decision relies on.
 | Session authority: leases, observations, rate, local priority | component-tested | `session`: `test_qt_addon_sessions`, `test_src_player_addon_session*`, `test_qt_addon_native_session_player` *(cmake)*; [session host](native-session-host-contract.md) | Full app link. |
 | Session WSS transport | component-tested | `session`: `test_qt_addon_websocket_codec`, `test_qt_addon_session_websocket` *(cmake)*; [wire format](native-websocket-wire-contract.md), [transport audit](records/native-session-transport-audit.md) | Full app link. |
 | Session app owners and host panel | mounted | `session`: `test_qt_addon_session_host`, `test_qt_addon_session_ui`, `test_qt_addon_player_sessions` *(cmake)*; [app owners](native-session-app-contract.md), [host panel](records/session-host-ui.md) | Full app link and compiled QML. |
-| Two-player drift and rate experiment | designed | One seek-offset case only. | Only if v1 claims coordinated playback. |
+| Two-player drift and rate experiment | component-tested | `session`: `test_src_player_addon_session_drift`; [record](records/session-drift-experiment.md) | Rate convergence with a real audio output; two machines. |
 
 ## Windows-specific repairs
 

@@ -157,6 +157,7 @@ test_qt_addon_sessions                          session     all
 test_qt_addon_websocket_codec                   session     all
 test_src_player_addon_session                   session     automake,meson
 test_src_player_addon_session_state             session     automake,meson
+test_src_player_addon_session_drift             session     meson
 
 # visualizer: audio analysis, scenes, workers and rendering
 test_qt_addon_audio_analysis                    visualizer  all
