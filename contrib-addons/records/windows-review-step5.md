@@ -212,3 +212,40 @@ loading) apply again. New checks:
    filled" is not shown for Radio Browser (it has no suggestions); the
    fixture source in tests covers it.
 6. **Owner on** (optional): start with `--metadata-native-owner` as before.
+
+## Package with player panels
+
+Package `8bfdd737fd` (clean tree): `vlc.exe`
+`d85c3729a96ef18e69df993d18ec00724a2c7f29fd49a918308368449840a199`,
+`libqt_plugin.dll`
+`fab0b20c37985f3c732873324dbd775b4f7937691f88ab2d11b98a5596def65c`.
+It replaces the package above. The Episodes panel is now the bundled
+add-on `org.videolan.episodes` 1.0.0
+([record](player-panels-design.md)). The checks above apply again; check
+1 now goes through the add-on's menu. New checks:
+
+1. **Button.** Play an episode file from a series folder (a local folder
+   and an SMB share). The Episodes button appears between Playback
+   settings and Queue, with the same icon as before. It does not appear
+   for a movie or a song.
+2. **Panel.** Open it. The show title, the season choice and the episode
+   list appear; the playing episode is open, marked "Now playing", with
+   its versions, file name and "Playing". Watched episodes say "Watched".
+   Another season, another row, and "Play" or "Play from beginning" work.
+   Escape and the close button close the panel; Queue and Playback
+   settings close it too.
+3. **Menu.** "Episode options" › Refresh, "Choose series folder…" and
+   "Choose series…" work as before.
+4. **Long season.** A season with more than 40 files shows "Next
+   episodes"; the playing episode's page opens first.
+5. **Podcast.** Play an episode from a podcast feed. The panel lists the
+   feed entries; "Listened" marks finished ones; "Play video" plays the
+   video version when the feed has one.
+6. **Turn off.** Extensions › Episodes › turn off. The button goes away
+   and nothing scans the folder. Turn it on again and the button returns
+   for the next episode.
+7. **Layout.** Player customization shows "Episodes" in the palette;
+   moving and removing it and saving works, and a removed button stays
+   removed after a restart.
+8. **Speed.** Starting an episode from a share and opening the panel
+   feel the same as before.
