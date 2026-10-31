@@ -6,7 +6,7 @@
 //
 // For each theme it renders sample controls in the dark and light variants,
 // also with high contrast. For each view (ui.route, ui.modal, ui.section,
-// ui.replacement) it renders the document with its declared initial state,
+// ui.replacement, ui.panel) it renders the document with its declared initial state,
 // in both variants. It writes PNG files and prints their names. Run it with
 // QT_QPA_PLATFORM=offscreen on a machine without a display.
 #include "addons/addon_package_store.hpp"
@@ -158,7 +158,7 @@ int main(int argc, char** argv)
                               contrast ? QStringLiteral("-contrast") : QString{}));
                 }
             useTheme({}, false);
-        } else if (QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement"}.contains(contribution.type)) {
+        } else if (QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement", "ui.panel"}.contains(contribution.type)) {
             const auto viewPath = contribution.document.value(QStringLiteral("view")).toString();
             const auto document = QJsonDocument::fromJson(candidate.contents.value(viewPath)).object();
             QJsonArray commands;

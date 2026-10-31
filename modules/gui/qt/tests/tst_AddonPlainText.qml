@@ -11,7 +11,7 @@ TestCase {
     Component { id: textComponent; Text { width: 1200; height: 100; font.pixelSize: 14 } }
     Component { id: playerComponent; RedesignPlayerView { width: 1280; height: 720; started: true } }
     Component { id: miniComponent; RedesignMiniPlayer { width: 391; x: 0; y: 0 } }
-    Component { id: episodesComponent; RedesignEpisodesView { width: 480; height: 740 } }
+    Component { id: panelViewComponent; RedesignAddonView { width: 480 } }
     Component { id: tracksComponent; RedesignTracks { width: 480; heading: "Subtitles" } }
     Component { id: libraryComponent; RedesignLibraryView { width: 480; height: 740; category: 1; showAddRow: false } }
     ListModel { id: tracks }
@@ -74,21 +74,25 @@ TestCase {
         verify(mini !== null)
         plain(mini, title, 1); plain(mini, artist, 1); plain(mini, folder, 1); noLoads()
     }
-    function test_episodeTitlesChoicesAndTooltipsStayLiteral() {
+    // The Episodes panel is an add-on view: show, episode and file names
+    // from the package state stay literal in rows, tabs and tooltips.
+    function test_panelTitlesChoicesAndTooltipsStayLiteral() {
         const title = markup(), show = markup(), filename = markup()
-        const first = "file:///" + encodeURIComponent(filename) + ".mkv"
-        const view = createTemporaryObject(episodesComponent, test, {showTitle: show, selectedSeason: 1, currentSeason: 1,
-            seasons: [1, 2], expandedKey: first, episodesModel: [{title: title, number: "1", current: false, progress: 0,
-                played: false, description: "", thumbnail: "", urls: [first, "file:///Other.mkv"], feedIndex: -1}]})
+        const expand = {command: "org.videolan.episodes/expand"}
+        const view = createTemporaryObject(panelViewComponent, test, {registeredCommands: [expand.command]})
         verify(view !== null)
-        tryVerify(() => findChild(view, "episodeTitle_0") !== null)
-        tooltip(findChild(view, "episodeSeasonsButton")); tooltip(findChild(view, "episodeTitle_0"))
-        plain(view, title, 1)
-        const versions = findChild(view, "episodeVersion_0")
-        compare(versions.labelTextFormat, Text.PlainText)
-        compare(versions.contentItem.text, filename + ".mkv"); compare(versions.contentItem.textFormat, Text.PlainText)
-        versions.popup.open(); tryVerify(() => versions.popup.opened)
-        plain(versions.popup.contentItem, filename + ".mkv", 1); noLoads()
+        view.document = {contract: "ui@1", id: "episodes", root: {type: "Page", children: [
+            {type: "Heading", text: {bind: "state.show"}},
+            {type: "List", id: "episodes", items: {bind: "state.episodes"}, keyField: "key", scroll: false,
+             itemTemplate: {type: "MediaRow", number: {bind: "item.number"}, title: {bind: "item.title"}, expanded: {bind: "item.expanded"},
+                primaryAction: Object.assign({arguments: {key: {bind: "item.key"}}}, expand),
+                children: [{type: "Tabs", id: "versions", items: {bind: "item.versions"}, selected: {bind: "item.version"}, text: "Episode version",
+                            action: Object.assign({arguments: {key: {bind: "item.key"}, version: {bind: "item.tab.key"}}}, expand)}]}}]}}
+        view.state = {show: show, episodes: [{key: "a", number: "1", title: title, expanded: true,
+            versions: [{key: "a", label: filename + ".mkv"}, {key: "b", label: "Other.mkv"}], version: "a"}]}
+        tryVerify(() => view.valid && findChild(view, "addonMediaRow_a") !== null && findChild(view, "addonTab_a") !== null)
+        tooltip(findChild(view, "addonMediaRow_a")); tooltip(findChild(view, "addonTab_a"))
+        plain(view, show, 1); plain(view, title, 1); plain(view, filename + ".mkv", 1); noLoads()
     }
     function test_trackNamesAndTooltipsStayLiteral() {
         const name = markup()

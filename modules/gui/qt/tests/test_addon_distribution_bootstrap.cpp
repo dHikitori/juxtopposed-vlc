@@ -78,17 +78,17 @@ class BootstrapTests:public QObject {
 private slots:
     void init(){QCOMPARE(AddonRepositoryJobs::processCount(),0u);lifetime=std::make_unique<AddonStreamLifetime>();QVERIFY(AddonStreamLifetime::registerApplication(lifetime->handle()));}
     void cleanup(){const auto handle=lifetime->handle();handle.close();QVERIFY(handle.waitQt(std::chrono::seconds(5)));QVERIFY(AddonStreamLifetime::unregisterApplication(handle));lifetime.reset();QCOMPARE(AddonRepositoryJobs::processCount(),0u);}
-    void sevenRealBundlesPublishOnceOnTheOwner() {
+    void eightRealBundlesPublishOnceOnTheOwner() {
         QTemporaryDir profile;AddonManager manager(profile.path());QSignalSpy state(&manager,&AddonManager::distributionBootstrapChanged),revision(&manager,&AddonManager::revisionChanged);
         QList<DistributionBootstrapEntry> entries;
         for(const auto& item:QList<QPair<QString,QString>>{{"tvmaze","org.videolan.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
-            {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},{"radio-browser","org.hakone.radio-browser"},{"thesubtitledb","org.hakone.thesubtitledb"}})
+            {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},{"radio-browser","org.hakone.radio-browser"},{"thesubtitledb","org.hakone.thesubtitledb"},{"episodes","org.videolan.episodes"}})
             entries.append({item.second,QString{},QDir(QStringLiteral(HAKONE_STARTUP_SOURCE_ROOT "/contrib-addons/examples")).filePath(item.first)});
         connect(&manager,&AddonManager::distributionBootstrapChanged,this,[&]{QCOMPARE(QThread::currentThread(),manager.thread());});
         QVERIFY(manager.beginDistributionBootstrap(entries));QVERIFY(manager.distributionBootstrapInProgress());QCOMPARE(manager.distributionBootstrapGeneration(),quint64(1));QCOMPARE(revision.size(),0);
         QTRY_VERIFY_WITH_TIMEOUT(!manager.distributionBootstrapInProgress(),15000);QCOMPARE(state.size(),2);QCOMPARE(revision.size(),1);QCOMPARE(manager.distributionBootstrapGeneration(),quint64(2));
-        const auto results=manager.distributionBootstrapResults();QCOMPARE(results.size(),7);for(const auto& value:results){const auto row=value.toMap();QVERIFY2(row.value("success").toBool(),qPrintable(row.value("error").toString()));}
-        QCOMPARE(manager.packages().size(),7);QVERIFY(!manager.beginDistributionBootstrap(entries));
+        const auto results=manager.distributionBootstrapResults();QCOMPARE(results.size(),8);for(const auto& value:results){const auto row=value.toMap();QVERIFY2(row.value("success").toBool(),qPrintable(row.value("error").toString()));}
+        QCOMPARE(manager.packages().size(),8);QVERIFY(!manager.beginDistributionBootstrap(entries));
     }
     void suppressedPackageStaysAbsent() {
         QTemporaryDir profile;Packages packages;const auto id=QStringLiteral("org.hakone.suppressed"),directory=packages.make(id);QVERIFY(!directory.isEmpty());

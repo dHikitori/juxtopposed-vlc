@@ -35,7 +35,7 @@ from pathlib import Path
 
 BUNDLED = ('org.videolan.tvmaze', 'org.videolan.musicbrainz', 'org.videolan.lastfm',
            'org.videolan.french-tv', 'org.videolan.google-images',
-           'org.hakone.radio-browser', 'org.hakone.thesubtitledb')
+           'org.hakone.radio-browser', 'org.hakone.thesubtitledb', 'org.videolan.episodes')
 CLOCK = os.sysconf('SC_CLK_TCK')
 PAGE = os.sysconf('SC_PAGE_SIZE')
 

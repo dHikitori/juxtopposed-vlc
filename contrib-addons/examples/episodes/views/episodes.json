@@ -1,0 +1,266 @@
+{
+  "contract": "ui@1",
+  "id": "episodes",
+  "root": {
+    "type": "Page",
+    "children": [
+      {
+        "type": "Row",
+        "id": "controls",
+        "children": [
+          {
+            "type": "Heading",
+            "id": "show",
+            "text": {
+              "bind": "state.show"
+            }
+          },
+          {
+            "type": "Menu",
+            "id": "options",
+            "text": "Episode options",
+            "icon": "more",
+            "entries": [
+              {
+                "text": "Refresh",
+                "icon": "refresh",
+                "action": {
+                  "command": "org.videolan.episodes/refresh"
+                }
+              },
+              {
+                "text": "Choose series folder…",
+                "icon": "folder",
+                "visible": {
+                  "bind": "state.files"
+                },
+                "action": {
+                  "command": "org.videolan.episodes/refresh",
+                  "arguments": {
+                    "folder": true
+                  }
+                }
+              },
+              {
+                "text": "Choose series…",
+                "icon": "search",
+                "visible": {
+                  "bind": "state.files"
+                },
+                "action": {
+                  "command": "org.videolan.episodes/identify"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Tabs",
+        "id": "seasons",
+        "visible": {
+          "bind": "state.manySeasons"
+        },
+        "items": {
+          "bind": "state.seasons"
+        },
+        "selected": {
+          "bind": "state.season"
+        },
+        "text": "Seasons",
+        "action": {
+          "command": "org.videolan.episodes/season",
+          "arguments": {
+            "season": {
+              "bind": "item.tab.key"
+            }
+          }
+        }
+      },
+      {
+        "type": "Notice",
+        "id": "notice",
+        "visible": {
+          "bind": "state.hasNotice"
+        },
+        "text": {
+          "bind": "state.notice"
+        }
+      },
+      {
+        "type": "List",
+        "id": "episodes",
+        "items": {
+          "bind": "state.episodes"
+        },
+        "keyField": "key",
+        "scroll": false,
+        "emptyText": "No episodes found in this season.",
+        "more": {
+          "bind": "state.more"
+        },
+        "moreAction": {
+          "command": "org.videolan.episodes/more"
+        },
+        "moreText": "Show more episodes",
+        "itemTemplate": {
+          "type": "MediaRow",
+          "number": {
+            "bind": "item.number"
+          },
+          "title": {
+            "bind": "item.title"
+          },
+          "mark": {
+            "bind": "item.mark"
+          },
+          "progress": {
+            "bind": "item.progress"
+          },
+          "expanded": {
+            "bind": "item.expanded"
+          },
+          "artwork": {
+            "bind": "item.artwork"
+          },
+          "primaryAction": {
+            "command": "org.videolan.episodes/expand",
+            "arguments": {
+              "key": {
+                "bind": "item.key"
+              },
+              "open": {
+                "bind": "item.expanded"
+              }
+            }
+          },
+          "children": [
+            {
+              "type": "Text",
+              "id": "description",
+              "visible": {
+                "bind": "item.hasDescription"
+              },
+              "text": {
+                "bind": "item.description"
+              }
+            },
+            {
+              "type": "Tabs",
+              "id": "versions",
+              "visible": {
+                "bind": "item.multiple"
+              },
+              "items": {
+                "bind": "item.versions"
+              },
+              "selected": {
+                "bind": "item.version"
+              },
+              "text": "Episode version",
+              "action": {
+                "command": "org.videolan.episodes/expand",
+                "arguments": {
+                  "key": {
+                    "bind": "item.key"
+                  },
+                  "version": {
+                    "bind": "item.tab.key"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Text",
+              "id": "file",
+              "visible": {
+                "bind": "item.hasFile"
+              },
+              "text": {
+                "bind": "item.fileLabel"
+              }
+            },
+            {
+              "type": "Row",
+              "id": "actions",
+              "children": [
+                {
+                  "type": "Button",
+                  "id": "play",
+                  "text": {
+                    "bind": "item.playLabel"
+                  },
+                  "icon": "play-outline",
+                  "intent": "primary",
+                  "enabled": {
+                    "bind": "item.playEnabled"
+                  },
+                  "action": {
+                    "command": "org.videolan.episodes/play",
+                    "arguments": {
+                      "key": {
+                        "bind": "item.playKey"
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "IconButton",
+                  "id": "restart",
+                  "text": "Play from beginning",
+                  "icon": "replay",
+                  "action": {
+                    "command": "org.videolan.episodes/play",
+                    "arguments": {
+                      "key": {
+                        "bind": "item.playKey"
+                      },
+                      "fromStart": true
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "Button",
+              "id": "video",
+              "visible": {
+                "bind": "item.hasVideo"
+              },
+              "text": "Play video",
+              "icon": "video",
+              "action": {
+                "command": "org.videolan.episodes/play",
+                "arguments": {
+                  "key": {
+                    "bind": "item.videoKey"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Button",
+              "id": "source",
+              "visible": {
+                "bind": "item.hasSource"
+              },
+              "text": "Episode source",
+              "icon": "info",
+              "action": {
+                "command": "org.videolan.episodes/source",
+                "arguments": {
+                  "key": {
+                    "bind": "item.sourceKey"
+                  }
+                }
+              }
+            }
+          ],
+          "subtitle": {
+            "bind": "item.subtitle"
+          }
+        }
+      }
+    ]
+  }
+}

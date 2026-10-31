@@ -146,6 +146,7 @@ test_qt_addon_package_summaries                 ui          all
 test_qt_addon_theme                             ui          all
 test_qt_addon_ui_assets                         ui          all
 test_qt_addon_media_siblings                    ui          all
+addon_episodes_worker                           ui          meson
 test_qt_addon_ui_registry                       ui          all
 
 # session: shared playback sessions

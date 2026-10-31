@@ -105,6 +105,8 @@ void AddonMediaSiblings::answer(const AddonHostServices::Context& context, const
     QJsonArray seasonList;
     for (const auto& [number, count] : seasons) seasonList.append(QJsonObject{{"season", number}, {"count", count}});
     response.insert(QStringLiteral("seasons"), seasonList);
+    for (const auto& item : snapshot.items)
+        if (item.current) { response.insert(QStringLiteral("currentSeason"), item.season); break; }
     QList<const Item*> selected;
     for (const auto& item : snapshot.items) if (season == -2 || item.season == season) selected.append(&item);
     response.insert(QStringLiteral("total"), selected.size());

@@ -1596,7 +1596,6 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignBookmarks.qml \
 	player/qml/redesign/RedesignBookmarksView.qml \
 	player/qml/redesign/RedesignChaptersView.qml \
-	player/qml/redesign/RedesignEpisodesView.qml \
 	player/qml/redesign/RedesignSeriesMetadata.qml \
 	player/qml/redesign/RedesignQueuePanel.qml \
 	player/qml/redesign/RedesignLibrary.qml \
@@ -1649,6 +1648,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonTrackPreparation.qml \
 	player/qml/redesign/RedesignAddonView.qml \
 	player/qml/redesign/RedesignAddonMount.qml \
+	player/qml/redesign/RedesignAddonPanel.qml \
 	player/qml/redesign/RedesignAddonSections.qml \
 	player/qml/redesign/RedesignAddonSurface.qml \
 	player/qml/redesign/RedesignAddonReplacements.qml \
@@ -4046,8 +4046,6 @@ EXTRA_DIST += tests/tst_RedesignBookmarks.qml
 TESTS += tests/tst_RedesignBookmarks.qml
 EXTRA_DIST += tests/tst_RedesignChapters.qml
 TESTS += tests/tst_RedesignChapters.qml
-EXTRA_DIST += tests/tst_RedesignEpisodes.qml
-TESTS += tests/tst_RedesignEpisodes.qml
 EXTRA_DIST += tests/tst_RedesignLibrary.qml
 TESTS += tests/tst_RedesignLibrary.qml
 EXTRA_DIST += tests/tst_RedesignAddons.qml
@@ -4103,6 +4101,14 @@ addon_tvmazedir = $(datadir)/vlc/addons/reference/tvmaze
 addon_tvmaze_DATA = $(top_srcdir)/contrib-addons/examples/tvmaze/addon.json $(top_srcdir)/contrib-addons/examples/tvmaze/LICENSE $(top_srcdir)/contrib-addons/examples/tvmaze/NOTICE.md
 addon_tvmaze_distdir = $(datadir)/vlc/addons/reference/tvmaze/dist
 addon_tvmaze_dist_DATA = $(top_srcdir)/contrib-addons/examples/tvmaze/dist/addon.wasm
+addon_episodesdir = $(datadir)/vlc/addons/reference/episodes
+addon_episodes_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/episodes/,addon.json LICENSE NOTICE.md)
+addon_episodes_distdir = $(datadir)/vlc/addons/reference/episodes/dist
+addon_episodes_dist_DATA = $(top_srcdir)/contrib-addons/examples/episodes/dist/addon.wasm
+addon_episodes_viewsdir = $(datadir)/vlc/addons/reference/episodes/views
+addon_episodes_views_DATA = $(top_srcdir)/contrib-addons/examples/episodes/views/episodes.json
+addon_episodes_iconsdir = $(datadir)/vlc/addons/reference/episodes/icons
+addon_episodes_icons_DATA = $(top_srcdir)/contrib-addons/examples/episodes/icons/episodes.svg
 addon_musicbrainzdir = $(datadir)/vlc/addons/reference/musicbrainz
 addon_musicbrainz_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
 addon_musicbrainz_distdir = $(datadir)/vlc/addons/reference/musicbrainz/dist
@@ -4174,6 +4180,8 @@ EXTRA_DIST += tests/test_addon_metadata_family_plan.cpp tests/test_addon_native_
 EXTRA_DIST += tests/discovery-source/CMakeLists.txt tests/discovery-source/native_module_baseline.cpp \
 	tests/fixtures/addon_source_tls_fixture.hpp
 
+EXTRA_DIST += $(addon_episodes_DATA) $(addon_episodes_dist_DATA) $(addon_episodes_views_DATA) $(addon_episodes_icons_DATA) \
+    $(addprefix $(top_srcdir)/contrib-addons/examples/episodes/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/sample-state.json)
 EXTRA_DIST += $(addon_radio_browser_DATA) $(addon_radio_browser_dist_DATA) \
     $(addprefix $(top_srcdir)/contrib-addons/examples/radio-browser/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/native/CMakeLists.txt tests/native/live_probe.cpp)
 if ENABLE_QT

@@ -44,7 +44,7 @@ QList<DistributionBootstrapEntry> bundles()
     for(const auto& pair:QList<QPair<QString,QString>>{
         {"tvmaze","org.videolan.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
         {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},
-        {"radio-browser","org.hakone.radio-browser"},{"thesubtitledb","org.hakone.thesubtitledb"}})
+        {"radio-browser","org.hakone.radio-browser"},{"episodes","org.videolan.episodes"},{"thesubtitledb","org.hakone.thesubtitledb"}})
         result.append({pair.second,{},QDir(QStringLiteral(HAKONE_DISPLAY_SOURCE_ROOT "/contrib-addons/examples")).filePath(pair.first)});
     return result;
 }
@@ -96,7 +96,7 @@ std::optional<PackageSummarySnapshot> legacyReader(AddonManager& manager)
 }
 // These two tests exercise real Manager outer-ticket identity. Their display
 // reader is in memory so an unrelated concurrent store.lock cannot decide the
-// ABA result; the actual seven-package/store tests below keep real readers.
+// ABA result; the actual eight-package/store tests below keep real readers.
 AddonCatalogueView* ticketView(AddonManager* manager,AddonStreamLifetime::Handle lifetime)
 {
     const QPointer<AddonManager> owner(manager);
@@ -244,14 +244,14 @@ private slots:
         const auto presence=manager.credentialPresenceSnapshot().value(id);QVERIFY(presence.value(original));QVERIFY(!presence.contains(created));manager.releaseDisplayRequest(ticket);
     }
 #endif
-    void actualSevenBundleStartupHasFullLegacyRowParityAndMemoryFacades(){
+    void actualEightBundleStartupHasFullLegacyRowParityAndMemoryFacades(){
         QTemporaryDir profile;AddonManager manager(profile.path());manager.setWorkerExecutable(QStringLiteral("/bin/true"));
         QSignalSpy revision(&manager,&AddonManager::revisionChanged);
         QVERIFY(manager.beginDistributionBootstrap(bundles()));
         AddonCatalogueView view(&manager,lifetime->handle());AddonPackageSummaries summary(&manager,lifetime->handle());summary.refresh();
         QVERIFY(view.loading());QVERIFY(!view.isCurrent());QVERIFY(summary.loading());
         QTRY_VERIFY_WITH_TIMEOUT(!manager.distributionBootstrapInProgress() && view.isCurrent() && summary.isCurrent(),15000);
-        QCOMPARE(revision.size(),1);QCOMPARE(manager.distributionBootstrapResults().size(),7);QCOMPARE(view.rows().size(),7);
+        QCOMPARE(revision.size(),1);QCOMPARE(manager.distributionBootstrapResults().size(),8);QCOMPARE(view.rows().size(),8);
         for(const auto& value:manager.distributionBootstrapResults())QVERIFY2(value.toMap().value("success").toBool(),qPrintable(value.toMap().value("error").toString()));
         const auto baseline=legacyReader(manager);QVERIFY(baseline);QVERIFY(baseline->authority.current());
         QString error;QVERIFY2(sameLegacyRows(baseline->rows,view.rows(),&error),qPrintable(error));

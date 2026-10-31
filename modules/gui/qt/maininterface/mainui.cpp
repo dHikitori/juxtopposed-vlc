@@ -442,7 +442,8 @@ void MainUI::registerQMLTypes()
                     {QStringLiteral("french-tv"),QStringLiteral("org.videolan.french-tv")},
                     {QStringLiteral("google-images"),QStringLiteral("org.videolan.google-images")},
                     {QStringLiteral("radio-browser"),QStringLiteral("org.hakone.radio-browser")},
-                    {QStringLiteral("thesubtitledb"),QStringLiteral("org.hakone.thesubtitledb")}}) {
+                    {QStringLiteral("thesubtitledb"),QStringLiteral("org.hakone.thesubtitledb")},
+                    {QStringLiteral("episodes"),QStringLiteral("org.videolan.episodes")}}) {
                 bundledAddons.append({entry.second,
                     installedRoot.isEmpty()?QString():QDir(installedRoot).filePath(entry.first),
                     QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(entry.first)});

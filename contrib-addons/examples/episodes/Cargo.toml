@@ -1,0 +1,20 @@
+[package]
+name = "hakone-addon-episodes"
+version = "1.0.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+hakone-addon-message-v1 = { path = "../../sdk/message-v1" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true

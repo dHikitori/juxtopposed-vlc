@@ -76,6 +76,7 @@ private slots:
         QCOMPARE(seasons.size(), 2);
         QCOMPARE(seasons[0].toObject().value("season").toInt(), 1);
         QCOMPARE(seasons[0].toObject().value("count").toInt(), 3); // versions are not episodes
+        QCOMPARE(response.value("currentSeason").toInt(), 1);
         const auto items = response.value("items").toArray();
         QCOMPARE(items.size(), 5);
         const auto first = items[0].toObject();

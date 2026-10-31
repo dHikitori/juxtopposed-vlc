@@ -1,0 +1,211 @@
+{
+  "episodes": [
+    {
+      "artwork": "",
+      "description": "",
+      "expanded": false,
+      "fileLabel": "The.Wand.S01E09.mkv",
+      "hasDescription": false,
+      "hasFile": true,
+      "hasSource": false,
+      "hasVideo": false,
+      "key": "media:e9",
+      "mark": "",
+      "multiple": false,
+      "number": "9",
+      "playEnabled": true,
+      "playKey": "media:e9",
+      "playLabel": "Play",
+      "progress": 0.0,
+      "sourceKey": "",
+      "subtitle": "Watched",
+      "title": "Episode 9",
+      "version": "media:e9",
+      "versions": [
+        {
+          "key": "media:e9",
+          "label": "The.Wand.S01E09.mkv"
+        }
+      ],
+      "videoKey": ""
+    },
+    {
+      "artwork": "",
+      "description": "",
+      "expanded": false,
+      "fileLabel": "The.Wand.S01E10.mkv",
+      "hasDescription": false,
+      "hasFile": true,
+      "hasSource": false,
+      "hasVideo": false,
+      "key": "media:e10",
+      "mark": "",
+      "multiple": false,
+      "number": "10",
+      "playEnabled": true,
+      "playKey": "media:e10",
+      "playLabel": "Resume",
+      "progress": 1.0,
+      "sourceKey": "",
+      "subtitle": "Watched",
+      "title": "Glass",
+      "version": "media:e10",
+      "versions": [
+        {
+          "key": "media:e10",
+          "label": "The.Wand.S01E10.mkv"
+        }
+      ],
+      "videoKey": ""
+    },
+    {
+      "artwork": "media:e11",
+      "description": "Ronin follows a lead to the old harbour, where the wand's last owner waits.",
+      "expanded": true,
+      "fileLabel": "The.Wand.S01E11.mkv",
+      "hasDescription": true,
+      "hasFile": true,
+      "hasSource": true,
+      "hasVideo": false,
+      "key": "media:e11",
+      "mark": "Now playing",
+      "multiple": true,
+      "number": "11",
+      "playEnabled": false,
+      "playKey": "media:e11",
+      "playLabel": "Playing",
+      "progress": 0.35,
+      "sourceKey": "media:e11",
+      "subtitle": "",
+      "title": "Old Harbour",
+      "version": "media:e11",
+      "versions": [
+        {
+          "key": "media:e11",
+          "label": "The.Wand.S01E11.mkv"
+        },
+        {
+          "key": "media:e11b",
+          "label": "The.Wand.S01E11.1080p.mkv"
+        }
+      ],
+      "videoKey": ""
+    },
+    {
+      "artwork": "",
+      "description": "",
+      "expanded": false,
+      "fileLabel": "The.Wand.S01E12.mkv",
+      "hasDescription": false,
+      "hasFile": true,
+      "hasSource": false,
+      "hasVideo": false,
+      "key": "media:e12",
+      "mark": "",
+      "multiple": false,
+      "number": "12",
+      "playEnabled": true,
+      "playKey": "media:e12",
+      "playLabel": "Play",
+      "progress": 0.0,
+      "sourceKey": "",
+      "subtitle": "",
+      "title": "Episode 12",
+      "version": "media:e12",
+      "versions": [
+        {
+          "key": "media:e12",
+          "label": "The.Wand.S01E12.mkv"
+        }
+      ],
+      "videoKey": ""
+    },
+    {
+      "artwork": "",
+      "description": "",
+      "expanded": false,
+      "fileLabel": "The.Wand.S01E13.mkv",
+      "hasDescription": false,
+      "hasFile": true,
+      "hasSource": false,
+      "hasVideo": false,
+      "key": "media:e13",
+      "mark": "",
+      "multiple": false,
+      "number": "13",
+      "playEnabled": true,
+      "playKey": "media:e13",
+      "playLabel": "Play",
+      "progress": 0.0,
+      "sourceKey": "",
+      "subtitle": "",
+      "title": "Ashes",
+      "version": "media:e13",
+      "versions": [
+        {
+          "key": "media:e13",
+          "label": "The.Wand.S01E13.mkv"
+        }
+      ],
+      "videoKey": ""
+    },
+    {
+      "artwork": "",
+      "description": "",
+      "expanded": false,
+      "fileLabel": "The.Wand.S01E14.mkv",
+      "hasDescription": false,
+      "hasFile": true,
+      "hasSource": false,
+      "hasVideo": false,
+      "key": "media:e14",
+      "mark": "",
+      "multiple": false,
+      "number": "14",
+      "playEnabled": true,
+      "playKey": "media:e14",
+      "playLabel": "Play",
+      "progress": 0.0,
+      "sourceKey": "",
+      "subtitle": "",
+      "title": "Return",
+      "version": "media:e14",
+      "versions": [
+        {
+          "key": "media:e14",
+          "label": "The.Wand.S01E14.mkv"
+        }
+      ],
+      "videoKey": ""
+    }
+  ],
+  "expanded": "",
+  "files": true,
+  "hasNotice": false,
+  "kind": "folder",
+  "manySeasons": true,
+  "more": false,
+  "notice": "",
+  "pages": 1,
+  "revision": 1.0,
+  "season": 1,
+  "seasonLabel": "Season 1",
+  "seasons": [
+    {
+      "key": 0,
+      "label": "Specials"
+    },
+    {
+      "key": 1,
+      "label": "Season 1"
+    },
+    {
+      "key": 2,
+      "label": "Season 2"
+    }
+  ],
+  "show": "The Wand",
+  "status": "ready",
+  "version": "",
+  "versionEpisode": ""
+}

@@ -8,6 +8,8 @@
 #include "addons/addon_discovery_coordinator.hpp"
 #include "addons/addon_manifest.hpp"
 #include "addons/addon_result_retention.hpp"
+#include "addons/addon_panel_icon.hpp"
+#include "addons/addon_ui_registry.hpp"
 #include "addons/addon_visual_scene.hpp"
 #include <QDir>
 #include <QFile>
@@ -184,6 +186,31 @@ private slots:
         const QJsonObject page{{"items", QJsonArray{QJsonObject{{"id", "a"}, {"kind", "media"}, {"title", "A"}}}}, {"revision", "r1\n"}};
         QVERIFY(!accepted(QStringLiteral("discovery-page"), page, {}, &detail));
         QCOMPARE(detail, QStringLiteral("revision dropped"));
+    }
+    // The bundled Episodes package and the sample state its renderer makes
+    // (examples/episodes/tests/sample-state.json) pass the app's own rules.
+    void theEpisodesPackageAgreesWithTheApp()
+    {
+        const QDir package(Root + QStringLiteral("/contrib-addons/examples/episodes"));
+        QFile file(package.filePath(QStringLiteral("addon.json"))); QVERIFY(file.open(QIODevice::ReadOnly));
+        Manifest manifest; QString error;
+        QVERIFY2(Manifest::parse(file.readAll(), &manifest, &error), qPrintable(error));
+        const auto* panel = manifest.contribution(QStringLiteral("episodes"));
+        QVERIFY(panel && panel->type == QLatin1String("ui.panel"));
+        QJsonArray commands;
+        for (const auto& contribution : manifest.contributions)
+            if (contribution.type == QLatin1String("ui.command")) commands.append(manifest.id + QLatin1Char('/') + contribution.id);
+        const auto view = read(package.filePath(QStringLiteral("views/episodes.json")));
+        QVERIFY(AddonUiRegistry::validViewDocument(view));
+        QVERIFY(loadUi());
+        QCOMPARE(callUi(QStringLiteral("validateView"), {view, commands}), QString());
+        const auto state = read(package.filePath(QStringLiteral("tests/sample-state.json")));
+        QVERIFY(!state.isEmpty());
+        QVERIFY(validateUiValue(panel->document.value("stateSchema").toObject(), state));
+        QCOMPARE(callUi(QStringLiteral("validateProjection"), {view.value("root"), state, QJsonValue(), QJsonObject{}}), QString());
+        QCOMPARE(callUi(QStringLiteral("validateProjection"), {view.value("root"), panel->document.value("state"), QJsonValue(), QJsonObject{}}), QString());
+        QFile icon(package.filePath(QStringLiteral("icons/episodes.svg"))); QVERIFY(icon.open(QIODevice::ReadOnly));
+        QVERIFY(panelIcon::markup(icon.readAll()).contains(QStringLiteral("COLOR")));
     }
     void corpus()
     {

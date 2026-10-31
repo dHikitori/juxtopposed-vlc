@@ -1129,7 +1129,6 @@ qml_modules += {
        'player/qml/redesign/RedesignBookmarks.qml',
        'player/qml/redesign/RedesignBookmarksView.qml',
        'player/qml/redesign/RedesignChaptersView.qml',
-       'player/qml/redesign/RedesignEpisodesView.qml',
        'player/qml/redesign/RedesignSeriesMetadata.qml',
        'player/qml/redesign/RedesignQueuePanel.qml',
        'player/qml/redesign/RedesignLibrary.qml',
@@ -1513,7 +1512,6 @@ qml_tests = {
     'tst_RedesignIconSizing': files('tests/tst_RedesignIconSizing.qml'),
     'tst_RedesignBookmarks': files('tests/tst_RedesignBookmarks.qml'),
     'tst_RedesignChapters': files('tests/tst_RedesignChapters.qml'),
-    'tst_RedesignEpisodes': files('tests/tst_RedesignEpisodes.qml'),
     'tst_RedesignNetwork': files('tests/tst_RedesignNetwork.qml'),
     'tst_RedesignPlaylist': files('tests/tst_RedesignPlaylist.qml'),
     'tst_RedesignPlaylistProperties': files('tests/tst_RedesignPlaylistProperties.qml'),
@@ -1628,6 +1626,10 @@ if qt6_dep.found()
         install_data(meson.project_source_root() / 'contrib-addons/examples/radio-browser' / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/radio-browser' / fs.parent(addon_resource))
     endforeach
+    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm', 'views/episodes.json', 'icons/episodes.svg']
+        install_data(meson.project_source_root() / 'contrib-addons/examples/episodes' / addon_resource,
+            install_dir: get_option('datadir') / 'vlc/addons/reference/episodes' / fs.parent(addon_resource))
+    endforeach
     if addon_worker_dependencies != [] and not meson.is_cross_build()
         test('addon_radio_browser_worker', prog_python,
             args: ['-B', meson.project_source_root() / 'contrib-addons/examples/radio-browser/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
@@ -1635,6 +1637,9 @@ if qt6_dep.found()
         test('addon_tvmaze_worker', prog_python,
             args: ['-B', meson.project_source_root() / 'contrib-addons/examples/tvmaze/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
             depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_tvmaze_worker']], timeout: 90)
+        test('addon_episodes_worker', prog_python,
+            args: ['-B', meson.project_source_root() / 'contrib-addons/examples/episodes/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
+            depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_episodes_worker']], timeout: 90)
         # Each core Lua artwork script against its add-on; skipped without Lua 5.4.
         addon_parity_lua = find_program('lua5.4', 'lua', required: false)
         test('addon_artwork_parity', prog_python,
