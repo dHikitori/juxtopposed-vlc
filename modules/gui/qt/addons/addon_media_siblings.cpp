@@ -116,6 +116,7 @@ void AddonMediaSiblings::answer(const AddonHostServices::Context& context, const
         if (selected[index]->current) { response.insert(QStringLiteral("currentOffset"), index); break; }
     QJsonArray items;
     auto& artwork = m_artwork[context.package];
+    const auto artworkBefore = artwork;
     if (artwork.size() > 4096) artwork.clear();
     for (const auto* item : selected.mid(offset, limit)) {
         const auto id = opaque(context.package, item->url);
@@ -152,7 +153,13 @@ void AddonMediaSiblings::answer(const AddonHostServices::Context& context, const
         detailList.append(detail);
     }
     response.insert(QStringLiteral("details"), detailList);
+    // The view resolves the handles in this reply from artwork(): tell it.
+    // The package's answer arrives later, from the worker.
+    const bool artworkChanged = artwork != artworkBefore;
+    if (artworkChanged) ++m_artworkRevision;
+    const QPointer<AddonMediaSiblings> alive(this);
     done({response, {}});
+    if (alive && artworkChanged) emit this->artworkChanged();
 }
 
 const AddonMediaSiblings::Item* AddonMediaSiblings::find(const Snapshot& snapshot, const QString& package, const QString& id) const

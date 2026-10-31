@@ -27,6 +27,9 @@ class AddonMediaSiblings final : public QObject
     Q_OBJECT
     // Changes when the source changes; the app then refreshes open panels.
     Q_PROPERTY(int revision READ revision NOTIFY changed FINAL)
+    // Changes when a package's artwork map (artwork()) gains or changes an
+    // entry, so a view that resolves media: handles reads it again.
+    Q_PROPERTY(int artworkRevision READ artworkRevision NOTIFY artworkChanged FINAL)
 public:
     struct Item {
         QUrl url;
@@ -59,6 +62,7 @@ public:
     ~AddonMediaSiblings() override;
     bool mount(AddonHostServices*, Source);
     int revision() const { return m_revision; }
+    int artworkRevision() const { return m_artworkRevision; }
 
     // A play, rescan or identify effect from AddonUiRegistry::panelEffect.
     // Only a package that read the siblings can ask, and only for an ID that
@@ -74,6 +78,7 @@ public slots:
 
 signals:
     void changed();
+    void artworkChanged();
     void playRequested(const QUrl& url, int feedIndex, int version, bool fromStart);
     void rescanRequested(bool chooseFolder);
     void identifyRequested();
@@ -97,6 +102,7 @@ private:
     QList<Waiting> m_waiting;
     quint64 m_nextWait = 0;
     int m_revision = 0;
+    int m_artworkRevision = 0;
     std::shared_ptr<bool> m_alive;
 };
 }

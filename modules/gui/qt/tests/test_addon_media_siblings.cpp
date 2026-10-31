@@ -105,6 +105,29 @@ private slots:
         QCOMPARE(artwork.value(first.value("id").toString()).toString(), QStringLiteral("image://thumbnail/101"));
         QVERIFY(siblings->artwork(QStringLiteral("org.example.three")).isEmpty());
     }
+    void artworkThatArrivesLaterReachesTheView()
+    {
+        // An episode without a thumbnail asks the app for one. When it
+        // arrives, the next read puts it in the view's map and says so, or
+        // the open row keeps its placeholder.
+        m_snapshot.items[1].artwork.clear();
+        AddonHostServices services; auto siblings = mount(services); QVERIFY(siblings);
+        QSignalSpy changed(siblings.get(), &Siblings::artworkChanged);
+        const auto id = run(services, {}).result.response.value("items").toArray()[1].toObject().value("id").toString();
+        const auto before = siblings->artworkRevision();
+        const QJsonObject request{{"limit", 1}, {"details", QJsonArray{id}}};
+        QVERIFY(!run(services, request).result.response.value("details").toArray()[0].toObject().contains("artwork"));
+        QCOMPARE(m_artwork, QList<QUrl>{m_snapshot.items[1].url});
+        QCOMPARE(changed.count(), 0);
+        m_snapshot.items[1].artwork = QStringLiteral("image://thumbnail/new");
+        QCOMPARE(run(services, request).result.response.value("details").toArray()[0].toObject().value("artwork").toString(), id);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(siblings->artworkRevision(), before + 1);
+        QCOMPARE(siblings->artwork(QStringLiteral("org.example.one")).value(id).toString(), QStringLiteral("image://thumbnail/new"));
+        // The same artwork again changes nothing.
+        run(services, request);
+        QCOMPARE(changed.count(), 1);
+    }
     void filtersPagesAndChecksTheRequest()
     {
         AddonHostServices services; auto siblings = mount(services); QVERIFY(siblings);

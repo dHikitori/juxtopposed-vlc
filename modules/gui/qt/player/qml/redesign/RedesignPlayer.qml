@@ -702,7 +702,7 @@ FocusScope {
                 hostArtwork: {
                     const siblings = rootPlayer.mediaSiblings
                     if (!siblings || !entry) return ({})
-                    siblings.revision
+                    siblings.artworkRevision
                     return siblings.artwork(entry.packageId)
                 }
                 scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
