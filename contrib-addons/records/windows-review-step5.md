@@ -187,3 +187,28 @@ Open Tools › Messages and set verbosity to 2 (debug) for checks 4 and 5.
 
 Step 5 exits when you confirm these checks, or when a failing check has a
 specific defect and a way to reproduce it.
+
+## Final package (Steps 6 and 7)
+
+Package `42503bc586` (clean tree): `vlc.exe`
+`b1a42a8fbc2db33cba9a1c85ff7f7d8c7d50c8ba5704c7436b1bfc52dd1eebb5`,
+`libqt_plugin.dll`
+`a3b5a1557b43f69cb9b2c721ec1ef221ca8dc072ab57afa1af04bb61ff66c3da`.
+It adds every Step 6 row and the Step 7 host fixes. The checks from the
+fourth run (Add Subtitles, Radio Browser, settings, theme, artwork, radio
+loading) apply again. New checks:
+
+1. **Identity choice.** Play an episode, then Episodes › Episode options ›
+   "Choose series…". Pick a series; the episode titles follow it.
+2. **TVMaze 0.3.0.** Extensions shows the bundled update. Episode titles
+   still appear, and come back after a restart without a new lookup.
+3. **Settings.** Open TheSubtitleDB settings; Save and Cancel work. A field
+   with a folder control (none bundled) is covered by tests only.
+4. **Temporary settings.** Change a TheSubtitleDB setting and select "Use
+   until the app closes". The note shows; "Stop temporary settings" removes
+   it; a restart forgets it.
+5. **Discovery.** Open Radio Browser. A root page loads without a freeze.
+   If Play and Enqueue are available for the source, "Keep the queue
+   filled" is not shown for Radio Browser (it has no suggestions); the
+   fixture source in tests covers it.
+6. **Owner on** (optional): start with `--metadata-native-owner` as before.
