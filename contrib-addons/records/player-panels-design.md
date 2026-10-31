@@ -313,6 +313,9 @@ bundling) and `54cc3444cc` (instruction budget). The author guide is
 - **media.siblings.** `addon_media_siblings.*`, mounted on an app-owned
   `SeriesModel` (`redesignSeriesModel`). The series is looked for only
   while an enabled panel can read it (`siblingsWanted`).
+  `SeriesModel` is a plain object with the scan, watch states, titles,
+  artwork and `siblings()`; the season list and rows of the removed view
+  are gone, and `test_qt_series_model` checks `siblings()`.
 - **Episodes package.** `examples/episodes`, version 1.0.0, bundled and on
   by default. The built-in `RedesignEpisodesView.qml` is removed.
 
@@ -370,6 +373,6 @@ Two QML results fail on the commit before this work as well:
 - Text in the package's state and view is English only. A state message
   with arguments, or the app's locale in the invocation, would let the
   package translate it.
-- `SeriesModel` still has the season list and roles of the removed view;
-  only `siblings()` and the scan are used now.
+- `test_qt_addon_ui_registry` takes about 26 s of meson's 30 s limit and
+  times out when the `ui` label runs in parallel (passes alone).
 
