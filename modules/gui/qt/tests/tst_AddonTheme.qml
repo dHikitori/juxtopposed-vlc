@@ -51,6 +51,14 @@ TestCase {
         delete invalid.variants.dark.colors["qml.source"]
         invalid.variants.dark.source = "file:///tmp/evil.qml"
         verify(Theme.validate(invalid).length > 0)
+        theme.document = invalid
+        verify(!theme.valid)
+        delete invalid.variants.dark.source
+        invalid.variants.dark.colors["text.primary"] = function() { return "#ffffff" }
+        verify(Theme.validate(invalid).length > 0)
+        theme.document = invalid
+        verify(!theme.valid)
+        compare(theme.snapshot.colors["surface.base"], "#1b1b1b")
     }
     function test_shapeAndTransparencyBounds() {
         for (const radius of [-1, 13, 100000]) {
