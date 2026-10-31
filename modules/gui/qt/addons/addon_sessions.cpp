@@ -176,7 +176,7 @@ void AddonSessions::execute(const QString& request)
     if (!m_pending.contains(request)) return;
     const auto pending = m_pending.value(request); auto error = validate(pending.package, pending.lease, pending.command);
     if (error.isEmpty() && pending.command.value("atUs").toLongLong() < now() - 200000)
-        error = tr("The command time limit was reached.");
+        error = tr("The command took too long.");
     if (!error.isEmpty()) { finish(request, QStringLiteral("rejected"), error); return; }
     const auto operation = pending.command.value("operation").toString(); const auto parameters = pending.command.value("parameters").toMap();
     if (operation == QLatin1String("setRate")) {

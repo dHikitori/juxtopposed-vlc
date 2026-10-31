@@ -750,7 +750,7 @@ TestCase {
         compare(probe.stateText(Object.assign({}, row, {enabled: false})), "Disabled")
         const known = Object.assign({}, row, {configurationKnown: true})
         summary.rows = [known]; wait(20)
-        compare(probe.stateText(known), "Setup required"); compare(button.caption, "Set up…")
+        compare(probe.stateText(known), "Set up first"); compare(button.caption, "Set up…")
         compare(manager.settingsSaves, 0); compare(manager.enableRequests, 0)
     }
 

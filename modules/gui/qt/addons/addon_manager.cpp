@@ -280,7 +280,7 @@ bool AddonManager::saveDisplaySettings(const QString& id,const QString& expected
 }
 bool AddonManager::saveSettingsImpl(const QString& id,const QVariantMap& input,const QVariantMap& secretOperations,const QString& expectedStamp)
 {
-    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
+    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
     InstalledPackage package; QString error;
     if (!m_store.installed(id, &package, &error)) return changed(false, error);
     const auto document = schema(package), properties = document.value("properties").toObject();
@@ -784,7 +784,7 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
     if (m_withdrawingPackages.contains(packagePart(global)))
         return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on is not available."); return result; };
     if (m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
-        return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on is being removed."); return result; };
+        return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on removal is in progress."); return result; };
     // This preparation reads memory only. The detached reader owns no QObject.
     const auto store = m_store;
     const auto presence = m_secrets.presenceSnapshot();
@@ -941,7 +941,7 @@ QVariantList AddonManager::providersForFeature(const QString& feature) const
                 {"enabled", package.enabled}, {"configured", configured(package)}, {"features", contribution.features},
                 {"operations", contribution.operations},
                 {"accountReference", account},
-                {"mediaKinds", contribution.mediaKinds}, {"status", !package.enabled ? tr("Disabled") : configured(package) ? tr("Ready") : tr("Setup required")},
+                {"mediaKinds", contribution.mediaKinds}, {"status", !package.enabled ? tr("Disabled") : configured(package) ? tr("Ready") : tr("Set up first")},
                 {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + ':' + QString::number(settingsRevision) + sessionPartition(id))}});
         }
     }
@@ -1008,7 +1008,7 @@ bool AddonManager::stageLocalPackage(const QString& directory)
 }
 bool AddonManager::ensureDistributionPackage(const QString& directory,const QString& expectedPackageId)
 {
-    if(m_distributionBootstrapInProgress)return changed(false,tr("The app is preparing the bundled add-ons. Try again after it finishes."));
+    if(m_distributionBootstrapInProgress)return changed(false,tr("The app prepares the bundled add-ons. Try again after it finishes."));
     const auto result=distributionBootstrap::ensure(m_store,directory,expectedPackageId,
         m_distributionPackages.value(expectedPackageId).value(QStringLiteral("source")).toString());
     if(!result.offer.isEmpty()) {
@@ -1236,7 +1236,7 @@ bool AddonManager::installLocalPackage(const QString& directory, bool approve)
 }
 bool AddonManager::setEnabled(const QString& id, bool enabled)
 {
-    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
+    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
     bool builtin = false;
     for (const auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) builtin = true;
     if (builtin) {
@@ -1254,7 +1254,7 @@ bool AddonManager::setEnabled(const QString& id, bool enabled)
         [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, id, enabled, e); }, &error), error);
 }
 bool AddonManager::rollback(const QString& id)
-{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
+{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
   QString error; if (!withdraw(id)) return false;
   m_crashes.remove(id);
   return changed(m_store.change([&](QString* e) { return m_store.rollback(id, e); },
@@ -1269,7 +1269,7 @@ bool AddonManager::setSafeMode(bool enabled)
     return changed(true);
 }
 bool AddonManager::recoverPackage(const QString& id)
-{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on is being removed."));
+{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
   QString error; if (!withdraw(id)) return false;
   m_crashes.remove(id);
   return changed(m_store.change([&](QString* e) { return m_store.recover(id, e); },
@@ -1536,7 +1536,7 @@ QString AddonManager::invoke(const QString& contributionId, const QString& opera
                 policy.value_or(QSet<int>{})})) {
             attempt->blocked(); const auto request = QUuid::createUuid().toString(QUuid::WithoutBraces);
             QTimer::singleShot(0, this, [this, request, contributionId] {
-                emit operationFinished(request, contributionId, QStringLiteral("denied"), {}, tr("The metadata attempt is not available."));
+                emit operationFinished(request, contributionId, QStringLiteral("denied"), {}, tr("The metadata request is not available."));
             });
             return request;
         }

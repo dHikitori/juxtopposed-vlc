@@ -34,7 +34,7 @@ AddonQueueTransactions::~AddonQueueTransactions()
 }
 bool AddonQueueTransactions::validReference(const QVariantMap& reference)
 {
-    static const QRegularExpression source(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}$"));
+    static const QRegularExpression source(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}\\z"));
     if (reference.value("format").toString() != QLatin1String("hakone-addon-source-v1")
         || !source.match(reference.value("source").toString()).hasMatch()
         || !boundedIdentifier(reference.value("itemId")) || !boundedIdentifier(reference.value("accountReference"))
@@ -80,7 +80,7 @@ QString AddonQueueTransactions::start(Transaction transaction, const Snapshot& e
         error = tr("The queue transaction is larger than the limit.");
     else if (!expected.available || expected.identity.isEmpty() || !current.available || current.identity != expected.identity || current.revision != expected.revision)
         error = tr("The destination changed. Select the items again.");
-    else if (playing ? (stableReference ? !referencePlayAvailable() : !playAvailable() || !QRegularExpression(QStringLiteral("^[A-Za-z0-9_.:-]{1,256}$")).match(transaction.playbackHandle).hasMatch()) : !appendAvailable())
+    else if (playing ? (stableReference ? !referencePlayAvailable() : !playAvailable() || !QRegularExpression(QStringLiteral("^[A-Za-z0-9_.:-]{1,256}\\z")).match(transaction.playbackHandle).hasMatch()) : !appendAvailable())
         error = tr("This host cannot apply the discovery action.");
     else for (const auto& reference : transaction.references) if (reference.metaType().id() != QMetaType::QVariantMap || !validReference(reference.toMap())) {
         error = tr("A discovery item reference is not correct."); break;

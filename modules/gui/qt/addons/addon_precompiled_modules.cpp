@@ -31,7 +31,7 @@ QString workerKey(const QString& executable)
 }
 bool releaseDigest(const QString& digest)
 {
-    static const QRegularExpression valid(QStringLiteral("^[0-9a-f]{64}$"));
+    static const QRegularExpression valid(QStringLiteral("^[0-9a-f]{64}\\z"));
     return valid.match(digest).hasMatch();
 }
 QString entry(const QString& directory, const QString& executable, const InstalledPackage& package)
@@ -61,7 +61,7 @@ QStringList arguments(const QString& directory, const QString& executable, const
     QByteArray digest;
     if (sidecar.open(QIODevice::ReadOnly))
         digest = sidecar.read(65).trimmed();
-    static const QRegularExpression valid(QStringLiteral("^[0-9a-f]{64}$"));
+    static const QRegularExpression valid(QStringLiteral("^[0-9a-f]{64}\\z"));
     if (!valid.match(QString::fromLatin1(digest)).hasMatch() || !QFileInfo::exists(base + QStringLiteral(".cwasm"))) {
         if (missing)
             *missing = true;

@@ -52,7 +52,7 @@ bool valueValid(const QJsonValue& value, const QJsonObject& field)
     if (text.size() < field.value("minLength").toInt(0) || text.size() > qMin(4096, field.value("maxLength").toInt(4096))) return false;
     if (pattern.isEmpty()) return true;
     if (pattern != QLatin1String("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$") || text.size() > 64) return false;
-    static const QRegularExpression language(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"));
+    static const QRegularExpression language(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*\\z"));
     return language.match(text).hasMatch();
 }
 AddonUiAssets::Options profile()

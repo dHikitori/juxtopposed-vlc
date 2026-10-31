@@ -118,7 +118,7 @@ bool identity(const QJsonObject& value)
                     || id.size() != 3 || !id[QStringLiteral("namespace")].isString() || !id[QStringLiteral("scope")].isString()
                     || !id[QStringLiteral("value")].isString() || !atom(id[QStringLiteral("namespace")].toString(), 32)
                     || !atom(id[QStringLiteral("scope")].toString(), 32) || !atom(id[QStringLiteral("value")].toString(), 256)) return false;
-                static const QRegularExpression idAtom(QStringLiteral("^[a-z][a-z0-9._-]{0,31}$"));
+                static const QRegularExpression idAtom(QStringLiteral("^[a-z][a-z0-9._-]{0,31}\\z"));
                 if (!idAtom.match(id[QStringLiteral("namespace")].toString()).hasMatch()
                     || !idAtom.match(id[QStringLiteral("scope")].toString()).hasMatch()) return false;
             }
@@ -145,7 +145,7 @@ bool identity(const QJsonObject& value)
                     || (value.contains(QStringLiteral("episodes")) && value.value(QStringLiteral("episodes")) != episode.value(QStringLiteral("episodes")))) return false;
             } else if (scheme == QLatin1String("absolute")) {
                 const auto absolute = episode[QStringLiteral("number")];
-                if (episode.size() != 2 || !absolute.isString() || !QRegularExpression(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?$")).match(absolute.toString()).hasMatch()) return false;
+                if (episode.size() != 2 || !absolute.isString() || !QRegularExpression(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?\\z")).match(absolute.toString()).hasMatch()) return false;
                 if (value.contains(QStringLiteral("absoluteEpisode")) && !value.value(QStringLiteral("absoluteEpisode")).toString().isEmpty()
                     && value.value(QStringLiteral("absoluteEpisode")) != absolute) return false;
             } else if (scheme == QLatin1String("air-date")) {
@@ -166,7 +166,7 @@ bool identity(const QJsonObject& value)
             if (key == QLatin1String("airDate") && !it.value().toString().isEmpty()
                 && !QDate::fromString(it.value().toString(), Qt::ISODate).isValid()) return false;
             if (key == QLatin1String("absoluteEpisode") && !it.value().toString().isEmpty()
-                && !QRegularExpression(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?$")).match(it.value().toString()).hasMatch()) return false;
+                && !QRegularExpression(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?\\z")).match(it.value().toString()).hasMatch()) return false;
         }
     }
     return true;

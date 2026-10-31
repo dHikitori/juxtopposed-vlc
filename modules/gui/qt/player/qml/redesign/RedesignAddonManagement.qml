@@ -142,7 +142,7 @@ ColumnLayout {
     }
     function stateText(row) {
         return row.removing === true ? qsTr("Removal in progress") : safeMode ? qsTr("Temporarily disabled")
-            : row.configured === false && row.configurationKnown !== false ? row.enabled === true ? qsTr("Setup required") : qsTr("Disabled · Setup required")
+            : row.configured === false && row.configurationKnown !== false ? row.enabled === true ? qsTr("Set up first") : qsTr("Disabled · Set up first")
             : row.enabled === true ? [qsTr("Enabled"), healthText(row)].filter(value => value.length > 0).join(" · ") : qsTr("Disabled")
     }
     // Worker crashes in this app window. The third crash in five minutes turns
@@ -210,7 +210,7 @@ ColumnLayout {
                 summaries.push(actions.length ? qsTr("Change the play queue: %1.").arg(actions.join(", ")) : qsTr("Change the play queue with its approved actions."))
                 break
             }
-            case "playback.observe": summaries.push(qsTr("Observe playback status, position and timing.")); break
+            case "playback.observe": summaries.push(qsTr("Observe playback status, position and time.")); break
             case "playback.control": {
                 const actions = [...new Set((scope.operations || []).map(operation => playbackActions[operation]).filter(Boolean))]
                 summaries.push(actions.length ? qsTr("Control playback: %1.").arg(actions.join(", ")) : qsTr("Control playback with its approved actions."))

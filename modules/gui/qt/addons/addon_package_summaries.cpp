@@ -162,7 +162,7 @@ void AddonPackageSummaries::completed(quint64 generation,
         m_snapshot.swap(*result); m_publishedGeneration = generation; m_error.clear();
         publish(generation, true, true);
     } else {
-        m_error = tr("The add-on list changed or could not be read. Try again.");
+        m_error = tr("The add-on list changed, or the app cannot read it. Try again.");
         publish(generation, true, false);
     }
 }

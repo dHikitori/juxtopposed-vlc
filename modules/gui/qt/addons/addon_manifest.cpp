@@ -78,7 +78,7 @@ bool positiveInteger(const QJsonValue& value, int* output)
 bool safeSource(const QUrl& url)
 {
     return url.isValid() && url.scheme() == QStringLiteral("https") && !url.host().isEmpty()
-        && url.userInfo().isEmpty() && !url.hasQuery() && !url.hasFragment();
+        && (url.userInfo().isEmpty() && !url.authority().contains(QLatin1Char('@'))) && !url.hasQuery() && !url.hasFragment();
 }
 QString originForUrl(const QUrl& url)
 {
@@ -161,9 +161,9 @@ bool permissions(const QJsonObject& value, QString* error)
                     || !text(binding, "field", &field, error) || !text(binding, "origin", &origin, error)
                     || !text(binding, "header", &header, error)) return false;
                 const bool websocket=QUrl(origin,QUrl::StrictMode).scheme()==QLatin1String("wss");
-                if (!QRegularExpression(QStringLiteral("^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")).match(field).hasMatch()
+                if (!QRegularExpression(QStringLiteral("^[a-zA-Z][a-zA-Z0-9_-]{0,63}\\z")).match(field).hasMatch()
                     || (websocket ? exactWssOrigin(origin).isEmpty() : exactHttpsOrigin(origin).isEmpty())
-                    || !QRegularExpression(QStringLiteral("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$")).match(header).hasMatch()
+                    || !QRegularExpression(QStringLiteral("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}\\z")).match(header).hasMatch()
                     || names.contains(field + QLatin1Char('/') + origin + QLatin1Char('/') + header.toLower()))
                     return fail(error, QStringLiteral("A credential binding is not correct or occurs more than once."));
                 const auto protectedHeaders = QSet<QString>{"host", "connection", "content-length", "transfer-encoding", "proxy-authorization"};
@@ -192,7 +192,7 @@ bool requiredResource(const QString& value, const QStringList& files, QString* e
 
 bool SemanticVersion::parse(const QString& value, SemanticVersion* output)
 {
-    static const QRegularExpression expression(QStringLiteral("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"));
+    static const QRegularExpression expression(QStringLiteral("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?\\z"));
     const auto match = expression.match(value);
     if (!match.hasMatch() || value.size() > 128) return false;
     SemanticVersion parsed; bool ok = false;
@@ -201,7 +201,7 @@ bool SemanticVersion::parse(const QString& value, SemanticVersion* output)
     parsed.patch = match.captured(3).toULongLong(&ok); if (!ok) return false;
     parsed.prerelease = match.captured(4);
     for (const auto& part : parsed.prerelease.split(QLatin1Char('.'))) {
-        if (part.size() > 1 && part.startsWith(QLatin1Char('0')) && QRegularExpression(QStringLiteral("^[0-9]+$")).match(part).hasMatch()) return false;
+        if (part.size() > 1 && part.startsWith(QLatin1Char('0')) && QRegularExpression(QStringLiteral("^[0-9]+\\z")).match(part).hasMatch()) return false;
     }
     if (output) *output = parsed;
     return true;
@@ -214,7 +214,7 @@ int SemanticVersion::compare(const SemanticVersion& other) const
     if (prerelease.isEmpty()) return 1;
     if (other.prerelease.isEmpty()) return -1;
     const auto a = prerelease.split(QLatin1Char('.')), b = other.prerelease.split(QLatin1Char('.'));
-    const QRegularExpression digits(QStringLiteral("^[0-9]+$"));
+    const QRegularExpression digits(QStringLiteral("^[0-9]+\\z"));
     for (int i = 0; i < std::min(a.size(), b.size()); ++i) {
         if (a[i] == b[i]) continue;
         const bool an = digits.match(a[i]).hasMatch(), bn = digits.match(b[i]).hasMatch();
@@ -286,7 +286,7 @@ QString exactHttpsOrigin(const QString& value)
 QString exactWssOrigin(const QString& value)
 {
     const QUrl url(value,QUrl::StrictMode);
-    if (!url.isValid() || url.scheme()!=QLatin1String("wss") || url.host().isEmpty() || !url.userInfo().isEmpty()
+    if (!url.isValid() || url.scheme()!=QLatin1String("wss") || url.host().isEmpty() || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@')))
         || url.authority(QUrl::FullyEncoded).contains(QLatin1Char('@')) || url.host().contains(QLatin1Char('%'))
         || url.port(443)!=443 || !url.path().isEmpty() || url.hasQuery() || url.hasFragment()) return {};
     const auto canonical=originForUrl(url);
@@ -305,7 +305,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     QString source;
     if (!text(root,"id",&result.id,error) || !text(root,"name",&result.name,error) || !text(root,"version",&result.version,error)
         || !text(root,"publisher",&result.publisher,error) || !text(root,"license",&result.license,error) || !text(root,"source",&source,error)) return false;
-    if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$")).match(result.id).hasMatch() || result.id.size() > 128)
+    if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\\z")).match(result.id).hasMatch() || result.id.size() > 128)
         return fail(error, QStringLiteral("The package ID is not correct."));
     for (const auto& reserved : {QStringLiteral("hakone.builtin"), QStringLiteral("vlc.builtin")})
         if (result.id == reserved || result.id.startsWith(reserved + QLatin1Char('.')))
@@ -362,7 +362,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
         Contribution contribution; contribution.document = value.toObject(); const auto item = contribution.document;
         if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "completionPolicy", "qualityTiers", "analysisChannels", "assets", "extensions"}, error, "contribution")
             || !text(item,"id",&contribution.id,error) || !text(item,"type",&contribution.type,error) || !text(item,"contract",&contribution.contract,error)) return false;
-        if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9.-]{0,63}$")).match(contribution.id).hasMatch() || identifiers.contains(contribution.id)
+        if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9.-]{0,63}\\z")).match(contribution.id).hasMatch() || identifiers.contains(contribution.id)
             || !types.contains(contribution.type)) return fail(error, QStringLiteral("A contribution ID or type is not correct or occurs more than once."));
         identifiers.insert(contribution.id);
         const auto parts = contribution.contract.split(QLatin1Char('@'));
@@ -387,7 +387,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
             if (!QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement"}.contains(contribution.type)
                 || !item.value("assets").isObject() || item.value("assets").toObject().size() > 64)
                 return fail(error, QStringLiteral("The UI image map is not correct."));
-            static const QRegularExpression assetId(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}$"));
+            static const QRegularExpression assetId(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}\\z"));
             const auto assets = item.value("assets").toObject();
             for (auto asset = assets.begin(); asset != assets.end(); ++asset) {
                 const auto declaration = asset.value().toObject(); const auto path = declaration.value("path").toString();
@@ -410,7 +410,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
             || !contracts.contains("settings")) return fail(error, QStringLiteral("The settings resources are not correct."));
         if (settings.contains("accountFields")) {
             const auto fields = settings.value("accountFields");
-            static const QRegularExpression fieldName(QStringLiteral("^[A-Za-z][A-Za-z0-9_]{0,63}$"));
+            static const QRegularExpression fieldName(QStringLiteral("^[A-Za-z][A-Za-z0-9_]{0,63}\\z"));
             if (!fields.isArray() || fields.toArray().size() > 16)
                 return fail(error, QStringLiteral("The account field list is too large or is not correct."));
             for (const auto& field : fields.toArray()) {

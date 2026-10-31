@@ -33,7 +33,7 @@ QVariantMap credit(const QVariant& value)
     const auto license = input.value(QStringLiteral("license")).toString();
     const QUrl url(input.value(QStringLiteral("url")).toString(), QUrl::StrictMode);
     if (name.isEmpty() || name.size() > 128 || license.size() > 128 || !url.isValid()
-        || url.scheme() != QStringLiteral("https") || url.host().isEmpty() || !url.userInfo().isEmpty()
+        || url.scheme() != QStringLiteral("https") || url.host().isEmpty() || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@')))
         || url.toEncoded().size() > 2048) return {};
     result.insert(QStringLiteral("name"), name); result.insert(QStringLiteral("url"), url.toString(QUrl::FullyEncoded));
     if (!license.isEmpty()) result.insert(QStringLiteral("license"), license);

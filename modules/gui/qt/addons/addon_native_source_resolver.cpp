@@ -41,7 +41,7 @@ void cancel(const AddonNativeSourceResolver::Cancel& value) noexcept
 bool proxy(const QByteArray& uri, vlc_input_policy_t* policy)
 {
     if (uri.isEmpty() || uri.size() > 1024 || uri.contains('\0') || !policy) return false;
-    static const QRegularExpression syntax(QStringLiteral("^http://127\\.0\\.0\\.1:([1-9][0-9]{0,4})/([A-Za-z0-9_-]{1,128})/([A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+){0,3})$"));
+    static const QRegularExpression syntax(QStringLiteral("^http://127\\.0\\.0\\.1:([1-9][0-9]{0,4})/([A-Za-z0-9_-]{1,128})/([A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+){0,3})\\z"));
     const auto match = syntax.match(QString::fromLatin1(uri));
     return match.hasMatch() && match.captured(1).toUInt() <= 65535 && match.captured(3).size() <= 512
         && vlc_input_policy_IsProxy(policy, uri.constData());

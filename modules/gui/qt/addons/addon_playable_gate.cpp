@@ -57,7 +57,7 @@ QString AddonPlayableGate::authorize(const QString& contribution, const QVariant
     if (!supported()) error = tr("The app cannot play media from this source.");
     else if (source.isEmpty() || context.partition.isEmpty() || context.view.isEmpty() || context.view.size() > 128
         || (context.intent != QLatin1String("play") && context.intent != QLatin1String("enqueue"))) error = tr("The playback source or action is not available.");
-    else if (!url.isValid() || url.scheme() != QLatin1String("https") || url.host().isEmpty() || !url.userInfo().isEmpty()
+    else if (!url.isValid() || url.scheme() != QLatin1String("https") || url.host().isEmpty() || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@')))
         || url.hasFragment() || url.toString().size() > 8192) error = tr("The source did not supply a permitted stream address.");
     else if (!approvedOrigin) error = tr("This stream address needs permission.");
     else {
@@ -73,7 +73,7 @@ QString AddonPlayableGate::authorize(const QString& contribution, const QVariant
         const auto cancelNative = m_backend.cancel; const QPointer<AddonPlayableGate> owner(this);
         if (!native.isEmpty()) cancelNative(native);
         if (!owner) return;
-        deliver(job, tr("The stream preparation time limit was reached."));
+        deliver(job, tr("The stream preparation took too long."));
     }); timer->start(10000);
     const auto weak = QPointer<AddonPlayableGate>(this);
     const auto prepare = m_backend.prepare; const auto cancelNative = m_backend.cancel;

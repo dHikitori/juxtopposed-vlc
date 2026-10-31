@@ -35,7 +35,7 @@ QVariantMap attribution(const QVariant& value)
     const QUrl url(address, QUrl::StrictMode);
     if (name.isEmpty() || name.size() > 128 || license.size() > 128 || address.size() > 2048
         || !url.isValid() || url.scheme() != QStringLiteral("https") || url.host().isEmpty()
-        || !url.userInfo().isEmpty()) return {};
+        || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@')))) return {};
     return {{QStringLiteral("name"), name}, {QStringLiteral("license"), license},
         {QStringLiteral("url"), url.toString(QUrl::FullyEncoded)}};
 }

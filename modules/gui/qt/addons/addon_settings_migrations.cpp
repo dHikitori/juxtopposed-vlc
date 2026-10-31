@@ -18,7 +18,7 @@ bool onlyKeys(const QJsonObject& object, const QSet<QString>& keys)
 }
 bool fieldName(const QJsonValue& value)
 {
-    static const QRegularExpression field(QStringLiteral("^[A-Za-z][A-Za-z0-9_.-]{0,127}$"));
+    static const QRegularExpression field(QStringLiteral("^[A-Za-z][A-Za-z0-9_.-]{0,127}\\z"));
     return value.isString() && field.match(value.toString()).hasMatch();
 }
 bool version(const QJsonValue& value, int* output)
@@ -96,7 +96,7 @@ bool valueValid(const QJsonValue& value, const QJsonObject& field, int depth = 0
     const auto pattern = field.value("pattern").toString();
     if (pattern.isEmpty()) return true;
     if (pattern != QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")) return false;
-    static const QRegularExpression language(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"));
+    static const QRegularExpression language(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*\\z"));
     return text.size() <= 64 && language.match(text).hasMatch();
 }
 }
@@ -139,7 +139,7 @@ bool migrateSettings(const Manifest& next, const QMap<QString, QByteArray>& cont
     const auto approvedBindings = grants.value("credentials.use").toObject().value("bindings").toArray();
     if (settings.contains("_credentials") && !settings.value("_credentials").isObject())
         return fail(error, QStringLiteral("The host credential reference envelope is not correct."));
-    static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
+    static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\z"));
     for (auto it = references.begin(); it != references.end(); ++it)
         if (!it.value().isString() || !uuid.match(it.value().toString()).hasMatch()
             || !nextBindings.contains(it.key()) || nextBindings.value(it.key()) != oldBindings.value(it.key())

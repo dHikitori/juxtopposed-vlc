@@ -349,7 +349,7 @@ FocusScope {
                 Layout.fillWidth: true; textFormat: Text.PlainText; wrapMode: Text.Wrap
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
                 text: root.queueFill.active !== true ? root.queueFill.error || ""
-                    : root.queueFill.paused === true ? qsTr("Queue filling from %1 is paused.").arg(root.queueFill.sourceName || qsTr("a source"))
+                    : root.queueFill.paused === true ? qsTr("Paused: %1 adds no items to the queue.").arg(root.queueFill.sourceName || qsTr("a source"))
                     : qsTr("%1 keeps the queue filled: %2 added.").arg(root.queueFill.sourceName || qsTr("A source")).arg(root.queueFill.added || 0)
             }
             RedesignButton {

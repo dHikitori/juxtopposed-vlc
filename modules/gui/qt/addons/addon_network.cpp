@@ -141,7 +141,7 @@ bool NetworkBroker::publicAddress(const QHostAddress& address)
 bool NetworkBroker::permittedUrl(const Manifest& manifest, const QJsonObject& grants, const QUrl& url)
 {
     if (!url.isValid() || url.scheme() != QLatin1String("https") || url.host().isEmpty()
-        || !url.userInfo().isEmpty() || url.hasFragment() || url.toEncoded().size() > 8192) return false;
+        || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@'))) || url.hasFragment() || url.toEncoded().size() > 8192) return false;
     QUrl origin; origin.setScheme(QStringLiteral("https")); origin.setHost(url.host().toLower());
     if (url.port(443) != 443) origin.setPort(url.port());
     const auto key = exactHttpsOrigin(origin.toString());
@@ -158,7 +158,7 @@ bool NetworkBroker::permittedUrl(const Manifest& manifest, const QJsonObject& gr
 bool NetworkBroker::permittedImageRedirect(const Manifest& manifest, const QJsonObject& grants, const QUrl& url)
 {
     if (!url.isValid() || url.scheme() != QStringLiteral("https") || url.port(443) != 443
-        || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasFragment() || url.toEncoded().size() > 8192) return false;
+        || url.host().isEmpty() || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@'))) || url.hasFragment() || url.toEncoded().size() > 8192) return false;
     const auto host = url.host().toLower();
     if (host != QStringLiteral("archive.org") && !host.endsWith(QStringLiteral(".archive.org"))) return false;
     const auto profile = QStringLiteral("internet-archive-images@1");
@@ -329,7 +329,7 @@ void NetworkBroker::resolved(const std::shared_ptr<Job>& job, const QList<QHostA
             const auto secret = job->credential ? job->credential(credentialField) : QByteArray{};
             if (!alive || !checkCurrent(job)) return;
             const auto header = binding.value(QStringLiteral("header")).toString().toUtf8();
-            static const QRegularExpression headerPattern(QStringLiteral("^[A-Za-z][A-Za-z0-9-]{0,63}$"));
+            static const QRegularExpression headerPattern(QStringLiteral("^[A-Za-z][A-Za-z0-9-]{0,63}\\z"));
             if (secret.isEmpty() || secret.size() > 4096 || secret.contains('\r') || secret.contains('\n')
                 || !headerPattern.match(QString::fromLatin1(header)).hasMatch()) {
                 finish(job, tr("Enter the account data or API key for this add-on.")); return;
@@ -414,7 +414,7 @@ bool NetworkBroker::readResponse(const std::shared_ptr<Job>& job)
     responseHeaders(job);
     if (job->prefix && status >= 200 && status < 300) {
         if (!textPrefixContentType(QString::fromLatin1(reply->rawHeader("content-type")))) {
-            finish(job, tr("A response prefix requires HTML or plain text.")); return false;
+            finish(job, tr("A response prefix needs HTML or plain text.")); return false;
         }
         const auto read = readBody(reply, job->response.body, job->limit, true);
         if (read == BodyRead::PrefixComplete) {

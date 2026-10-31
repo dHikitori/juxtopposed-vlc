@@ -18,14 +18,14 @@ namespace vlc::addons {
 namespace {
 bool validReference(const QString& reference)
 {
-    static const QRegularExpression pattern(QStringLiteral("^[a-f0-9-]{36}$"));
+    static const QRegularExpression pattern(QStringLiteral("^[a-f0-9-]{36}\\z"));
     return pattern.match(reference).hasMatch();
 }
 QString credentialName(const QString& package, const QString& reference)
 { return QStringLiteral("VLC/addons/%1/%2").arg(package, reference); }
 bool validPackage(const QString& package)
 {
-    static const QRegularExpression pattern(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"));
+    static const QRegularExpression pattern(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\\z"));
     return package.size() <= 128 && pattern.match(package).hasMatch();
 }
 

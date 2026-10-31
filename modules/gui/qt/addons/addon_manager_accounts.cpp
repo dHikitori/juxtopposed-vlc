@@ -40,7 +40,7 @@ bool AddonManager::connectAccount(const QString& id, const QString& field, const
                                   QString* error)
 {
     const auto refuse = [error](const QString& message) { if (error) *error = message; return false; };
-    if (m_retiring || m_removingPackages.contains(id) || m_store.packageRetiring(id)) return refuse(tr("The add-on is being removed."));
+    if (m_retiring || m_removingPackages.contains(id) || m_store.packageRetiring(id)) return refuse(tr("The add-on removal is in progress."));
     InstalledPackage package; QString reason;
     if (!m_store.installed(id, &package, &reason)) return refuse(reason);
     if (!accountRecipe(id, field) || tokens.accessToken.isEmpty()) return refuse(tr("The app cannot use this account."));
@@ -74,7 +74,7 @@ bool AddonManager::connectAccount(const QString& id, const QString& field, const
     if (!m_store.change([&](QString* e) { return m_store.saveSettings(id, values, revision, stamp, e); },
             [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveSettings(c, id, values, revision, stamp, e); },
             &reason)) { discard(); return refuse(reason); }
-    if (!withdraw(id)) return refuse(tr("The add-on is being removed."));
+    if (!withdraw(id)) return refuse(tr("The add-on removal is in progress."));
     m_accountExpiry.remove(key(id, field));
     // A new sign-in replaces the tokens; older settings generations that
     // named them are no longer usable for this account.

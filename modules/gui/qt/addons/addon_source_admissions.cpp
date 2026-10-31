@@ -20,7 +20,7 @@ bool fail(QString* error, const QString& message) { if (error) *error = message;
 QByteArray payload(QVariantMap reference) { reference.remove(QStringLiteral("snapshot")); return QJsonDocument(QJsonObject::fromVariantMap(reference)).toJson(QJsonDocument::Compact); }
 QString digest(const QByteArray& bytes) { return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()); }
 bool admissionId(const QString& id)
-{ static const QRegularExpression expression(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")); return expression.match(id).hasMatch(); }
+{ static const QRegularExpression expression(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\z")); return expression.match(id).hasMatch(); }
 QString encode(const QByteArray& bytes, const QString& id)
 { return prefix + QString::fromLatin1(bytes.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)) + '.' + id; }
 }
@@ -57,7 +57,7 @@ bool AddonSourceAdmissions::read(QJsonObject* records, QString* error) const
         return fail(error, QObject::tr("The saved discovery references are not correct."));
     const auto entries = root.value("admissions").toObject();
     if (entries.size() > MaximumAdmissions) return fail(error, QObject::tr("The saved discovery references are larger than the limit."));
-    static const QRegularExpression hash(QStringLiteral("^[0-9a-f]{64}$"));
+    static const QRegularExpression hash(QStringLiteral("^[0-9a-f]{64}\\z"));
     for (auto it = entries.begin(); it != entries.end(); ++it) {
         if (!admissionId(it.key()) || !it.value().isObject()) return fail(error, QObject::tr("The saved discovery references are not correct."));
         const auto record = it.value().toObject();
@@ -90,7 +90,7 @@ bool AddonSourceAdmissions::admit(const QVariantList& references, QStringList* u
         || !m_currentSource(reference.toMap())) return fail(error, QObject::tr("The discovery source or account is not available."));
     if (!QDir().mkpath(m_directory)) return fail(error, QObject::tr("The app cannot save the discovery references."));
     QLockFile lock(QDir(m_directory).filePath(QStringLiteral("source-admissions.lock")));
-    if (!lock.tryLock(0)) return fail(error, QObject::tr("Another operation is saving discovery references. Try again."));
+    if (!lock.tryLock(0)) return fail(error, QObject::tr("Another operation saves discovery references now. Try again."));
     QJsonObject records; if (!read(&records, error)) return false;
     QStringList staged;
     bool changed = false;
@@ -99,7 +99,7 @@ bool AddonSourceAdmissions::admit(const QVariantList& references, QStringList* u
         QString id;
         for (auto it = records.begin(); it != records.end(); ++it) if (it.value().toObject().value("digest").toString() == hash) { id = it.key(); break; }
         if (id.isEmpty()) {
-            if (records.size() >= MaximumAdmissions) return fail(error, QObject::tr("The saved discovery reference limit has been reached."));
+            if (records.size() >= MaximumAdmissions) return fail(error, QObject::tr("The app has the maximum number of saved discovery references."));
             id = QUuid::createUuid().toString(QUuid::WithoutBraces);
             records.insert(id, QJsonObject{{"digest", hash}, {"source", reference.value("source").toString()}, {"account", reference.value("accountReference").toString()},
                 {"snapshot", QJsonObject::fromVariantMap(reference.value("snapshot").toMap())}});

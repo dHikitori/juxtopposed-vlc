@@ -175,7 +175,7 @@ QString AddonWorker::invoke(const QString& contribution, const QString& operatio
         }
         if (m_attemptGates.size() >= 1024 || !attempt->bindWorker(m_attemptWorkerId, id, contribution, operation, context)) {
             attempt->blocked();
-            QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("denied"), {}, tr("The metadata attempt is not available.")); });
+            QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("denied"), {}, tr("The metadata request is not available.")); });
             return id;
         }
         m_attemptGates.insert(id, attempt->m_capture.admission);

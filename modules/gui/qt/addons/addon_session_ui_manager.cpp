@@ -61,7 +61,7 @@ struct DisplayCatalog final : std::enable_shared_from_this<DisplayCatalog> {
             QString state;
             if(!enabled) state=AddonSessionUi::tr("Disabled");
             else if(!known) state=AddonSessionUi::tr("Settings not checked");
-            else if(!configured) state=AddonSessionUi::tr("Setup required");
+            else if(!configured) state=AddonSessionUi::tr("Set up first");
             else if(!caps.value("workerKnown").toBool() || !caps.value("webSocketKnown").toBool()) state=AddonSessionUi::tr("Checking app support");
             else if(!platformReady(caps)) state=AddonSessionUi::tr("This controller is not available.");
             else if(!view->isCurrent()) state=AddonSessionUi::tr("The controller list changed.");

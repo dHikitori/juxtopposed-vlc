@@ -78,7 +78,7 @@ struct ImageLease {
 QString nonce() { return QUuid::createUuid().toString(QUuid::WithoutBraces); }
 bool identifier(const QString& value)
 {
-    static const QRegularExpression expression(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}$"));
+    static const QRegularExpression expression(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}\\z"));
     return expression.match(value).hasMatch() && value != QLatin1String("__proto__")
         && value != QLatin1String("prototype") && value != QLatin1String("constructor");
 }

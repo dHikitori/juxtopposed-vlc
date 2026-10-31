@@ -589,7 +589,7 @@ void AddonCatalogueView::completed(quint64 generation,quint64 requestRevision,co
         if(storeBusy && nativeRetry) {
             m_loading=!isCurrent();m_error.clear();schedule();publishFreshness();return;
         }
-        m_error=result->error.isEmpty()?tr("The add-on catalogue changed or could not be read."):result->error;
+        m_error=result->error.isEmpty()?tr("The add-on catalogue changed, or the app cannot read it."):result->error;
         publishFreshness();
     }
 }
@@ -624,7 +624,7 @@ QVariantList AddonCatalogueView::providers(const QString& feature) const
         if(!row.value(QStringLiteral("features")).toStringList().contains(feature))continue;
         row.insert(QStringLiteral("status"),!row.value(QStringLiteral("enabled")).toBool()?tr("Disabled")
             :!row.value(QStringLiteral("configurationKnown")).toBool()?tr("Settings not checked")
-            :row.value(QStringLiteral("configured")).toBool()?tr("Ready"):tr("Setup required"));
+            :row.value(QStringLiteral("configured")).toBool()?tr("Ready"):tr("Set up first"));
         result.append(row);
     }
     const auto order=m_data->preferences.value(feature).toArray();

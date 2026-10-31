@@ -168,7 +168,7 @@ QString AddonDiscoveryCoordinator::suggest(const QString& source, const QVariant
 QString AddonDiscoveryCoordinator::subscribe(const QString& source, const QString& node, const QString& revision,
                                             const QString& view, quint64 generation)
 {
-    static const QRegularExpression token(QStringLiteral("^[\\x21-\\x7e]{0,256}$"));
+    static const QRegularExpression token(QStringLiteral("^[\\x21-\\x7e]{0,256}\\z"));
     if (!token.match(revision).hasMatch())
         return rejected(view, generation, QStringLiteral("error"), tr("The discovery revision is not correct."));
     QString collection;
@@ -186,7 +186,7 @@ QString AddonDiscoveryCoordinator::subscribe(const QString& source, const QStrin
 QString AddonDiscoveryCoordinator::start(const QString& source, const QString& operation, QVariantMap context,
                                         const QString& view, quint64 generation, const QString& cursor, const QString& intent)
 {
-    if (!isCurrent()) return rejected(view, generation, QStringLiteral("unavailable"), tr("The source list is being updated. Try again when it is ready."));
+    if (!isCurrent()) return rejected(view, generation, QStringLiteral("unavailable"), tr("The app updates the source list. Try again when it is ready."));
     if (!enterView(view, generation)) return rejected(view, generation, QStringLiteral("error"), tr("The discovery view is no longer valid."));
     const auto entry = registration(source);
     if (entry.isEmpty() || !entry.value(QStringLiteral("enabled")).toBool())
@@ -194,7 +194,7 @@ QString AddonDiscoveryCoordinator::start(const QString& source, const QString& o
     if (!entry.value(QStringLiteral("configured")).toBool())
         return rejected(view, generation, QStringLiteral("auth_required"), tr("Set up this discovery source first."));
     if (!available(entry, operation))
-        return rejected(view, generation, QStringLiteral("unsupported"), tr("This discovery operation is not supported."));
+        return rejected(view, generation, QStringLiteral("unsupported"), tr("The source does not support this discovery operation."));
     if (m_requests.size() >= MaxRequests)
         return rejected(view, generation, QStringLiteral("error"), tr("Too many discovery requests are active."));
     if (!cursor.isEmpty()) {
@@ -297,7 +297,9 @@ void AddonDiscoveryCoordinator::page(const QString& request, const QVariantMap& 
     QSet<QString> seen;
     for (const auto& value : entries) {
         const auto item = value.toMap();
-        const auto itemId = item.value(QStringLiteral("id")).toString();
+        // An ID is text: a number or a Boolean is not converted to one.
+        const auto itemId = item.value(QStringLiteral("id")).metaType().id() == QMetaType::QString
+            ? item.value(QStringLiteral("id")).toString() : QString{};
         const auto kind = item.value(QStringLiteral("kind"), QStringLiteral("media")).toString();
         if (!identifier(itemId) || (kind != QLatin1String("node") && kind != QLatin1String("media")) || seen.contains(itemId)) continue;
         seen.insert(itemId);
@@ -327,7 +329,7 @@ void AddonDiscoveryCoordinator::page(const QString& request, const QVariantMap& 
     const auto rawCursor = data.value(QStringLiteral("cursor"));
     if (rawCursor.isValid() && !rawCursor.isNull()
         && (rawCursor.metaType().id() != QMetaType::QString || !rawCursor.toString().isEmpty())) {
-        if (m_cursors.size() >= MaxCursors) { finish(request, QStringLiteral("error"), {}, tr("The discovery page cursor limit has been reached. Open the view again.")); return; }
+        if (m_cursors.size() >= MaxCursors) { finish(request, QStringLiteral("error"), {}, tr("The discovery view has too many pages. Open the view again.")); return; }
         if (QJsonDocument(QJsonArray{QJsonValue::fromVariant(rawCursor)}).toJson(QJsonDocument::Compact).size() > 4096) {
             finish(request, QStringLiteral("error"), {}, tr("The discovery page cursor exceeds the size limit.")); return;
         }
@@ -338,18 +340,20 @@ void AddonDiscoveryCoordinator::page(const QString& request, const QVariantMap& 
     }
     // A source can name its revision and when to check again; a change feed
     // also names the items it removed. Anything else is ignored.
-    static const QRegularExpression token(QStringLiteral("^[\\x21-\\x7e]{1,256}$"));
+    static const QRegularExpression token(QStringLiteral("^[\\x21-\\x7e]{1,256}\\z"));
     const auto revision = data.value(QStringLiteral("revision"));
     if (revision.metaType().id() == QMetaType::QString && token.match(revision.toString()).hasMatch())
         result.insert(QStringLiteral("revision"), revision.toString());
     const auto next = data.value(QStringLiteral("nextCheckSeconds"));
-    if (next.canConvert<double>() && next.metaType().id() != QMetaType::QString && std::isfinite(next.toDouble()))
+    if (next.canConvert<double>() && next.metaType().id() != QMetaType::QString && std::isfinite(next.toDouble())
+        && std::floor(next.toDouble()) == next.toDouble())
         result.insert(QStringLiteral("nextCheckSeconds"), int(std::clamp(next.toDouble(), 60.0, 3600.0)));
     QVariantList removed;
     if (job.operation == QLatin1String("subscribe")) {
         const auto ids = data.value(QStringLiteral("removed")).toList();
         if (ids.size() > MaxPage) { finish(request, QStringLiteral("error"), {}, tr("The discovery source removed too many items at once.")); return; }
         for (const auto& id : ids) {
+            if (id.metaType().id() != QMetaType::QString) continue;
             const QString stable = job.source + '\n' + partition(job.registration) + '\n' + account(job.registration)
                 + '\n' + job.view + '\n' + QString::number(job.generation) + '\n' + id.toString();
             const auto ref = m_stable.value(stable);
@@ -409,7 +413,7 @@ void AddonDiscoveryCoordinator::authorize(const QString& request, const QVariant
     for (const auto& key : {QStringLiteral("options"), QStringLiteral("vlcOptions"), QStringLiteral("sout"), QStringLiteral("access"), QStringLiteral("path"), QStringLiteral("file"), QStringLiteral("uri")})
         if (proposal.contains(key)) { finish(request, QStringLiteral("error"), {}, tr("The source returned playback properties that are not permitted.")); return; }
     const QUrl url(proposal.value(QStringLiteral("url")).toString(), QUrl::StrictMode);
-    if (!url.isValid() || url.scheme() != QLatin1String("https") || url.host().isEmpty() || !url.userInfo().isEmpty()) {
+    if (!url.isValid() || url.scheme() != QLatin1String("https") || url.host().isEmpty() || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@')))) {
         finish(request, QStringLiteral("error"), {}, tr("The source returned an unsupported playback protocol.")); return;
     }
     auto guarded = proposal;
@@ -428,7 +432,7 @@ void AddonDiscoveryCoordinator::authorize(const QString& request, const QVariant
                 || !owner->available(now, QStringLiteral("resolve"))) {
                 owner->finish(request, QStringLiteral("error"), {}, tr("The discovery source changed before playback authorization.")); return;
             }
-            static const QRegularExpression opaqueHandle(QStringLiteral("^[A-Za-z0-9_.:-]{1,256}$"));
+            static const QRegularExpression opaqueHandle(QStringLiteral("^[A-Za-z0-9_.:-]{1,256}\\z"));
             if (!error.isEmpty() || !opaqueHandle.match(handle).hasMatch()) {
                 owner->finish(request, QStringLiteral("error"), {}, error.isEmpty() ? tr("The playback adapter did not issue an opaque handle.") : error.left(512)); return;
             }

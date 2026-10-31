@@ -33,7 +33,7 @@ bool parseRepositoryTags(const QByteArray& advertisement, QList<RepositoryTag>* 
     QSet<QString> names;
     int count = 0;
     qsizetype objectWidth = 0;
-    static const QRegularExpression objectId(QStringLiteral("^(?:[a-f0-9]{40}|[a-f0-9]{64})$"));
+    static const QRegularExpression objectId(QStringLiteral("^(?:[a-f0-9]{40}|[a-f0-9]{64})\\z"));
     for (auto line : advertisement.split('\n')) {
         if (line.endsWith('\r')) line.chop(1);
         if (line.isEmpty()) continue;

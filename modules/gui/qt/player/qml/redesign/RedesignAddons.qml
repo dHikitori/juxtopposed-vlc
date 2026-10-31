@@ -176,7 +176,7 @@ ColumnLayout {
                     DetailText {
                         objectName: "addonDetailsManual"
                         Layout.fillWidth: true; visible: root.selectedAddon.manageable === false
-                        text: qsTr("The app cannot change this add-on because it was added manually.")
+                        text: qsTr("The app cannot change this add-on because you added it manually.")
                     }
                     ColumnLayout {
                         Layout.fillWidth: true; visible: (root.selectedAddon.files || []).length > 0; spacing: theme.dp(4)

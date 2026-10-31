@@ -28,7 +28,7 @@ constexpr quint64 MaximumRevision=9007199254740991ULL, GenerationWindow=4096;
 QString uuid() { return QUuid::createUuid().toString(QUuid::WithoutBraces); }
 bool validUuid(const QString& value)
 {
-    static const QRegularExpression pattern(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
+    static const QRegularExpression pattern(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\z"));
     return pattern.match(value).hasMatch() && !QUuid(value).isNull();
 }
 bool text(const QString& value,qsizetype maximum)
@@ -293,23 +293,23 @@ AddonSourceConsent::AddonSourceConsent(QString path,Checks checks,Options option
 AddonSourceConsent::~AddonSourceConsent() { close(); }
 std::optional<AddonSourceConsent::Binding> AddonSourceConsent::canonical(const Binding& input)
 {
-    static const QRegularExpression contribution(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}$"));
+    static const QRegularExpression contribution(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}\\z"));
     if (kind(input.kind).isEmpty() || !text(input.identity,2048) || !contribution.match(input.contribution).hasMatch()
         || !text(input.accountReference,512) || input.accountReference.startsWith(QLatin1String("disconnected:"))
         || input.profile!=QLatin1String("public-https-media@1")) return {};
     Binding result=input; QUrl url(input.identity,QUrl::StrictMode);
     if (url.isValid() && url.scheme()==QLatin1String("https") && !url.host().isEmpty()
-        && url.userInfo().isEmpty() && !url.hasQuery() && !url.hasFragment() && url.port(-1)!=0) {
+        && (url.userInfo().isEmpty() && !url.authority().contains(QLatin1Char('@'))) && !url.hasQuery() && !url.hasFragment() && url.port(-1)!=0) {
         const auto decoded=url.path(QUrl::FullyDecoded);
         for (auto c:decoded) if (c.category()==QChar::Other_Control) return {};
         url.setHost(url.host().toLower()); if (url.port(-1)==443) url.setPort(-1);
         result.identity=QString::fromLatin1(url.adjusted(QUrl::NormalizePathSegments).toEncoded(QUrl::FullyEncoded));
-    } else if (input.kind==SourceKind::Developer && url.isLocalFile() && url.host().isEmpty() && url.userInfo().isEmpty()
+    } else if (input.kind==SourceKind::Developer && url.isLocalFile() && url.host().isEmpty() && (url.userInfo().isEmpty() && !url.authority().contains(QLatin1Char('@')))
                && !url.hasQuery() && !url.hasFragment() && QDir::isAbsolutePath(url.toLocalFile())) {
         for (auto c:url.toLocalFile()) if (c.category()==QChar::Other_Control) return {};
         result.identity=QString::fromLatin1(QUrl::fromLocalFile(QDir::cleanPath(url.toLocalFile())).toEncoded(QUrl::FullyEncoded));
     } else if (input.kind==SourceKind::Distribution
-               && QRegularExpression(QStringLiteral("^hakone-distribution:[a-z][a-z0-9.-]{1,127}$")).match(input.identity).hasMatch()) {}
+               && QRegularExpression(QStringLiteral("^hakone-distribution:[a-z][a-z0-9.-]{1,127}\\z")).match(input.identity).hasMatch()) {}
     else return {};
     return result.identity.size()<=2048?std::optional<Binding>(result):std::nullopt;
 }
@@ -401,7 +401,7 @@ bool AddonSourceConsent::grant(const QString& token,QString* error)
     State state; if (!load(&state,error)) return false;
     if (state.epoch!=dialog.epoch || state.revision!=dialog.revision || state.revision>=MaximumRevision) return fail(error,QObject::tr("The saved approval changed. Open approval again."));
     const auto id=key(dialog.ticket.binding);
-    if (!state.approvals.contains(id) && state.approvals.size()>=m_options.approvals) return fail(error,QObject::tr("The source approval limit was reached."));
+    if (!state.approvals.contains(id) && state.approvals.size()>=m_options.approvals) return fail(error,QObject::tr("The app has the maximum number of source approvals."));
     const auto entry=liveEntry(id); if (!entry) return fail(error,savedError());
     LiveMutation mutation(entry);
     state.approvals.insert(id,QJsonObject{{"binding",bindingJson(dialog.ticket.binding)},{"id",uuid()}}); ++state.revision;

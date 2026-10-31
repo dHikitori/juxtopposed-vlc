@@ -86,7 +86,7 @@ quint64 AddonHostServices::dispatch(const Context& context, const QString& opera
     if (error.isEmpty() && context.current && !context.current()) error = tr("The host request configuration changed.");
     if (!alive || !m_jobs.contains(id)) return id;
     if (!error.isEmpty()) { QTimer::singleShot(0, this, [this, id, error] { finish(id, {{}, error}); }); return id; }
-    connect(timer, &QTimer::timeout, this, [this, id] { finish(id, {{}, tr("The host operation time limit was reached.")}, true, AddonMetadataHostTerminal::Timeout); });
+    connect(timer, &QTimer::timeout, this, [this, id] { finish(id, {{}, tr("The host operation took too long.")}, true, AddonMetadataHostTerminal::Timeout); });
     timer->start(qBound(1, timeoutMs, 30000));
     const auto gate = m_gate;
     auto cancel = registration.handler(context, request, [gate, id](Result result) {

@@ -188,7 +188,7 @@ bool css(const QString& value)
 {
     if (value.contains(QLatin1Char('\\')) || value.contains(QLatin1Char('@'))) return false;
     static const QRegularExpression calls(QStringLiteral("url\\s*\\(([^)]*)\\)"), QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression fragment(QStringLiteral("^#[A-Za-z_][A-Za-z0-9_.:-]{0,255}$"));
+    static const QRegularExpression fragment(QStringLiteral("^#[A-Za-z_][A-Za-z0-9_.:-]{0,255}\\z"));
     auto matches = calls.globalMatch(value);
     while (matches.hasNext()) {
         auto reference = matches.next().captured(1).trimmed();
@@ -204,7 +204,7 @@ bool svg(const QByteArray& bytes, const Limits& limits, QByteArray* clean)
 {
     QXmlStreamReader input(bytes); QXmlStreamWriter output(clean); int depth = 0, elements = 0, attributes = 0;
     qint64 inlineBytes = 0, inlinePixels = 0; bool root = false; QString current;
-    static const QRegularExpression fragment(QStringLiteral("^#[A-Za-z_][A-Za-z0-9_.:-]{0,255}$"));
+    static const QRegularExpression fragment(QStringLiteral("^#[A-Za-z_][A-Za-z0-9_.:-]{0,255}\\z"));
     while (!input.atEnd()) {
         const auto token = input.readNext();
         if (token == QXmlStreamReader::DTD || token == QXmlStreamReader::EntityReference || token == QXmlStreamReader::ProcessingInstruction) return false;

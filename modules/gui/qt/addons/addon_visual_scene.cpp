@@ -24,7 +24,7 @@ bool color(const QJsonValue& value)
     if (!value.isString()) return false;
     const auto text = value.toString();
     return text == QLatin1String("theme.background") || text == QLatin1String("theme.foreground") || text == QLatin1String("theme.accent")
-        || QRegularExpression(QStringLiteral("^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$" )).match(text).hasMatch();
+        || QRegularExpression(QStringLiteral("^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\\z" )).match(text).hasMatch();
 }
 QColor resolveColor(const QJsonValue& value, const AddonVisualScene::Colors& colors)
 {
@@ -49,7 +49,7 @@ bool AddonVisualScene::validate(const QJsonObject& scene, QString* error)
         || !color(scene.value("background")) || !scene.value("nodes").isArray()) return fail();
     const auto assets = scene.value("assets").toObject();
     if ((scene.contains("assets") && !scene.value("assets").isObject()) || assets.size() > 16) return fail();
-    static const QRegularExpression assetId(QStringLiteral("^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$"));
+    static const QRegularExpression assetId(QStringLiteral("^[a-zA-Z_][a-zA-Z0-9_-]{0,63}\\z"));
     for (auto it = assets.begin(); it != assets.end(); ++it) {
         const auto path = it.value().toString(); const auto parts = path.split('/');
         if (!assetId.match(it.key()).hasMatch() || QStringList{"__proto__", "prototype", "constructor"}.contains(it.key())

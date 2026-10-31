@@ -73,7 +73,7 @@ QVariantMap merged(const QJsonObject& variant, bool light)
 }
 bool isColor(const QString& value)
 {
-    static const QRegularExpression expression(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+    static const QRegularExpression expression(QStringLiteral("^#[0-9a-fA-F]{6}\\z"));
     return expression.match(value).hasMatch();
 }
 bool validate(const QJsonObject& document, QString* error)
@@ -83,7 +83,7 @@ bool validate(const QJsonObject& document, QString* error)
         || !keys(document, {"contract", "id", "variants"})
         || document.value("contract").toString() != QLatin1String("theme@1"))
         return fail(error, tr("The app cannot use this theme contract."));
-    static const QRegularExpression identifier(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}$"));
+    static const QRegularExpression identifier(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}\\z"));
     const auto id = document.value("id").toString();
     if (!identifier.match(id).hasMatch() || id == QLatin1String("__proto__") || id == QLatin1String("constructor") || id == QLatin1String("prototype"))
         return fail(error, tr("The theme identifier is not correct."));

@@ -48,7 +48,7 @@ QString sourceKind(AddonSourceConsent::SourceKind kind) {
     return {};
 }
 bool sourceId(const QString& value) {
-    static const QRegularExpression syntax(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}$"));
+    static const QRegularExpression syntax(QStringLiteral("^[a-z][a-z0-9.-]{1,127}/[a-z][a-z0-9.-]{0,63}\\z"));
     return syntax.match(value).hasMatch();
 }
 }
@@ -544,12 +544,12 @@ void AddonDiscoverySourceOwner::resolved(const QString& invocation,const QString
         if(url.metaType().id()!=QMetaType::QString || url.toString().size()>8192 || !AddonStreamPolicy::url(spec.upstream))
             failure=tr("The source did not return a permitted HTTPS media address.");
         const auto format=data.value("format",QStringLiteral("auto"));
-        if(format.metaType().id()!=QMetaType::QString) failure=tr("The media format is not supported.");
+        if(format.metaType().id()!=QMetaType::QString) failure=tr("The app does not support the media format.");
         else if(format.toString()==QLatin1String("auto")) spec.format=AddonStreamProxy::Format::Auto;
         else if(format.toString()==QLatin1String("progressive")) spec.format=AddonStreamProxy::Format::Progressive;
         else if(format.toString()==QLatin1String("hls")) spec.format=AddonStreamProxy::Format::Hls;
         else if(format.toString()==QLatin1String("dash")) spec.format=AddonStreamProxy::Format::Dash;
-        else failure=tr("The media format is not supported.");
+        else failure=tr("The app does not support the media format.");
         if(data.contains("expiresAt")) {
             const auto value=QJsonValue::fromVariant(data.value("expiresAt")); const auto time=value.toDouble(-1);
             if(!value.isDouble() || !std::isfinite(time) || std::floor(time)!=time || time>9007199254740991.0

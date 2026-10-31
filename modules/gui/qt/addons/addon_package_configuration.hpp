@@ -43,7 +43,7 @@ inline bool valueValid(const QJsonValue& value, const QJsonObject& field)
         // The first SDK supports this bounded language-code grammar. Never
         // compile arbitrary package-supplied PCRE into a UI-thread validator.
         if (pattern != QLatin1String("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")) return false;
-        static const QRegularExpression language(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"));
+        static const QRegularExpression language(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*\\z"));
         if (text.size() > 64 || !language.match(text).hasMatch()) return false;
     }
     return true;

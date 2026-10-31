@@ -10,7 +10,9 @@ function own(object, key) {
     return object !== null && typeof object === "object" && Object.prototype.hasOwnProperty.call(object, key)
 }
 function record(value) { return value !== null && typeof value === "object" && !Array.isArray(value) }
-function safeKey(key) { return /^[A-Za-z_][A-Za-z0-9_.-]{0,95}$/.test(key) && !forbiddenKeys.includes(key) }
+// A key is text: a regular expression test would accept a number, an array
+// or undefined as its string form.
+function safeKey(key) { return typeof key === "string" && /^[A-Za-z_][A-Za-z0-9_.-]{0,95}$/.test(key) && !forbiddenKeys.includes(key) }
 function clone(value) { return JSON.parse(JSON.stringify(value)) }
 // A list from C++ arrives as a sequence, for which Array.isArray is false.
 // Validate and keep plain copies of host data instead.
@@ -193,7 +195,8 @@ function validateSettingsSchema(schema) {
             || Object.keys(schema.properties).length > 64 || schema.additionalProperties !== false) return "The app cannot use this settings schema."
     var topKeys = ["$schema", "type", "properties", "required", "additionalProperties", "title", "description"]
     if (Object.keys(schema).some(key => !topKeys.includes(key))) return "The app cannot use this schema keyword."
-    if (schema.required !== undefined && (!Array.isArray(schema.required) || schema.required.some(key => !own(schema.properties, key)))) return "The required settings list is not correct."
+    if (["$schema", "title", "description"].some(key => schema[key] !== undefined && typeof schema[key] !== "string")) return "A settings label is not correct."
+    if (schema.required !== undefined && (!Array.isArray(schema.required) || schema.required.some(key => typeof key !== "string" || !own(schema.properties, key)))) return "The required settings list is not correct."
     var fieldKeys = ["writeOnly", "pattern", "type", "title", "description", "default", "enum", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "items", "format", "x-hakone-control", "x-hakone-label", "x-hakone-help", "x-hakone-secret", "x-hakone-visibleWhen", "x-hakone-restartRequired", "x-hakone-account"]
     for (var name of Object.keys(schema.properties)) {
         var field = schema.properties[name]
@@ -212,6 +215,13 @@ function validateSettingsSchema(schema) {
         if ((field["x-hakone-control"] === "account") !== (field["x-hakone-account"] !== undefined) || field["x-hakone-control"] === "account" && (!fieldSecret(field) || !record(field["x-hakone-account"]))) return "The app cannot use this account field."
         if (fieldSecret(field) && field.default !== undefined) return "Do not set a default value for a secret field."
         if (field.type === "array" && (!record(field.items) || field.items.type !== "string" || Object.keys(field.items).some(key => !["type", "enum"].includes(key)))) return "Use a string list that is within the size limit."
+        if (field.type !== "array" && (field.items !== undefined || field.minItems !== undefined || field.maxItems !== undefined)) return "Only a list can have list limits."
+        // Choices and the default value have the field's own type.
+        const typed = value => field.type === "boolean" ? typeof value === "boolean" : field.type === "string" ? typeof value === "string"
+            : field.type === "integer" ? Number.isInteger(value) : field.type === "number" ? typeof value === "number" && Number.isFinite(value)
+            : Array.isArray(value) && value.every(entry => typeof entry === "string")
+        if (field.enum !== undefined && Array.isArray(field.enum) && field.enum.some(value => !typed(value))) return "The setting choices are not correct."
+        if (field.default !== undefined && (!typed(field.default) || Array.isArray(field.enum) && !field.enum.includes(field.default))) return "The default setting is not correct."
         if (field.enum !== undefined && (!Array.isArray(field.enum) || !field.enum.length || field.enum.length > 64 || field.enum.some(value => !["string", "number", "boolean"].includes(typeof value)))) return "The setting choices are not correct."
         for (var limit of ["minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"]) {
             if (field[limit] !== undefined && (typeof field[limit] !== "number" || !Number.isFinite(field[limit]))) return "A setting limit is not correct."
@@ -226,7 +236,7 @@ function validateSettingsSchema(schema) {
         if (field.minimum !== undefined && field.maximum !== undefined && field.minimum > field.maximum) return "A setting range is not correct."
         if (field["x-hakone-visibleWhen"] !== undefined) {
             var condition = field["x-hakone-visibleWhen"]
-            if (!record(condition) || !own(schema.properties, condition.field) || fieldSecret(schema.properties[condition.field]) || !own(condition, "equals") || Object.keys(condition).some(key => !["field", "equals"].includes(key))) return "A settings condition is not correct."
+            if (!record(condition) || typeof condition.field !== "string" || !own(schema.properties, condition.field) || fieldSecret(schema.properties[condition.field]) || !own(condition, "equals") || Object.keys(condition).some(key => !["field", "equals"].includes(key))) return "A settings condition is not correct."
         }
     }
     return ""

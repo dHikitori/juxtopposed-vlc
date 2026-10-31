@@ -68,7 +68,7 @@ struct AddonArtworkAssets::Cache {
             }
             if(!current()) return canceled();
             if(entries>=options.maxEntries || bytes>=options.maxCacheBytes)
-                return {{},tr("The artwork cache limit has been reached.")};
+                return {{},tr("The artwork cache is full.")};
             return {};
         }
         QString extension;
@@ -77,7 +77,7 @@ struct AddonArtworkAssets::Cache {
             return {{},tr("The artwork response is not a complete PNG, JPEG, or WebP image within the size limit.")};
         if(!current()) return canceled();
         if(entries<0 || entries>=options.maxEntries || bytes+response->body.size()>options.maxCacheBytes)
-            return {{},tr("The artwork cache limit has been reached.")};
+            return {{},tr("The artwork cache is full.")};
         if(!QDir().mkpath(directory)) return {{},tr("The app cannot create the artwork cache.")};
         const auto path=QDir(directory).filePath(key+QLatin1Char('.')+extension);
         if(QFileInfo(path).isSymLink()) return {{},tr("The artwork cache file is not correct.")};
@@ -188,7 +188,7 @@ void AddonArtworkAssets::begin(const QString& id,const QString& contribution,con
     Transfer transfer{contribution, partition, request, {id}, 0, std::move(prepared), {}, 0}; m_transfers.insert(key, transfer);
     QTimer::singleShot(0,this,[this,key,url] {
         if(!m_transfers.contains(key)) return;
-        if(!url.isValid() || url.scheme()!=QStringLiteral("https") || url.host().isEmpty() || !url.userInfo().isEmpty()
+        if(!url.isValid() || url.scheme()!=QStringLiteral("https") || url.host().isEmpty() || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@')))
             || url.hasFragment() || url.toEncoded().size()>8192) {
             finish(key,{},tr("The artwork request is not correct."));return;
         }

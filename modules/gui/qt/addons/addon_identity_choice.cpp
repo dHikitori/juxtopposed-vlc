@@ -185,7 +185,7 @@ void AddonIdentityChoice::offer(const QVariantMap& data, const QString& error)
             {QStringLiteral("link"), credit.value(QStringLiteral("url"))}});
     }
     if (m_rows.isEmpty()) {
-        fail(error.isEmpty() ? tr("No match was found. Try other search text.") : error);
+        fail(error.isEmpty() ? tr("The app found no match. Try other search text.") : error);
         return;
     }
     set(QStringLiteral("choosing"), data.value(QStringLiteral("warning")).toString());
@@ -238,8 +238,8 @@ void AddonIdentityChoice::apply(const QString& status, const QVariantMap& data)
             input_item_Release(copy);
         }
         if (applied != VLC_SUCCESS) {
-            fail(applied == -EAGAIN ? tr("The item changed while it was identified. Try again.")
-                                    : tr("The episode title cannot be saved."));
+            fail(applied == -EAGAIN ? tr("The item changed during identification. Try again.")
+                                    : tr("The app cannot save the episode title."));
             return;
         }
     }
@@ -249,12 +249,12 @@ void AddonIdentityChoice::apply(const QString& status, const QVariantMap& data)
     release();
     m_rows.clear();
     if (!revision) {
-        set(QStringLiteral("failed"), error.isEmpty() ? tr("Your choice cannot be saved.") : error);
+        set(QStringLiteral("failed"), error.isEmpty() ? tr("The app cannot save your choice.") : error);
         return;
     }
     if (m_service) m_service->noteIdentityAccepted();
     set(QStringLiteral("done"), title.isEmpty()
-        ? tr("Saved. %1 is used for this series.").arg(identity.value(QStringLiteral("title")).toString())
+        ? tr("Saved. The app uses %1 for this series.").arg(identity.value(QStringLiteral("title")).toString())
         : tr("Saved. This episode is \"%1\".").arg(title));
     emit accepted(revision);
 }

@@ -32,7 +32,7 @@ AddonUiAssets::Backend AddonVisualizerCatalog::backend(AddonManager* manager, co
             const PackageStore store(directory);
             UiAssetCapture capture; QVariantList choices;
             const auto root = store.storageDirectory(); const bool safe = store.safeMode();
-            static const QRegularExpression digest(QStringLiteral("^[0-9a-f]{64}$"));
+            static const QRegularExpression digest(QStringLiteral("^[0-9a-f]{64}\\z"));
             const auto ids = store.installedIds().mid(0, 256);
             for (const auto& id : ids) {
                 if (!authority.current() || epoch->load(std::memory_order_acquire) != expected) return capture;

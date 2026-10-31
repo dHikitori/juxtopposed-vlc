@@ -90,14 +90,14 @@ C.Popup {
                     objectName: "sourceConsentPublisher"
                     Layout.fillWidth: true; wrapMode: Text.Wrap; textFormat: Text.PlainText
                     visible: root.review.publisherVerified === false
-                    text: qsTr("The publisher has not been verified.")
+                    text: qsTr("The app did not verify the publisher.")
                     color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
                 }
                 Text {
                     Layout.fillWidth: true; wrapMode: Text.Wrap; textFormat: Text.PlainText
                     text: root.review.approved === true
                         ? qsTr("Playback is permitted for this source and account. You can remove this approval.")
-                        : qsTr("This approval stays when the panel closes. A source or account change requires a new review.")
+                        : qsTr("This approval stays when the panel closes. A source or account change needs a new review.")
                     color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
                 }
             }

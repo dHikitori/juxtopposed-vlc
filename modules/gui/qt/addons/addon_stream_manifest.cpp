@@ -21,7 +21,7 @@ struct PendingRange { quint64 length; std::optional<quint64> offset; qsizetype l
 bool https(const QUrl& url)
 {
     if (!url.isValid() || url.scheme() != QLatin1String("https") || url.host().isEmpty()
-        || !url.userInfo().isEmpty() || url.hasFragment() || url.toEncoded().size() > 8192
+        || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@'))) || url.hasFragment() || url.toEncoded().size() > 8192
         || url.port(443) <= 0 || url.port(443) > 65535) return false;
     const auto bytes = url.toEncoded();
     for (const unsigned char byte : bytes) if (byte <= 32 || byte == 127 || byte == '\\') return false;
@@ -32,14 +32,14 @@ bool local(const QString& value, const QUrl& prefix)
     const auto root = prefix.toString(QUrl::FullyEncoded);
     if (!value.startsWith(root)) return false;
     const auto path = value.mid(root.size());
-    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+){0,2}$"));
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+){0,2}\\z"));
     return path.size() <= 512 && pattern.match(path).hasMatch();
 }
 bool proxy(const QUrl& value)
 {
-    static const QRegularExpression path(QStringLiteral("^/[A-Za-z0-9_-]{1,128}/$"));
+    static const QRegularExpression path(QStringLiteral("^/[A-Za-z0-9_-]{1,128}/\\z"));
     return value.isValid() && value.scheme() == QLatin1String("http") && value.host() == QLatin1String("127.0.0.1")
-        && value.port() > 0 && value.port() <= 65535 && value.userInfo().isEmpty()
+        && value.port() > 0 && value.port() <= 65535 && (value.userInfo().isEmpty() && !value.authority().contains(QLatin1Char('@')))
         && !value.hasQuery() && !value.hasFragment() && path.match(value.path(QUrl::FullyEncoded)).hasMatch();
 }
 bool unsignedNumber(const QString& value, quint64* result)

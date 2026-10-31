@@ -17,7 +17,7 @@ namespace distributionBootstrap {
 bool validEntries(const QList<DistributionBootstrapEntry>& entries)
 {
     if(entries.isEmpty() || entries.size()>MaximumEntries)return false;
-    static const QRegularExpression id(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"));
+    static const QRegularExpression id(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\\z"));
     QSet<QString> unique;
     for(const auto& entry:entries) {
         if(entry.expectedId.size()>128 || !id.match(entry.expectedId).hasMatch() || unique.contains(entry.expectedId)

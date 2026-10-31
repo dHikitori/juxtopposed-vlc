@@ -53,7 +53,7 @@ inline std::optional<QVariantMap> normalizeMetadataIdentity(const QVariantMap& i
     auto ids = input.value(QStringLiteral("ids")).toMap();
     const auto external = input.value(QStringLiteral("externalIds")).toList();
     if (ids.size() > 32 || external.size() > 32) return {};
-    static const QRegularExpression atom(QStringLiteral("^[a-z][a-z0-9._-]{0,31}$"));
+    static const QRegularExpression atom(QStringLiteral("^[a-z][a-z0-9._-]{0,31}\\z"));
     for (const auto& entry : external) {
         const auto id = entry.toMap();
         const auto space = id.value(QStringLiteral("namespace")).toString();
@@ -113,7 +113,7 @@ inline std::optional<QVariantMap> normalizeMetadataIdentity(const QVariantMap& i
         }
         value.insert(QStringLiteral("episodes"), normalized);
     }
-    static const QRegularExpression absolute(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?$"));
+    static const QRegularExpression absolute(QStringLiteral("^[0-9]{1,6}(?:\\.[0-9]{1,3})?\\z"));
     const auto absoluteText = input.value(QStringLiteral("absoluteEpisode")).toString();
     if (!absoluteText.isEmpty() && !absolute.match(absoluteText).hasMatch()) return {};
     const auto dateText = input.value(QStringLiteral("airDate")).toString();

@@ -106,7 +106,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     text: row.modelData.status || (!row.modelData.enabled ? qsTr("Disabled")
                         : row.modelData.configurationKnown === false ? qsTr("Settings not checked")
-                        : row.modelData.configured === false ? qsTr("Setup required") : qsTr("Ready"))
+                        : row.modelData.configured === false ? qsTr("Set up first") : qsTr("Ready"))
                     textFormat: Text.PlainText; wrapMode: Text.Wrap
                     color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
                 }

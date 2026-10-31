@@ -58,15 +58,15 @@ bool fail(QString* error, const QString& message)
 }
 bool packageId(const QString& id)
 {
-    return id.size() <= 128 && QRegularExpression(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$")).match(id).hasMatch();
+    return id.size() <= 128 && QRegularExpression(QStringLiteral("^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\\z")).match(id).hasMatch();
 }
 bool digestId(const QString& value)
 {
-    return QRegularExpression(QStringLiteral("^[0-9a-f]{64}$")).match(value).hasMatch();
+    return QRegularExpression(QStringLiteral("^[0-9a-f]{64}\\z")).match(value).hasMatch();
 }
 bool gitId(const QString& value)
 {
-    return QRegularExpression(QStringLiteral("^(?:[0-9a-f]{40}|[0-9a-f]{64})$")).match(value).hasMatch();
+    return QRegularExpression(QStringLiteral("^(?:[0-9a-f]{40}|[0-9a-f]{64})\\z")).match(value).hasMatch();
 }
 QJsonObject identityJson(const ReleaseIdentity& identity)
 {
@@ -635,7 +635,7 @@ bool credentialSettingsValid(const Manifest& manifest, const QJsonObject& schema
         if (!settings.value("_credentials").isObject())
             return fail(error, QStringLiteral("The host credential reference object is not correct."));
         const auto references = settings.value("_credentials").toObject();
-        static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
+        static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\z"));
         for (auto it = references.begin(); it != references.end(); ++it)
             if (!referenceFields.contains(it.key()) || !it.value().isString()
                 || !uuid.match(it.value().toString()).hasMatch())
@@ -815,7 +815,7 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
         return fail(error, QStringLiteral("Select an exact SemVer release tag."));
     const QUrl url(source, QUrl::StrictMode);
     if (!developerLocalSource && (url.scheme() != QStringLiteral("https") || url.host().isEmpty()
-        || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()))
+        || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@'))) || url.hasQuery() || url.hasFragment()))
         return fail(error, QStringLiteral("Use an HTTPS Git source."));
     if (developerLocalSource && (!QFileInfo(source).isDir() || QFileInfo(source).isSymLink()))
         return fail(error, QStringLiteral("The developer source must be an existing local repository."));
@@ -923,7 +923,7 @@ bool PackageStore::fetchRepositoryUpdate(const QString& id, const QString& range
     const auto source = active.identity.source;
     const QUrl url(source, QUrl::StrictMode);
     if (!developerLocalSource && (url.scheme() != QStringLiteral("https") || url.host().isEmpty()
-        || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()))
+        || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@'))) || url.hasQuery() || url.hasFragment()))
         return fail(error, QStringLiteral("Use an HTTPS Git source."));
     if (developerLocalSource && (!QFileInfo(source).isDir() || QFileInfo(source).isSymLink()))
         return fail(error, QStringLiteral("The developer repository directory is not available."));
@@ -1353,7 +1353,7 @@ bool PackageStore::ensureDistributionPackage(const QString& directory,const Mani
     if(!QDir().mkpath(m_root))return fail(error,QStringLiteral("The app cannot create the add-on store."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
     if(!lock.tryLock(0))return fail(error,QStringLiteral("The add-on store is busy."));
-    if(packageRetiring(id))return fail(error,QStringLiteral("The add-on is being removed."));
+    if(packageRetiring(id))return fail(error,QStringLiteral("The add-on removal is in progress."));
     if(distributionSuppressed(id)) {
         if(output)output->state=DistributionInstallResult::State::Suppressed;
         return true;
@@ -1389,7 +1389,7 @@ ProfileChange PackageStore::ensureDistributionPackage(const StoreProfileWriteCon
         if (RepositoryCancellation::requested())
             return refuseProfile(error, QStringLiteral("The app canceled the startup package check."));
         if (store.packageRetiring(id))
-            return refuseProfile(error, QStringLiteral("The add-on is being removed."));
+            return refuseProfile(error, QStringLiteral("The add-on removal is in progress."));
         MetadataCatalogueSnapshot policy;
         if (!store.cataloguePolicy(&policy, error)) return ProfileChange::NeedsRecovery;
         const auto statePath = QDir(store.m_root).filePath(QStringLiteral("packages/") + id + QStringLiteral("/state.json"));
@@ -2307,7 +2307,7 @@ QStringList PackageStore::credentialReferences(const QString& id, const QString&
 {
     if (!packageId(id)) return {};
     QSet<QString> references;
-    static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
+    static const QRegularExpression uuid(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\z"));
     const auto add = [&](const QJsonValue& value) {
         if (value.isString() && uuid.match(value.toString()).hasMatch()) references.insert(value.toString());
     };

@@ -183,7 +183,7 @@ TestCase {
         tryVerify(() => pause.visible && findChild(view, "addonDiscoveryFillStop").x > pause.x)
         mouseClick(pause)
         compare(service.queueFill.paused, true)
-        compare(status.text, "Queue filling from <b>Radio</b> is paused.")
+        compare(status.text, "Paused: <b>Radio</b> adds no items to the queue.")
         compare(findChild(view, "addonDiscoveryFillPause").caption, "Resume")
         mouseClick(findChild(view, "addonDiscoveryFillStop"))
         tryVerify(() => start.visible)

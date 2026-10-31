@@ -6,7 +6,7 @@ namespace vlc::addons {
 bool AddonStreamPolicy::url(const QUrl& value)
 {
     if (!value.isValid() || value.scheme() != QLatin1String("https") || value.host().isEmpty() || value.port(443) != 443
-        || !value.userInfo().isEmpty() || value.authority(QUrl::FullyEncoded).contains(QLatin1Char('@'))
+        || (!value.userInfo().isEmpty() || value.authority().contains(QLatin1Char('@'))) || value.authority(QUrl::FullyEncoded).contains(QLatin1Char('@'))
         || value.hasFragment() || value.toEncoded().size() > 8192 || value.host().size() > 253) return false;
     for (const auto& part : {value.path(QUrl::FullyDecoded),value.query(QUrl::FullyDecoded)})
         for (const auto c : part) if (c.unicode() < 32 || (c.unicode() >= 127 && c.unicode() <= 159) || c == QLatin1Char('\\')) return false;

@@ -39,7 +39,7 @@ bool AddonWebSocketCodec::token(const QByteArray& bytes)
 }
 std::optional<AddonWebSocketCodec::Handshake> AddonWebSocketCodec::handshake(const QUrl& url, const QStringList& protocols)
 {
-    if (!url.isValid() || url.scheme() != QLatin1String("wss") || url.host().isEmpty() || !url.userInfo().isEmpty()
+    if (!url.isValid() || url.scheme() != QLatin1String("wss") || url.host().isEmpty() || (!url.userInfo().isEmpty() || url.authority().contains(QLatin1Char('@')))
         || url.authority(QUrl::FullyEncoded).contains(QLatin1Char('@')) || url.hasFragment()
         || url.port(443) != 443 || url.toEncoded().size() > 8192 || protocols.size() > 8) return {};
     QSet<QString> unique;

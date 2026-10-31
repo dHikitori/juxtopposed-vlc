@@ -19,7 +19,7 @@ bool fail(QString* error)
 }
 bool identifier(const QString& id)
 {
-    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z_][A-Za-z0-9_-]{0,63}$"));
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z_][A-Za-z0-9_-]{0,63}\\z"));
     return pattern.match(id).hasMatch() && id != QLatin1String("__proto__")
         && id != QLatin1String("prototype") && id != QLatin1String("constructor");
 }

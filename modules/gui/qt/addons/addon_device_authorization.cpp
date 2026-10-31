@@ -24,7 +24,7 @@ bool endpoint(const QJsonValue& value, QUrl* url)
     if (!value.isString() || value.toString().size() > 2048) return false;
     const QUrl parsed(value.toString(), QUrl::StrictMode);
     if (!parsed.isValid() || parsed.scheme() != QLatin1String("https") || parsed.host().isEmpty()
-        || !parsed.userInfo().isEmpty() || parsed.hasFragment()) return false;
+        || (!parsed.userInfo().isEmpty() || parsed.authority().contains(QLatin1Char('@'))) || parsed.hasFragment()) return false;
     *url = parsed;
     return true;
 }
@@ -38,7 +38,7 @@ QUrl page(const QJsonValue& value)
 {
     if (!value.isString() || value.toString().size() > 2048) return {};
     const QUrl url(value.toString(), QUrl::StrictMode);
-    return url.isValid() && url.scheme() == QLatin1String("https") && !url.host().isEmpty() && url.userInfo().isEmpty()
+    return url.isValid() && url.scheme() == QLatin1String("https") && !url.host().isEmpty() && (url.userInfo().isEmpty() && !url.authority().contains(QLatin1Char('@')))
         ? url : QUrl{};
 }
 QByteArray form(const QList<std::pair<QString, QString>>& fields)
@@ -55,7 +55,7 @@ QJsonObject object(const QByteArray& body)
 bool token(const QJsonValue& value, QByteArray* output)
 {
     // A bearer token is visible ASCII; a header cannot carry anything else.
-    static const QRegularExpression visible(QStringLiteral("^[\\x21-\\x7e]{1,8192}$"));
+    static const QRegularExpression visible(QStringLiteral("^[\\x21-\\x7e]{1,8192}\\z"));
     if (!value.isString() || !visible.match(value.toString()).hasMatch()) return false;
     *output = value.toString().toLatin1();
     return true;
@@ -82,8 +82,8 @@ std::optional<DeviceRecipe> DeviceRecipe::from(const QJsonObject& annotation, co
         fail(error, QStringLiteral("The account endpoints must be declared network origins."));
         return std::nullopt;
     }
-    static const QRegularExpression client(QStringLiteral("^[\\x21-\\x7e]{1,256}$"));
-    static const QRegularExpression scope(QStringLiteral("^[\\x21\\x23-\\x5b\\x5d-\\x7e]{1,128}$"));
+    static const QRegularExpression client(QStringLiteral("^[\\x21-\\x7e]{1,256}\\z"));
+    static const QRegularExpression scope(QStringLiteral("^[\\x21\\x23-\\x5b\\x5d-\\x7e]{1,128}\\z"));
     const auto clientId = annotation.value(QStringLiteral("clientId"));
     if (!clientId.isString() || !client.match(clientId.toString()).hasMatch()) {
         fail(error, QStringLiteral("The account client ID is not correct."));
@@ -188,8 +188,8 @@ void DeviceAuthorization::authorized(int status, const QByteArray& body)
     const auto reply = object(body);
     const auto lifetime = reply.value(QStringLiteral("expires_in"));
     const auto interval = reply.value(QStringLiteral("interval"));
-    static const QRegularExpression code(QStringLiteral("^[\\x21-\\x7e]{1,4096}$"));
-    static const QRegularExpression userCode(QStringLiteral("^[\\x20-\\x7e]{1,64}$"));
+    static const QRegularExpression code(QStringLiteral("^[\\x21-\\x7e]{1,4096}\\z"));
+    static const QRegularExpression userCode(QStringLiteral("^[\\x20-\\x7e]{1,64}\\z"));
     const auto device = reply.value(QStringLiteral("device_code")).toString();
     const auto user = reply.value(QStringLiteral("user_code")).toString().trimmed();
     const auto verification = page(reply.value(QStringLiteral("verification_uri")));
