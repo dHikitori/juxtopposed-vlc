@@ -1,7 +1,8 @@
 # Player panels, and Episodes as an add-on (design)
 
-Written 31 October 2026. Status: proposal. Nothing in this record is
-implemented. It extends the published hooks of
+Written 31 October 2026. Status: implemented on Linux, waiting for the
+Windows check; see [Implementation](#implementation). It extends the
+published hooks of
 [UI, themes and configuration](../04-ui-themes-and-configuration.md) and the
 read projections of [guest projections](guest-projections.md).
 
@@ -280,3 +281,95 @@ choices left to the implementer. These are the choices:
   owner is on by default (a rule of the handoff). The panel does not
   depend on it: the app adds titles to `media.siblings` from whichever path
   is active.
+
+## Implementation
+
+Built on 31 October 2026 in `82fbb47ee3` (host), `1db521b813` (package and
+bundling) and `54cc3444cc` (instruction budget). The author guide is
+[player panels](../sdk/player-panels.md).
+
+### What the app has now
+
+- **Hook and frame.** `ui.panel` on `player.panels@1`
+  (`addon_manifest.cpp`, `addon_ui_registry.*`), `RedesignAddonPanel.qml`
+  in the side area of the queue and playback settings. One side panel at a
+  time; Escape and the close button close it; a failed view shows "Reload"
+  and "Open Extensions", and the button stays.
+- **Context call.** `AddonUiRegistry::setPanelMedia` on each new media,
+  `refreshPanels` (one call a second at most) when the series data changes
+  while a panel is open, `attachPanelSession` when a panel opens. Replies
+  for older media are ignored.
+- **Effects.** `play`, `rescan`, `identify` and `source`, accepted only in
+  the reply to a session command (a click). `AddonMediaSiblings::runEffect`
+  checks the ID; the player runs the effect on its existing paths.
+- **Layout and icons.** Layout items `addon:<package>/<panel>`, saved
+  layouts with `episodes` moved to the bundled panel, requested zones drawn
+  until the user removes them (`dismissed` in the saved layout), a
+  "missing" item visible only in the editor. `addon_panel_icon.cpp` checks
+  the SVG in the store snapshot job; `RedesignIcon.markup` draws it.
+- **Components.** `Tabs`, `Menu`, `MediaRow`, and `List` with `scroll`,
+  `more`, `moreAction` and `moreText`, in `AddonUi.js`, the renderer, the
+  host type list, `ui-view.schema.json` and the corpus.
+- **media.siblings.** `addon_media_siblings.*`, mounted on an app-owned
+  `SeriesModel` (`redesignSeriesModel`). The series is looked for only
+  while an enabled panel can read it (`siblingsWanted`).
+- **Episodes package.** `examples/episodes`, version 1.0.0, bundled and on
+  by default. The built-in `RedesignEpisodesView.qml` is removed.
+
+### Changes from the design
+
+- **Watch state** is in the `media.siblings` items (`progress`, `played`),
+  not new `library.query` fields. The series model already reads it, and a
+  panel then needs no `library.read` grant.
+- **Details on request.** Descriptions, artwork and the title source come
+  only for up to four IDs in `details`. A podcast's show notes can be 4 KiB
+  for each entry.
+- **Pages of 40.** The worker gives each dispatch 10 million Wasm
+  instructions. A measurement with a probe worker gave about 120,000 for
+  each rendered row (25 rows: 3.2 M, 50: 6.1 M, 100: 12.0 M, so 100 rows
+  stopped the worker). After the change a closed row costs about 92,000
+  and a page of 40 about 37 % of the budget. Longer seasons page with Next
+  and Previous, and the playing episode's page opens first
+  (`currentOffset`). The open-panel flow takes 1.1 ms (median, 500 files,
+  three host reads) in the real worker.
+- **Grouping.** The app's scan still matches the series and orders the
+  files; items are in episode order with the versions of an episode after
+  version 0. The package makes episodes, seasons, labels, marks, versions
+  and pages from that. The scan stays in the app because a package must not
+  see the other files of a folder.
+- **Default zone.** Requested zones are drawn, not written, so every
+  layout write stays in the editor's save. The bundled panel has no
+  `placement`: the default layout names it, and a layout saved without the
+  built-in button keeps it removed.
+- **No `panel` template.** The Episodes package and the guide are the
+  example. The icon names `lyrics` and `people` are not added: the app has
+  no glyphs for them yet.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `test_qt_addon_ui_registry` | 26 cases, including context calls, stale replies, refresh limit, click-only effects, panel declarations and icon checks |
+| `test_qt_addon_media_siblings` | 6 cases: no paths or URLs, IDs for each package, grants, season filter and pages, waiting for a scan, details, effects |
+| `test_qt_addon_schema_corpus` | 330 cases, including the Episodes manifest, view, icon and `tests/sample-state.json` against the app's rules |
+| `check-corpus.py` (jsonschema 4.23.0) | 326 cases |
+| Episodes `cargo test` | 17 tests: the former built-in rules case by case, paging, details, effects, fixture |
+| `addon_episodes_worker` | 6 tests in the real worker, including a full page with long names and an open row with 4 KiB of notes |
+| QML | `tst_AddonUi` (components), `tst_AddonMounts` (frame), `tst_RedesignPlayerLayout` (panel items, migration, dismissal), `tst_RedesignPlayerChrome`, `tst_RedesignCustomizationEditor`, `tst_AddonPlainText` |
+| Labels at `1db521b813` | profile 33 (+1 expected fail, 1 skipped), ui 11, source 23, metadata 53, session 5, visualizer 12, app 6; 0 failed |
+
+Two QML results fail on the commit before this work as well:
+`tst_AddonTheme::test_unknownTokensAndExecutablePropertiesFailClosed`, and
+`tst_Redesign`, which passes in 31.3 s but has a 30 s meson limit.
+
+### Open
+
+- The user's Windows check of the bundled Episodes panel.
+- Step 1 (titles only through providers) waits for the native metadata
+  owner, as decided above.
+- Text in the package's state and view is English only. A state message
+  with arguments, or the app's locale in the invocation, would let the
+  package translate it.
+- `SeriesModel` still has the season list and roles of the removed view;
+  only `siblings()` and the scan are used now.
+

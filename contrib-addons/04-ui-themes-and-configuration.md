@@ -66,6 +66,7 @@ Each hook has a stable ID, major version, accepted contribution types, context s
 | `subtitles.search.content@1` | One user-selected replacement search body | Host modal frame, draft/selection contract, confirm/cancel and track assignment |
 | `queue.item.actions@1` | Many commands | Current selected entry IDs, normal queue mutation checks and overflow ordering |
 | `player.actions@1` | Many commands available to customization | Existing bounded toolbar zones, button sizing and playback-critical controls |
+| `player.panels@1` | Many side panels, each with a layout button ([design](records/player-panels-design.md)) | Panel frame, one side panel at a time, button placement, focus, recovery and every playback effect |
 | `dialog.add-to-playlist.content@1` | One user-selected replacement picker | Target item set, allowed playlist handles and atomic confirm/cancel result |
 | `settings.addons.sections@1` | Many package-specific settings sections | Core categories, Save/Cancel and account/permission controls |
 | `actions.subtitles.open@1` | One user-selected alternate command | Existing action placement/accessible purpose and built-in fallback |

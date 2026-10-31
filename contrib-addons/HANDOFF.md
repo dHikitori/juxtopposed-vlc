@@ -27,9 +27,11 @@ done except macOS, which needs a macOS host.
 - **Windows:** a package with every change up to the end of Step 7 is built
   for the user's final check. The native metadata owner stays off by
   default until that check passes.
-- **Player panels:** [design](records/player-panels-design.md) for add-ons
-  that own a player panel and its layout button, with Episodes as the
-  first bundled package. Implementation is in progress.
+- **Player panels:** add-ons can own a player panel and its layout button
+  ([record](records/player-panels-design.md), [guide](sdk/player-panels.md)).
+  The Episodes panel is now the bundled package `org.videolan.episodes`,
+  on by default; the built-in panel is removed. Waiting for the user's
+  Windows check.
 - **Tool environment:** the schema corpus check needs jsonschema 4.23.0
   (`python3 -m venv` in the scratchpad, then `pip install
   jsonschema==4.23.0`). Under the system jsonschema 3.2 the meson test
@@ -83,7 +85,8 @@ These matter on this machine (WSL2 on Windows):
 
 ## Open items owned by the user
 
-- The final Windows check of the package built at the end of Step 7.
+- The final Windows check of the package built at the end of Step 7,
+  now with player panels and the Episodes add-on.
 - The decision to turn the native metadata owner on by default after it.
 - Optional clean-up: the local branch `backup/addons-before-target-removal`
   and `refs/original` from the history rewrite that removed a committed

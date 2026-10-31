@@ -62,6 +62,7 @@ Add one row for each label run that a record or a decision relies on.
 | `7ddc4b28ee` | `ui` | 7 tests, 170 cases. 0 failed, 0 skipped. | Linux, meson debug |
 | `7ddc4b28ee` | `session` | 4 tests, 28 cases. 0 failed, 0 skipped. | Linux, meson debug |
 | `7ddc4b28ee` | `app` | 3 tests (one window, two windows, driver). 0 failed. | Linux, meson debug with `-Daddon-test-driver=true`, offscreen Qt, Mesa llvmpipe |
+| `1db521b813` | `profile`, `ui`, `source`, `metadata`, `session`, `visualizer`, `app` | 33 (+1 expected fail, 1 skipped), 11, 23, 53, 5, 12, 6 tests. 0 failed. | Linux, meson debug; player panels and the bundled Episodes package |
 
 ## Cross-cutting gates
 
@@ -141,6 +142,7 @@ Add one row for each label run that a record or a decision relies on.
 | Extensions list, generated settings and install approval | mounted | `ui`: `test_qt_addon_catalogue_view`, `test_qt_addon_display_catalogue`, `test_qt_addon_package_summaries`; [Extensions](records/extensions-settings-ui.md), [package list](records/package-summary-ui.md) | Windows Extensions click (user). |
 | File, folder and account pickers; account recipes; settings layers | mounted | `profile`: `test_qt_addon_accounts`; `tst_AddonUi`; [record](records/settings-accounts.md), [SDK](sdk/settings-accounts.md) | Account-scoped value layer; PKCE recipe; guest operation for picked handles; live sign-in run. |
 | Theme and UI preview harness | mounted | `ui`: `addon_preview`, `addon_preview_theme`; [record](records/schemas-and-author-tools.md) | Interactive preview. |
+| Player panels (`player.panels@1`), add-on layout buttons and icons, `media.siblings`, panel effects | mounted | `ui`: `test_qt_addon_ui_registry`, `test_qt_addon_media_siblings`, `addon_episodes_worker`; `profile`: `test_qt_addon_schema_corpus`; `tst_AddonUi`, `tst_AddonMounts`, `tst_RedesignPlayerLayout`; [record](records/player-panels-design.md), [SDK](sdk/player-panels.md) | Windows check of the bundled Episodes panel (user). |
 
 ## Visualizers and sessions (`05-visualizers-and-sessions.md`)
 

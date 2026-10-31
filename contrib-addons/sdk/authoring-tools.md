@@ -64,8 +64,9 @@ QT_QPA_PLATFORM=offscreen vlc-addon-preview --qml modules/gui/qt/player/qml/rede
 ```
 
 For each theme it writes sample controls in the dark and light variants,
-also with high contrast. For each view it writes the document with its
-declared initial state. The images use the app's own components.
+also with high contrast. For each view (routes, modals, sections,
+replacements and [player panels](player-panels.md)) it writes the document
+with its declared initial state. The images use the app's own components.
 
 ## Templates
 
@@ -78,6 +79,10 @@ declared initial state. The images use the app's own components.
 
 `templates/check-templates.py` builds each one, runs its unit tests and
 self-test, and validates the package.
+
+For a player panel, start from the bundled Episodes package
+([`examples/episodes`](../examples/episodes)) and the
+[player panel guide](player-panels.md).
 
 ## Text check
 
