@@ -1,0 +1,205 @@
+{
+  "description": "The schema has more than 64 fields.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field_0": {
+        "type": "boolean"
+      },
+      "field_1": {
+        "type": "boolean"
+      },
+      "field_2": {
+        "type": "boolean"
+      },
+      "field_3": {
+        "type": "boolean"
+      },
+      "field_4": {
+        "type": "boolean"
+      },
+      "field_5": {
+        "type": "boolean"
+      },
+      "field_6": {
+        "type": "boolean"
+      },
+      "field_7": {
+        "type": "boolean"
+      },
+      "field_8": {
+        "type": "boolean"
+      },
+      "field_9": {
+        "type": "boolean"
+      },
+      "field_10": {
+        "type": "boolean"
+      },
+      "field_11": {
+        "type": "boolean"
+      },
+      "field_12": {
+        "type": "boolean"
+      },
+      "field_13": {
+        "type": "boolean"
+      },
+      "field_14": {
+        "type": "boolean"
+      },
+      "field_15": {
+        "type": "boolean"
+      },
+      "field_16": {
+        "type": "boolean"
+      },
+      "field_17": {
+        "type": "boolean"
+      },
+      "field_18": {
+        "type": "boolean"
+      },
+      "field_19": {
+        "type": "boolean"
+      },
+      "field_20": {
+        "type": "boolean"
+      },
+      "field_21": {
+        "type": "boolean"
+      },
+      "field_22": {
+        "type": "boolean"
+      },
+      "field_23": {
+        "type": "boolean"
+      },
+      "field_24": {
+        "type": "boolean"
+      },
+      "field_25": {
+        "type": "boolean"
+      },
+      "field_26": {
+        "type": "boolean"
+      },
+      "field_27": {
+        "type": "boolean"
+      },
+      "field_28": {
+        "type": "boolean"
+      },
+      "field_29": {
+        "type": "boolean"
+      },
+      "field_30": {
+        "type": "boolean"
+      },
+      "field_31": {
+        "type": "boolean"
+      },
+      "field_32": {
+        "type": "boolean"
+      },
+      "field_33": {
+        "type": "boolean"
+      },
+      "field_34": {
+        "type": "boolean"
+      },
+      "field_35": {
+        "type": "boolean"
+      },
+      "field_36": {
+        "type": "boolean"
+      },
+      "field_37": {
+        "type": "boolean"
+      },
+      "field_38": {
+        "type": "boolean"
+      },
+      "field_39": {
+        "type": "boolean"
+      },
+      "field_40": {
+        "type": "boolean"
+      },
+      "field_41": {
+        "type": "boolean"
+      },
+      "field_42": {
+        "type": "boolean"
+      },
+      "field_43": {
+        "type": "boolean"
+      },
+      "field_44": {
+        "type": "boolean"
+      },
+      "field_45": {
+        "type": "boolean"
+      },
+      "field_46": {
+        "type": "boolean"
+      },
+      "field_47": {
+        "type": "boolean"
+      },
+      "field_48": {
+        "type": "boolean"
+      },
+      "field_49": {
+        "type": "boolean"
+      },
+      "field_50": {
+        "type": "boolean"
+      },
+      "field_51": {
+        "type": "boolean"
+      },
+      "field_52": {
+        "type": "boolean"
+      },
+      "field_53": {
+        "type": "boolean"
+      },
+      "field_54": {
+        "type": "boolean"
+      },
+      "field_55": {
+        "type": "boolean"
+      },
+      "field_56": {
+        "type": "boolean"
+      },
+      "field_57": {
+        "type": "boolean"
+      },
+      "field_58": {
+        "type": "boolean"
+      },
+      "field_59": {
+        "type": "boolean"
+      },
+      "field_60": {
+        "type": "boolean"
+      },
+      "field_61": {
+        "type": "boolean"
+      },
+      "field_62": {
+        "type": "boolean"
+      },
+      "field_63": {
+        "type": "boolean"
+      },
+      "field_64": {
+        "type": "boolean"
+      }
+    }
+  }
+}

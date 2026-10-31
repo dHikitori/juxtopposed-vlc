@@ -1,0 +1,13 @@
+{
+  "description": "A field name starts with a digit.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "1st": {
+        "type": "string"
+      }
+    }
+  }
+}

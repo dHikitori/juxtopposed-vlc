@@ -1,0 +1,17 @@
+{
+  "description": "reuseSeconds is a string.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "fields": {
+        "title": "A"
+      },
+      "retention": {
+        "reuseSeconds": "3600"
+      }
+    }
+  }
+}

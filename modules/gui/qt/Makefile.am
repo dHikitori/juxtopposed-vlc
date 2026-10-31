@@ -2720,6 +2720,17 @@ test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFOR
 check_PROGRAMS += test_qt_addon_worker_health
 TESTS += test_qt_addon_worker_health
 
+test_qt_addon_schema_corpus_SOURCES = tests/test_addon_schema_corpus.cpp
+nodist_test_qt_addon_schema_corpus_SOURCES = tests/test_addon_schema_corpus.moc
+BUILT_SOURCES += tests/test_addon_schema_corpus.moc
+CLEANFILES += tests/test_addon_schema_corpus.moc
+test_qt_addon_schema_corpus_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_schema_corpus_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_schema_corpus_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_schema_corpus_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_schema_corpus
+TESTS += test_qt_addon_schema_corpus
+
 test_qt_addon_guest_projections_SOURCES = tests/test_addon_guest_projections.cpp
 nodist_test_qt_addon_guest_projections_SOURCES = tests/test_addon_guest_projections.moc
 BUILT_SOURCES += tests/test_addon_guest_projections.moc

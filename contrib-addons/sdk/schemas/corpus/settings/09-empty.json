@@ -1,0 +1,10 @@
+{
+  "description": "A schema without fields.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  }
+}

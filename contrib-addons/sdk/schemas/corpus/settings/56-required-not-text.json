@@ -1,0 +1,23 @@
+{
+  "description": "A required entry must be a field name.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "language": {
+        "type": "string",
+        "default": "en"
+      },
+      "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9,
+        "default": 3
+      }
+    },
+    "required": [
+      true
+    ]
+  }
+}

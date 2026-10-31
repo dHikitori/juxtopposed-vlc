@@ -1,0 +1,12 @@
+{
+  "description": "A row id is null.",
+  "valid": false,
+  "value": {
+    "items": [
+      {
+        "id": null,
+        "title": "Null"
+      }
+    ]
+  }
+}

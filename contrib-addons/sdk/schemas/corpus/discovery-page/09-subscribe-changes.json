@@ -1,0 +1,21 @@
+{
+  "description": "A subscribe page with a new row, removed IDs, a revision and a check time.",
+  "valid": true,
+  "value": {
+    "items": [
+      {
+        "id": "item-9",
+        "title": "Item 9"
+      }
+    ],
+    "removed": [
+      "item-1",
+      "item-2"
+    ],
+    "revision": "rev-17",
+    "nextCheckSeconds": 300
+  },
+  "context": {
+    "operation": "subscribe"
+  }
+}

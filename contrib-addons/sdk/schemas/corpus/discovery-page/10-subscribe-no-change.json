@@ -1,0 +1,12 @@
+{
+  "description": "A subscribe reply that reports no change.",
+  "valid": true,
+  "value": {
+    "revision": "rev-17",
+    "nextCheckSeconds": 900
+  },
+  "context": {
+    "operation": "subscribe",
+    "status": "no_match"
+  }
+}

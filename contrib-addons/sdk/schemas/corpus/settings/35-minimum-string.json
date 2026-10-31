@@ -1,0 +1,14 @@
+{
+  "description": "A numeric limit is a string.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "integer",
+        "minimum": "1"
+      }
+    }
+  }
+}

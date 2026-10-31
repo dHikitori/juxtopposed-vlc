@@ -1,0 +1,19 @@
+{
+  "description": "A texture node with an asset key, and asset paths with subfolders.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "texture",
+        "asset": "tile",
+        "opacity": 0.5
+      }
+    ],
+    "assets": {
+      "tile": "images/tile.png",
+      "_bg-2": "a/b/c/...png"
+    }
+  }
+}

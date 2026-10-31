@@ -1,0 +1,9 @@
+{
+  "description": "The top-level type is not object.",
+  "valid": false,
+  "value": {
+    "type": "array",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

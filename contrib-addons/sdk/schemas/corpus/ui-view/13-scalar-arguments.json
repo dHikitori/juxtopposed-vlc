@@ -1,0 +1,58 @@
+{
+  "description": "Command arguments that are a string, null and an empty object at the deepest level.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Column",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play",
+            "arguments": "station-1"
+          }
+        },
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play",
+            "arguments": null
+          }
+        },
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play",
+            "arguments": {
+              "a": {
+                "b": {
+                  "c": {
+                    "d": {
+                      "e": {
+                        "f": {
+                          "g": {
+                            "h": {}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "description": "A discovery source with media streams and a request interval.",
+  "valid": true,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.hakone.radio-browser",
+    "name": "Radio Browser",
+    "version": "0.1.0",
+    "publisher": "Hakone reference add-ons",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-radio-browser.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "discovery": "^1.0.0"
+      }
+    },
+    "runtime": {
+      "kind": "wasm-message-v1",
+      "entry": "dist/addon.wasm"
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "NOTICE.md",
+      "THIRD_PARTY_NOTICES.md",
+      "dist/addon.wasm"
+    ],
+    "contributions": [
+      {
+        "id": "stations",
+        "name": "Radio Browser",
+        "type": "discovery.source",
+        "contract": "discovery@1",
+        "mediaKinds": [
+          "audio"
+        ],
+        "operations": [
+          "roots",
+          "browse",
+          "search",
+          "resolve"
+        ],
+        "requires": [
+          "network.http"
+        ]
+      }
+    ],
+    "permissions": {
+      "required": {
+        "network.http": {
+          "origins": [
+            "https://de1.api.radio-browser.info"
+          ],
+          "methods": [
+            "GET"
+          ],
+          "minimumIntervalMs": 1000
+        },
+        "media.stream": {
+          "profiles": [
+            "public-https-media@1"
+          ]
+        }
+      },
+      "optional": {}
+    }
+  }
+}

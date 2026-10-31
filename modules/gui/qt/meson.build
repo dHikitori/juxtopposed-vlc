@@ -1948,6 +1948,48 @@ if qt6_dep.found()
         cpp_args: [qt_extra_flags, qt_cppargs, '-D__PLUGIN__'],
         pic: true,
         build_by_default: false)
+    # The package validator for add-on authors: the host's install rules,
+    # without running package code.
+    addon_validate = executable('vlc-addon-validate', files('addons/tools/vlc_addon_validate.cpp'),
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: [qt6_dep, qt_extra_deps, libvlccore_deps, threads_dep],
+        link_with: [addon_host_library, libvlccore],
+        cpp_args: [qt_extra_flags, qt_cppargs],
+        install: false, build_by_default: false)
+    addon_preview = executable('vlc-addon-preview', files('addons/tools/vlc_addon_preview.cpp'),
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: [qt6_dep, qt_extra_deps, libvlccore_deps, threads_dep],
+        link_with: [addon_host_library, libvlccore],
+        cpp_args: [qt_extra_flags, qt_cppargs],
+        install: false, build_by_default: false)
+    addon_validate_examples = []
+    foreach example : ['discovery-fixture', 'french-tv', 'google-images', 'lastfm', 'midnight', 'musicbrainz', 'radio-browser', 'thesubtitledb', 'tvmaze', 'visual-scenes']
+        addon_validate_examples += meson.project_source_root() / 'contrib-addons/examples' / example
+    endforeach
+    test('addon_validate_examples', addon_validate,
+        args: ['--ui', meson.current_source_dir() / 'player/qml/redesign/AddonUi.js'] + addon_validate_examples,
+        suite: ['qt', 'addons', addon_test_labels['addon_validate_examples']], timeout: 60)
+    test('addon_validate_refuses', addon_validate, args: [meson.current_source_dir() / 'tests/fixtures/invalid-addon'],
+        should_fail: true, suite: ['qt', 'addons', addon_test_labels['addon_validate_refuses']], timeout: 30)
+    addon_preview_args = ['--qml', meson.current_source_dir() / 'player/qml/redesign', '--output', meson.current_build_dir() / 'addon-preview']
+    test('addon_preview', addon_preview,
+        args: addon_preview_args + [meson.current_source_dir() / 'tests/fixtures/preview-addon'],
+        env: ['QT_QPA_PLATFORM=offscreen'], suite: ['qt', 'addons', addon_test_labels['addon_preview']], timeout: 60)
+    test('addon_preview_theme', addon_preview,
+        args: addon_preview_args + [meson.project_source_root() / 'contrib-addons/examples/midnight'],
+        env: ['QT_QPA_PLATFORM=offscreen'], suite: ['qt', 'addons', addon_test_labels['addon_preview_theme']], timeout: 60)
+    # The schemas, their generated Rust types and the author templates.
+    test('addon_schema_corpus_python', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/schemas/check-corpus.py'],
+        suite: ['qt', 'addons', addon_test_labels['addon_schema_corpus_python']], timeout: 60)
+    test('addon_schema_rust_drift', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/schemas/generate-rust.py', '--check'],
+        suite: ['qt', 'addons', addon_test_labels['addon_schema_rust_drift']], timeout: 30)
+    if addon_worker_dependencies != []
+        test('addon_templates', prog_python,
+            args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/templates/check-templates.py', '--validator', addon_validate.full_path(),
+                '--ui', meson.current_source_dir() / 'player/qml/redesign/AddonUi.js', '--worker', addon_worker_target.full_path()],
+            depends: [addon_validate, addon_worker_dependencies], env: ['RUSTUP_TOOLCHAIN=stable'],
+            suite: ['qt', 'addons', addon_test_labels['addon_templates']], timeout: 600)
+    endif
 
     qt6pre_files = qt6.preprocess(ui_files: ui_sources,
         method: qt_dependency_method,
@@ -2001,7 +2043,7 @@ if qt6_dep.found()
         addon_visualizer_process = executable('addon_visualizer_process', files('tests/fixtures/addon_visualizer_process.c'), install: false, build_by_default: false)
         addon_discovery_source_process = executable('addon_discovery_source_process', files('tests/fixtures/addon_discovery_source_process.c'), install: false, build_by_default: false)
         addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
-        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'store_profile_writes', 'profile_host', 'worker_health', 'candidate_check', 'accounts', 'guest_projections', 'identity_choice', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
+        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'store_profile_writes', 'profile_host', 'worker_health', 'candidate_check', 'accounts', 'guest_projections', 'schema_corpus', 'identity_choice', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
             native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
             addon_timeout = addon_test in ['catalogue_view', 'display_catalogue', 'package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'playable_gate', 'runtime', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'profile_host', 'worker_health', 'candidate_check'] ? 90 : 30
             if addon_test in ['display_integration', 'distribution_bootstrap']

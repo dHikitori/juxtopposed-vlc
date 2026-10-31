@@ -1,0 +1,15 @@
+{
+  "description": "The retention record is an array.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "fields": {
+        "title": "A"
+      },
+      "retention": []
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "description": "The document has an unknown top-level property.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations"
+    },
+    "theme": "dark"
+  }
+}

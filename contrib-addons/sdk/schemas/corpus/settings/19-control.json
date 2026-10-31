@@ -1,0 +1,14 @@
+{
+  "description": "A field uses an editor that is not supported.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "integer",
+        "x-hakone-control": "slider"
+      }
+    }
+  }
+}

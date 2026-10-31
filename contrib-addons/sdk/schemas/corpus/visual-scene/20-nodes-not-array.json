@@ -1,0 +1,11 @@
+{
+  "description": "The nodes value is an object.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": {
+      "type": "spectrum"
+    }
+  }
+}

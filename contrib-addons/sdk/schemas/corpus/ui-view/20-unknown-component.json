@@ -1,0 +1,18 @@
+{
+  "description": "The component type Table is not available in the current host.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Table",
+          "text": "x"
+        }
+      ]
+    }
+  }
+}

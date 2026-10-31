@@ -1,0 +1,17 @@
+{
+  "description": "A list item schema has a keyword that is not supported.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 8
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "description": "A row kind is not media or node.",
+  "valid": false,
+  "value": {
+    "items": [
+      {
+        "id": "a",
+        "kind": "folder"
+      }
+    ]
+  }
+}

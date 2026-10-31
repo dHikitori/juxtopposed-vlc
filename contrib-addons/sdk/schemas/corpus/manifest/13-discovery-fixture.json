@@ -1,0 +1,52 @@
+{
+  "description": "A discovery source with empty permission groups.",
+  "valid": true,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.hakone.discovery-fixture",
+    "name": "Discovery fixture (synthetic)",
+    "version": "0.1.0",
+    "publisher": "Hakone reference add-ons",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-discovery-fixture.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "discovery": "^1.0.0"
+      }
+    },
+    "runtime": {
+      "kind": "wasm-message-v1",
+      "entry": "dist/addon.wasm"
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "dist/addon.wasm"
+    ],
+    "contributions": [
+      {
+        "id": "catalogue",
+        "name": "Synthetic discovery catalogue",
+        "type": "discovery.source",
+        "contract": "discovery@1",
+        "mediaKinds": [
+          "musicTrack",
+          "podcastEpisode"
+        ],
+        "operations": [
+          "roots",
+          "browse",
+          "search",
+          "suggest",
+          "resolve"
+        ],
+        "requires": []
+      }
+    ],
+    "permissions": {
+      "required": {},
+      "optional": {}
+    }
+  }
+}

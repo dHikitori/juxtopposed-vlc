@@ -1,0 +1,22 @@
+{
+  "description": "The documented example page with a media row, a node row and an object cursor.",
+  "valid": true,
+  "value": {
+    "items": [
+      {
+        "id": "station-42",
+        "kind": "media",
+        "title": "Station 42",
+        "mediaKind": "audio"
+      },
+      {
+        "id": "regional",
+        "kind": "node",
+        "title": "Regional stations"
+      }
+    ],
+    "cursor": {
+      "offset": 200
+    }
+  }
+}

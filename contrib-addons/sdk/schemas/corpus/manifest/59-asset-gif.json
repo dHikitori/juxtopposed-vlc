@@ -1,0 +1,111 @@
+{
+  "description": "A UI image is not PNG, JPEG or WebP.",
+  "valid": false,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.hakone.example.midnight",
+    "name": "Midnight",
+    "version": "1.0.0",
+    "publisher": "Hakone add-on examples",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-midnight.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "ui": "^1.0.0"
+      }
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "views/home.json",
+      "images/banner.png",
+      "images/Logo.WEBP",
+      "images/anim.gif"
+    ],
+    "contributions": [
+      {
+        "id": "home",
+        "type": "ui.route",
+        "contract": "ui@1",
+        "label": "Home",
+        "route": "home",
+        "view": "views/home.json",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tab": {
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ],
+              "maxLength": 8
+            }
+          }
+        },
+        "stateSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "count"
+          ],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0,
+              "maxItems": 10
+            },
+            "on": {
+              "type": "boolean",
+              "enum": [
+                true,
+                false
+              ]
+            }
+          }
+        },
+        "state": {
+          "count": 1,
+          "tags": [
+            "x"
+          ]
+        },
+        "resultSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "assets": {
+          "banner": {
+            "path": "images/banner.png"
+          },
+          "logo_2.small": {
+            "path": "images/Logo.WEBP"
+          },
+          "anim": {
+            "path": "images/anim.gif"
+          }
+        }
+      }
+    ],
+    "permissions": {
+      "optional": {
+        "ui.contribute": {
+          "hooks": [
+            "library.toolbar"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "description": "A field name starts with x-vlc-.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "x-vlc-name": {
+        "type": "string"
+      }
+    }
+  }
+}

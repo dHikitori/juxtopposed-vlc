@@ -1,0 +1,21 @@
+{
+  "description": "A visibility condition has a key that is not supported.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "a": {
+        "type": "boolean"
+      },
+      "b": {
+        "type": "string",
+        "x-hakone-visibleWhen": {
+          "field": "a",
+          "equals": true,
+          "not": false
+        }
+      }
+    }
+  }
+}

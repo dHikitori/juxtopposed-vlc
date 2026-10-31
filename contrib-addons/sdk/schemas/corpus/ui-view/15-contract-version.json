@@ -1,0 +1,12 @@
+{
+  "description": "The contract is ui@2. The host accepts only ui@1.",
+  "valid": false,
+  "value": {
+    "contract": "ui@2",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations"
+    }
+  }
+}

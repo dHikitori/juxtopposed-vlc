@@ -1,0 +1,24 @@
+{
+  "description": "Particles over feedback, as in the particles example.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "feedback",
+        "buffer": 0,
+        "decay": 0.6,
+        "scale": 1.01
+      },
+      {
+        "type": "particles",
+        "count": 512,
+        "seed": 7,
+        "speed": 0.2,
+        "size": 0.006,
+        "color": "theme.accent"
+      }
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "description": "The account recipe is not oauth-device.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "account": {
+        "type": "string",
+        "x-hakone-secret": true,
+        "x-hakone-control": "account",
+        "x-hakone-label": "settings.account",
+        "x-hakone-account": {
+          "recipe": "oauth-pkce",
+          "deviceAuthorizationUrl": "https://auth.example.org/device",
+          "tokenUrl": "https://auth.example.org/token",
+          "clientId": "my-public-client",
+          "scopes": [
+            "read",
+            "offline_access"
+          ]
+        }
+      }
+    }
+  },
+  "context": {
+    "networkOrigins": [
+      "https://auth.example.org"
+    ]
+  }
+}

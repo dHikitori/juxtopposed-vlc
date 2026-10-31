@@ -1,0 +1,10 @@
+{
+  "description": "The message type is not result.",
+  "valid": false,
+  "value": {
+    "type": "progress",
+    "id": "inv-1",
+    "status": "match",
+    "data": {}
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "description": "offlineSeconds is above 604800.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "fields": {
+        "title": "A"
+      },
+      "retention": {
+        "offlineSeconds": 604801
+      }
+    }
+  }
+}

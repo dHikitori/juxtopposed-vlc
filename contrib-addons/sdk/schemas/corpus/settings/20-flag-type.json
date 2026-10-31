@@ -1,0 +1,17 @@
+{
+  "description": "A field flag is not a boolean.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "uniqueItems": "yes"
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "description": "A command argument binding object has a second property.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play",
+            "arguments": {
+              "station": {
+                "bind": "state.ref",
+                "fallback": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

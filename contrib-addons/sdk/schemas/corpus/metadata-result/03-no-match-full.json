@@ -1,0 +1,25 @@
+{
+  "description": "A no_match result with identity, empty arrays, empty fields and a retention record.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "no_match",
+    "data": {
+      "identity": {
+        "kind": "movie",
+        "title": "Example Film",
+        "year": 1999,
+        "ids": {
+          "imdb": "tt0000001"
+        }
+      },
+      "records": [],
+      "candidates": [],
+      "fields": {},
+      "retention": {
+        "reuseSeconds": 3600
+      }
+    }
+  }
+}

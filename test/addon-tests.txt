@@ -108,6 +108,14 @@ addon_radio_browser_worker                      source      meson,cmake
 test_qt_addon_discovery                         source      all
 test_qt_addon_discovery_service                 source      all
 test_qt_addon_guest_projections                 source      all
+test_qt_addon_schema_corpus                     profile     all
+addon_validate_examples                         profile     meson
+addon_validate_refuses                          profile     meson
+addon_schema_corpus_python                      profile     meson
+addon_schema_rust_drift                         profile     meson
+addon_templates                                 profile     meson
+addon_preview                                   ui          meson
+addon_preview_theme                             ui          meson
 test_qt_addon_discovery_source_owner            source      all
 test_qt_addon_native_queue_store                source      all
 test_qt_addon_native_source_resolver            source      all

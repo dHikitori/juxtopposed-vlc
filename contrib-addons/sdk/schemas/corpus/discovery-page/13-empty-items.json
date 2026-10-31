@@ -1,0 +1,7 @@
+{
+  "description": "An empty items array.",
+  "valid": true,
+  "value": {
+    "items": []
+  }
+}

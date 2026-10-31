@@ -1,0 +1,578 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.invalid/schemas/settings.schema.json",
+  "title": "Hakone add-on settings schema",
+  "description": "The JSON Schema subset that an add-on uses to declare its settings. The app makes the settings form from it.",
+  "$comment": "Host-only rules (validateSettingsSchema and DeviceRecipe::from check these; this schema does not): (1) Each entry of required names a declared property. (2) x-hakone-visibleWhen.field names a declared property that is not secret. (3) minimum <= maximum, minLength <= maxLength and minItems <= maxItems. (4) The origins of deviceAuthorizationUrl and tokenUrl are network.http origins of the package. (5) The endpoints must parse as strict URLs. (6) The document has at most 20 levels and 10000 nodes, and all strings together have at most 131072 characters. String lengths count UTF-16 code units. (7) When the host loads a package (Manifest::validateContents), an account field must also set x-hakone-secret to true, each settings.accountFields name is a nonsecret scalar property, each credentials.use field is a secret string property, and the annotation scan has at most 32 levels and 8192 nodes. The default value must be one of the enum choices when both are present (host only).",
+  "allOf": [
+    {
+      "$ref": "#/$defs/data"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "type",
+    "properties",
+    "additionalProperties"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "type": {
+      "const": "object"
+    },
+    "additionalProperties": {
+      "const": false
+    },
+    "required": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "properties": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,95}$",
+        "not": {
+          "enum": [
+            "__proto__",
+            "prototype",
+            "constructor"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/field"
+      }
+    }
+  },
+  "$defs": {
+    "data": {
+      "description": "Limits that apply to every JSON value in the document.",
+      "maxLength": 16384,
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/data"
+      },
+      "maxProperties": 256,
+      "propertyNames": {
+        "maxLength": 128,
+        "not": {
+          "anyOf": [
+            {
+              "enum": [
+                "__proto__",
+                "prototype",
+                "constructor"
+              ]
+            },
+            {
+              "pattern": "^x-vlc-"
+            }
+          ]
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/data"
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "secretField": {
+      "description": "A field is secret when one of these is true.",
+      "anyOf": [
+        {
+          "required": [
+            "x-hakone-secret"
+          ],
+          "properties": {
+            "x-hakone-secret": {
+              "const": true
+            }
+          }
+        },
+        {
+          "required": [
+            "x-hakone-control"
+          ],
+          "properties": {
+            "x-hakone-control": {
+              "const": "secret"
+            }
+          }
+        },
+        {
+          "required": [
+            "writeOnly"
+          ],
+          "properties": {
+            "writeOnly": {
+              "const": true
+            }
+          }
+        },
+        {
+          "required": [
+            "format"
+          ],
+          "properties": {
+            "format": {
+              "const": "password"
+            }
+          }
+        }
+      ]
+    },
+    "httpsEndpoint": {
+      "description": "An HTTPS URL without user data or a fragment. A path and a query are permitted.",
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]://(?:[^\\s/?#@:\\[\\]%]+|\\[[0-9A-Fa-f:.]+\\])(?::(?:0*[1-9][0-9]{0,4})?)?(?:[/?][^#]*)?$"
+    },
+    "accountRecipe": {
+      "description": "The OAuth 2.0 device authorization grant (RFC 8628). Both endpoint origins must be network.http origins of the package.",
+      "type": "object",
+      "required": [
+        "recipe",
+        "deviceAuthorizationUrl",
+        "tokenUrl",
+        "clientId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "recipe": {
+          "const": "oauth-device"
+        },
+        "deviceAuthorizationUrl": {
+          "$ref": "#/$defs/httpsEndpoint"
+        },
+        "tokenUrl": {
+          "$ref": "#/$defs/httpsEndpoint"
+        },
+        "clientId": {
+          "type": "string",
+          "pattern": "^[!-~]{1,256}$"
+        },
+        "scopes": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[!#-\\[\\]-~]{1,128}$"
+          }
+        }
+      }
+    },
+    "field": {
+      "description": "One setting.",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "boolean",
+            "string",
+            "integer",
+            "number",
+            "array"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "x-hakone-label": {
+          "type": "string"
+        },
+        "x-hakone-help": {
+          "type": "string"
+        },
+        "writeOnly": {
+          "type": "boolean"
+        },
+        "x-hakone-secret": {
+          "type": "boolean"
+        },
+        "x-hakone-restartRequired": {
+          "type": "boolean"
+        },
+        "uniqueItems": {
+          "type": "boolean"
+        },
+        "pattern": {
+          "const": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+        },
+        "format": {
+          "enum": [
+            "password",
+            "uri",
+            "color",
+            "language"
+          ]
+        },
+        "x-hakone-control": {
+          "enum": [
+            "secret",
+            "language-list",
+            "multi-enum",
+            "color",
+            "url",
+            "file",
+            "folder",
+            "account",
+            "duration"
+          ]
+        },
+        "default": true,
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "minLength": {
+          "$ref": "#/$defs/count"
+        },
+        "maxLength": {
+          "$ref": "#/$defs/count"
+        },
+        "minItems": {
+          "$ref": "#/$defs/count"
+        },
+        "maxItems": {
+          "$ref": "#/$defs/count"
+        },
+        "items": true,
+        "x-hakone-visibleWhen": {
+          "type": "object",
+          "required": [
+            "field",
+            "equals"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "equals": true
+          }
+        },
+        "x-hakone-account": {
+          "$ref": "#/$defs/accountRecipe"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "$ref": "#/$defs/secretField"
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "string"
+              }
+            },
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "x-hakone-control"
+            ],
+            "properties": {
+              "x-hakone-control": {
+                "const": "account"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "x-hakone-account"
+            ],
+            "$ref": "#/$defs/secretField"
+          },
+          "else": {
+            "not": {
+              "required": [
+                "x-hakone-account"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "array"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "items": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "string"
+                  },
+                  "enum": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "boolean"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              },
+              "enum": {
+                "items": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "items"
+                  ]
+                },
+                {
+                  "required": [
+                    "minItems"
+                  ]
+                },
+                {
+                  "required": [
+                    "maxItems"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "string"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "enum": {
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "items"
+                  ]
+                },
+                {
+                  "required": [
+                    "minItems"
+                  ]
+                },
+                {
+                  "required": [
+                    "maxItems"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "integer"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "integer"
+              },
+              "enum": {
+                "items": {
+                  "type": "integer"
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "items"
+                  ]
+                },
+                {
+                  "required": [
+                    "minItems"
+                  ]
+                },
+                {
+                  "required": [
+                    "maxItems"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "number"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              },
+              "enum": {
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "items"
+                  ]
+                },
+                {
+                  "required": [
+                    "minItems"
+                  ]
+                },
+                {
+                  "required": [
+                    "maxItems"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "array"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "enum": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

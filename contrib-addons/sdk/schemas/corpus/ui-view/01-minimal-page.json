@@ -1,0 +1,12 @@
+{
+  "description": "A page with a title and no children.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations"
+    }
+  }
+}

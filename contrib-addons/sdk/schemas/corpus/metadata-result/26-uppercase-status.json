@@ -1,0 +1,10 @@
+{
+  "description": "Status names are case-sensitive.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "MATCH",
+    "data": {}
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "description": "Defaults with Unicode text and a string list.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "opts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "a",
+          "b"
+        ],
+        "x-hakone-label": "x-hakone-custom"
+      },
+      "meta": {
+        "type": "string",
+        "title": "Name",
+        "default": "Ünïcødé ✓"
+      }
+    }
+  }
+}

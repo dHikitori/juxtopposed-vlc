@@ -1,0 +1,93 @@
+{
+  "description": "The private storage quota is more than 100 MiB.",
+  "valid": false,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.videolan.tvmaze",
+    "name": "TVmaze episode titles",
+    "version": "0.3.0",
+    "publisher": "Hakone reference add-ons",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-tvmaze.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "metadata": "^1.0.0",
+        "storage": "^1.0.0"
+      }
+    },
+    "runtime": {
+      "kind": "wasm-message-v1",
+      "entry": "dist/addon.wasm",
+      "selfTest": true
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "NOTICE.md",
+      "dist/addon.wasm",
+      "storage/1-2.json"
+    ],
+    "contributions": [
+      {
+        "id": "episodes",
+        "type": "metadata.provider",
+        "contract": "metadata@1",
+        "features": [
+          "video.details",
+          "video.identity"
+        ],
+        "mediaKinds": [
+          "episode"
+        ],
+        "operations": [
+          "identify",
+          "enrich"
+        ],
+        "requires": [
+          "metadata.context",
+          "network.http"
+        ]
+      }
+    ],
+    "permissions": {
+      "required": {
+        "metadata.context": {
+          "fields": [
+            "kind",
+            "title",
+            "year",
+            "season",
+            "episodes",
+            "ids",
+            "externalIds",
+            "episode"
+          ]
+        },
+        "network.http": {
+          "origins": [
+            "https://api.tvmaze.com"
+          ],
+          "methods": [
+            "GET"
+          ]
+        }
+      },
+      "optional": {
+        "storage.private": {
+          "quotaBytes": 104857601
+        }
+      }
+    },
+    "storage": {
+      "version": 2,
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "resource": "storage/1-2.json"
+        }
+      ]
+    }
+  }
+}

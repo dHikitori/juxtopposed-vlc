@@ -1,0 +1,25 @@
+{
+  "description": "A gradient has a color property.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "gradient",
+        "vertical": true,
+        "stops": [
+          [
+            0,
+            "theme.background"
+          ],
+          [
+            1,
+            "#101820"
+          ]
+        ],
+        "color": "theme.accent"
+      }
+    ]
+  }
+}

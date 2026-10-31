@@ -1,0 +1,18 @@
+{
+  "description": "An enabled flag is the string true.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Text",
+          "enabled": "true"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "description": "A section with a heading, body text, a notice, an empty state and a heading without text.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Section",
+      "title": "About",
+      "visible": {
+        "bind": "state.flags.showAbout"
+      },
+      "children": [
+        {
+          "type": "Heading",
+          "text": "Heading"
+        },
+        {
+          "type": "Text",
+          "text": ""
+        },
+        {
+          "type": "Notice",
+          "text": {
+            "message": ""
+          }
+        },
+        {
+          "type": "EmptyState",
+          "text": "Nothing here."
+        },
+        {
+          "type": "Heading"
+        }
+      ]
+    }
+  }
+}

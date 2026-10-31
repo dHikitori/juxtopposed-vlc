@@ -1,0 +1,18 @@
+{
+  "description": "Retention integers written with a zero fraction.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "partial",
+    "data": {
+      "fields": {
+        "title": "Example"
+      },
+      "retention": {
+        "reuseSeconds": 3600.0,
+        "offlineSeconds": 0.0
+      }
+    }
+  }
+}

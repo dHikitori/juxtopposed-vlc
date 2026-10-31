@@ -1,0 +1,7 @@
+{
+  "description": "nodes is a string.",
+  "valid": false,
+  "value": {
+    "nodes": "folder"
+  }
+}

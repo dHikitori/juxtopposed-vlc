@@ -1,0 +1,13 @@
+{
+  "description": "The envelope has an unknown key.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {},
+    "meta": {
+      "x": 1
+    }
+  }
+}

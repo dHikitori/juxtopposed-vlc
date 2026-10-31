@@ -1,0 +1,22 @@
+{
+  "description": "The spectrum scene from the scene guide.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "spectrum",
+        "count": 32,
+        "color": "theme.accent",
+        "rect": [
+          0.05,
+          0.1,
+          0.9,
+          0.8
+        ],
+        "gain": 2
+      }
+    ]
+  }
+}

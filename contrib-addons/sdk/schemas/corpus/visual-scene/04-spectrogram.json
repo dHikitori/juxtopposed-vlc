@@ -1,0 +1,21 @@
+{
+  "description": "A spectrogram with a hex color and gain.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "spectrogram",
+        "color": "#80FF8800",
+        "gain": 3,
+        "rect": [
+          0.05,
+          0.05,
+          0.9,
+          0.9
+        ]
+      }
+    ]
+  }
+}

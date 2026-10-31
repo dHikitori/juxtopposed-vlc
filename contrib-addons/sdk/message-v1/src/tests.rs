@@ -171,3 +171,46 @@ fn reused_pending_id_rejects_a_late_old_invocation_result() {
     assert_eq!(pending.take("call-1", "slice-2"), Some(20));
     assert!(pending.is_empty());
 }
+
+#[test]
+fn contract_types_follow_the_schema_limits() {
+    use crate::contract::*;
+    let retention = Retention { reuse_seconds: Some(999_999), keep: Some(Keep::Library), offline_seconds: Some(60) };
+    assert_eq!(retention.to_value(), json!({"reuseSeconds": MAX_REUSE_SECONDS, "keep": "library", "offlineSeconds": 60}));
+    let message = result("job-1", Status::NoMatch, json!({}));
+    assert_eq!(message["status"], "no_match");
+    assert_eq!(Status::ALL.len(), 9);
+    let mut item = Item::new("station-1", ItemKind::Media, &"x".repeat(600));
+    item.available = Some(true);
+    let row = item.to_value().unwrap();
+    assert_eq!(row["title"].as_str().unwrap().chars().count(), MAX_TITLE);
+    assert!(Item::new("bad\nid", ItemKind::Media, "x").to_value().is_none());
+    let page = Page { items: vec![item], revision: Some("r1".into()), next_check_seconds: Some(5), ..Page::default() };
+    let value = page.to_value().unwrap();
+    assert_eq!(value["nextCheckSeconds"], MIN_NEXT_CHECK_SECONDS);
+    assert!(Page { revision: Some("r 1".into()), ..Page::default() }.to_value().is_none());
+    assert!(Page { cursor: Some(json!("")), ..Page::default() }.to_value().is_none());
+}
+
+#[test]
+fn a_self_test_message_calls_the_addon_check() {
+    struct Checked(bool);
+    impl Addon for Checked {
+        fn handle(&mut self, _: Incoming<'_>) -> Vec<Value> {
+            vec![]
+        }
+        fn self_test(&mut self) -> bool {
+            self.0
+        }
+    }
+    for (passes, status) in [(true, "ok"), (false, "error")] {
+        let mut guest = Guest::new(Checked(passes));
+        let bytes = serde_json::to_vec(&json!({"type":"self-test","id":"hakone-self-test"})).unwrap();
+        let pointer = guest.buffers.allocate(bytes.len());
+        guest.buffers.allocations.get_mut(&pointer).unwrap().copy_from_slice(&bytes);
+        let mut sent = vec![];
+        assert_eq!(guest.dispatch(pointer, bytes.len(), |out| { sent.push(serde_json::from_slice::<Value>(out).unwrap()); true }), Ok(1));
+        assert_eq!(sent[0]["status"], status);
+        assert_eq!(sent[0]["id"], "hakone-self-test");
+    }
+}

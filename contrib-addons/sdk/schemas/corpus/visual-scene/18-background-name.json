@@ -1,0 +1,9 @@
+{
+  "description": "The background is a CSS color name.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "red",
+    "nodes": []
+  }
+}

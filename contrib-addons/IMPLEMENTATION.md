@@ -101,7 +101,7 @@ Add one row for each label run that a record or a decision relies on.
 | Built-in provider IDs and reserved host namespaces | mounted | `profile`: `test_qt_addon_runtime`; [namespaces](host-provider-namespaces.md), [ID migration](records/builtin-provider-id-migration.md) | — |
 | Offline self-test and activation health transaction | mounted | [self-test and health](records/self-test-and-health.md); `profile`: `test_qt_addon_candidate_check`, `test_qt_addon_worker_health` | Staged data migration and commit journal (install steps 6–7); trial across restarts. |
 | Signed curated install path (optional) | designed | Projections report `publisherVerified=false`. | Trust anchor and catalogue verifier. |
-| Normative schemas, package validator, generated SDK types, templates, preview tool | designed | Session request and completion policy schemas only (`sdk/`). | Step 7. |
+| Normative schemas, package validator, generated SDK types, templates, preview tool | mounted | `profile`: `test_qt_addon_schema_corpus`, `addon_validate_*`, `addon_schema_*`, `addon_templates`; `ui`: `addon_preview*`; [record](records/schemas-and-author-tools.md), [guide](sdk/authoring-tools.md) | Installed tools; macOS. |
 
 ## Metadata providers (`03-providers-and-discovery.md`)
 
@@ -140,7 +140,7 @@ Add one row for each label run that a record or a decision relies on.
 | Static UI images | mounted | `ui`: `test_qt_addon_ui_assets` | Full app check. |
 | Extensions list, generated settings and install approval | mounted | `ui`: `test_qt_addon_catalogue_view`, `test_qt_addon_display_catalogue`, `test_qt_addon_package_summaries`; [Extensions](records/extensions-settings-ui.md), [package list](records/package-summary-ui.md) | Windows Extensions click (user). |
 | File, folder and account pickers; account recipes; settings layers | mounted | `profile`: `test_qt_addon_accounts`; `tst_AddonUi`; [record](records/settings-accounts.md), [SDK](sdk/settings-accounts.md) | Account-scoped value layer; PKCE recipe; guest operation for picked handles; live sign-in run. |
-| Theme and UI preview harness | designed | — | Step 7. |
+| Theme and UI preview harness | mounted | `ui`: `addon_preview`, `addon_preview_theme`; [record](records/schemas-and-author-tools.md) | Interactive preview. |
 
 ## Visualizers and sessions (`05-visualizers-and-sessions.md`)
 

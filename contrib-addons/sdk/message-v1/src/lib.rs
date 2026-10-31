@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //! Guest messages and the `wasm-message-v1` ABI. The host owns all I/O.
 pub use serde_json;
+/// Contract types generated from the published schemas.
+pub mod contract;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
@@ -144,6 +146,12 @@ impl<'a> Incoming<'a> {
 
 pub trait Addon {
     fn handle(&mut self, message: Incoming<'_>) -> Vec<Value>;
+    /// The offline check before install (runtime.selfTest in the manifest).
+    /// Run your parsing on built-in sample data; make no host call. The
+    /// host refuses a release whose check returns false.
+    fn self_test(&mut self) -> bool {
+        false
+    }
 }
 
 /// Exact pointer and length pairs prevent invalid frees or reads in ABI exports.
@@ -205,7 +213,17 @@ impl<A: Addon> Guest<A> {
     ) -> Result<usize, Error> {
         let bytes = self.buffers.input(pointer, length).ok_or(Error::Buffer)?;
         let value: Value = serde_json::from_slice(bytes).map_err(|_| Error::Json)?;
-        let messages = self.addon.handle(Incoming::parse(&value)?);
+        let messages = if value.get("type").and_then(Value::as_str) == Some("self-test") {
+            let id = value
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| identifier(id))
+                .ok_or(Error::Message)?;
+            let status = if self.addon.self_test() { "ok" } else { "error" };
+            vec![serde_json::json!({"type":"result","id":id,"status":status,"data":{}})]
+        } else {
+            self.addon.handle(Incoming::parse(&value)?)
+        };
         if messages.len() > MAX_OUTPUTS {
             return Err(Error::OutputLimit);
         }

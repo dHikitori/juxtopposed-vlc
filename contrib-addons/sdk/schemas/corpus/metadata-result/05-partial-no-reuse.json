@@ -1,0 +1,31 @@
+{
+  "description": "A partial result that does not permit reuse.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "partial",
+    "data": {
+      "identity": {
+        "kind": "movie",
+        "title": "Example Film",
+        "year": 1999,
+        "ids": {
+          "imdb": "tt0000001"
+        }
+      },
+      "fields": {
+        "title": "Example Film"
+      },
+      "attribution": {
+        "name": "Example Data",
+        "license": "CC BY 4.0",
+        "url": "https://data.example/terms"
+      },
+      "retention": {
+        "reuseSeconds": 0,
+        "keep": "memory"
+      }
+    }
+  }
+}

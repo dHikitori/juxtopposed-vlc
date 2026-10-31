@@ -1,0 +1,18 @@
+{
+  "description": "A button has no command.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "description": "Retention values at their maximums.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "fields": {
+        "title": "Example"
+      },
+      "retention": {
+        "reuseSeconds": 86400,
+        "offlineSeconds": 604800
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "description": "The top level does not set additionalProperties to false.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "string"
+      }
+    }
+  }
+}

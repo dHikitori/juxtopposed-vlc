@@ -1,0 +1,13 @@
+{
+  "description": "The longest check time, written with a zero fraction.",
+  "valid": true,
+  "value": {
+    "nodes": [
+      {
+        "id": "n"
+      }
+    ],
+    "revision": "v2",
+    "nextCheckSeconds": 3600.0
+  }
+}

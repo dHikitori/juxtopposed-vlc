@@ -1,0 +1,16 @@
+{
+  "description": "A default value has a key that starts with x-vlc-.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "string",
+        "default": {
+          "x-vlc-note": 1
+        }
+      }
+    }
+  }
+}

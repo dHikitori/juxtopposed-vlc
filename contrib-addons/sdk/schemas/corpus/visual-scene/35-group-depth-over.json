@@ -1,0 +1,60 @@
+{
+  "description": "Nine nested groups.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "group",
+        "children": [
+          {
+            "type": "group",
+            "children": [
+              {
+                "type": "group",
+                "children": [
+                  {
+                    "type": "group",
+                    "children": [
+                      {
+                        "type": "group",
+                        "children": [
+                          {
+                            "type": "group",
+                            "children": [
+                              {
+                                "type": "group",
+                                "children": [
+                                  {
+                                    "type": "group",
+                                    "children": [
+                                      {
+                                        "type": "group",
+                                        "children": [
+                                          {
+                                            "type": "spectrum",
+                                            "count": 32,
+                                            "color": "theme.accent"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

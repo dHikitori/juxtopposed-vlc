@@ -1,0 +1,51 @@
+{
+  "description": "The station list from the UI document guide: a list of media cards with a bound command argument.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": {
+        "message": "stations.title"
+      },
+      "children": [
+        {
+          "type": "List",
+          "items": {
+            "bind": "state.stations"
+          },
+          "keyField": "ref",
+          "emptyText": {
+            "message": "stations.empty"
+          },
+          "itemTemplate": {
+            "type": "MediaCard",
+            "title": {
+              "bind": "item.title"
+            },
+            "subtitle": {
+              "bind": "item.description"
+            },
+            "artwork": {
+              "bind": "item.artworkHandle"
+            },
+            "primaryAction": {
+              "command": "org.example.radio/play",
+              "arguments": {
+                "item": {
+                  "bind": "item.ref"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

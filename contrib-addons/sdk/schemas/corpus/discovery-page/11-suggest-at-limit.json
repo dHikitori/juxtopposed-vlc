@@ -1,0 +1,32 @@
+{
+  "description": "A suggest page at its requested limit.",
+  "valid": true,
+  "value": {
+    "items": [
+      {
+        "id": "item-0",
+        "title": "Item 0"
+      },
+      {
+        "id": "item-1",
+        "title": "Item 1"
+      },
+      {
+        "id": "item-2",
+        "title": "Item 2"
+      },
+      {
+        "id": "item-3",
+        "title": "Item 3"
+      },
+      {
+        "id": "item-4",
+        "title": "Item 4"
+      }
+    ]
+  },
+  "context": {
+    "operation": "suggest",
+    "limit": 5
+  }
+}

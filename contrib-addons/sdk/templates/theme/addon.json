@@ -1,0 +1,30 @@
+{
+  "formatVersion": 1,
+  "id": "org.example.theme",
+  "name": "Example theme",
+  "version": "0.1.0",
+  "publisher": "Example publisher",
+  "license": "GPL-2.0-or-later",
+  "source": "https://git.example.org/addon-theme.git",
+  "api": {
+    "addon": ">=1.0.0 <2.0.0",
+    "contracts": {
+      "theme": "^1.0.0"
+    }
+  },
+  "files": [
+    "addon.json",
+    "LICENSE",
+    "themes/example.json"
+  ],
+  "contributions": [
+    {
+      "id": "example",
+      "type": "theme",
+      "contract": "theme@1",
+      "name": "Example theme",
+      "resource": "themes/example.json"
+    }
+  ],
+  "permissions": {}
+}

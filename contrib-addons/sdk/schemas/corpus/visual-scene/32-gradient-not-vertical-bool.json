@@ -1,0 +1,24 @@
+{
+  "description": "The gradient vertical value is a string.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "gradient",
+        "vertical": "true",
+        "stops": [
+          [
+            0,
+            "theme.background"
+          ],
+          [
+            1,
+            "#101820"
+          ]
+        ]
+      }
+    ]
+  }
+}

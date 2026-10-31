@@ -1,0 +1,10 @@
+{
+  "description": "The status is not a result status.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "found",
+    "data": {}
+  }
+}

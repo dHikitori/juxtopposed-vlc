@@ -1,0 +1,38 @@
+{
+  "contract": "theme@1",
+  "id": "example",
+  "variants": {
+    "dark": {
+      "colors": {
+        "surface.base": "#171923",
+        "surface.panel": "#1e2230",
+        "surface.field": "#10131d",
+        "surface.hover": "#30384a",
+        "surface.selected": "#3c4860",
+        "text.primary": "#edf0f7",
+        "text.secondary": "#b6c0d4",
+        "accent.primary": "#9ac6ff",
+        "focus.ring": "#bbd9ff",
+        "border.default": "#536079"
+      },
+      "shape": {"controlRadius": 8, "panelRadius": 12},
+      "effects": {"panelOpacity": 0.96}
+    },
+    "light": {
+      "colors": {
+        "surface.base": "#e9edf5",
+        "surface.panel": "#f4f6fb",
+        "surface.field": "#ffffff",
+        "surface.hover": "#d9e2f1",
+        "surface.selected": "#c6d5eb",
+        "text.primary": "#17243b",
+        "text.secondary": "#384a68",
+        "accent.primary": "#224d91",
+        "focus.ring": "#16488f",
+        "border.default": "#8093b1"
+      },
+      "shape": {"controlRadius": 8, "panelRadius": 12},
+      "effects": {"panelOpacity": 0.96}
+    }
+  }
+}

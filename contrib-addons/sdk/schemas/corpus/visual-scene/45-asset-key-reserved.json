@@ -1,0 +1,12 @@
+{
+  "description": "An asset key is a reserved object name.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [],
+    "assets": {
+      "constructor": "images/tile.png"
+    }
+  }
+}

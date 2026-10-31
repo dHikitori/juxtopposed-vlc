@@ -1,0 +1,17 @@
+{
+  "description": "The retention record has an unknown key.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "fields": {
+        "title": "A"
+      },
+      "retention": {
+        "ttl": 60
+      }
+    }
+  }
+}

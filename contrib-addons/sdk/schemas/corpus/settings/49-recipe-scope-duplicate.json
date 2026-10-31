@@ -1,0 +1,31 @@
+{
+  "description": "A scope occurs two times.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "account": {
+        "type": "string",
+        "x-hakone-secret": true,
+        "x-hakone-control": "account",
+        "x-hakone-label": "settings.account",
+        "x-hakone-account": {
+          "recipe": "oauth-device",
+          "deviceAuthorizationUrl": "https://auth.example.org/device",
+          "tokenUrl": "https://auth.example.org/token",
+          "clientId": "my-public-client",
+          "scopes": [
+            "read",
+            "read"
+          ]
+        }
+      }
+    }
+  },
+  "context": {
+    "networkOrigins": [
+      "https://auth.example.org"
+    ]
+  }
+}

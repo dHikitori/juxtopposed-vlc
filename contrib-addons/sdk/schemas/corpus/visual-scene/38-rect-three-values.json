@@ -1,0 +1,20 @@
+{
+  "description": "A rectangle has three values.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "spectrum",
+        "count": 32,
+        "color": "theme.accent",
+        "rect": [
+          0,
+          0,
+          1
+        ]
+      }
+    ]
+  }
+}

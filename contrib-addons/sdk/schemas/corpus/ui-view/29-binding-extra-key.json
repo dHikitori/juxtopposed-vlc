@@ -1,0 +1,21 @@
+{
+  "description": "A binding object has a second property.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Text",
+          "text": {
+            "bind": "state.title",
+            "default": "x"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "description": "A gradient has one stop.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "gradient",
+        "vertical": true,
+        "stops": [
+          [
+            0,
+            "#000000"
+          ]
+        ]
+      }
+    ]
+  }
+}

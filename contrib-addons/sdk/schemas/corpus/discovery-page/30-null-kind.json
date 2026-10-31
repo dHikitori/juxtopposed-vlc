@@ -1,0 +1,12 @@
+{
+  "description": "A row kind is null.",
+  "valid": false,
+  "value": {
+    "items": [
+      {
+        "id": "a",
+        "kind": null
+      }
+    ]
+  }
+}

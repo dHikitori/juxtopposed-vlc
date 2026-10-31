@@ -1,0 +1,12 @@
+{
+  "description": "A row has an empty id.",
+  "valid": false,
+  "value": {
+    "items": [
+      {
+        "id": "",
+        "title": "Empty"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "description": "A field label is not a string.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "string",
+        "title": 5
+      }
+    }
+  }
+}

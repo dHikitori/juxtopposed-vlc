@@ -1,0 +1,21 @@
+{
+  "description": "A list has no item template.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "List",
+          "items": {
+            "bind": "state.items"
+          },
+          "keyField": "id"
+        }
+      ]
+    }
+  }
+}

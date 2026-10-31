@@ -1,0 +1,20 @@
+{
+  "description": "A visible flag uses a message. Flags accept only a Boolean or a binding.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Text",
+          "visible": {
+            "message": "x"
+          }
+        }
+      ]
+    }
+  }
+}

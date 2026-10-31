@@ -1,0 +1,26 @@
+{
+  "description": "The command identifier has an uppercase package ID. The registry contains it, but the form is not correct.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "Org.Example/play"
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "Org.Example/play"
+    ]
+  }
+}

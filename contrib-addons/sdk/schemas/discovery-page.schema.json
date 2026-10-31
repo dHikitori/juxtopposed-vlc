@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.invalid/schemas/discovery-page.schema.json",
+  "title": "Discovery source page",
+  "description": "The data object of a discovery@1 source reply to roots, browse, search, suggest or subscribe, with status match, partial or no_match. The host refuses a page with an incorrect items or nodes value or too many rows. It removes rows with an incorrect or duplicate ID or an incorrect kind, and it ignores an incorrect cursor, revision or nextCheckSeconds value.",
+  "$comment": "Host-only rules that this schema cannot express: (1) roots, browse, search and suggest pages need items, nodes or both; only a subscribe reply can omit both. (2) items and nodes together have a maximum of 200 rows; a suggest page has a maximum of the requested limit (1 to 50). (3) Item IDs are unique across items and nodes together; the host removes a later row with the same ID even when other keys differ. uniqueItems refuses only identical rows. (4) The host counts the ID (512), title (512) and mediaKind (32) lengths in UTF-16 code units; JSON Schema counts code points. An ID with an unpaired surrogate is removed. (5) The compact JSON encoding of the cursor has a maximum of 4096 bytes. (6) For a non-subscribe operation, a no_match reply discards its rows, revision, check time and cursor; send no_match with rows only for subscribe. (7) The host ignores removed for operations other than subscribe, and ignores a removed ID that the view does not show. (8) An ID that is shown with one kind cannot change kind in the same view. (9) The host converts a numeric or boolean ID to text; this schema requires the documented string type.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "items": {
+      "description": "Rows in source order. A row is media unless its kind is node.",
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "nodes": {
+      "description": "Folder rows. The host shows them before items and always gives them the node kind.",
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "cursor": {
+      "description": "Opaque JSON data for the next page. The host keeps it and gives the interface a separate reference. null means no more pages. An empty string is not a cursor.",
+      "not": { "const": "" }
+    },
+    "revision": {
+      "description": "1 to 256 visible ASCII characters. The host sends it back in the next subscribe request.",
+      "type": "string",
+      "pattern": "^[!-~]{1,256}$"
+    },
+    "nextCheckSeconds": {
+      "description": "When the host checks the view again, in seconds. Without the key, the host uses 300.",
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 3600
+    },
+    "removed": {
+      "description": "subscribe only: the IDs of rows to take away. A row that is also on this page stays.",
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/itemId" }
+    }
+  },
+  "$defs": {
+    "itemId": {
+      "description": "A stable source item ID: 1 to 512 characters with no control characters. Use the same ID for the same source item; a title change must not change it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "not": { "type": "string", "pattern": "[\\u0000-\\u001f\\u007f-\\u009f]" }
+    },
+    "identity": {
+      "description": "Media identity evidence in the fixed host vocabulary (kind or type, title, aliases, year, season, episodes, absoluteEpisode, airDate, ids, artist, albumArtist, album, series, guid, track, disc). The host removes URLs, playback options and other keys.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "row": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/itemId" },
+        "title": {
+          "description": "Plain text.",
+          "type": "string",
+          "maxLength": 512
+        },
+        "mediaKind": {
+          "description": "For example audio or video.",
+          "type": "string",
+          "maxLength": 32
+        },
+        "identity": { "$ref": "#/$defs/identity" },
+        "available": {
+          "description": "false: the item cannot play now.",
+          "type": "boolean"
+        }
+      }
+    },
+    "item": {
+      "description": "A media row or a folder row. The host removes URLs, playback options and other keys from the displayed row.",
+      "$ref": "#/$defs/row",
+      "properties": {
+        "kind": {
+          "description": "media (the default) or node (a folder).",
+          "enum": ["media", "node"]
+        }
+      }
+    },
+    "node": {
+      "description": "A folder row. The host ignores kind and uses node.",
+      "$ref": "#/$defs/row"
+    }
+  }
+}

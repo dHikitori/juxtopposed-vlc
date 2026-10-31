@@ -1,0 +1,28 @@
+{
+  "description": "Folder rows in nodes and media rows in items.",
+  "valid": true,
+  "value": {
+    "nodes": [
+      {
+        "id": "folder-a",
+        "title": "A"
+      },
+      {
+        "id": "folder-b",
+        "title": "B",
+        "kind": "node"
+      }
+    ],
+    "items": [
+      {
+        "id": "item-1",
+        "title": "Item 1"
+      },
+      {
+        "id": "item-2",
+        "title": "Item 2",
+        "kind": "media"
+      }
+    ]
+  }
+}

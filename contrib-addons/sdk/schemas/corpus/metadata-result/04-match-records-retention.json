@@ -1,0 +1,47 @@
+{
+  "description": "A match with one record, attribution and a full retention record.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "records": [
+        {
+          "identity": {
+            "kind": "episode",
+            "title": "Example Show",
+            "externalIds": [
+              {
+                "namespace": "exampledb",
+                "scope": "series",
+                "value": "281"
+              }
+            ],
+            "episodeNumbering": {
+              "scheme": "seasonal",
+              "season": 2,
+              "episodes": [
+                3
+              ]
+            }
+          },
+          "fields": {
+            "episodeTitle": "Pilot",
+            "description": "The first episode."
+          },
+          "attribution": {
+            "name": "Example Data",
+            "license": "CC BY 4.0",
+            "url": "https://data.example/terms"
+          }
+        }
+      ],
+      "retention": {
+        "reuseSeconds": 3600,
+        "keep": "library",
+        "offlineSeconds": 86400
+      }
+    }
+  }
+}

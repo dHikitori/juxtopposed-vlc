@@ -1,0 +1,16 @@
+{
+  "description": "A waveform line width is less than 0.1.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "waveform",
+        "points": 128,
+        "color": "theme.accent",
+        "lineWidth": 0.05
+      }
+    ]
+  }
+}

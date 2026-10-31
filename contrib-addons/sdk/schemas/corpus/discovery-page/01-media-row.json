@@ -1,0 +1,12 @@
+{
+  "description": "One media row with the default kind.",
+  "valid": true,
+  "value": {
+    "items": [
+      {
+        "id": "station-42",
+        "title": "Station 42"
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "description": "A no_match roots reply with no data.",
+  "valid": true,
+  "value": {},
+  "context": {
+    "status": "no_match"
+  }
+}

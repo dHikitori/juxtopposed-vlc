@@ -1,0 +1,16 @@
+{
+  "description": "A partial reply is a page.",
+  "valid": true,
+  "value": {
+    "items": [
+      {
+        "id": "item-1",
+        "title": "Item 1"
+      }
+    ],
+    "cursor": 3
+  },
+  "context": {
+    "status": "partial"
+  }
+}

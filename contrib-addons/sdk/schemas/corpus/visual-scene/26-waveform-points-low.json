@@ -1,0 +1,15 @@
+{
+  "description": "A waveform has one point.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "waveform",
+        "points": 1,
+        "color": "theme.accent"
+      }
+    ]
+  }
+}

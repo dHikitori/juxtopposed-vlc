@@ -1,0 +1,10 @@
+{
+  "description": "The id is a number.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": 7,
+    "status": "match",
+    "data": {}
+  }
+}

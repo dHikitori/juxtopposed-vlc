@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.invalid/schemas/metadata-result.schema.json",
+  "title": "Metadata provider result message",
+  "description": "The terminal result message that a metadata@1 provider worker sends for one invocation. The host refuses a message with an unknown key, an incorrect status, a missing data object or an incorrect retention record.",
+  "$comment": "Host-only rules that this schema cannot express: (1) The host counts the lengths of id (128), error (512), identity strings and ids in UTF-16 code units; JSON Schema counts code points. (2) id must be the ID of a current invocation of the same worker; a result for another ID is ignored. (3) The normalized identity (identity, records[].identity, candidates[].identity) has a maximum compact JSON size of 8192 bytes; each candidate has a maximum compact JSON size of 8192 bytes. (4) Identity cross-field rules: kind and type must name the same kind; episodeNumbering or an object episode is permitted only for episode and podcastEpisode; episodeNumbering and episode must be equal when both are present; numbering values must agree with season, episodes, absoluteEpisode and airDate; externalIds must not conflict with ids; after the merge, ids has a maximum of 32 entries. (5) identify candidates need an identity with a known kind and a title; searchAssets candidates need a nonempty id. The operation is not part of the message. (6) A no_match identity must equal the request identity after host normalization. (7) Attribution: name must have a non-space character; url must be a valid absolute https URL with a host and no user information (the pattern is an approximation). A failed attribution is ignored, not refused. (8) The host clamps reuseSeconds per status (match and partial 86400, no_match 3600, ambiguous 600, others 0) and ignores keep and offlineSeconds for statuses other than match and partial. (9) A positive completion receipt needs a nonempty bounded data object and complete host observations. (10) The host coerces some scalar types (for example a numeric ids value or title) to text; this schema states the documented types.",
+  "type": "object",
+  "required": ["type", "id", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "description": "The message type.",
+      "const": "result"
+    },
+    "id": {
+      "description": "The invocation ID that the host sent with the request.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "status": {
+      "$ref": "#/$defs/status"
+    },
+    "data": {
+      "$ref": "#/$defs/data"
+    },
+    "error": {
+      "description": "Plain text that explains a failure. The host shows at most 512 characters.",
+      "type": "string",
+      "maxLength": 512
+    }
+  },
+  "allOf": [
+    {
+      "description": "A no_match result reports a complete lookup with no answer. Its data can contain only identity, empty records and candidates arrays, an empty fields object and a retention record. It has no error. Other data or an error prevents a completion receipt.",
+      "if": {
+        "required": ["status"],
+        "properties": { "status": { "const": "no_match" } }
+      },
+      "then": {
+        "not": { "required": ["error"] },
+        "properties": {
+          "data": {
+            "propertyNames": { "enum": ["identity", "records", "candidates", "fields", "retention"] },
+            "properties": {
+              "records": { "maxItems": 0 },
+              "candidates": { "maxItems": 0 },
+              "fields": { "maxProperties": 0 }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "status": {
+      "description": "The result status. match: fields for the requested entity. partial: some fields; the host asks the next provider for the missing fields. no_match: a complete lookup with no answer. ambiguous: alternatives that need a choice. auth_required, rate_limited, offline, unsupported and error are failures.",
+      "enum": ["match", "partial", "no_match", "auth_required", "rate_limited", "offline", "ambiguous", "unsupported", "error"]
+    },
+    "data": {
+      "description": "The result data. The host reads only the documented keys.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "identity": {
+          "description": "The identity of the entity that the result is for. Without records, the host uses data itself as one record.",
+          "$ref": "#/$defs/identity"
+        },
+        "fields": {
+          "$ref": "#/$defs/fields"
+        },
+        "attribution": {
+          "$ref": "#/$defs/attribution"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "records": {
+          "description": "Records, each with its own identity and field claims. The host reads at most 64 records. More than one accepted record for a target makes the result ambiguous.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/record" }
+        },
+        "candidates": {
+          "description": "Identity candidates (identify) or asset candidates (searchAssets). The host reads at most 500 candidates.",
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/candidate" }
+        },
+        "retention": {
+          "$ref": "#/$defs/retention"
+        },
+        "cursor": {
+          "description": "An opaque page cursor for a later searchAssets request. Any JSON value."
+        },
+        "retryAfterSeconds": {
+          "description": "For rate_limited: the number of seconds before the host can ask this provider again. Without the key, the host waits 60 seconds.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        }
+      }
+    },
+    "retention": {
+      "description": "What the provider permits the host to keep. Every key is optional. A record with an unknown key or an incorrect value permits nothing: no reuse, no saving and no offline use.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reuseSeconds": {
+          "description": "How long the host can reuse the answer for the same request, account and settings. 0: do not reuse.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "keep": {
+          "description": "library: the host can save accepted fields in the media library. memory: the host keeps fields in memory only.",
+          "enum": ["memory", "library"]
+        },
+        "offlineSeconds": {
+          "description": "After the reuse time ends, how long the host can show the answer, labeled as not current, while the provider is offline.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 604800
+        }
+      }
+    },
+    "fields": {
+      "description": "Field claims by field name, for example title, description, episodeTitle or artwork. A null value or an empty string is not a claim.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "attribution": {
+      "description": "The credit for the data. The host ignores an attribution that is not correct.",
+      "type": "object",
+      "required": ["name", "url"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "license": { "type": "string", "maxLength": 128 },
+        "url": { "type": "string", "maxLength": 2048, "pattern": "^https://[^\\s/?#@]+" }
+      }
+    },
+    "evidence": {
+      "description": "How the provider found the match. type label: the match uses only names and titles, so the host does not use it to establish an entity.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": { "type": "string" }
+      }
+    },
+    "record": {
+      "description": "One entity and its field claims.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "identity": { "$ref": "#/$defs/identity" },
+        "fields": { "$ref": "#/$defs/fields" },
+        "attribution": { "$ref": "#/$defs/attribution" },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "candidate": {
+      "description": "One identity candidate or asset candidate.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "description": "The provider-local candidate ID. searchAssets candidates need it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "identity": { "$ref": "#/$defs/identity" },
+        "attribution": { "$ref": "#/$defs/attribution" },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "kindName": {
+      "description": "A media kind: movie, episode, series, musicTrack, album, artist, podcast, podcastEpisode, audiobook or unknown. The host compares names without case. Empty means unknown.",
+      "type": "string",
+      "pattern": "^(?:[Mm][Oo][Vv][Ii][Ee]|[Ee][Pp][Ii][Ss][Oo][Dd][Ee]|[Ss][Ee][Rr][Ii][Ee][Ss]|[Mm][Uu][Ss][Ii][Cc][Tt][Rr][Aa][Cc][Kk]|[Aa][Ll][Bb][Uu][Mm]|[Aa][Rr][Tt][Ii][Ss][Tt]|[Pp][Oo][Dd][Cc][Aa][Ss][Tt]|[Pp][Oo][Dd][Cc][Aa][Ss][Tt][Ee][Pp][Ii][Ss][Oo][Dd][Ee]|[Aa][Uu][Dd][Ii][Oo][Bb][Oo][Oo][Kk]|[Uu][Nn][Kk][Nn][Oo][Ww][Nn])?$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 1024
+    },
+    "titleList": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "episodeNumber": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9999
+    },
+    "absoluteNumber": {
+      "type": "string",
+      "pattern": "^[0-9]{1,6}(?:\\.[0-9]{1,3})?$"
+    },
+    "isoDate": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "format": "date"
+    },
+    "atom": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,31}$"
+    },
+    "externalId": {
+      "description": "A scoped external ID. Movie, series, season and episode IDs are distinct scopes in the same namespace.",
+      "type": "object",
+      "required": ["namespace", "scope", "value"],
+      "additionalProperties": true,
+      "properties": {
+        "namespace": { "$ref": "#/$defs/atom" },
+        "scope": { "$ref": "#/$defs/atom" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "episodeNumbering": {
+      "description": "One episode numbering scheme. Use exactly the keys of one scheme.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["scheme", "season", "episodes"],
+          "additionalProperties": false,
+          "properties": {
+            "scheme": { "const": "seasonal" },
+            "season": { "type": "integer", "minimum": 0, "maximum": 999 },
+            "episodes": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/episodeNumber" } }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["scheme", "number"],
+          "additionalProperties": false,
+          "properties": {
+            "scheme": { "const": "absolute" },
+            "number": { "$ref": "#/$defs/absoluteNumber" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["scheme", "date"],
+          "additionalProperties": false,
+          "properties": {
+            "scheme": { "const": "air-date" },
+            "date": { "$ref": "#/$defs/isoDate" }
+          }
+        }
+      ]
+    },
+    "identity": {
+      "description": "A media identity in the fixed host vocabulary. The host removes other keys. Unknown values stay unknown: use -1 for an unknown number and an empty string for unknown text.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "kind": { "$ref": "#/$defs/kindName" },
+        "type": { "$ref": "#/$defs/kindName" },
+        "title": { "$ref": "#/$defs/text" },
+        "titles": { "$ref": "#/$defs/titleList" },
+        "aliases": { "$ref": "#/$defs/titleList" },
+        "year": {
+          "description": "Movie release year or series start year. -1: unknown.",
+          "type": "integer",
+          "anyOf": [{ "const": -1 }, { "minimum": 1880, "maximum": 2099 }]
+        },
+        "season": { "type": "integer", "minimum": -1, "maximum": 999 },
+        "episodes": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/episodeNumber" } },
+        "episode": {
+          "description": "One episode number, or the same object as episodeNumbering.",
+          "anyOf": [{ "$ref": "#/$defs/episodeNumber" }, { "$ref": "#/$defs/episodeNumbering" }]
+        },
+        "episodeNumbering": { "$ref": "#/$defs/episodeNumbering" },
+        "absoluteEpisode": {
+          "anyOf": [{ "const": "" }, { "$ref": "#/$defs/absoluteNumber" }]
+        },
+        "airDate": {
+          "anyOf": [{ "const": "" }, { "$ref": "#/$defs/isoDate" }]
+        },
+        "ids": {
+          "description": "Host ID keys (for example imdb, seriesImdb, tmdbMovie, tvdbEpisode) and their values.",
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": { "minLength": 1, "maxLength": 128 },
+          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "externalIds": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/externalId" }
+        },
+        "release": { "type": "object" },
+        "artist": { "$ref": "#/$defs/text" },
+        "albumArtist": { "$ref": "#/$defs/text" },
+        "album": { "$ref": "#/$defs/text" },
+        "series": { "$ref": "#/$defs/text" },
+        "guid": { "$ref": "#/$defs/text" },
+        "feedUrl": { "$ref": "#/$defs/text" },
+        "track": { "type": "integer", "minimum": -1, "maximum": 9999 },
+        "disc": { "type": "integer", "minimum": -1, "maximum": 9999 }
+      }
+    }
+  }
+}

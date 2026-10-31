@@ -1,0 +1,13 @@
+{
+  "formatVersion": 1,
+  "id": "org.example.invalid",
+  "name": "Invalid",
+  "version": "1.0.0",
+  "publisher": "Tests",
+  "license": "GPL-2.0-or-later",
+  "source": "https://git.example.org/invalid.git",
+  "api": {"addon": ">=1.0.0 <2.0.0", "contracts": {}},
+  "files": ["addon.json", "LICENSE"],
+  "contributions": [],
+  "permissions": {"required": {"shell.execute": {}}, "optional": {}}
+}

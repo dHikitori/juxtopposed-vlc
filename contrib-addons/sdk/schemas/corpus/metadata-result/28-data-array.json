@@ -1,0 +1,10 @@
+{
+  "description": "data is an array.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": []
+  }
+}
