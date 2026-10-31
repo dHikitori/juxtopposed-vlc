@@ -215,10 +215,12 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `94413e6591`: `vlc.exe`
-`01e941364ed0cc318d8452b6adfa0a59bfd95da01a312581aca2a6f8301e5609`,
+Package `7ba1c6abf2`: `vlc.exe`
+`3b6c403b3d52b604a8c3651b5cba8664cd2fc68ac23b9d3270c80c13819d1b98`,
 `libqt_plugin.dll`
-`10eafe99eb53468ecdef8c201f405962b652790fa5f64b43bacd10b3f8eab580`.
+`9f1c2f981d4a3e4455da342d149ae5273da98a32ef9cb513aced43f1a79b1602`.
+It replaces `94413e6591` (`vlc.exe` `01e94136…`), in which only the playing
+episode and an already cached one showed artwork; Episodes stays 1.0.2.
 `BUILD-INFO.json` says `dirty` only because untracked worktree folders are
 under `.claude/`; the source copy takes files only, so the build is the
 committed tree. The Episodes panel is the bundled add-on
@@ -245,7 +247,8 @@ New checks:
    and season, "…" and close, and no second "Episodes" title. The playing
    episode is highlighted and open, marked "Now playing", with its artwork
    across the width, its versions, file name and "Playing"; watched
-   episodes say "Watched". Other rows open and close, and "Play" or "Play
+   episodes say "Watched". Other rows open and close, and each shows its
+   thumbnail once made (a file on a share can take a moment), and "Play" or "Play
    from beginning" work. With several seasons the header opens the season
    list (a ✓ on the playing season), and a season returns to its episodes.
    Escape and the close button close the panel; Queue and Playback
