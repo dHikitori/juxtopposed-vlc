@@ -140,6 +140,11 @@ ColumnLayout {
         packageList.currentIndex = filteredPackages.findIndex(row => row.id === id)
         if (packageList.currentIndex >= 0) packageList.positionViewAtIndex(packageList.currentIndex, ListView.Contain)
     }
+    // The list row: version, a bundled update the app offers, then the state.
+    function rowText(row) {
+        const update = row.appUpdateAvailable === true && row.appUpdateVersion ? qsTr("Update to %1 available").arg(row.appUpdateVersion) : ""
+        return [row.version || "", update, stateText(row)].filter(value => value.length > 0).join(" · ")
+    }
     function stateText(row) {
         return row.removing === true ? qsTr("Removal in progress") : safeMode ? qsTr("Temporarily disabled")
             : row.configured === false && row.configurationKnown !== false ? row.enabled === true ? qsTr("Set up first") : qsTr("Disabled · Set up first")
@@ -323,8 +328,9 @@ ColumnLayout {
                             color: root.theme.bright; font.pixelSize: root.theme.dp(14); elide: Text.ElideRight
                         }
                         Text {
+                            objectName: "addonPackageStatus_" + packageRow.modelData.id
                             Layout.fillWidth: true
-                            text: [packageRow.modelData.version || "", root.stateText(packageRow.modelData)].filter(value => value.length > 0).join(" · ")
+                            text: root.rowText(packageRow.modelData)
                             textFormat: Text.PlainText; color: root.theme.foreground; font.pixelSize: root.theme.dp(12); elide: Text.ElideRight
                         }
                     }

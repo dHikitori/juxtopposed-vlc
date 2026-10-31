@@ -112,6 +112,7 @@ private:
     bool dispatch(const QString& command, const QVariantMap& arguments, const QString& session, const QString& replacement,
                   const QVariantMap& extra = {}, const QString& panel = {}, bool gesture = false);
     void dispatchPanelContext(const QString& panel);
+    void resumePanelContext(const QString& sessionId);
     void askNewPanels();
     void panelReply(const Pending&, bool success, const QVariantMap& data);
     QVariantMap projectContext(const QVariantMap& entry, const QVariantMap& context) const;
@@ -141,6 +142,7 @@ private:
     QHash<QString, Session> m_sessions;
     QHash<QString, QString> m_modals, m_replacementViews;
     QHash<QString, QString> m_panelSessions; // panel contribution -> open session
+    QSet<QString> m_panelContextWanted;      // panel sessions to call once ready and not suspended
     QHash<QString, bool> m_panelAvailable;
     QVariantMap m_panelMedia;
     quint64 m_panelRevision = 0;

@@ -291,6 +291,43 @@ private slots:
                  QByteArray(16 * 1024 + 1, ' ')})
             QVERIFY2(panelIcon::markup(bad).isEmpty(), bad.constData());
     }
+    void attachedPanelAsksForContextOnceItsDocumentLoads() {
+        // In the app the registry is attached to the catalogue, and a panel
+        // session's view document arrives after the session opens. The open
+        // panel's context call waits for it (and for a resume) instead of
+        // being dropped.
+        QTemporaryDir source, storage;
+        panelPackage(source.path(), "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 6h16\" stroke=\"#000\"/></svg>");
+        AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled("org.example.panel", true));
+        auto catalogue = std::make_unique<AddonCatalogueView>(&manager, m_lifetime->handle());
+        QStringList requests; QList<QVariantMap> contexts;
+        AddonUiRegistry registry(&manager, {
+            [&](const QString&, const QString&, const QVariantMap& context) {
+                requests.append(QStringLiteral("r") + QString::number(requests.size() + 1)); contexts.append(context); return requests.last(); },
+            [](const QString&) {}});
+        QTRY_VERIFY(catalogue->isCurrent()); QTRY_VERIFY(registry.available());
+        registry.setPanelMedia({{"kind", "video"}});
+        QCOMPARE(requests.size(), 1); QVERIFY(!contexts.last().contains("state"));
+        registry.operationFinished("r1", "org.example.panel/context", "match", {{"available", true}}, {});
+        QVERIFY(registry.panels().first().toMap().value("available").toBool());
+
+        const auto id = registry.createSession("org.example.panel/episodes");
+        QVERIFY(!id.isEmpty()); QVERIFY(registry.session(id).value("pending").toBool());
+        QVERIFY(registry.attachPanelSession(id));
+        QCOMPARE(requests.size(), 1); // not ready yet
+        QTRY_COMPARE(requests.size(), 2);
+        QVERIFY(!registry.session(id).value("pending").toBool());
+        QCOMPARE(contexts.last().value("state").toMap().value("status").toString(), QStringLiteral("loading"));
+        registry.operationFinished("r2", "org.example.panel/context", "match", {{"state", QVariantMap{{"status", "ready"}}}}, {});
+        QCOMPARE(registry.session(id).value("state").toMap().value("status").toString(), QStringLiteral("ready"));
+
+        // Suspending cancels a running call; the panel asks again on resume.
+        registry.suspendSession(id, true); QCOMPARE(requests.size(), 2);
+        registry.suspendSession(id, false); QCOMPARE(requests.size(), 3);
+        QVERIFY(contexts.last().contains("state"));
+        registry.closeSession(id);
+    }
     void panelsAskForContextAndTakeEffectsOnlyFromClicks() {
         QTemporaryDir source, storage;
         panelPackage(source.path(), "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 6h16M4 12h16\" stroke=\"#000\" stroke-width=\"1.5\"/></svg>");

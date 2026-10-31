@@ -515,7 +515,8 @@ bool AddonUiRegistry::materializeSession(const QString& id)
         if(!m_sessions.contains(id))return false;
         m_sessions[id].assetsOpened=opened;m_sessions[id].descriptor.insert(QStringLiteral("assetUrls"),m_assets?m_assets->sessionAssets(id):QVariantMap{});
     }
-    if(changed)emit sessionChanged(id);
+    if(changed){emit sessionChanged(id);if(!alive)return false;}
+    if(m_panelContextWanted.contains(id)){resumePanelContext(id);if(!alive)return false;}
     return true;
 }
 bool AddonUiRegistry::bindSessionOwner(const QString& id, QObject* owner)
@@ -585,8 +586,11 @@ void AddonUiRegistry::suspendSession(const QString& id, bool suspended)
     it->suspended = suspended; it->generation = ++m_generation;
     QPointer<AddonUiRegistry> guard(this);
     if (m_assets && it->assetsOpened) m_assets->suspendSession(id, suspended);
+    // A suspended panel loses its running context call; it asks again on resume.
+    if (guard && suspended && std::find(m_panelSessions.cbegin(), m_panelSessions.cend(), id) != m_panelSessions.cend()) m_panelContextWanted.insert(id);
     if (guard && suspended) cancelSessionJobs(id);
     else if(guard && m_attached)materializeSession(id);
+    else if(guard && m_panelContextWanted.contains(id))resumePanelContext(id);
 }
 void AddonUiRegistry::closeSession(const QString& id)
 {
@@ -594,6 +598,7 @@ void AddonUiRegistry::closeSession(const QString& id)
     if(session!=m_sessions.cend()){disconnect(session->ownerDestroyed);ticket=session->documentTicket;}
     m_sessions.remove(id);
     for(auto it=m_panelSessions.begin();it!=m_panelSessions.end();)if(it.value()==id)it=m_panelSessions.erase(it);else ++it;
+    m_panelContextWanted.remove(id);
     QPointer<AddonUiRegistry> guard(this);dropDocument(ticket);if(!guard)return;
     if(m_assets)m_assets->closeSession(id);if(guard)cancelSessionJobs(id);
 }
@@ -711,12 +716,22 @@ void AddonUiRegistry::dispatchPanelContext(const QString& panel)
     const auto sessionId = m_panelSessions.value(panel);
     if (sessionId.isEmpty()) { dispatch(command, {}, {}, {}, extra, panel, false); return; }
     const auto session = m_sessions.find(sessionId);
-    if (session == m_sessions.end() || !session->ready || session->suspended) return;
+    if (session == m_sessions.end()) return;
+    // An attached view loads its document after the session opens: call the
+    // panel when the session is ready and visible (resumePanelContext).
+    if (!session->ready || session->suspended) { m_panelContextWanted.insert(sessionId); return; }
+    m_panelContextWanted.remove(sessionId);
     // Like a session command: the newest call wins, older calls are canceled.
     const auto generation = session->generation = ++m_generation;
     const QPointer<AddonUiRegistry> alive(this); cancelSessionJobs(sessionId);
     if (!alive || !m_sessions.contains(sessionId) || m_sessions.value(sessionId).generation != generation) return;
     dispatch(command, {}, sessionId, {}, extra, panel, false);
+}
+void AddonUiRegistry::resumePanelContext(const QString& sessionId)
+{
+    const auto session = m_sessions.constFind(sessionId);
+    if (session == m_sessions.cend() || !session->ready || session->suspended || m_panelSessions.value(session->contribution) != sessionId) return;
+    dispatchPanelContext(session->contribution);
 }
 void AddonUiRegistry::panelReply(const Pending& pending, bool success, const QVariantMap& data)
 {
