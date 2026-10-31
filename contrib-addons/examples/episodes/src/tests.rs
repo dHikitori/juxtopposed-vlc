@@ -295,6 +295,45 @@ fn the_playing_episode_page_opens_first() {
     assert_eq!(done[0]["data"]["state"]["less"], true);
 }
 
+fn finish(addon: &mut Episodes, mut calls: Vec<Value>, listing: &Listing) -> Value {
+    while calls[0]["type"] == "host-call" {
+        calls = answer(addon, &calls[0], reply(listing));
+    }
+    calls[0]["data"]["state"].clone()
+}
+
+#[test]
+fn the_header_opens_the_season_list_and_a_season_returns() {
+    // The built-in panel's header: show and season; with several seasons
+    // it opens the season list, which marks the playing season.
+    let sample = sample();
+    let state = render(&sample, &Choice::reset(1.0), 1);
+    assert_eq!((state["seasonsClosed"].clone(), state["showingSeasons"].clone(), state["headerSubtitle"].clone()), (json!(true), json!(false), json!("Season 1")));
+    assert_eq!(state["seasonRows"], json!([{"key": 0, "label": "Specials", "icon": "", "current": false},
+                                           {"key": 1, "label": "Season 1", "icon": "check", "current": true}]));
+    assert_eq!(rows(&state)[0]["current"], true);
+    let mut addon = Episodes::default();
+    let calls = invoke(&mut addon, "seasons", json!({"state": state}));
+    let seasons = finish(&mut addon, calls, &sample);
+    assert_eq!((seasons["showingSeasons"].clone(), seasons["episodesShown"].clone(), seasons["headerSubtitle"].clone()), (json!(true), json!(false), json!("")));
+    let calls = invoke(&mut addon, "season", json!({"arguments": {"season": 0}, "state": seasons}));
+    assert_eq!(calls[0]["request"]["season"], 0);
+    let back = finish(&mut addon, calls, &sample);
+    assert_eq!((back["showingSeasons"].clone(), back["season"].clone()), (json!(false), json!(0)));
+    // One season: no list, and the header only names the show.
+    let mut one = sample.clone();
+    one.seasons = vec![(1, 2)];
+    let state = render(&one, &Choice { seasons_view: true, ..Choice::reset(1.0) }, 1);
+    assert_eq!((state["oneSeason"].clone(), state["showingSeasons"].clone()), (json!(true), json!(false)));
+    // While a scan runs, an empty season waits instead of saying "none found".
+    let mut loading = one.clone();
+    loading.items.clear();
+    loading.loading = true;
+    assert_eq!(render(&loading, &Choice::reset(1.0), 1)["episodesShown"], false);
+    loading.loading = false;
+    assert_eq!(render(&loading, &Choice::reset(1.0), 1)["episodesShown"], true);
+}
+
 #[test]
 fn clicks_become_app_effects() {
     let mut addon = Episodes::default();

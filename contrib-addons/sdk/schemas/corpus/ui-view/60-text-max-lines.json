@@ -1,0 +1,13 @@
+{
+  "description": "A line limit is 1 to 20.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "panel",
+    "root": {
+      "type": "Text",
+      "text": "x",
+      "maxLines": 0
+    }
+  }
+}

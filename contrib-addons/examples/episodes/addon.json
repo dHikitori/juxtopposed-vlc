@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "id": "org.videolan.episodes",
   "name": "Episodes",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "Hakone reference add-ons",
   "license": "GPL-2.0-or-later",
   "source": "https://github.com/hakone-org/addon-episodes.git",
@@ -36,6 +36,7 @@
       "icon": "icons/episodes.svg",
       "view": "views/episodes.json",
       "command": "context",
+      "header": "controls",
       "stateSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -71,32 +72,6 @@
             "maxLength": 512
           },
           "hasNotice": {
-            "type": "boolean"
-          },
-          "seasons": {
-            "type": "array",
-            "maxItems": 64,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "key",
-                "label"
-              ],
-              "properties": {
-                "key": {
-                  "type": "integer",
-                  "minimum": -1,
-                  "maximum": 9999
-                },
-                "label": {
-                  "type": "string",
-                  "maxLength": 64
-                }
-              }
-            }
-          },
-          "manySeasons": {
             "type": "boolean"
           },
           "season": {
@@ -229,6 +204,9 @@
                 "subtitle": {
                   "type": "string",
                   "maxLength": 64
+                },
+                "current": {
+                  "type": "boolean"
                 }
               }
             }
@@ -240,6 +218,54 @@
           },
           "less": {
             "type": "boolean"
+          },
+          "showingSeasons": {
+            "type": "boolean"
+          },
+          "seasonsClosed": {
+            "type": "boolean"
+          },
+          "oneSeason": {
+            "type": "boolean"
+          },
+          "episodesShown": {
+            "type": "boolean"
+          },
+          "headerSubtitle": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "seasonRows": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "label",
+                "icon",
+                "current"
+              ],
+              "properties": {
+                "key": {
+                  "type": "integer",
+                  "minimum": -1,
+                  "maximum": 9999
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "icon": {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                "current": {
+                  "type": "boolean"
+                }
+              }
+            }
           }
         }
       },
@@ -251,8 +277,6 @@
         "show": "Episodes",
         "notice": "Finding episodes…",
         "hasNotice": true,
-        "seasons": [],
-        "manySeasons": false,
         "season": -1,
         "seasonLabel": "",
         "more": false,
@@ -261,7 +285,13 @@
         "version": "",
         "episodes": [],
         "page": 0,
-        "less": false
+        "less": false,
+        "showingSeasons": false,
+        "seasonsClosed": false,
+        "oneSeason": true,
+        "episodesShown": false,
+        "headerSubtitle": "",
+        "seasonRows": []
       }
     },
     {
@@ -272,6 +302,16 @@
       "command": "context",
       "operations": [
         "context"
+      ]
+    },
+    {
+      "id": "seasons",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Show the seasons",
+      "command": "seasons",
+      "operations": [
+        "seasons"
       ]
     },
     {

@@ -1,0 +1,24 @@
+{
+  "description": "A tab style is buttons or dropdown.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "panel",
+    "root": {
+      "type": "Tabs",
+      "items": {
+        "bind": "state.v"
+      },
+      "text": "x",
+      "style": "grid",
+      "action": {
+        "command": "org.hakone.example.panels/seasons"
+      }
+    }
+  },
+  "context": {
+    "commands": [
+      "org.hakone.example.panels/seasons"
+    ]
+  }
+}

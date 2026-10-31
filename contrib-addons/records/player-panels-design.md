@@ -316,7 +316,7 @@ bundling) and `54cc3444cc` (instruction budget). The author guide is
   `SeriesModel` is a plain object with the scan, watch states, titles,
   artwork and `siblings()`; the season list and rows of the removed view
   are gone, and `test_qt_series_model` checks `siblings()`.
-- **Episodes package.** `examples/episodes`, version 1.0.1, bundled and on
+- **Episodes package.** `examples/episodes`, version 1.0.2, bundled and on
   by default. The built-in `RedesignEpisodesView.qml` is removed.
 
 ### Changes from the design
@@ -392,6 +392,48 @@ fixtures had the same gap, and the worker tests call the module directly.
   the desktop.
 - Also fixed: the UI image capture in `AddonManager` left out `ui.panel`,
   so a panel's own package images would have been refused.
+
+### Windows check: the panel had gone backwards (1.0.2)
+
+After 1.0.1 the user found the panel slow to fill, unable to open other
+episodes, and plainer than the built-in view: a second title, the menu on
+its own line, a combo box instead of the season list, a narrow letterboxed
+image, and a highlighted Play with the restart button wrapped below it.
+
+Bugs, fixed first:
+
+- The open panel's first context call came before its view document
+  loaded (the registry is attached to the catalogue in the app), was
+  dropped, and nothing asked again. The call now waits for the session.
+- A closed row has no `expanded` value, so the expand click sent
+  `open: null`, which the parameter check refused. A missing binding now
+  leaves its argument out.
+
+Parity, checked by rendering the removed `RedesignEpisodesView` (from
+`37f8d2049d`) and the add-on panel side by side offscreen, with states from
+the real Wasm in the worker (one season, two seasons with the season list,
+row 3 open, a 30-episode season playing episode 20):
+
+- `ui.panel.header` names the view's header row. The frame shows it above
+  the scrolled area with the close button at its end and a divider, drops
+  its own title, and lets the view run edge to edge.
+- View options: `grow`, `Button.subtitle` (two-line heading) and
+  `intent: "link"`, `Text.style` and `maxLines`, `Tabs.style`,
+  `MediaRow.icon`, `navigates` and `selected`, icons `chevron-down` and
+  `chevron-up`. App artwork in a media row uses the library's artwork
+  frame. A text node no longer takes a fixed height (a line limit made its
+  size loop).
+- The frame scrolls once to the highlighted row when the panel opens.
+- Episodes 1.0.2: the header button opens the season list (a ✓ on the
+  playing season) and a season returns to its episodes; the playing
+  episode and season are highlighted; the expanded row has the old order
+  and styles (description in three lines, a quiet source link, version
+  drop-down, file name, full-width Play beside restart); an empty season
+  waits while a scan runs. A page of 40 still fits one dispatch.
+
+Not carried over: Escape in the season list closes the panel instead of
+returning to the episodes (the header button returns), and the file name
+is 12 px instead of 11 px.
 
 ### Open
 

@@ -9,10 +9,57 @@
         "id": "controls",
         "children": [
           {
-            "type": "Heading",
-            "id": "show",
+            "type": "Button",
+            "id": "seasonsOpen",
+            "grow": true,
+            "visible": {
+              "bind": "state.seasonsClosed"
+            },
             "text": {
               "bind": "state.show"
+            },
+            "subtitle": {
+              "bind": "state.headerSubtitle"
+            },
+            "icon": "chevron-left",
+            "action": {
+              "command": "org.videolan.episodes/seasons"
+            }
+          },
+          {
+            "type": "Button",
+            "id": "seasonsClose",
+            "grow": true,
+            "visible": {
+              "bind": "state.showingSeasons"
+            },
+            "text": {
+              "bind": "state.show"
+            },
+            "subtitle": {
+              "bind": "state.headerSubtitle"
+            },
+            "icon": "chevron-down",
+            "action": {
+              "command": "org.videolan.episodes/seasons"
+            }
+          },
+          {
+            "type": "Button",
+            "id": "showTitle",
+            "grow": true,
+            "visible": {
+              "bind": "state.oneSeason"
+            },
+            "text": {
+              "bind": "state.show"
+            },
+            "subtitle": {
+              "bind": "state.headerSubtitle"
+            },
+            "enabled": false,
+            "action": {
+              "command": "org.videolan.episodes/seasons"
             }
           },
           {
@@ -56,35 +103,48 @@
         ]
       },
       {
-        "type": "Tabs",
-        "id": "seasons",
-        "visible": {
-          "bind": "state.manySeasons"
-        },
-        "items": {
-          "bind": "state.seasons"
-        },
-        "selected": {
-          "bind": "state.season"
-        },
-        "text": "Seasons",
-        "action": {
-          "command": "org.videolan.episodes/season",
-          "arguments": {
-            "season": {
-              "bind": "item.tab.key"
-            }
-          }
-        }
-      },
-      {
-        "type": "Notice",
+        "type": "Text",
         "id": "notice",
+        "style": "caption",
         "visible": {
           "bind": "state.hasNotice"
         },
         "text": {
           "bind": "state.notice"
+        }
+      },
+      {
+        "type": "List",
+        "id": "seasonList",
+        "visible": {
+          "bind": "state.showingSeasons"
+        },
+        "items": {
+          "bind": "state.seasonRows"
+        },
+        "keyField": "key",
+        "scroll": false,
+        "emptyText": "No seasons found.",
+        "itemTemplate": {
+          "type": "MediaRow",
+          "title": {
+            "bind": "item.label"
+          },
+          "selected": {
+            "bind": "item.current"
+          },
+          "icon": {
+            "bind": "item.icon"
+          },
+          "navigates": true,
+          "primaryAction": {
+            "command": "org.videolan.episodes/season",
+            "arguments": {
+              "season": {
+                "bind": "item.key"
+              }
+            }
+          }
         }
       },
       {
@@ -102,6 +162,9 @@
       {
         "type": "List",
         "id": "episodes",
+        "visible": {
+          "bind": "state.episodesShown"
+        },
         "items": {
           "bind": "state.episodes"
         },
@@ -122,6 +185,12 @@
           },
           "title": {
             "bind": "item.title"
+          },
+          "selected": {
+            "bind": "item.current"
+          },
+          "subtitle": {
+            "bind": "item.subtitle"
           },
           "mark": {
             "bind": "item.mark"
@@ -150,6 +219,8 @@
             {
               "type": "Text",
               "id": "description",
+              "style": "small",
+              "maxLines": 3,
               "visible": {
                 "bind": "item.hasDescription"
               },
@@ -158,8 +229,26 @@
               }
             },
             {
+              "type": "Button",
+              "id": "source",
+              "intent": "link",
+              "visible": {
+                "bind": "item.hasSource"
+              },
+              "text": "Episode source",
+              "action": {
+                "command": "org.videolan.episodes/source",
+                "arguments": {
+                  "key": {
+                    "bind": "item.sourceKey"
+                  }
+                }
+              }
+            },
+            {
               "type": "Tabs",
               "id": "versions",
+              "style": "dropdown",
               "visible": {
                 "bind": "item.multiple"
               },
@@ -185,6 +274,8 @@
             {
               "type": "Text",
               "id": "file",
+              "style": "caption",
+              "maxLines": 1,
               "visible": {
                 "bind": "item.hasFile"
               },
@@ -199,11 +290,11 @@
                 {
                   "type": "Button",
                   "id": "play",
+                  "grow": true,
                   "text": {
                     "bind": "item.playLabel"
                   },
                   "icon": "play-outline",
-                  "intent": "primary",
                   "enabled": {
                     "bind": "item.playEnabled"
                   },
@@ -249,28 +340,8 @@
                   }
                 }
               }
-            },
-            {
-              "type": "Button",
-              "id": "source",
-              "visible": {
-                "bind": "item.hasSource"
-              },
-              "text": "Episode source",
-              "icon": "info",
-              "action": {
-                "command": "org.videolan.episodes/source",
-                "arguments": {
-                  "key": {
-                    "bind": "item.sourceKey"
-                  }
-                }
-              }
             }
-          ],
-          "subtitle": {
-            "bind": "item.subtitle"
-          }
+          ]
         }
       }
     ]

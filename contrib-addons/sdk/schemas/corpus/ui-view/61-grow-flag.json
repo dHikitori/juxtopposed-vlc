@@ -1,0 +1,20 @@
+{
+  "description": "grow is a Boolean, not a binding.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "panel",
+    "root": {
+      "type": "Row",
+      "children": [
+        {
+          "type": "Text",
+          "text": "x",
+          "grow": {
+            "bind": "state.grow"
+          }
+        }
+      ]
+    }
+  }
+}

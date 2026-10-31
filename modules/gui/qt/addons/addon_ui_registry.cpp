@@ -663,7 +663,7 @@ QVariantList AddonUiRegistry::panels() const
         if (type(entry) != QLatin1String("ui.panel")) continue;
         const auto document = entry.value("document").toMap(); const auto id = entry.value("id").toString();
         result.append(QVariantMap{{"id", id}, {"packageId", entry.value("packageId")}, {"name", document.value("name")},
-            {"label", document.value("label")}, {"placement", document.value("placement")},
+            {"label", document.value("label")}, {"placement", document.value("placement")}, {"header", document.value("header")},
             {"iconMarkup", entry.value("iconMarkup").toString()}, {"available", m_panelAvailable.value(id, false)},
             {"open", m_panelSessions.contains(id)}});
     }

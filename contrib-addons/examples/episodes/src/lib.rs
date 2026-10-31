@@ -196,6 +196,8 @@ pub struct Choice {
     pub expanded: String,
     pub version_episode: String,
     pub version: String,
+    /// The season list replaces the episodes (the header button).
+    pub seasons_view: bool,
 }
 
 impl Choice {
@@ -208,6 +210,7 @@ impl Choice {
             expanded: text("expanded"),
             version_episode: text("versionEpisode"),
             version: text("version"),
+            seasons_view: state.get("showingSeasons").and_then(Value::as_bool).unwrap_or(false),
         }
     }
     pub fn reset(revision: f64) -> Self {
@@ -260,6 +263,9 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
                 if progress > 0.0 {
                     row.insert("progress".into(), progress.into());
                 }
+                if current {
+                    row.insert("current".into(), true.into());
+                }
             }
             if expanded {
                 row["expanded"] = true.into();
@@ -292,13 +298,23 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
     };
     let shown = listing.items.len() as u64;
     let page = choice.page.unwrap_or(listing.offset / PAGE);
+    // The header shows the show and season; with several seasons it opens
+    // the season list, which marks the playing episode's season.
+    let many = listing.seasons.len() > 1;
+    let showing = many && choice.seasons_view;
+    // While a scan runs, an empty list waits instead of saying "none found".
+    let episodes_shown = !showing && (!rows.is_empty() || (!listing.loading && notice.is_empty()));
     json!({
         "status": "ready", "revision": choice.revision, "kind": listing.kind, "files": listing.kind == "folder",
         "show": if listing.show.is_empty() { "Episodes".to_owned() } else { listing.show.clone() },
         "notice": notice, "hasNotice": !notice.is_empty(),
-        "seasons": listing.seasons.iter().map(|(season, _)| json!({"key": season, "label": season_label(*season)})).collect::<Vec<_>>(),
-        "manySeasons": listing.seasons.len() > 1, "season": season, "seasonLabel": season_label(season),
-        "page": page, "more": listing.offset + shown < listing.total, "less": listing.offset > 0,
+        "seasonRows": listing.seasons.iter().map(|(value, _)| json!({"key": value, "label": season_label(*value),
+            "icon": if listing.current_season == Some(*value) { "check" } else { "" },
+            "current": listing.current_season == Some(*value)})).collect::<Vec<_>>(),
+        "showingSeasons": showing, "seasonsClosed": many && !showing, "oneSeason": !many,
+        "headerSubtitle": if showing { String::new() } else { season_label(season) },
+        "season": season, "seasonLabel": season_label(season), "episodesShown": episodes_shown,
+        "page": page, "more": listing.offset + shown < listing.total, "less": listing.offset > 0 && !showing,
         "expanded": choice.expanded, "versionEpisode": choice.version_episode, "version": choice.version,
         "episodes": rows
     })
@@ -316,7 +332,8 @@ pub fn open_key(listing: &Listing, choice: &Choice) -> Option<String> {
 /// The state when the media has no series.
 fn empty(revision: f64) -> Value {
     json!({"status": "none", "revision": revision, "kind": "none", "files": false, "show": "Episodes",
-           "notice": "This media has no other episodes.", "hasNotice": true, "seasons": [], "manySeasons": false,
+           "notice": "This media has no other episodes.", "hasNotice": true, "seasonRows": [], "showingSeasons": false,
+           "seasonsClosed": false, "oneSeason": true, "headerSubtitle": "", "episodesShown": false,
            "season": -1, "seasonLabel": "", "page": 0, "more": false, "less": false, "expanded": "", "versionEpisode": "",
            "version": "", "episodes": []})
 }
@@ -405,11 +422,19 @@ impl Episodes {
             }
             "season" => match arguments.get("season").and_then(Value::as_i64) {
                 Some(season) => {
-                    choice = Choice { season: Some(season), page: None, expanded: String::new(), ..choice };
+                    choice = Choice { season: Some(season), page: None, expanded: String::new(), seasons_view: false, ..choice };
                     self.read_season(call(choice, false), season)
                 }
                 None => vec![result(id, Status::Error, json!({}))],
             },
+            // The header button: the season list, or back to the episodes.
+            "seasons" => {
+                choice.seasons_view = !choice.seasons_view;
+                match choice.season {
+                    Some(season) => self.read_season(call(choice, false), season),
+                    None => self.read(call(choice, false), json!({"limit": 1})),
+                }
+            }
             "expand" => {
                 let key = text("key");
                 if key.is_empty() {
@@ -540,7 +565,7 @@ impl Addon for Episodes {
             && rows[0]["mark"] == "Now playing"
             && rows[0]["playKey"] == "b"
             && rows[0]["expanded"] == true
-            && state["seasons"][0]["label"] == "Specials"
+            && state["seasonRows"][0]["label"] == "Specials"
     }
     fn handle(&mut self, message: Incoming<'_>) -> Vec<Value> {
         match message {

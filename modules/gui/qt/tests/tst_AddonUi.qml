@@ -372,7 +372,7 @@ TestCase {
         view.state = {title: "<b>Untrusted title</b>", ref: "station-1"}; wait(50)
         verify(view.valid, view.errorMessage)
         const label = findChild(view, "addonNode_label")
-        compare(label.children[0].item.textFormat, Text.PlainText)
+        compare(findChild(label, "addonText").textFormat, Text.PlainText)
         const node = findChild(view, "addonNode_play")
         mouseClick(node.children[0].item)
         compare(commandSpy.count, 1); compare(commandSpy.signalArguments[0][0], "org.example.radio/play")
@@ -441,6 +441,51 @@ TestCase {
                 {type: "List", items: {bind: "state.episodes"}, keyField: "key", scroll: "no", itemTemplate: {type: "Text", text: "x"}}])
             verify(Contract.validateView(viewDocument(bad), view.registeredCommands).length > 0, JSON.stringify(bad))
         view.hostArtwork = ({})
+    }
+    function test_panelLayoutOptions() {
+        const command = name => ({command: "org.example.radio/" + name})
+        view.registeredCommands = ["org.example.radio/play", "org.example.radio/seasons", "org.example.radio/source"]
+        view.document = viewDocument({type: "Column", children: [
+            {type: "Row", id: "header", children: [
+                {type: "Button", id: "heading", grow: true, text: {bind: "state.show"}, subtitle: {bind: "state.season"}, icon: "chevron-left", action: command("seasons")},
+                {type: "IconButton", id: "more", text: "More", icon: "more", action: command("seasons")}]},
+            {type: "Text", id: "file", style: "caption", maxLines: 1, text: {bind: "state.file"}},
+            {type: "Text", id: "notes", style: "small", maxLines: 3, text: "Notes"},
+            {type: "Button", id: "source", intent: "link", text: "Episode source", action: command("source")},
+            {type: "Tabs", id: "versions", style: "dropdown", items: {bind: "state.versions"}, text: "Version", action: command("play")},
+            {type: "List", id: "seasons", items: {bind: "state.seasons"}, keyField: "key",
+             itemTemplate: {type: "MediaRow", title: {bind: "item.label"}, icon: {bind: "item.icon"}, navigates: true,
+                selected: {bind: "item.current"}, primaryAction: command("play")}}]})
+        view.state = {show: "Show", season: "Season 1", file: "Show.S01E01.1080p.mkv",
+            versions: [{key: "a", label: "A"}, {key: "b", label: "B"}],
+            seasons: [{key: 1, label: "Season 1", icon: "check", current: true}, {key: 2, label: "Season 2", icon: "", current: false}]}
+        wait(60)
+        verify(view.valid, view.errorMessage)
+        // A growing child takes the free width on one line.
+        const heading = findChild(view, "addonNode_heading"), more = findChild(view, "addonNode_more")
+        verify(heading.width > more.width * 3, heading.width + " " + more.width)
+        compare(heading.y, more.y)
+        compare(findChild(heading, "addonActionSubtitle").text, "Season 1")
+        const file = findChild(findChild(view, "addonNode_file"), "addonText")
+        compare(file.maximumLineCount, 1); compare(file.elide, Text.ElideMiddle)
+        compare(findChild(findChild(view, "addonNode_notes"), "addonText").maximumLineCount, 3)
+        // Two versions still use the drop-down.
+        verify(findChild(view, "addonTabs_versions").visible)
+        // The current season is highlighted though no row is open.
+        tryVerify(() => !!findChild(view, "addonMediaRow_1"))
+        verify(findChild(view, "addonMediaRow_1").selected)
+        verify(!findChild(view, "addonMediaRow_2").selected)
+        for (const bad of [
+                {type: "Text", text: "x", style: "huge"},
+                {type: "Text", text: "x", maxLines: 0},
+                {type: "Text", text: "x", grow: "yes"},
+                {type: "Button", text: "x", intent: "fancy", action: command("play")},
+                {type: "Tabs", items: {bind: "state.versions"}, text: "x", style: "grid", action: command("play")},
+                {type: "MediaRow", title: "x", icon: "rocket"},
+                {type: "MediaRow", title: "x", navigates: "yes"}])
+            verify(Contract.validateView(viewDocument(bad), view.registeredCommands).length > 0, JSON.stringify(bad))
+        // A bound media-row selection must be a flag.
+        verify(Contract.validateProjection({type: "MediaRow", title: "x", selected: {bind: "state.flag"}}, {flag: "yes"}, null, {}).length > 0)
     }
     function test_untrustedButtonAndEnumLabelsUsePlainText() {
         const markup = "<img src='https://example.org/track'>"

@@ -39,30 +39,38 @@ The document permits only `contract`, `id`, and `root`. An identifier starts wit
 
 ## Components
 
-Each component accepts `type`, `id`, `visible`, and `enabled`. The table gives the additional properties.
+Each component accepts `type`, `id`, `visible`, `enabled`, and `grow`. The table gives the additional properties.
 
 | Component | Additional properties | Host behavior |
 | --- | --- | --- |
 | `Page` | `title`, `children` | Column with a title |
 | `Section` | `title`, `children` | Column with a title and section spacing |
 | `Column` | `children` | Vertical content |
-| `Row` | `children` | Horizontal content that can continue on another line |
+| `Row` | `children` | Horizontal content. It continues on another line, unless a child has `grow` |
 | `Heading` | `text` | Heading text |
-| `Text` | `text` | Body text |
+| `Text` | `text`, `style`, `maxLines` | Body text |
 | `Notice` | `text` | Text with an alert role for a screen reader |
 | `EmptyState` | `text` | Text for an empty result |
-| `Button` | `text`, `icon`, `intent`, `action` | Button with a text label |
+| `Button` | `text`, `subtitle`, `icon`, `intent`, `action` | Button with a text label |
 | `IconButton` | `text`, `icon`, `action` | Icon button; `text` supplies its accessible name |
 | `Image` | `artwork`, `text` | Image from a host asset handle; `text` supplies its accessible name |
 | `MediaCard` | `title`, `subtitle`, `artwork`, `primaryAction` | Media title, description, artwork, and optional action |
-| `List` | `items`, `keyField`, `itemTemplate`, `emptyText` | Virtual list with a scroll bar |
+| `List` | `items`, `keyField`, `itemTemplate`, `emptyText`, `scroll`, `more`, `moreAction`, `moreText` | List of state items; `"scroll": false` shows every row, and `more` adds a "next" button |
 | `Progress` | `value`, `text` | Progress value from zero to one and a text label |
+| `Tabs` | `items`, `selected`, `text`, `action`, `style` | One choice from a state list of `{key, label}`; in the action, `item.tab` is the chosen entry |
+| `Menu` | `text`, `icon`, `entries` | Button with up to 16 commands; an entry can have `visible` |
+| `MediaRow` | `title`, `subtitle`, `number`, `mark`, `icon`, `navigates`, `selected`, `artwork`, `progress`, `expanded`, `primaryAction`, `children` | One media item; when `expanded` is true, its artwork and children show below it |
 
-`Button.intent` can be `primary`, `secondary`, or `destructive`. This value changes the style. It does not give command authority.
+- `grow` (a Boolean, not a binding): in a `Row`, the child takes the free width. A row with a growing child keeps its children on one line, each other child at its own width.
+- `Button.intent` can be `primary`, `secondary`, `destructive`, or `link` (a quiet text action in the secondary color). This value changes the style. It does not give command authority.
+- `Button.subtitle` makes a two-line heading button: `text` is the title and `subtitle` the line below it, also when it is empty. A disabled heading button is not dimmed.
+- `Text.style` is `body` (the default), `small` (13 px), or `caption` (12 px, secondary color). `Text.maxLines` (1 to 20) elides the text after that many lines; one line elides in the middle, for a file name.
+- `Tabs.style` is `buttons` or `dropdown`. Without it, up to four entries are buttons and more are a drop-down.
+- `MediaRow.icon` is an icon before the title, in the accent color; it can be bound to state, and a name that is not an app icon shows none. `navigates: true` shows a chevron that opens something. `selected` highlights the row (the playing item, say); without it the open row is highlighted. A row with `number`, `subtitle`, or `mark` is 60 px high, a plain row 48 px.
 
-The permitted icon names are `play`, `pause`, `stop`, `queue`, `music`, `video`, `network`, `folder`, `playlist`, `refresh`, `search`, `info`, `close`, `settings`, `subtitles`, `favorite`, `home`, `chevron-left`, and `chevron-right`.
+The permitted icon names are `play`, `pause`, `stop`, `queue`, `music`, `video`, `network`, `folder`, `playlist`, `refresh`, `search`, `info`, `close`, `settings`, `subtitles`, `favorite`, `home`, `chevron-left`, `chevron-right`, `chevron-down`, `chevron-up`, `episodes`, `chapters`, `more`, `check`, `replay`, and `play-outline`.
 
-The current host does not implement `Table`, `Tabs`, or `FormField` in a UI document. Use the separate generated settings form for package configuration.
+The current host does not implement `Table` or `FormField` in a UI document. Use the separate generated settings form for package configuration.
 
 ## Values and bindings
 

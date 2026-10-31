@@ -363,7 +363,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     for (const auto& value : root.value("contributions").toArray()) {
         if (!value.isObject()) return fail(error, QStringLiteral("The contribution is not correct."));
         Contribution contribution; contribution.document = value.toObject(); const auto item = contribution.document;
-        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "completionPolicy", "qualityTiers", "analysisChannels", "assets", "placement", "extensions"}, error, "contribution")
+        if (!keys(item, {"id", "type", "contract", "features", "mediaKinds", "operations", "requires", "name", "label", "icon", "resource", "view", "theme", "scene", "hook", "route", "command", "parameters", "state", "stateSchema", "resultSchema", "completionPolicy", "qualityTiers", "analysisChannels", "assets", "placement", "header", "extensions"}, error, "contribution")
             || !text(item,"id",&contribution.id,error) || !text(item,"type",&contribution.type,error) || !text(item,"contract",&contribution.contract,error)) return false;
         if (!QRegularExpression(QStringLiteral("^[a-z][a-z0-9.-]{0,63}\\z")).match(contribution.id).hasMatch() || identifiers.contains(contribution.id)
             || !types.contains(contribution.type)) return fail(error, QStringLiteral("A contribution ID or type is not correct or occurs more than once."));
@@ -384,18 +384,21 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
             if (item.contains("stateSchema") && !validateUiValue(item.value("stateSchema").toObject(), item.contains("state") ? item.value("state") : QJsonValue(QJsonObject{})))
                 return fail(error, QStringLiteral("The initial UI state does not agree with its schema."));
         }
-        if (item.contains("placement") && contribution.type != QLatin1String("ui.panel"))
-            return fail(error, QStringLiteral("Only a player panel can ask for a layout zone."));
+        if ((item.contains("placement") || item.contains("header")) && contribution.type != QLatin1String("ui.panel"))
+            return fail(error, QStringLiteral("Only a player panel can ask for a layout zone or a header row."));
         if (contribution.type == QLatin1String("ui.panel")) {
             // A panel has a view, a context command, a button label and an
-            // optional single-color SVG icon and default layout zone.
+            // optional single-color SVG icon, default layout zone and header
+            // row (the ID of a Row in its view that holds the close button).
             static const QStringList zones{"headerLeft", "headerRight", "footerLeft", "footerRight", "above"};
+            static const QRegularExpression rowId(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]{0,95}\\z"));
             const auto name = item.value("name").toString(), label = item.value("label").toString();
             if (item.value("hook").toString() != QLatin1String("player.panels@1") || !item.value("view").isString()
                 || !item.value("command").isString() || !item.contains("stateSchema")
                 || name.trimmed().isEmpty() || name.size() > 64 || label.trimmed().isEmpty() || label.size() > 128
                 || (item.contains("icon") && !item.value("icon").toString().endsWith(QLatin1String(".svg")))
-                || (item.contains("placement") && !zones.contains(item.value("placement").toString())))
+                || (item.contains("placement") && !zones.contains(item.value("placement").toString()))
+                || (item.contains("header") && !rowId.match(item.value("header").toString()).hasMatch()))
                 return fail(error, QStringLiteral("The player panel declaration is not correct."));
         }
         for (const auto& key : {QStringLiteral("resource"), QStringLiteral("view"), QStringLiteral("theme"), QStringLiteral("scene"), QStringLiteral("icon")})

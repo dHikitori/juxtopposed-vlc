@@ -5,7 +5,7 @@
 var forbiddenKeys = ["__proto__", "prototype", "constructor"]
 var nodeTypes = ["Page", "Section", "Column", "Row", "Heading", "Text", "Notice", "EmptyState", "Button", "IconButton", "Image", "MediaCard", "List", "Progress", "Tabs", "Menu", "MediaRow"]
 var icons = ["play", "pause", "stop", "queue", "music", "video", "network", "folder", "playlist", "refresh", "search", "info", "close", "settings", "subtitles", "favorite", "home", "chevron-left", "chevron-right",
-    "episodes", "chapters", "more", "check", "replay", "play-outline"]
+    "episodes", "chapters", "more", "check", "replay", "play-outline", "chevron-down", "chevron-up"]
 
 function own(object, key) {
     return object !== null && typeof object === "object" && Object.prototype.hasOwnProperty.call(object, key)
@@ -115,24 +115,31 @@ function resolveArguments(value, state, item, messages) {
 function nodeError(node, commands, depth, budget, insideList) {
     if (--budget.nodes < 0 || depth > 10) return "The view is larger than the limit."
     if (!record(node) || !nodeTypes.includes(node.type)) return "The app cannot use this component type."
-    var common = ["type", "id", "visible", "enabled"]
+    var common = ["type", "id", "visible", "enabled", "grow"]
     var fields = {
         Page: ["title", "children"], Section: ["title", "children"], Column: ["children"], Row: ["children"],
-        Heading: ["text"], Text: ["text"], Notice: ["text"], EmptyState: ["text"],
-        Button: ["text", "icon", "intent", "action"], IconButton: ["text", "icon", "action"],
+        Heading: ["text"], Text: ["text", "style", "maxLines"], Notice: ["text"], EmptyState: ["text"],
+        Button: ["text", "subtitle", "icon", "intent", "action"], IconButton: ["text", "icon", "action"],
         Image: ["artwork", "text"], MediaCard: ["title", "subtitle", "artwork", "primaryAction"],
         List: ["items", "keyField", "itemTemplate", "emptyText", "scroll", "more", "moreAction", "moreText"], Progress: ["value", "text"],
-        Tabs: ["items", "selected", "text", "action"], Menu: ["text", "icon", "entries"],
-        MediaRow: ["title", "subtitle", "number", "mark", "artwork", "progress", "expanded", "primaryAction", "children"]
+        Tabs: ["items", "selected", "text", "action", "style"], Menu: ["text", "icon", "entries"],
+        MediaRow: ["title", "subtitle", "number", "mark", "icon", "navigates", "artwork", "progress", "expanded", "selected", "primaryAction", "children"]
     }
     for (var key of Object.keys(node)) {
         if (!common.includes(key) && !fields[node.type].includes(key)) return "The app cannot use this component property."
         if (["text", "title", "subtitle", "emptyText", "artwork", "number", "mark", "moreText"].includes(key)) { var textError = valueError(node[key], "text"); if (textError) return textError }
-        if (["visible", "enabled", "expanded", "more"].includes(key)) { var boolError = valueError(node[key], "bool"); if (boolError) return boolError }
+        if (["visible", "enabled", "expanded", "more"].includes(key) || (key === "selected" && node.type === "MediaRow")) { var boolError = valueError(node[key], "bool"); if (boolError) return boolError }
     }
     if (node.id !== undefined && !safeKey(node.id)) return "A component ID is not correct."
-    if (node.icon !== undefined && !icons.includes(node.icon)) return "The app cannot use this icon."
-    if (node.intent !== undefined && !["primary", "secondary", "destructive"].includes(node.intent)) return "The app cannot use this button style."
+    if (node.grow !== undefined && typeof node.grow !== "boolean") return "The grow value is not correct."
+    // A media row's icon can be bound to state; the bound name must be an app icon.
+    if (node.type === "MediaRow" && node.icon !== undefined && typeof node.icon !== "string") { var iconError = valueError(node.icon, "text"); if (iconError) return iconError }
+    else if (node.icon !== undefined && !icons.includes(node.icon)) return "The app cannot use this icon."
+    if (node.navigates !== undefined && typeof node.navigates !== "boolean") return "The navigates value is not correct."
+    if (node.intent !== undefined && !["primary", "secondary", "destructive", "link"].includes(node.intent)) return "The app cannot use this button style."
+    if (node.type === "Text" && node.style !== undefined && !["body", "small", "caption"].includes(node.style)) return "The app cannot use this text style."
+    if (node.type === "Tabs" && node.style !== undefined && !["buttons", "dropdown"].includes(node.style)) return "The app cannot use this tab style."
+    if (node.maxLines !== undefined && !(Number.isInteger(node.maxLines) && node.maxLines >= 1 && node.maxLines <= 20)) return "The line limit is not correct."
     for (var actionKey of ["action", "primaryAction", "moreAction"]) {
         if (node[actionKey] !== undefined) { var actionProblem = actionError(node[actionKey], commands); if (actionProblem) return actionProblem }
     }
@@ -190,14 +197,14 @@ function validateProjection(node, state, item, messages) {
         var label = resolve(["MediaCard", "MediaRow"].includes(node.type) ? node.title : node.text, state, item, messages)
         if (typeof label !== "string" || !label.trim()) return "A control must have a label for the screen reader."
     }
-    for (var textKey of ["number", "mark", "moreText"]) {
+    for (var textKey of ["number", "mark", "moreText", "icon"]) {
         if (node[textKey] !== undefined) {
             var textValue = resolve(node[textKey], state, item, messages)
             if (textValue !== undefined && typeof textValue !== "string") return "A text binding returned a value that is not correct."
         }
     }
-    for (var boolKey of ["expanded", "more"]) {
-        if (node[boolKey] !== undefined) {
+    for (var boolKey of ["expanded", "selected", "more"]) {
+        if (node[boolKey] !== undefined && (boolKey !== "selected" || node.type === "MediaRow")) {
             var boolValue = resolve(node[boolKey], state, item, messages)
             if (boolValue !== undefined && typeof boolValue !== "boolean") return "An availability binding returned a value that is not correct."
         }

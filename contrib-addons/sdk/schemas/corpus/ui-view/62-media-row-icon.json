@@ -1,0 +1,13 @@
+{
+  "description": "A literal media row icon is an app icon.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "panel",
+    "root": {
+      "type": "MediaRow",
+      "title": "x",
+      "icon": "rocket"
+    }
+  }
+}

@@ -16,6 +16,14 @@ Item {
     property var hostArtwork: ({})
     property var registry: null
     property string sessionId: ""
+    // A player panel that draws its own header: the page runs edge to edge
+    // like the app's panels, the row with this ID is the header, and the
+    // frame's control (headerTrailing) ends that row.
+    property bool bleed: false
+    property string headerRow: ""
+    property Component headerTrailing: null
+    // The frame's place for the header row, above its scrolled area.
+    property Item headerHost: null
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false

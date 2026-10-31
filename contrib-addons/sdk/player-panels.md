@@ -22,6 +22,7 @@ gives the reasons for each rule.
   "icon": "icons/lyrics.svg",
   "view": "views/lyrics.json",
   "command": "context",
+  "header": "controls",
   "placement": "footerRight",
   "stateSchema": { "type": "object", "additionalProperties": false, "properties": {} },
   "state": {}
@@ -41,7 +42,28 @@ gives the reasons for each rule.
   app adds it when it draws the layout. If the user removes it in the
   editor, it does not come back. A panel without `placement` is only in the
   editor's catalogue.
+- `header` (optional) names a `Row` in the view that is the panel's
+  header (see below).
 - The permission `ui.contribute` must list `player.panels@1`.
+
+## Header and layout
+
+Without `header`, the frame shows `name` as the title with the close
+button, and the view sits below it with the frame's margins.
+
+With `header`, the panel looks like the app's own panels:
+
+- The named row is shown above the scrolled area, padded and with a
+  divider below it, and the frame ends it with the close button. The frame
+  shows no title of its own. A heading `Button` with `subtitle` and `grow`
+  makes the app's two-line panel title (Episodes: the show and the season).
+- The view runs edge to edge: lists and media rows span the width, and
+  other components get the app's side margins.
+- If the view fails, the frame shows its own title row and recovery.
+
+When the panel opens, the frame scrolls once to the first highlighted
+media row (`MediaRow.selected`), the way the app's lists show the playing
+item. Episodes highlights the playing episode and the playing season.
 
 ## Icon
 
@@ -136,13 +158,15 @@ resolve these handles.
 
 | Component | Use |
 | --- | --- |
-| `Tabs` | One choice from a state list of `{key, label}`: buttons for up to four entries, a combo box for more. In the action, `item.tab` is the chosen entry and `item` is the enclosing list item. |
+| `Tabs` | One choice from a state list of `{key, label}`: buttons for up to four entries, a drop-down for more (`style` can choose). In the action, `item.tab` is the chosen entry and `item` is the enclosing list item. |
 | `Menu` | A button with up to 16 commands; entries can have `visible`. |
-| `MediaRow` | Number, title, `subtitle`, `mark` (accent color), `progress` and `artwork`; with `expanded: true` it shows the artwork and its `children`. |
+| `MediaRow` | Number, title, `subtitle`, `mark` (accent color), `icon`, `navigates`, `selected`, `progress` and `artwork`; with `expanded: true` it shows the artwork and its `children`. App artwork (`media:` handles) is cropped into the library's rounded frame. |
 | `List` | `"scroll": false` shows every row and lets the frame scroll; `more`, `moreAction` and `moreText` add a "next" button. |
+| `Row`, `Button`, `Text` | `grow` puts a row on one line with that child taking the free width; `Button.subtitle` and `intent: "link"`; `Text.style` and `maxLines`. |
 
-New icon names: `episodes`, `chapters`, `more`, `check`, `replay`,
-`play-outline`.
+See [the UI document contract](ui-document.md#components) for every
+property. New icon names: `episodes`, `chapters`, `more`, `check`,
+`replay`, `play-outline`, `chevron-down`, `chevron-up`.
 
 ## Limits that shape a panel
 
@@ -161,7 +185,7 @@ New icon names: `episodes`, `chapters`, `more`, `check`, `replay`,
   view and icon.
 - `vlc-addon-preview` writes the view with its initial state in both
   themes. Put a realistic state in a copy of the manifest to look at a full
-  panel.
+  panel. The preview does not draw the frame or the header placement.
 - Run your module in the real worker with host replies, as
   `examples/episodes/tests/test_worker.py` does, and include a test for your
   largest page.

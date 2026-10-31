@@ -23,6 +23,8 @@ TestCase {
         property bool loading: false
         property bool pendingDocument: false
         property bool unavailableDocument: false
+        // A panel view with its own header row (Episodes, say).
+        property bool headerDocument: false
         property var routes: [{id: "org.example.ui/browser", name: "<b>Browser</b>", route: "addon/org.example.ui/browser"}]
         property var commands: []
         signal changed()
@@ -36,6 +38,11 @@ TestCase {
         function descriptor(id) {
             if (pendingDocument) return {id: id, pending: true, state: {label: "First"}, registeredCommands: ["org.example.ui/update"], messages: {}, assetUrls: {}}
             if (unavailableDocument) return {id: id, unavailable: true, state: {}, registeredCommands: [], messages: {}, assetUrls: {}}
+            if (headerDocument && !badDocument) return {id: id, document: {contract: "ui@1", id: "test", root: {type: "Page", children: [
+                    {type: "Row", id: "controls", children: [{type: "Button", id: "heading", grow: true, text: "Show", subtitle: "Season 1", action: {command: "org.example.ui/update"}}]},
+                    {type: "Column", id: "rows", children: Array.from({length: 30}, (_, n) => ({type: "MediaRow", id: "row" + n, title: "Row " + n,
+                        number: String(n), selected: n === 20, primaryAction: {command: "org.example.ui/update"}}))}]}},
+                state: {label: "First"}, registeredCommands: ["org.example.ui/update"], messages: {}, assetUrls: {}}
             return {id: id, document: {contract: "ui@1", id: "test", root: badDocument ? {type: "Loader", source: "package.qml"} :
                 {type: "Button", id: "action", text: {bind: "state.label"}, action: {command: "org.example.ui/update"}}},
                 state: {label: "First"}, registeredCommands: ["org.example.ui/update"], messages: {}, assetUrls: {}}
@@ -101,6 +108,36 @@ TestCase {
         mouseClick(findChild(panel, "addonPanelClose"))
         compare(panelCloseSpy.count, 2)
     }
+    Component {
+        id: headerPanelComponent
+        RedesignAddonPanel { width: 380; height: 500; registry: fakeRegistry; panelId: "org.example.ui/panel"; entry: ({name: "Episodes", header: "controls"}) }
+    }
+    function test_panelHeaderRowHoldsTheCloseButtonAndStaysInView() {
+        fakeRegistry.headerDocument = true
+        const panel = createTemporaryObject(headerPanelComponent, test)
+        tryVerify(() => findChild(panel, "addonPanelMount").usable)
+        // The view's header row is the title: the frame adds only its close
+        // button there, above the scrolled area.
+        verify(!findChild(panel, "addonPanelTitle").visible)
+        const host = findChild(panel, "addonPanelHeaderHost")
+        tryVerify(() => !!findChild(host, "addonPanelHeader") && !!findChild(host, "addonPanelClose"))
+        compare(findChild(host, "addonActionSubtitle").text, "Season 1")
+        panelCloseSpy.target = panel; panelCloseSpy.clear()
+        const close = findChild(host, "addonPanelClose")
+        tryVerify(() => host.height > close.height)
+        mouseClick(close)
+        compare(panelCloseSpy.count, 1)
+        // The highlighted row is shown when the panel opens.
+        const scroller = findChild(panel, "addonPanelMount").parent.parent
+        tryVerify(() => scroller.contentY > 0)
+        const row = findChild(panel, "addonMediaRow_row20")
+        const top = row.mapToItem(scroller, 0, 0).y
+        verify(top >= -1 && top < scroller.height, "row 20 at " + top)
+        // A failed view has no header row: the frame's own title row returns.
+        panel.failed = true
+        verify(findChild(panel, "addonPanelTitle").visible)
+        verify(!host.visible)
+    }
     QtObject {
         id: visualizers
         property var availableVisualizers: [{id: "org.example.visual/bars", name: "<b>Bars</b>"}]
@@ -122,7 +159,7 @@ TestCase {
         fakeRegistry.sessions = ({}); fakeRegistry.closedSessions = []; fakeRegistry.dispatches = []; fakeRegistry.suspended = []
         fakeRegistry.failures = []; fakeRegistry.modalResults = []; fakeRegistry.replacements = ({}); fakeRegistry.badDocument = false
         fakeRegistry.commands = []; fakeRegistry.available = true; fakeRegistry.loading = false
-        fakeRegistry.pendingDocument = false; fakeRegistry.unavailableDocument = false
+        fakeRegistry.pendingDocument = false; fakeRegistry.unavailableDocument = false; fakeRegistry.headerDocument = false
         visualizers.selectedVisualizer = ""; visualizers.selections = 0
         fakeRegistry.revision++; fakeRegistry.changed()
     }
@@ -187,7 +224,9 @@ TestCase {
         fakeRegistry.patch(first.sessionId, {label: "Changed"})
         tryCompare(findChild(first, "addonActionLabel"), "text", "Changed")
         compare(findChild(second, "addonActionLabel").text, "First")
-        findChild(first, "addonActionLabel").parent.parent.clicked()
+        let button = findChild(first, "addonActionLabel")
+        while (button && typeof button.clicked !== "function") button = button.parent
+        button.clicked()
         compare(fakeRegistry.dispatches.length, 1)
         compare(fakeRegistry.dispatches[0].id, first.sessionId)
     }

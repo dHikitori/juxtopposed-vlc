@@ -2990,6 +2990,11 @@
             "footerRight",
             "above"
           ]
+        },
+        "header": {
+          "description": "ui.panel only: the id of a Row in the panel's view that is its header. The app shows that row above the scrolled view, ends it with the close button, and drops its own title; the view runs edge to edge.",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,95}$"
         }
       },
       "allOf": [
@@ -3107,8 +3112,17 @@
           },
           "else": {
             "not": {
-              "required": [
-                "placement"
+              "anyOf": [
+                {
+                  "required": [
+                    "placement"
+                  ]
+                },
+                {
+                  "required": [
+                    "header"
+                  ]
+                }
               ]
             }
           }

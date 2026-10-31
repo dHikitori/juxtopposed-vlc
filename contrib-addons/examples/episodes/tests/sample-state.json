@@ -47,7 +47,8 @@
           "label": "The.Wand.S01E11.1080p.mkv"
         }
       ],
-      "videoKey": ""
+      "videoKey": "",
+      "current": true
     },
     {
       "key": "media:e12",
@@ -76,29 +77,39 @@
   "hasNotice": false,
   "kind": "folder",
   "less": false,
-  "manySeasons": true,
   "more": false,
   "notice": "",
   "page": 0,
   "revision": 1.0,
   "season": 1,
   "seasonLabel": "Season 1",
-  "seasons": [
-    {
-      "key": 0,
-      "label": "Specials"
-    },
-    {
-      "key": 1,
-      "label": "Season 1"
-    },
-    {
-      "key": 2,
-      "label": "Season 2"
-    }
-  ],
   "show": "The Wand",
   "status": "ready",
   "version": "",
-  "versionEpisode": ""
+  "versionEpisode": "",
+  "seasonRows": [
+    {
+      "key": 0,
+      "label": "Specials",
+      "icon": "",
+      "current": false
+    },
+    {
+      "key": 1,
+      "label": "Season 1",
+      "icon": "check",
+      "current": true
+    },
+    {
+      "key": 2,
+      "label": "Season 2",
+      "icon": "",
+      "current": false
+    }
+  ],
+  "showingSeasons": false,
+  "seasonsClosed": true,
+  "oneSeason": false,
+  "headerSubtitle": "Season 1",
+  "episodesShown": true
 }

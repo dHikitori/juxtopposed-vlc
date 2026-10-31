@@ -9,6 +9,10 @@ Item {
     property var parameters: ({})
     property var hostContext: ({})
     property var hostArtwork: ({})
+    property bool bleed: false
+    property string headerRow: ""
+    property Component headerTrailing: null
+    property Item headerHost: null
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
@@ -139,6 +143,7 @@ Item {
         registeredCommands: root.descriptor.registeredCommands || []
         assetUrls: root.descriptor.assetUrls || ({})
         hostArtwork: root.hostArtwork
+        bleed: root.bleed; headerRow: root.headerRow; headerTrailing: root.headerTrailing; headerHost: root.headerHost
         registry: root.sessionRegistry; sessionId: root.sessionId
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         onCommandRequested: (command, arguments) => {

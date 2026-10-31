@@ -645,7 +645,9 @@
         "more",
         "check",
         "replay",
-        "play-outline"
+        "play-outline",
+        "chevron-down",
+        "chevron-up"
       ]
     },
     "node": {
@@ -901,6 +903,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "title": {
           "$ref": "#/$defs/text"
         },
@@ -929,6 +935,10 @@
         },
         "enabled": {
           "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
         },
         "title": {
           "$ref": "#/$defs/text"
@@ -959,6 +969,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "children": {
           "type": "array",
           "maxItems": 64,
@@ -984,6 +998,10 @@
         },
         "enabled": {
           "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
         },
         "children": {
           "type": "array",
@@ -1011,6 +1029,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "text": {
           "$ref": "#/$defs/text"
         }
@@ -1033,8 +1055,26 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "text": {
           "$ref": "#/$defs/text"
+        },
+        "style": {
+          "enum": [
+            "body",
+            "small",
+            "caption"
+          ],
+          "description": "body (default), small (13 px) or caption (12 px, secondary color)."
+        },
+        "maxLines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Elide after this many lines; one line elides in the middle."
         }
       }
     },
@@ -1054,6 +1094,10 @@
         },
         "enabled": {
           "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
         },
         "text": {
           "$ref": "#/$defs/text"
@@ -1076,6 +1120,10 @@
         },
         "enabled": {
           "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
         },
         "text": {
           "$ref": "#/$defs/text"
@@ -1101,8 +1149,16 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "text": {
           "$ref": "#/$defs/label"
+        },
+        "subtitle": {
+          "description": "A second line: the button becomes a two-line heading (a panel header, say).",
+          "$ref": "#/$defs/text"
         },
         "icon": {
           "$ref": "#/$defs/icon"
@@ -1111,8 +1167,10 @@
           "enum": [
             "primary",
             "secondary",
-            "destructive"
-          ]
+            "destructive",
+            "link"
+          ],
+          "description": "link: a quiet text action in the secondary color."
         },
         "action": {
           "$ref": "#/$defs/action"
@@ -1137,6 +1195,10 @@
         },
         "enabled": {
           "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
         },
         "text": {
           "$ref": "#/$defs/label"
@@ -1166,6 +1228,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "artwork": {
           "$ref": "#/$defs/text"
         },
@@ -1191,6 +1257,10 @@
         },
         "enabled": {
           "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
         },
         "title": {
           "$ref": "#/$defs/label"
@@ -1225,6 +1295,10 @@
         },
         "enabled": {
           "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
         },
         "items": {
           "$ref": "#/$defs/binding"
@@ -1277,6 +1351,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "value": {
           "$ref": "#/$defs/progress"
         },
@@ -1301,7 +1379,7 @@
       }
     },
     "Tabs": {
-      "description": "A choice of one entry from a state list of {key, label}. Few entries show as buttons, more as a combo box. In the action, item.tab is the chosen entry and item is the enclosing list item.",
+      "description": "A choice of one entry from a state list of {key, label}. Few entries show as buttons, more as a combo box; style can choose one. In the action, item.tab is the chosen entry and item is the enclosing list item.",
       "type": "object",
       "required": [
         "type",
@@ -1321,6 +1399,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "items": {
           "$ref": "#/$defs/binding"
         },
@@ -1339,6 +1421,13 @@
         },
         "action": {
           "$ref": "#/$defs/action"
+        },
+        "style": {
+          "enum": [
+            "buttons",
+            "dropdown"
+          ],
+          "description": "buttons up to four entries and a drop-down above, unless set."
         }
       }
     },
@@ -1384,6 +1473,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "text": {
           "$ref": "#/$defs/label"
         },
@@ -1419,6 +1512,10 @@
         "enabled": {
           "$ref": "#/$defs/flag"
         },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
         "title": {
           "$ref": "#/$defs/label"
         },
@@ -1431,6 +1528,21 @@
         "mark": {
           "$ref": "#/$defs/text"
         },
+        "icon": {
+          "description": "A leading app icon, or a binding to an icon name (an unknown name shows none).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/icon"
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ]
+        },
+        "navigates": {
+          "description": "Show a chevron that opens something (a season, say).",
+          "type": "boolean"
+        },
         "artwork": {
           "$ref": "#/$defs/text"
         },
@@ -1438,6 +1550,10 @@
           "$ref": "#/$defs/progress"
         },
         "expanded": {
+          "$ref": "#/$defs/flag"
+        },
+        "selected": {
+          "description": "Highlight the row (the playing item, say). Without it the open row is highlighted.",
           "$ref": "#/$defs/flag"
         },
         "primaryAction": {

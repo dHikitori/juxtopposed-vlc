@@ -7,6 +7,7 @@ Item {
     required property var renderer
     property var itemContext: null
     implicitHeight: content.item ? content.item.implicitHeight : 0
+    implicitWidth: content.item ? content.item.implicitWidth : 0
     onNodeChanged: if (content.item) content.item.node = node
     onRendererChanged: if (content.item) content.item.renderer = renderer
     onItemContextChanged: if (content.item) content.item.itemContext = itemContext
