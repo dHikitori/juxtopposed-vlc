@@ -393,7 +393,7 @@ TestCase {
              more: {bind: "state.more"}, moreAction: command("more"),
              itemTemplate: {type: "MediaRow", number: {bind: "item.number"}, title: {bind: "item.title"}, mark: {bind: "item.mark"},
                 progress: {bind: "item.progress"}, expanded: {bind: "item.expanded"}, artwork: {bind: "item.artwork"},
-                primaryAction: Object.assign(command("expand"), {arguments: {key: {bind: "item.key"}}}),
+                primaryAction: Object.assign(command("expand"), {arguments: {key: {bind: "item.key"}, open: {bind: "item.expanded"}}}),
                 children: [
                     {type: "Tabs", id: "versions", items: {bind: "item.versions"}, selected: {bind: "item.version"}, text: "Episode version",
                      action: Object.assign(command("expand"), {arguments: {key: {bind: "item.key"}, version: {bind: "item.tab.key"}}})},
@@ -401,7 +401,7 @@ TestCase {
         view.state = {seasons: [{key: 1, label: "Season 1"}, {key: 2, label: "Season 2"}], season: 1, more: true, hidden: false,
             episodes: [{key: "a", number: "1", title: "Pilot", mark: "Now playing", progress: 0.5, expanded: true, artwork: "media:abc",
                         versions: [{key: "v0", label: "Show.S01E01.mkv"}, {key: "v1", label: "Show.S01E01.1080p.mkv"}], version: "v0"},
-                       {key: "b", number: "2", title: "Second", mark: "", progress: 0, expanded: false, artwork: "", versions: [], version: ""}]}
+                       {key: "b", number: "2", title: "Second", mark: "", progress: 0, artwork: "", versions: [], version: ""}]}
         wait(60)
         verify(view.valid, view.errorMessage)
         tryVerify(() => !!findChild(view, "addonTab_2"))
@@ -410,6 +410,8 @@ TestCase {
         compare(commandSpy.signalArguments[commandSpy.count - 1][1].season, 2)
         mouseClick(findChild(view, "addonMediaRow_b"))
         compare(commandSpy.signalArguments[commandSpy.count - 1][1].key, "b")
+        // A closed row leaves "expanded" out: the argument is left out, not null.
+        verify(!("open" in commandSpy.signalArguments[commandSpy.count - 1][1]))
         tryVerify(() => !!findChild(view, "addonTab_v1"))
         mouseClick(findChild(view, "addonTab_v1"))
         compare(commandSpy.signalArguments[commandSpy.count - 1][1].key, "a")

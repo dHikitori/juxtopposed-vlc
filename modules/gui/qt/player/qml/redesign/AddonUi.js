@@ -103,8 +103,13 @@ function resolveArguments(value, state, item, messages) {
     if (record(value) && (own(value, "bind") || own(value, "message"))) return resolve(value, state, item, messages)
     if (Array.isArray(value)) return value.map(entry => resolveArguments(entry, state, item, messages))
     if (!record(value)) return value
+    // A binding to a missing value leaves its argument out, like a missing
+    // text binding shows nothing; an undefined value would arrive as null.
     var result = {}
-    for (var key of Object.keys(value)) result[key] = resolveArguments(value[key], state, item, messages)
+    for (var key of Object.keys(value)) {
+        var resolved = resolveArguments(value[key], state, item, messages)
+        if (resolved !== undefined) result[key] = resolved
+    }
     return result
 }
 function nodeError(node, commands, depth, budget, insideList) {
