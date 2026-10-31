@@ -42,8 +42,10 @@ fn rows(state: &Value) -> Vec<Value> {
 
 #[test]
 fn versions_follow_their_first_file() {
-    let groups = group(&[file("a", 1, &[1], 0), file("b", 1, &[1], 1), file("c", 1, &[2], 0), file("d", 1, &[2], 0)]);
+    let items = [file("a", 1, &[1], 0), file("b", 1, &[1], 1), file("c", 1, &[2], 0), file("d", 1, &[2], 0)];
+    let groups = group(&items);
     let ids: Vec<Vec<&str>> = groups.iter().map(|group| group.iter().map(|item| item.id.as_str()).collect()).collect();
+    assert!(group(&[]).is_empty());
     assert_eq!(ids, vec![vec!["a", "b"], vec!["c"], vec!["d"]]);
 }
 
@@ -81,8 +83,8 @@ fn the_playing_episode_opens_with_its_version() {
     assert_eq!(rows[0]["playLabel"], "Playing");
     assert_eq!(rows[0]["playEnabled"], false);
     assert_eq!(rows[0]["versions"][1]["label"], "b.mkv");
-    assert_eq!(rows[1]["expanded"], false);
-    assert_eq!(rows[1]["mark"], "");
+    assert_eq!(rows[1]["expanded"], Value::Null);
+    assert_eq!(rows[1]["mark"], Value::Null);
     assert_eq!(rows[1]["subtitle"], "Watched");
     assert_eq!(rows[1]["playLabel"], "Resume");
     assert_eq!(rows[1]["progress"], 0.4);
@@ -95,18 +97,18 @@ fn a_chosen_row_and_version_stay_chosen() {
     let mut playing = file("c", 1, &[2], 0);
     playing.current = true;
     let items = vec![file("a", 1, &[1], 0), file("b", 1, &[1], 1), playing];
-    let choice = Choice { revision: 1.0, pages: 1, expanded: "a".into(), version_episode: "a".into(), version: "b".into(), ..Choice::default() };
+    let choice = Choice { revision: 1.0, expanded: "a".into(), version_episode: "a".into(), version: "b".into(), ..Choice::default() };
     let rows = rows(&render(&listing(items.clone()), &choice, 1));
     assert_eq!(rows[0]["expanded"], true);
     assert_eq!(rows[0]["playKey"], "b");
     assert_eq!(rows[0]["playLabel"], "Play");
-    assert_eq!(rows[1]["expanded"], false);
+    assert_eq!(rows[1]["expanded"], Value::Null);
     let closed = Choice { expanded: "collapsed".into(), ..Choice::reset(1.0) };
     assert!(rows_closed(&render(&listing(items), &closed, 1)));
 }
 
 fn rows_closed(state: &Value) -> bool {
-    rows(state).iter().all(|row| row["expanded"] == false)
+    rows(state).iter().all(|row| row["expanded"] != true)
 }
 
 #[test]
@@ -116,7 +118,8 @@ fn a_podcast_offers_its_video_and_says_listened() {
     audio.played = true;
     audio.title = "First show".into();
     let items = vec![audio, feed("a-video", 1), feed("b", 0)];
-    let state = render(&listing(items), &Choice::reset(1.0), -1);
+    let open = Choice { expanded: "a".into(), ..Choice::reset(1.0) };
+    let state = render(&listing(items), &open, -1);
     let rows = rows(&state);
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0]["subtitle"], "Listened");
@@ -125,6 +128,9 @@ fn a_podcast_offers_its_video_and_says_listened() {
     assert_eq!(rows[0]["videoKey"], "a-video");
     assert_eq!(rows[0]["hasFile"], false);
     assert_eq!(rows[1]["title"], "Episode");
+    // A closed row carries only what the row shows.
+    assert_eq!(rows[1]["hasVideo"], Value::Null);
+    assert_eq!(rows[1]["playLabel"], "Play");
     assert_eq!(state["files"], false);
     assert_eq!(state["seasonLabel"], "Episodes");
 }
@@ -143,15 +149,21 @@ fn the_shown_season_prefers_the_choice_then_the_playing_one() {
 
 #[test]
 fn notices_and_paging() {
-    let mut list = listing((0..50).map(|n| file(&format!("e{n}"), 1, &[n + 1], 0)).collect());
+    let mut list = listing((0..PAGE as i64).map(|n| file(&format!("e{n}"), 1, &[n + 1], 0)).collect());
     list.total = 75;
     list.limited = true;
     let state = render(&list, &Choice::reset(1.0), 1);
-    assert_eq!(state["more"], true);
+    assert_eq!((state["more"].clone(), state["less"].clone(), state["page"].clone()), (json!(true), json!(false), json!(0)));
     assert_eq!(state["hasNotice"], true);
     assert!(state["notice"].as_str().unwrap().starts_with("Some folders"));
+    list.offset = PAGE;
+    let state = render(&list, &Choice::reset(1.0), 1);
+    assert_eq!((state["more"].clone(), state["less"].clone(), state["page"].clone()), (json!(false), json!(true), json!(1)));
     list.message = "Choose the series folder to look for other episodes.".into();
     assert_eq!(render(&list, &Choice::reset(1.0), 1)["notice"], "Choose the series folder to look for other episodes.");
+    // A closed row leaves empty values out.
+    let row = &rows(&state)[0];
+    assert_eq!(row.as_object().unwrap().len(), 5, "{row}");
 }
 
 // The message flow, with a host that answers media.siblings.
@@ -193,7 +205,7 @@ fn the_app_asks_whether_there_is_anything_to_show() {
 #[test]
 fn an_open_panel_reads_the_playing_season_and_its_artwork() {
     let mut addon = Episodes::default();
-    let state = json!({"status": "loading", "revision": -1, "season": -1, "pages": 1, "expanded": ""});
+    let state = json!({"status": "loading", "revision": -1, "season": -1, "expanded": ""});
     let calls = invoke(&mut addon, "context", json!({"media": {"revision": 7}, "state": state}));
     assert_eq!(calls[0]["request"], json!({"limit": 1}));
     let sample = sample();
@@ -203,22 +215,24 @@ fn an_open_panel_reads_the_playing_season_and_its_artwork() {
     let mut data = sample.clone();
     data.items.retain(|item| item.season == 1);
     let calls = answer(&mut addon, &calls[0], reply(&data));
-    // The playing episode is open and has no artwork: ask for it once.
+    // The playing episode is open: read its details before the answer.
     assert_eq!(calls[0]["type"], "host-call");
-    assert_eq!(calls[0]["request"]["artwork"], json!(["a"]));
-    let done = answer(&mut addon, &calls[0], json!({}));
+    assert_eq!(calls[0]["request"]["details"], json!(["a"]));
+    let done = answer(&mut addon, &calls[0], json!({"details": [{"id": "a", "description": "The first one.", "artwork": "a"}]}));
     let state = &done[0]["data"]["state"];
     assert_eq!(done[0]["data"]["available"], true);
     assert_eq!(state["status"], "ready");
     assert_eq!(state["revision"], 7.0);
     assert_eq!(state["season"], 1);
     assert_eq!(rows(state)[0]["playKey"], "b");
+    assert_eq!(rows(state)[0]["description"], "The first one.");
+    assert_eq!(rows(state)[0]["artwork"], "a");
 }
 
 #[test]
 fn choices_survive_a_refresh_but_not_new_media() {
     let mut addon = Episodes::default();
-    let state = json!({"status": "ready", "revision": 7, "season": 0, "pages": 1, "expanded": "collapsed"});
+    let state = json!({"status": "ready", "revision": 7, "season": 0, "expanded": "collapsed"});
     let calls = invoke(&mut addon, "context", json!({"media": {"revision": 7}, "state": state}));
     assert_eq!(calls[0]["request"]["season"], 0);
     let calls = invoke(&mut addon, "context", json!({"media": {"revision": 8}, "state": state}));
@@ -228,16 +242,22 @@ fn choices_survive_a_refresh_but_not_new_media() {
 #[test]
 fn rows_open_close_and_pick_a_version() {
     let mut addon = Episodes::default();
-    let state = json!({"status": "ready", "revision": 7, "season": 1, "pages": 1, "expanded": ""});
+    let state = json!({"status": "ready", "revision": 7, "season": 1, "expanded": ""});
     let calls = invoke(&mut addon, "expand", json!({"arguments": {"key": "c", "open": false}, "state": state}));
-    assert_eq!(calls[0]["request"]["artwork"], json!(["c"]));
-    let done = answer(&mut addon, &calls[0], reply(&sample()));
+    assert_eq!(calls[0]["request"]["details"], json!(["c"]));
+    // The host answers the details it was asked for with the page.
+    let mut page = reply(&sample());
+    page["details"] = json!([{"id": "c", "description": "Second."}]);
+    let done = answer(&mut addon, &calls[0], page);
     assert_eq!(done[0]["data"]["state"]["expanded"], "c");
+    assert_eq!(rows(&done[0]["data"]["state"])[1]["description"], "Second.");
     let calls = invoke(&mut addon, "expand", json!({"arguments": {"key": "a", "open": true}, "state": state}));
     let done = answer(&mut addon, &calls[0], reply(&sample()));
     assert!(rows_closed(&done[0]["data"]["state"]));
     let calls = invoke(&mut addon, "expand", json!({"arguments": {"key": "a", "version": "a"}, "state": state}));
-    let done = answer(&mut addon, &calls[0], reply(&sample()));
+    let mut page = reply(&sample());
+    page["details"] = json!([{"id": "a"}]);
+    let done = answer(&mut addon, &calls[0], page);
     assert_eq!(rows(&done[0]["data"]["state"])[0]["playKey"], "a");
     assert_eq!(invoke(&mut addon, "expand", json!({"arguments": {}}))[0]["status"], "error");
 }
@@ -245,12 +265,34 @@ fn rows_open_close_and_pick_a_version() {
 #[test]
 fn seasons_and_pages_read_again() {
     let mut addon = Episodes::default();
-    let state = json!({"status": "ready", "revision": 7, "season": 1, "pages": 1, "expanded": "c"});
+    let state = json!({"status": "ready", "revision": 7, "season": 1, "page": 1, "expanded": "c"});
     let calls = invoke(&mut addon, "season", json!({"arguments": {"season": 0}, "state": state}));
     assert_eq!(calls[0]["request"]["season"], 0);
-    assert_eq!(calls[0]["request"]["artwork"], json!([]));
+    assert_eq!(calls[0]["request"]["offset"], 0);
+    assert_eq!(calls[0]["request"]["details"], json!([]));
     let calls = invoke(&mut addon, "more", json!({"state": state}));
-    assert_eq!(calls[0]["request"]["limit"], 2 * PAGE);
+    assert_eq!((calls[0]["request"]["offset"].clone(), calls[0]["request"]["limit"].clone()), (json!(2 * PAGE), json!(PAGE)));
+    let calls = invoke(&mut addon, "less", json!({"state": state}));
+    assert_eq!(calls[0]["request"]["offset"], 0);
+}
+
+#[test]
+fn the_playing_episode_page_opens_first() {
+    let mut addon = Episodes::default();
+    let state = json!({"status": "ready", "revision": 7, "season": 1, "expanded": "collapsed"});
+    let calls = invoke(&mut addon, "context", json!({"media": {"revision": 7}, "state": state}));
+    assert_eq!(calls[0]["request"]["offset"], 0);
+    let mut first = reply(&sample());
+    first["currentOffset"] = json!(PAGE + 5);
+    first["total"] = json!(2 * PAGE);
+    let calls = answer(&mut addon, &calls[0], first);
+    assert_eq!(calls[0]["request"]["offset"], PAGE);
+    let mut second = reply(&sample());
+    second["offset"] = json!(PAGE);
+    second["total"] = json!(2 * PAGE);
+    let done = answer(&mut addon, &calls[0], second);
+    assert_eq!(done[0]["data"]["state"]["page"], 1);
+    assert_eq!(done[0]["data"]["state"]["less"], true);
 }
 
 #[test]
@@ -270,7 +312,7 @@ fn clicks_become_app_effects() {
 #[test]
 fn a_failed_read_is_an_error_and_media_without_a_series_is_empty() {
     let mut addon = Episodes::default();
-    let state = json!({"status": "ready", "revision": 7, "season": 1, "pages": 1});
+    let state = json!({"status": "ready", "revision": 7, "season": 1});
     let calls = invoke(&mut addon, "context", json!({"media": {"revision": 7}, "state": state}));
     let done = addon.complete(calls[0]["id"].as_str().unwrap(), "call", false, None);
     assert_eq!(done[0]["status"], "error");

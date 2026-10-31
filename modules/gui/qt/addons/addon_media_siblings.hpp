@@ -52,7 +52,7 @@ public:
         std::function<void(const QUrl&)> artwork; // ask for one file's artwork
     };
     static constexpr int MaxItems = 100;
-    static constexpr int MaxArtworkRequests = 4;
+    static constexpr int MaxDetails = 4;
     static constexpr int WaitMilliseconds = 8000;
 
     explicit AddonMediaSiblings(QObject* parent = nullptr);

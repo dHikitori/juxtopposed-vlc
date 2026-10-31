@@ -88,6 +88,18 @@
         }
       },
       {
+        "type": "Button",
+        "id": "previous",
+        "visible": {
+          "bind": "state.less"
+        },
+        "text": "Previous episodes",
+        "icon": "chevron-left",
+        "action": {
+          "command": "org.videolan.episodes/less"
+        }
+      },
+      {
         "type": "List",
         "id": "episodes",
         "items": {
@@ -102,7 +114,7 @@
         "moreAction": {
           "command": "org.videolan.episodes/more"
         },
-        "moreText": "Show more episodes",
+        "moreText": "Next episodes",
         "itemTemplate": {
           "type": "MediaRow",
           "number": {

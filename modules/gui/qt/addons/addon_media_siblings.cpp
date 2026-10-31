@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_media_siblings.hpp"
 #include <QJsonArray>
+#include <algorithm>
 #include <QMessageAuthenticationCode>
 #include <QRandomGenerator>
 #include <QTimer>
@@ -57,13 +58,13 @@ AddonHostServices::Cancel AddonMediaSiblings::read(const AddonHostServices::Cont
 {
     int offset = 0, limit = 0, season = 0;
     for (auto it = request.begin(); it != request.end(); ++it)
-        if (!QStringList{"offset", "limit", "season", "artwork"}.contains(it.key())) {
+        if (!QStringList{"offset", "limit", "season", "details"}.contains(it.key())) {
             done({{}, QStringLiteral("The episode request is not correct.")}); return {};
         }
-    const auto artwork = request.value(QStringLiteral("artwork"));
+    const auto details = request.value(QStringLiteral("details"));
     if (!integer(request, QStringLiteral("offset"), 0, 10000, 0, &offset) || !integer(request, QStringLiteral("limit"), 1, MaxItems, 50, &limit)
         || !integer(request, QStringLiteral("season"), -1, 9999, -2, &season)
-        || (!artwork.isUndefined() && (!artwork.isArray() || artwork.toArray().size() > MaxArtworkRequests))) {
+        || (!details.isUndefined() && (!details.isArray() || details.toArray().size() > MaxDetails))) {
         done({{}, QStringLiteral("The episode request is not correct.")}); return {};
     }
     if (!m_source.snapshot().loading) { answer(context, request, done, false); return {}; }
@@ -110,6 +111,9 @@ void AddonMediaSiblings::answer(const AddonHostServices::Context& context, const
     QList<const Item*> selected;
     for (const auto& item : snapshot.items) if (season == -2 || item.season == season) selected.append(&item);
     response.insert(QStringLiteral("total"), selected.size());
+    // Where the playing item is, so a panel can open its page first.
+    for (int index = 0; index < selected.size(); ++index)
+        if (selected[index]->current) { response.insert(QStringLiteral("currentOffset"), index); break; }
     QJsonArray items;
     auto& artwork = m_artwork[context.package];
     if (artwork.size() > 4096) artwork.clear();
@@ -128,18 +132,26 @@ void AddonMediaSiblings::answer(const AddonHostServices::Context& context, const
         if (!item->absolute.isEmpty()) row.insert(QStringLiteral("absolute"), text(item->absolute, 32));
         if (item->airDate.isValid()) row.insert(QStringLiteral("airDate"), item->airDate.toString(Qt::ISODate));
         if (item->published.isValid()) row.insert(QStringLiteral("published"), item->published.toUTC().toString(Qt::ISODate));
-        if (!item->description.isEmpty()) row.insert(QStringLiteral("description"), text(item->description, 4096));
-        if (item->titleSource.scheme() == QLatin1String("https")) row.insert(QStringLiteral("hasSource"), true);
-        if (!item->artwork.isEmpty()) { row.insert(QStringLiteral("artwork"), id); artwork.insert(id, item->artwork); }
         items.append(row);
     }
     response.insert(QStringLiteral("items"), items);
-    // Artwork is made only for the few items a panel shows in full.
-    if (m_source.artwork && snapshot.kind == QLatin1String("folder"))
-        for (const auto& value : request.value(QStringLiteral("artwork")).toArray()) {
-            const auto url = ids.value(value.toString());
-            if (!url.isEmpty()) m_source.artwork(url);
-        }
+    // Descriptions, artwork and the title source are only for the few items
+    // a panel shows in full: a feed's show notes can be long, and artwork
+    // for a file may need a thumbnail.
+    QJsonArray detailList;
+    for (const auto& value : request.value(QStringLiteral("details")).toArray()) {
+        const auto id = value.toString();
+        const auto url = ids.value(id);
+        const auto found = std::find_if(snapshot.items.cbegin(), snapshot.items.cend(), [&](const Item& item) { return !url.isEmpty() && item.url == url; });
+        if (found == snapshot.items.cend()) continue;
+        QJsonObject detail{{"id", id}};
+        if (!found->description.isEmpty()) detail.insert(QStringLiteral("description"), text(found->description, 4096));
+        if (found->titleSource.scheme() == QLatin1String("https")) detail.insert(QStringLiteral("hasSource"), true);
+        if (!found->artwork.isEmpty()) { detail.insert(QStringLiteral("artwork"), id); artwork.insert(id, found->artwork); }
+        else if (m_source.artwork && found->kind == QLatin1String("folder")) m_source.artwork(url);
+        detailList.append(detail);
+    }
+    response.insert(QStringLiteral("details"), detailList);
     done({response, {}});
 }
 

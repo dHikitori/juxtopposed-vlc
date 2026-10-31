@@ -12,9 +12,10 @@ use hakone_addon_message_v1::{
     Addon, Incoming, Pending,
 };
 
-/// Rows for each "Show more" step.
-pub const PAGE: u64 = 50;
-const MAX_ITEMS: u64 = 100;
+/// Items on one page. Each dispatch has a fixed instruction budget, and a
+/// row costs about 120,000 instructions, mostly in allocation: 40 rows use
+/// about half of it. Longer seasons page with Next and Previous.
+pub const PAGE: u64 = 40;
 
 /// One file or feed entry, as the app gives it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -81,7 +82,12 @@ pub struct Listing {
     pub total: u64,
     pub seasons: Vec<(i64, u64)>,
     pub current_season: Option<i64>,
+    /// The playing item's index in the season, and this page's first index.
+    pub current_offset: Option<u64>,
+    pub offset: u64,
     pub items: Vec<Sibling>,
+    /// IDs whose details (description, artwork, source) the reply had.
+    pub detailed: Vec<String>,
 }
 
 impl Listing {
@@ -104,12 +110,29 @@ impl Listing {
                 })
                 .unwrap_or_default(),
             current_season: response.get("currentSeason").and_then(Value::as_i64),
+            current_offset: response.get("currentOffset").and_then(Value::as_u64),
+            offset: response.get("offset").and_then(Value::as_u64).unwrap_or(0),
             items: response
                 .get("items")
                 .and_then(Value::as_array)
                 .map(|list| list.iter().filter_map(Sibling::from).collect())
                 .unwrap_or_default(),
+            detailed: Vec::new(),
         }
+        .with_details(response)
+    }
+    /// Details come only for the IDs a read asked for.
+    pub fn with_details(mut self, response: &Map<String, Value>) -> Self {
+        for detail in response.get("details").and_then(Value::as_array).into_iter().flatten() {
+            let Some(id) = detail.get("id").and_then(Value::as_str) else { continue };
+            if let Some(item) = self.items.iter_mut().find(|item| item.id == id) {
+                item.description = detail.get("description").and_then(Value::as_str).unwrap_or("").to_owned();
+                item.artwork = detail.get("artwork").and_then(Value::as_str).unwrap_or("").to_owned();
+                item.has_source = detail.get("hasSource").and_then(Value::as_bool).unwrap_or(false);
+            }
+            self.detailed.push(id.to_owned());
+        }
+        self
     }
     /// The media has a series with at least one episode.
     pub fn available(&self) -> bool {
@@ -118,12 +141,15 @@ impl Listing {
 }
 
 /// The versions of one episode follow each other, version 0 first.
-pub fn group(items: &[Sibling]) -> Vec<Vec<Sibling>> {
-    let mut episodes: Vec<Vec<Sibling>> = Vec::new();
-    for item in items {
-        match episodes.last_mut() {
-            Some(last) if item.version > 0 => last.push(item.clone()),
-            _ => episodes.push(vec![item.clone()]),
+pub fn group(items: &[Sibling]) -> Vec<&[Sibling]> {
+    let mut episodes = Vec::new();
+    let mut start = 0;
+    for index in 1..=items.len() {
+        if index == items.len() || items[index].version == 0 {
+            if start < index {
+                episodes.push(&items[start..index]);
+            }
+            start = index;
         }
     }
     episodes
@@ -163,7 +189,8 @@ pub fn title(item: &Sibling) -> String {
 pub struct Choice {
     pub revision: f64,
     pub season: Option<i64>,
-    pub pages: u64,
+    /// The chosen page; None shows the playing episode's page.
+    pub page: Option<u64>,
     /// The expanded episode key; empty follows the playing episode and
     /// "collapsed" closes every row.
     pub expanded: String,
@@ -177,14 +204,14 @@ impl Choice {
         Self {
             revision: state.get("revision").and_then(Value::as_f64).unwrap_or(-1.0),
             season: state.get("season").and_then(Value::as_i64).filter(|_| state.get("status").and_then(Value::as_str) == Some("ready")),
-            pages: state.get("pages").and_then(Value::as_u64).unwrap_or(1).clamp(1, MAX_ITEMS / PAGE),
+            page: state.get("page").and_then(Value::as_u64).filter(|page| *page <= 250),
             expanded: text("expanded"),
             version_episode: text("versionEpisode"),
             version: text("version"),
         }
     }
-    fn reset(revision: f64) -> Self {
-        Self { revision, pages: 1, ..Self::default() }
+    pub fn reset(revision: f64) -> Self {
+        Self { revision, ..Self::default() }
     }
 }
 
@@ -198,18 +225,19 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
         "collapsed" => false,
         expanded => expanded == key,
     };
+    // A dispatch has a fixed instruction budget: a closed row carries only
+    // what the row shows, and the open row adds its details.
     let rows: Vec<Value> = episodes
         .iter()
         .map(|versions| {
             let first = &versions[0];
-            let key = first.id.clone();
+            let key = &first.id;
             // Files: each version is a choice. Feeds: version 1 is the video.
-            let choices: Vec<&Sibling> = if feed { vec![first] } else { versions.iter().collect() };
+            let choices = if feed { &versions[..1] } else { *versions };
             let chosen = choices
                 .iter()
-                .find(|item| choice.version_episode == key && item.id == choice.version)
+                .find(|item| choice.version_episode == *key && item.id == choice.version)
                 .or_else(|| choices.iter().find(|item| item.current))
-                .copied()
                 .unwrap_or(first);
             let current = versions.iter().any(|item| item.current);
             let played = versions.iter().any(|item| item.played);
@@ -219,20 +247,38 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
             let subtitle = if !current && played { if feed { "Listened" } else { "Watched" } } else { "" };
             let playing = chosen.current;
             let label = if playing { "Playing" } else if chosen.progress > 0.0 { "Resume" } else { "Play" };
-            let video = if feed { versions.iter().find(|item| item.version == 1) } else { None };
-            let artwork = versions.iter().find(|item| !item.artwork.is_empty()).map(|item| item.artwork.clone()).unwrap_or_default();
-            json!({
-                "key": key, "number": number(first), "title": title(first), "mark": mark, "subtitle": subtitle, "progress": progress,
-                "expanded": open(&key, versions), "artwork": artwork,
-                "description": first.description, "hasDescription": !first.description.trim().is_empty(),
-                "versions": choices.iter().map(|item| json!({"key": item.id, "label": if item.name.is_empty() { title(item) } else { item.name.clone() }})).collect::<Vec<_>>(),
-                "version": chosen.id, "multiple": choices.len() > 1,
-                "fileLabel": chosen.name, "hasFile": !chosen.name.is_empty(),
-                "playKey": chosen.id, "playLabel": label, "playEnabled": !playing,
-                "videoKey": video.map(|item| item.id.clone()).unwrap_or_default(), "hasVideo": video.is_some(),
-                "sourceKey": versions.iter().find(|item| item.has_source).map(|item| item.id.clone()).unwrap_or_default(),
-                "hasSource": versions.iter().any(|item| item.has_source)
-            })
+            let expanded = open(key, versions);
+            let mut row = json!({"key": key, "title": title(first), "playKey": chosen.id, "playLabel": label});
+            if let Some(row) = row.as_object_mut() {
+                // Empty values stay out: a missing text binding shows nothing.
+                let number = number(first);
+                for (name, value) in [("number", number.as_str()), ("mark", mark), ("subtitle", subtitle)] {
+                    if !value.is_empty() {
+                        row.insert(name.into(), value.into());
+                    }
+                }
+                if progress > 0.0 {
+                    row.insert("progress".into(), progress.into());
+                }
+            }
+            if expanded {
+                row["expanded"] = true.into();
+                let video = if feed { versions.iter().find(|item| item.version == 1) } else { None };
+                let source = versions.iter().find(|item| item.has_source);
+                let details = json!({
+                    "artwork": versions.iter().find(|item| !item.artwork.is_empty()).map(|item| item.artwork.as_str()).unwrap_or(""),
+                    "description": first.description, "hasDescription": !first.description.trim().is_empty(),
+                    "versions": choices.iter().map(|item| json!({"key": item.id, "label": if item.name.is_empty() { title(item) } else { item.name.clone() }})).collect::<Vec<_>>(),
+                    "version": chosen.id, "multiple": choices.len() > 1,
+                    "fileLabel": chosen.name, "hasFile": !chosen.name.is_empty(), "playEnabled": !playing,
+                    "videoKey": video.map(|item| item.id.as_str()).unwrap_or(""), "hasVideo": video.is_some(),
+                    "sourceKey": source.map(|item| item.id.as_str()).unwrap_or(""), "hasSource": source.is_some()
+                });
+                if let (Some(row), Value::Object(details)) = (row.as_object_mut(), details) {
+                    row.extend(details);
+                }
+            }
+            row
         })
         .collect();
     let notice = if !listing.message.is_empty() {
@@ -245,23 +291,33 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
         String::new()
     };
     let shown = listing.items.len() as u64;
+    let page = choice.page.unwrap_or(listing.offset / PAGE);
     json!({
         "status": "ready", "revision": choice.revision, "kind": listing.kind, "files": listing.kind == "folder",
         "show": if listing.show.is_empty() { "Episodes".to_owned() } else { listing.show.clone() },
         "notice": notice, "hasNotice": !notice.is_empty(),
         "seasons": listing.seasons.iter().map(|(season, _)| json!({"key": season, "label": season_label(*season)})).collect::<Vec<_>>(),
         "manySeasons": listing.seasons.len() > 1, "season": season, "seasonLabel": season_label(season),
-        "pages": choice.pages, "more": shown < listing.total && shown < MAX_ITEMS,
+        "page": page, "more": listing.offset + shown < listing.total, "less": listing.offset > 0,
         "expanded": choice.expanded, "versionEpisode": choice.version_episode, "version": choice.version,
         "episodes": rows
     })
+}
+
+/// The key of the open episode: the chosen one, else the playing one.
+pub fn open_key(listing: &Listing, choice: &Choice) -> Option<String> {
+    match choice.expanded.as_str() {
+        "collapsed" => None,
+        "" => group(&listing.items).into_iter().find(|versions| versions.iter().any(|item| item.current)).map(|versions| versions[0].id.clone()),
+        key => listing.items.iter().any(|item| item.id == key).then(|| key.to_owned()),
+    }
 }
 
 /// The state when the media has no series.
 fn empty(revision: f64) -> Value {
     json!({"status": "none", "revision": revision, "kind": "none", "files": false, "show": "Episodes",
            "notice": "This media has no other episodes.", "hasNotice": true, "seasons": [], "manySeasons": false,
-           "season": -1, "seasonLabel": "", "pages": 1, "more": false, "expanded": "", "versionEpisode": "",
+           "season": -1, "seasonLabel": "", "page": 0, "more": false, "less": false, "expanded": "", "versionEpisode": "",
            "version": "", "episodes": []})
 }
 
@@ -280,8 +336,8 @@ enum Step {
     Seasons,
     /// Read one season.
     Season(i64),
-    /// Ask for the artwork of the open row; the reply is not used.
-    Artwork(Value),
+    /// Read the details of the open row, then answer.
+    Details(Listing, i64),
 }
 
 struct Call {
@@ -318,11 +374,11 @@ impl Episodes {
         vec![json!({"type": "host-call", "id": id, "invocation": invocation, "operation": "media.siblings", "request": request})]
     }
     fn read_season(&mut self, mut call: Call, season: i64) -> Vec<Value> {
-        let limit = (call.choice.pages * PAGE).min(MAX_ITEMS);
+        let offset = call.choice.page.unwrap_or(0) * PAGE;
         let expanded = call.choice.expanded.clone();
-        let artwork: Vec<&str> = [expanded.as_str()].into_iter().filter(|key| !key.is_empty() && *key != "collapsed").collect();
+        let details: Vec<&str> = [expanded.as_str()].into_iter().filter(|key| !key.is_empty() && *key != "collapsed").collect();
         call.step = Step::Season(season);
-        self.read(call, json!({"season": season, "offset": 0, "limit": limit, "artwork": artwork}))
+        self.read(call, json!({"season": season, "offset": offset, "limit": PAGE, "details": details}))
     }
 
     fn invoke(&mut self, id: &str, operation: &str, context: &Map<String, Value>) -> Vec<Value> {
@@ -349,7 +405,7 @@ impl Episodes {
             }
             "season" => match arguments.get("season").and_then(Value::as_i64) {
                 Some(season) => {
-                    choice = Choice { season: Some(season), pages: 1, expanded: String::new(), ..choice };
+                    choice = Choice { season: Some(season), page: None, expanded: String::new(), ..choice };
                     self.read_season(call(choice, false), season)
                 }
                 None => vec![result(id, Status::Error, json!({}))],
@@ -374,8 +430,9 @@ impl Episodes {
                     None => self.read(call(choice, false), json!({"limit": 1})),
                 }
             }
-            "more" => {
-                choice.pages = (choice.pages + 1).min(MAX_ITEMS / PAGE);
+            "more" | "less" => {
+                let page = state.and_then(|state| state.get("page")).and_then(Value::as_u64).unwrap_or(0);
+                choice.page = Some(if operation == "more" { (page + 1).min(250) } else { page.saturating_sub(1) });
                 match choice.season {
                     Some(season) => self.read_season(call(choice, false), season),
                     None => self.read(call(choice, false), json!({"limit": 1})),
@@ -398,12 +455,13 @@ impl Episodes {
             return vec![];
         };
         let invocation = call.invocation.clone();
-        if let Step::Artwork(state) = call.step {
-            return vec![result(&invocation, Status::Match, json!({"available": true, "state": state}))];
-        }
         let Some(response) = response.filter(|_| ok) else {
             return vec![result(&invocation, Status::Error, json!({}))];
         };
+        if let Step::Details(listing, season) = call.step {
+            let state = render(&listing.with_details(response), &call.choice, season);
+            return vec![result(&invocation, Status::Match, json!({"available": true, "state": state}))];
+        }
         let listing = Listing::from(response);
         if !listing.available() {
             if call.sessionless {
@@ -418,18 +476,23 @@ impl Episodes {
             return vec![result(&invocation, Status::Match, json!({"available": false, "state": empty(call.choice.revision)}))];
         };
         match call.step {
+            // The playing episode is on another page: show that page.
+            Step::Season(read)
+                if read == season && call.choice.page.is_none() && !call.retried
+                    && listing.current_offset.is_some_and(|offset| offset / PAGE != listing.offset / PAGE) =>
+            {
+                call.retried = true;
+                call.choice.page = listing.current_offset.map(|offset| offset / PAGE);
+                self.read_season(call, season)
+            }
             Step::Season(read) if read == season => {
-                let state = render(&listing, &call.choice, season);
-                // The playing episode opens by itself: ask once for its artwork.
-                let open = state["episodes"].as_array().and_then(|rows| {
-                    rows.iter().find(|row| row["expanded"] == true && row["artwork"] == "").map(|row| row["key"].clone())
-                });
-                match open.filter(|_| call.choice.expanded.is_empty()) {
+                // The playing episode is open by itself: read its details first.
+                match open_key(&listing, &call.choice).filter(|key| !listing.detailed.contains(key)) {
                     Some(key) => {
-                        call.step = Step::Artwork(state);
-                        self.read(call, json!({"season": season, "limit": 1, "artwork": [key]}))
+                        call.step = Step::Details(listing, season);
+                        self.read(call, json!({"season": season, "limit": 1, "details": [key]}))
                     }
-                    None => vec![result(&invocation, Status::Match, json!({"available": true, "state": state}))],
+                    None => vec![result(&invocation, Status::Match, json!({"available": true, "state": render(&listing, &call.choice, season)}))],
                 }
             }
             // The chosen season is gone, or the seasons were not known yet.

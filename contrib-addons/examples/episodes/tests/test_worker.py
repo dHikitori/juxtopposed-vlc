@@ -10,6 +10,7 @@ import unittest
 
 PACKAGE = Path(__file__).resolve().parent.parent
 WORKER = None
+PAGE = 40
 
 
 class Worker:
@@ -103,13 +104,14 @@ class PortableWorkerTests(unittest.TestCase):
             probe, = worker.dispatch(invoke("context", context))
             read, = answer(worker, probe, SEASON)
             self.assertEqual(read["request"]["season"], 1)
-            artwork, = answer(worker, read, SEASON)
-            self.assertEqual(artwork["request"]["artwork"], ["media:a"])
-            result, = answer(worker, artwork, {})
+            details, = answer(worker, read, SEASON)
+            self.assertEqual(details["request"]["details"], ["media:a"])
+            result, = answer(worker, details, {"details": [{"id": "media:a", "description": "First", "hasSource": True}]})
             state = result["data"]["state"]
             self.assertEqual(state["status"], "ready")
             self.assertEqual([row["title"] for row in state["episodes"]], ["Episode 1", "Episode 2"])
             self.assertEqual(state["episodes"][0]["playKey"], "media:b")
+            self.assertEqual(state["episodes"][0]["description"], "First")
             # The state schema check needs jsonschema 4 (Draft 2020-12).
             try:
                 from importlib.metadata import version
@@ -119,6 +121,27 @@ class PortableWorkerTests(unittest.TestCase):
             except ImportError:
                 return
             jsonschema.Draft202012Validator(schema()).validate(state)
+
+    def test_a_full_page_fits_in_one_dispatch(self):
+        # Each dispatch has a fixed instruction budget. The largest reply is
+        # a full page with long names and nothing playing, rendered at once.
+        title = "A long episode title that a provider could send for a series"
+        items = [item(f"media:{n:032x}", n + 1, title=title, name=f"{title}.S01E{n + 1:02}.1080p.WEB-DL.x265.mkv", played=n % 2 == 0)
+                 for n in range(PAGE)]
+        listing = dict(SEASON, total=3 * PAGE, currentSeason=None, items=items)
+        with Worker() as worker:
+            state = {"status": "ready", "revision": 1, "season": 1, "expanded": "collapsed"}
+            call, = worker.dispatch(invoke("season", {"arguments": {"season": 1}, "state": state}))
+            self.assertEqual(call["request"]["limit"], PAGE)
+            result, = answer(worker, call, listing)
+            self.assertEqual(len(result["data"]["state"]["episodes"]), PAGE)
+            # The same page with one open row and its details.
+            key = "media:" + "0" * 32
+            call, = worker.dispatch(invoke("expand", {"arguments": {"key": key, "open": False}, "state": state}))
+            self.assertEqual(call["request"]["details"], [key])
+            notes = "Show notes for a podcast episode can be long. " * 80
+            result, = answer(worker, call, dict(listing, details=[{"id": key, "description": notes[:4096], "hasSource": True}]))
+            self.assertEqual(result["data"]["state"]["episodes"][0]["expanded"], True)
 
     def test_clicks_are_effects(self):
         with Worker() as worker:

@@ -108,11 +108,6 @@
             "type": "string",
             "maxLength": 64
           },
-          "pages": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 2
-          },
           "more": {
             "type": "boolean"
           },
@@ -237,6 +232,14 @@
                 }
               }
             }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 250
+          },
+          "less": {
+            "type": "boolean"
           }
         }
       },
@@ -252,12 +255,13 @@
         "manySeasons": false,
         "season": -1,
         "seasonLabel": "",
-        "pages": 1,
         "more": false,
         "expanded": "",
         "versionEpisode": "",
         "version": "",
-        "episodes": []
+        "episodes": [],
+        "page": 0,
+        "less": false
       }
     },
     {
@@ -319,8 +323,15 @@
       "id": "more",
       "type": "ui.command",
       "contract": "ui@1",
-      "label": "Show more episodes",
+      "label": "Show the next episodes",
       "command": "more"
+    },
+    {
+      "id": "less",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Show the previous episodes",
+      "command": "less"
     },
     {
       "id": "play",

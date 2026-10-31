@@ -85,16 +85,24 @@ private slots:
         QCOMPARE(first.value("folder").toString(), QStringLiteral("Season 1"));
         QVERIFY(first.value("current").toBool());
         QCOMPARE(items[1].toObject().value("progress").toDouble(), 0.5);
-        QVERIFY(items[2].toObject().value("hasSource").toBool());
+        QVERIFY(!items[2].toObject().contains("hasSource") && !first.contains("artwork") && !first.contains("description"));
         QCOMPARE(items[3].toObject().value("version").toInt(), 1);
         const auto text = QJsonDocument(response).toJson();
         QVERIFY(!text.contains("/private") && !text.contains("file:") && !text.contains("tvmaze") && !text.contains("image://"));
         // Each package gets its own IDs.
         const auto other = run(services, {}, QStringLiteral("org.example.two"));
         QVERIFY(other.result.response.value("items").toArray()[0].toObject().value("id") != first.value("id"));
+        // Details are only for the items a panel shows in full.
+        const auto third = items[2].toObject().value("id").toString();
+        const auto detailed = run(services, {{"limit", 1}, {"details", QJsonArray{first.value("id"), third, "media:unknown"}}}).result.response;
+        const auto details = detailed.value("details").toArray();
+        QCOMPARE(details.size(), 2);
+        QCOMPARE(details[0].toObject().value("artwork").toString(), first.value("id").toString());
+        QVERIFY(details[1].toObject().value("hasSource").toBool());
+        QVERIFY(!QJsonDocument(detailed).toJson().contains("tvmaze"));
         // Host artwork is kept for the app's image loading, by handle.
         const auto artwork = siblings->artwork(QStringLiteral("org.example.one"));
-        QCOMPARE(artwork.value(first.value("artwork").toString()).toString(), QStringLiteral("image://thumbnail/101"));
+        QCOMPARE(artwork.value(first.value("id").toString()).toString(), QStringLiteral("image://thumbnail/101"));
         QVERIFY(siblings->artwork(QStringLiteral("org.example.three")).isEmpty());
     }
     void filtersPagesAndChecksTheRequest()
@@ -102,12 +110,13 @@ private slots:
         AddonHostServices services; auto siblings = mount(services); QVERIFY(siblings);
         auto call = run(services, {{"season", 1}, {"offset", 1}, {"limit", 2}});
         QCOMPARE(call.result.response.value("total").toInt(), 4);
+        QCOMPARE(call.result.response.value("currentOffset").toInt(), 0);
         QCOMPARE(call.result.response.value("items").toArray().size(), 2);
         QCOMPARE(call.result.response.value("items").toArray()[0].toObject().value("title").toString(), QStringLiteral("Episode 2"));
         QCOMPARE(run(services, {{"season", 2}}).result.response.value("items").toArray().size(), 1);
         for (const auto& bad : {QJsonObject{{"limit", 0}}, QJsonObject{{"limit", 101}}, QJsonObject{{"offset", -1}},
                                 QJsonObject{{"season", 1.5}}, QJsonObject{{"url", "file:///"}},
-                                QJsonObject{{"artwork", QJsonArray{"a", "b", "c", "d", "e"}}}}) {
+                                QJsonObject{{"details", QJsonArray{"a", "b", "c", "d", "e"}}}}) {
             const auto result = run(services, bad);
             QVERIFY2(result.done && !result.result.error.isEmpty(), QJsonDocument(bad).toJson().constData());
         }
@@ -144,7 +153,7 @@ private slots:
             identify(siblings.get(), &Siblings::identifyRequested), source(siblings.get(), &Siblings::sourceRequested);
         // A package that read nothing cannot act.
         QVERIFY(!siblings->runEffect(QStringLiteral("org.example.one"), QStringLiteral("rescan"), {}));
-        const auto items = run(services, {{"artwork", QJsonArray{"media:unknown"}}}).result.response.value("items").toArray();
+        const auto items = run(services, {{"details", QJsonArray{"media:unknown"}}}).result.response.value("items").toArray();
         QVERIFY(m_artwork.isEmpty());
         const auto second = items[1].toObject().value("id").toString(), third = items[2].toObject().value("id").toString();
         QVERIFY(siblings->runEffect(QStringLiteral("org.example.one"), QStringLiteral("play"), {{"id", second}, {"fromStart", true}}));
@@ -165,8 +174,11 @@ private slots:
         // An item that left the series cannot be played.
         m_snapshot.items.removeAt(1);
         QVERIFY(!siblings->runEffect(QStringLiteral("org.example.one"), QStringLiteral("play"), {{"id", second}}));
-        // Artwork is made only for the few items asked for.
-        run(services, {{"artwork", QJsonArray{third}}});
+        // Artwork is made only for the few items asked for, without one.
+        run(services, {{"details", QJsonArray{third}}});
+        QVERIFY(m_artwork.isEmpty());
+        m_snapshot.items[1].artwork.clear();
+        run(services, {{"details", QJsonArray{third}}});
         QCOMPARE(m_artwork, QList<QUrl>{m_snapshot.items[1].url});
         // A feed has no folder to choose and no series to identify.
         m_snapshot.kind = QStringLiteral("feed");
