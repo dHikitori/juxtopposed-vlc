@@ -27,6 +27,9 @@ done except macOS, which needs a macOS host.
 - **Windows:** a package with every change up to the end of Step 7 is built
   for the user's final check. The native metadata owner stays off by
   default until that check passes.
+- **Player panels:** [design](records/player-panels-design.md) for add-ons
+  that own a player panel and its layout button, with Episodes as the
+  first bundled package. Implementation is in progress.
 - **Tool environment:** the schema corpus check needs jsonschema 4.23.0
   (`python3 -m venv` in the scratchpad, then `pip install
   jsonschema==4.23.0`). Under the system jsonschema 3.2 the meson test
