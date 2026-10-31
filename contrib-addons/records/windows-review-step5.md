@@ -215,12 +215,13 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `7ba1c6abf2`: `vlc.exe`
-`3b6c403b3d52b604a8c3651b5cba8664cd2fc68ac23b9d3270c80c13819d1b98`,
+Package `5d71509ec5`: `vlc.exe`
+`381cb2423d2f01d6dfd6c906c5ea769939ff73bf5877f2560b5b159942cf7739`,
 `libqt_plugin.dll`
-`9f1c2f981d4a3e4455da342d149ae5273da98a32ef9cb513aced43f1a79b1602`.
-It replaces `94413e6591` (`vlc.exe` `01e94136…`), in which only the playing
-episode and an already cached one showed artwork; Episodes stays 1.0.2.
+`a5d74e0467f141ad7eb732514f4bc269f8d2057ee4803a196fc8c19fba22607a`.
+It adds the startup update prompt and evener Extensions rows (checks 9 and
+10) to `7ba1c6abf2`, which fixed late episode artwork; Episodes stays
+1.0.2.
 `BUILD-INFO.json` says `dirty` only because untracked worktree folders are
 under `.claude/`; the source copy takes files only, so the build is the
 committed tree. The Episodes panel is the bundled add-on
@@ -268,3 +269,14 @@ New checks:
    removed after a restart.
 8. **Speed.** Starting an episode from a share and opening the panel
    feel the same as before.
+9. **Extensions rows.** Each row's name, status and switch sit in the
+   middle of the row, with even space above and below. A bundled update
+   shows an "Update to …" badge beside the switch.
+10. **Update prompt.** In Extensions select Episodes › More › "Use previous
+    version" (back to 1.0.1), then restart the app. After start a dialog,
+    "Add-on updates", lists Episodes 1.0.1 → 1.0.2. "Update all" installs
+    it there; Episodes stays on and its panel works. Roll back once more
+    and choose "Later": the dialog does not return on the next start (it
+    asks again only for a newer version), and the Extensions row still
+    offers the update. An update that asks for new permissions (none in
+    this package) lists them and has its own "Approve and update".
