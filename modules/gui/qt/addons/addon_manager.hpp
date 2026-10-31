@@ -43,6 +43,10 @@ class AddonManager : public QObject
     Q_PROPERTY(bool safeMode READ safeMode NOTIFY revisionChanged FINAL)
     Q_PROPERTY(QVariantMap capabilities READ capabilities NOTIFY capabilitiesChanged FINAL)
     Q_PROPERTY(QVariantMap updateResult READ updateResult NOTIFY revisionChanged FINAL)
+    // Bundled add-ons whose app copy is newer than the installed release,
+    // from the startup package check: {id, name, installedVersion, version,
+    // enabled, newPermissions}. An approved update leaves the list.
+    Q_PROPERTY(QVariantList appUpdates READ appUpdates NOTIFY appUpdatesChanged FINAL)
 public:
     explicit AddonManager(const QString& storageDirectory, QObject* parent = nullptr);
     // Native construction only. No runtime transport setter is available.
@@ -138,6 +142,7 @@ public:
     bool distributionBootstrapInProgress() const noexcept { return m_distributionBootstrapInProgress; }
     quint64 distributionBootstrapGeneration() const noexcept { return m_distributionBootstrapGeneration; }
     QVariantList distributionBootstrapResults() const { return m_distributionBootstrapResults; }
+    QVariantList appUpdates() const { return m_appUpdates; }
     QString distributionBootstrapError() const { return m_distributionBootstrapError; }
     Q_INVOKABLE bool restoreDistributionPackage(const QString& packageId);
     Q_INVOKABLE bool stageDistributionPackage(const QString& packageId);
@@ -207,6 +212,7 @@ signals:
     // Direct owner-thread teardown runs before worker shutdown waits.
     void retiring();
     void distributionBootstrapChanged();
+    void appUpdatesChanged();
     void catalogueChanged();
     void catalogueFreshnessChanged();
     void revisionChanged();
@@ -302,6 +308,7 @@ private:
     quint64 m_distributionBootstrapGeneration=0;
     std::shared_ptr<std::atomic_bool> m_distributionBootstrapCancel;
     QVariantList m_distributionBootstrapResults;
+    QVariantList m_appUpdates;
     QString m_distributionBootstrapError;
     QPointer<QObject> m_mediaCapabilitiesSource;
     QList<QMetaObject::Connection> m_mediaCapabilityConnections;

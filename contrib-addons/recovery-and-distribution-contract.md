@@ -12,6 +12,30 @@ The app registers a package directory and an exact package ID through a C++ API.
 
 Review copies the declared package contents into an immutable candidate on counted background work. It checks the ID, source, version, compatibility, and package contents. The installed release stays active until approval. The permission and digest review is the same review that the Git installer uses. Cancel does not change the installed release or the removal policy.
 
+### Startup update prompt
+
+The startup package check already reads each installed app package. For an
+installed release older than the app's copy, it also records the installed
+version, whether the package is on, and the permissions that the app's copy
+asks for and the current grants do not give (`AddonManager.appUpdates`).
+After the check, one prompt lists these updates with their version change.
+It does no package read of its own and starts no timer or network request.
+
+- **Update** and **Update all** (shown as "Update the others" when some
+  remain) install updates that ask for no new permission.
+- An update that asks for new permissions lists them and installs only
+  through its own **Approve and update**.
+- Each install is the same review: the app's copy is staged as an immutable
+  candidate and approved; the add-on keeps its on or off state. A failed
+  stage or approval shows its reason and can be retried.
+- **Later** (or Escape) records the offered versions in the app settings
+  (`Redesign/AddonUpdatesDismissed`); the prompt returns for a newer
+  version. The Extensions row keeps its "Update to" badge and review.
+- The prompt waits while the first-run window is open.
+
+Repository updates are not part of the prompt: finding them needs a network
+check, which stays the explicit action in Extensions.
+
 A Git or developer installation of the same ID takes precedence. The app does not replace that installation. Its row does not offer an app update. A removed app package can enter review only through its registered app path.
 
 Approval records the exact distribution digest in the same atomic state pointer as the installed release. The original removal policy remains in its file. Only a valid current distribution snapshot with matching approval can supersede that policy. Rollback, recovery, another digest, a source-class change, or corrupt state cannot reuse approval. Another removal removes that current pointer and exposes the original removal policy again. This avoids a policy-file clear before a failed install.

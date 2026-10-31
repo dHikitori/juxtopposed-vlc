@@ -675,6 +675,16 @@ bool validateCommandOperations(const Manifest& manifest, QString* error)
     return true;
 }
 
+// The permissions an offered release asks for that the grants do not
+// already give, scope by scope.
+QJsonObject newPermissions(const QJsonObject& requested, const QJsonObject& granted)
+{
+    QJsonObject result;
+    for (auto it = requested.begin(); it != requested.end(); ++it)
+        if (granted.value(it.key()) != it.value()) result.insert(it.key(), it.value());
+    return result;
+}
+
 bool validateCandidate(const PackageCandidate& candidate, QString* error)
 {
     Manifest parsed;
@@ -1377,7 +1387,11 @@ bool PackageStore::ensureDistributionPackage(const QString& directory,const Mani
     }
     InstalledPackage existing;
     if(installed(id,&existing)) {
-        if(output){output->state=DistributionInstallResult::State::Existing;output->recoveryRequired=existing.recoveryRequired;}
+        if(output){
+            output->state=DistributionInstallResult::State::Existing;output->recoveryRequired=existing.recoveryRequired;
+            output->installedVersion=existing.manifest.version;output->installedEnabled=existing.enabled;
+            output->newPermissions=newPermissions(offer.requiredPermissions,existing.grants);
+        }
         return true;
     }
     const auto state=QDir(m_root).filePath(QStringLiteral("packages/")+id+QStringLiteral("/state.json"));
@@ -1426,7 +1440,12 @@ ProfileChange PackageStore::ensureDistributionPackage(const StoreProfileWriteCon
             return ProfileChange::Applied;
         }
         if (present) {
-            if (output) output->state = DistributionInstallResult::State::Existing;
+            if (output) {
+                output->state = DistributionInstallResult::State::Existing;
+                output->installedVersion = existing.package.manifest.version;
+                output->installedEnabled = existing.package.enabled;
+                output->newPermissions = newPermissions(offer.requiredPermissions, existing.package.grants);
+            }
             return ProfileChange::Applied;
         }
         ReleaseIdentity identity; identity.source = offer.source.toString();

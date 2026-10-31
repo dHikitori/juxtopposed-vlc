@@ -1088,11 +1088,25 @@ void AddonManager::finishDistributionBootstrap(const QList<DistributionBootstrap
         rows.append(item.row());
     }
     m_distributionDirectories=std::move(directories);m_distributionPackages=std::move(offers);
+    // A bundled release newer than the installed one is an update to offer.
+    QVariantList updates;
+    for(const auto& value:rows) {
+        const auto row=value.toMap();SemanticVersion offered,installed;
+        if(row.value(QStringLiteral("success")).toBool() && row.value(QStringLiteral("status")).toString()==QLatin1String("existing")
+            && !row.value(QStringLiteral("recoveryRequired")).toBool()
+            && SemanticVersion::parse(row.value(QStringLiteral("version")).toString(),&offered)
+            && SemanticVersion::parse(row.value(QStringLiteral("installedVersion")).toString(),&installed) && offered.compare(installed)>0)
+            updates.append(QVariantMap{{"id",row.value(QStringLiteral("id"))},{"name",row.value(QStringLiteral("name"))},
+                {"installedVersion",row.value(QStringLiteral("installedVersion"))},{"version",row.value(QStringLiteral("version"))},
+                {"enabled",row.value(QStringLiteral("installedEnabled"))},{"newPermissions",row.value(QStringLiteral("newPermissions"))}});
+    }
     m_distributionBootstrapResults=std::move(rows);m_distributionBootstrapError=errors.join(QLatin1Char('\n'));
+    const bool updatesChanged=updates!=m_appUpdates;m_appUpdates=std::move(updates);
     if(m_distributionBootstrapError.isEmpty() && canceled)m_distributionBootstrapError=tr("The app canceled the startup package batch.");
     m_distributionBootstrapCancel.reset();
     m_error=m_distributionBootstrapError;m_distributionBootstrapInProgress=false;++m_distributionBootstrapGeneration;++m_revision;
     const QPointer<AddonManager> alive(this);emit distributionBootstrapChanged();if(alive)emit revisionChanged();
+    if(alive && updatesChanged)emit appUpdatesChanged();
 }
 bool AddonManager::restoreDistributionPackage(const QString& id)
 { return stageDistributionPackage(id); }
@@ -1215,6 +1229,11 @@ bool AddonManager::approvePendingPackage(bool enable)
     m_updateResult.clear();
     const auto installedId = candidate->manifest.id;
     observeUpdate(installedId);
+    // An approved app release is no longer an update to offer.
+    bool offered = false;
+    for (qsizetype i = 0; i < m_appUpdates.size(); ++i)
+        if (m_appUpdates.at(i).toMap().value(QStringLiteral("id")).toString() == installedId) { m_appUpdates.removeAt(i); offered = true; break; }
+    if (offered) { emit appUpdatesChanged(); if (!alive) return false; }
     if (enable && !m_store.change([&](QString* e) { return m_store.setEnabled(installedId, true, e); },
             [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, installedId, true, e); },
             &error)) return changed(false, error);

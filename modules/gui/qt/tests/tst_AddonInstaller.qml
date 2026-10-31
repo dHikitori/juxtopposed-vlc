@@ -180,7 +180,9 @@ TestCase {
         manager.packages = [{id: "org.example.app", name: "App", version: "1.0.0", distributionSource: true,
             appUpdateAvailable: true, appUpdateVersion: "2.0.0", enabled: true, configured: true}]; manager.revision++
         // The list row shows the offer without opening the package.
-        tryCompare(item("addonPackageStatus_org.example.app"), "text", "1.0.0 · Update to 2.0.0 available · Enabled")
+        tryCompare(item("addonPackageStatus_org.example.app"), "text", "1.0.0 · Enabled")
+        verify(item("addonPackageUpdate_org.example.app").visible)
+        compare(item("addonPackageUpdate_org.example.app").label, "Update to 2.0.0")
         selectPackage("org.example.app")
         tryVerify(() => item("addonPackageAppUpdate_org.example.app") !== null)
         item("addonPackageAppUpdate_org.example.app").clicked()

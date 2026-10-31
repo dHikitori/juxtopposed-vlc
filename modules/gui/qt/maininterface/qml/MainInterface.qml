@@ -57,6 +57,23 @@ Item {
         }
     }
 
+    // Updates of add-ons that come with the app, found by the startup package
+    // check: one prompt for all of them.
+    Loader {
+        id: addonUpdates
+        anchors.fill: parent
+        active: typeof AddonManager !== "undefined"
+        source: active ? "qrc:///qt/qml/VLC/Player/RedesignAddonUpdates.qml" : ""
+        onLoaded: {
+            item.videoBackdropContent = dialogBackdrop
+            item.ctx = MainCtx
+            item.scaleFactor = Qt.binding(() => VLCStyle.scale)
+            item.lightTheme = Qt.binding(() => !VLCStyle.palette.isDark)
+            item.accentColor = Qt.binding(() => MainCtx.redesignAccent)
+            item.blocked = Qt.binding(() => DialogsProvider.firstRunDialogVisible)
+            item.backend = AddonManager
+        }
+    }
     Loader {
         id: networkStreams
         anchors.fill: parent

@@ -31,7 +31,8 @@ struct NativeGate {
 };
 struct Packages {
     QTemporaryDir root;
-    QString make(const QString& id,const QString& version=QStringLiteral("1.0.0"),const QString& source=QStringLiteral("https://github.com/hakone-org/startup-fixture")) {
+    QString make(const QString& id,const QString& version=QStringLiteral("1.0.0"),const QString& source=QStringLiteral("https://github.com/hakone-org/startup-fixture"),
+        const QJsonObject& permissions={}) {
         const auto directory=root.filePath(id+QLatin1Char('-')+version+QLatin1Char('-')+QString::number(++sequence));
         if(!QDir().mkpath(directory))return {};
         const QJsonObject contribution{{"id","artwork"},{"type","metadata.provider"},{"contract","metadata@1"},
@@ -41,7 +42,9 @@ struct Packages {
             {"api",QJsonObject{{"addon","^1.0.0"},{"contracts",QJsonObject{{"metadata","^1.0.0"}}}}},
             {"runtime",QJsonObject{{"kind","wasm-message-v1"},{"entry","worker.wasm"}}},
             {"files",QJsonArray{"addon.json","LICENSE","worker.wasm"}},{"contributions",QJsonArray{contribution}}};
-        if(!write(QDir(directory).filePath(QStringLiteral("addon.json")),QJsonDocument(manifest).toJson())
+        auto document=manifest;
+        if(!permissions.isEmpty())document.insert("permissions",QJsonObject{{"required",permissions},{"optional",QJsonObject{}}});
+        if(!write(QDir(directory).filePath(QStringLiteral("addon.json")),QJsonDocument(document).toJson())
             ||!write(QDir(directory).filePath(QStringLiteral("LICENSE")),QByteArray("Fixture license.\n"))
             ||!write(QDir(directory).filePath(QStringLiteral("worker.wasm")),QByteArray::fromHex("0061736d01000000")))return {};
         return directory;
@@ -106,6 +109,33 @@ private slots:
         AddonManager manager(profile.path());QVERIFY(manager.beginDistributionBootstrap(entry(id,bundled)));QTRY_VERIFY(!manager.distributionBootstrapInProgress());
         QCOMPARE(read(path),before);QVERIFY(authority.current());InstalledPackage actual;QVERIFY(store.installed(id,&actual));QCOMPARE(actual.digest,candidate.digest);QVERIFY(!actual.enabled);QVERIFY(actual.identity.developerSource);
         QCOMPARE(manager.distributionBootstrapResults().first().toMap().value("status").toString(),QStringLiteral("existing"));
+    }
+    void aNewerBundledReleaseIsAnUpdateUntilApproved() {
+        // The startup check lists a newer app copy with the installed version
+        // and the permissions it adds; approving it takes it off the list.
+        QTemporaryDir profile;Packages packages;const auto id=QStringLiteral("org.hakone.updated");
+        const auto first=packages.make(id);
+        {AddonManager manager(profile.path());QVERIFY(manager.beginDistributionBootstrap(entry(id,first)));QTRY_VERIFY(!manager.distributionBootstrapInProgress());
+         QCOMPARE(manager.distributionBootstrapResults().first().toMap().value("status").toString(),QStringLiteral("installed"));QVERIFY(manager.appUpdates().isEmpty());}
+        const QJsonObject network{{"network.http",QJsonObject{{"methods",QJsonArray{"GET"}},{"origins",QJsonArray{"https://api.example.org"}}}}};
+        const auto next=packages.make(id,QStringLiteral("1.1.0"),QStringLiteral("https://github.com/hakone-org/startup-fixture"),network);
+        AddonManager manager(profile.path());QSignalSpy changed(&manager,&AddonManager::appUpdatesChanged);
+        QVERIFY(manager.beginDistributionBootstrap(entry(id,next)));QTRY_VERIFY(!manager.distributionBootstrapInProgress());
+        QCOMPARE(changed.count(),1);
+        const auto updates=manager.appUpdates();QCOMPARE(updates.size(),1);
+        const auto update=updates.first().toMap();
+        QCOMPARE(update.value("id").toString(),id);QCOMPARE(update.value("installedVersion").toString(),QStringLiteral("1.0.0"));
+        QCOMPARE(update.value("version").toString(),QStringLiteral("1.1.0"));QVERIFY(update.value("enabled").toBool());
+        QCOMPARE(update.value("newPermissions").toMap().keys(),QStringList{QStringLiteral("network.http")});
+        QVERIFY(manager.stageDistributionPackage(id));QTRY_VERIFY(!manager.busy());
+        QCOMPARE(manager.pendingPackage().value("id").toString(),id);
+        QVERIFY2(manager.approvePendingPackage(true),qPrintable(manager.errorMessage()));
+        QVERIFY(manager.appUpdates().isEmpty());QCOMPARE(changed.count(),2);
+        PackageStore store(profile.path());InstalledPackage installed;QVERIFY(store.installed(id,&installed));
+        QCOMPARE(installed.manifest.version,QStringLiteral("1.1.0"));QVERIFY(installed.enabled);
+        // The same or an older app copy is not an update.
+        AddonManager again(profile.path());QVERIFY(again.beginDistributionBootstrap(entry(id,next)));QTRY_VERIFY(!again.distributionBootstrapInProgress());
+        QVERIFY(again.appUpdates().isEmpty());
     }
     void damagedStateIsNotOverwrittenAndOtherEntriesContinue() {
         QTemporaryDir profile;Packages packages;const auto damaged=QStringLiteral("org.hakone.damaged"),good=QStringLiteral("org.hakone.good");const auto badDirectory=packages.make(damaged),goodDirectory=packages.make(good);

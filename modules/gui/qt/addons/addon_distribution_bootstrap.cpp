@@ -11,7 +11,9 @@ QVariantMap DistributionBootstrapItem::row() const
     QVariantMap result=offer;result.insert(QStringLiteral("id"),id);
     result.insert(QStringLiteral("directory"),directory);result.insert(QStringLiteral("status"),status);
     result.insert(QStringLiteral("success"),success);result.insert(QStringLiteral("error"),error);
-    result.insert(QStringLiteral("recoveryRequired"),recoveryRequired);return result;
+    result.insert(QStringLiteral("recoveryRequired"),recoveryRequired);
+    result.insert(QStringLiteral("installedVersion"),installedVersion);result.insert(QStringLiteral("installedEnabled"),installedEnabled);
+    result.insert(QStringLiteral("newPermissions"),newPermissions.toVariantMap());return result;
 }
 namespace distributionBootstrap {
 bool validEntries(const QList<DistributionBootstrapEntry>& entries)
@@ -48,6 +50,8 @@ DistributionBootstrapItem ensure(PackageStore& store,const QString& directory,
         return result;
     }
     result.success=true;result.recoveryRequired=installed.recoveryRequired;
+    result.installedVersion=installed.installedVersion;result.installedEnabled=installed.installedEnabled;
+    result.newPermissions=installed.newPermissions;
     switch(installed.state) {
         case DistributionInstallResult::State::Suppressed:result.status=QStringLiteral("suppressed");break;
         case DistributionInstallResult::State::Existing:result.status=QStringLiteral("existing");break;

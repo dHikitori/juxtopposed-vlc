@@ -1649,6 +1649,8 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonView.qml \
 	player/qml/redesign/RedesignAddonMount.qml \
 	player/qml/redesign/RedesignAddonPanel.qml \
+	player/qml/redesign/RedesignAddonPermissions.qml \
+	player/qml/redesign/RedesignAddonUpdates.qml \
 	player/qml/redesign/RedesignAddonSections.qml \
 	player/qml/redesign/RedesignAddonSurface.qml \
 	player/qml/redesign/RedesignAddonReplacements.qml \
@@ -3998,6 +4000,8 @@ if HAVE_QT_QUICK_TEST
 TESTS += tests/tst_AddonSessions.qml tests/tst_AddonSourceConsent.qml
 EXTRA_DIST += tests/tst_AddonInstaller.qml
 TESTS += tests/tst_AddonInstaller.qml
+EXTRA_DIST += tests/tst_AddonUpdates.qml
+TESTS += tests/tst_AddonUpdates.qml
 EXTRA_DIST += tests/tst_AddonDiscovery.qml
 TESTS += tests/tst_AddonDiscovery.qml
 EXTRA_DIST += tests/tst_AddonSelections.qml tests/tst_AddonSelectionSurface.qml tests/tst_AddonRecovery.qml tests/tst_AddonTypedDialogs.qml
