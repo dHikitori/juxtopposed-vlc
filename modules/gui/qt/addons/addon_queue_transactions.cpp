@@ -51,9 +51,11 @@ AddonQueueTransactions::Snapshot AddonQueueTransactions::snapshot(const QString&
 { return m_backend.snapshot ? m_backend.snapshot(target) : Snapshot{}; }
 void AddonQueueTransactions::releasePlayable(const QString& handle)
 { if (!handle.isEmpty() && m_backend.releasePlayable) m_backend.releasePlayable(handle); }
-QString AddonQueueTransactions::append(const QString& view, const QVariantList& references, const QString& target)
+QString AddonQueueTransactions::append(const QString& view, const QVariantList& references, const QString& target,
+                                      const QString& fillTag, const QString& fillCredit)
 {
     Transaction transaction; transaction.view = view; transaction.target = target; transaction.references = references;
+    transaction.fillTag = fillTag.left(128); transaction.fillCredit = fillCredit.left(256);
     return start(transaction, snapshot(target), false);
 }
 QString AddonQueueTransactions::play(const QString& view, const QVariantMap& reference, const QString& handle,

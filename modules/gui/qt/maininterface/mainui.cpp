@@ -588,6 +588,8 @@ void MainUI::registerQMLTypes()
             }
             auto* discovery = vlc::addons::createPlayerDiscoveryWithSources(addonManager, sourceOwner, std::move(nativeBackend), this);
             if (libraryTargets) discovery->setPlaylistBackend(libraryTargets->backend());
+            // A queue-fill session reacts to queue changes only.
+            connect(nativeQueue, &vlc::addons::AddonNativeQueueStore::revisionChanged, discovery, &vlc::addons::AddonDiscoveryService::noteQueueChanged);
             qmlRegisterSingletonInstance<vlc::addons::AddonDiscoveryService>(uri, versionMajor, versionMinor, "AddonDiscovery", discovery);
 #ifdef VLC_ADDON_TEST_DRIVER
             if (auto* driver = vlc::addons::AddonTestDriver::create(addonManager, packageSummaries, discovery, this)) {

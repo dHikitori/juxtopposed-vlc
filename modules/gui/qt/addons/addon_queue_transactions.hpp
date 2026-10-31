@@ -19,6 +19,9 @@ public:
         quint64 expectedRevision = 0;
         QVariantList references;
         QString playbackHandle;
+        // A queue-fill session marks its entries (append only) and credits
+        // the source; the adapter stores both on each new entry.
+        QString fillTag, fillCredit;
         // The host captures this query before admission. A native adapter does a
         // check under its final write lock. It has no I/O, signal, or QObject call.
         std::function<bool()> authorityCurrent;
@@ -38,13 +41,19 @@ public:
         // A trusted native lazy resolver opens the saved reference at playback.
         // This callback must not ask a provider for a stream URL before enqueue.
         std::function<Cancel(const Transaction&, Completion)> playReference;
+        // Entries marked with this fill tag after the current one. Memory only.
+        std::function<int(const QString& fillTag)> pendingAhead;
     };
     explicit AddonQueueTransactions(Backend, QObject* parent = nullptr);
     ~AddonQueueTransactions() override;
     bool appendAvailable() const { return bool(m_backend.snapshot) && bool(m_backend.append); }
     bool referencePlayAvailable() const { return bool(m_backend.snapshot) && bool(m_backend.playReference); }
     bool playAvailable() const { return bool(m_backend.snapshot) && bool(m_backend.play); }
-    QString append(const QString& view, const QVariantList& references, const QString& target = QStringLiteral("queue"));
+    QString append(const QString& view, const QVariantList& references, const QString& target = QStringLiteral("queue"),
+                   const QString& fillTag = {}, const QString& fillCredit = {});
+    bool fillAvailable() const { return appendAvailable() && bool(m_backend.pendingAhead); }
+    // -1 without a queue that can count marked entries.
+    int pendingAhead(const QString& fillTag) const { return m_backend.pendingAhead ? m_backend.pendingAhead(fillTag) : -1; }
     QString play(const QString& view, const QVariantMap& reference, const QString& playbackHandle,
                  const Snapshot& expected, const QString& target = QStringLiteral("queue"));
     QString playReference(const QString& view, const QVariantMap& reference, const Snapshot& expected,

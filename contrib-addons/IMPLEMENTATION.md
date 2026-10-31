@@ -129,7 +129,7 @@ Add one row for each label run that a record or a decision relies on.
 | Radio Browser reference source | mounted | `source`: `addon_radio_browser_worker`; [record](records/radio-browser-source.md). A Linux live probe decoded 30 HLS blocks. | Full app and other platforms. |
 | Adaptive manifests: HLS and static DASH | component-tested | `source`: `test_qt_addon_stream_manifest`; [DASH](native-dash-manifest-contract.md), [manifests](native-stream-manifest-contract.md) | Actual adaptive playback in the app. |
 | Native queue and library transactions | mounted | `source`: `test_qt_addon_native_queue_store`; `metadata`: `test_qt_addon_native_library_store` *(cmake)*, `test_src_misc_addon_medialibrary`; [playlist CAS](records/native-playlist-cas.md), [library targets](native-library-target-contract.md) | Full app check. |
-| Subscriptions and continuous queue population | designed | `subscribe` returns unsupported. [Backlog](completion-backlog.md) | Step 6. |
+| Subscriptions and continuous queue population | mounted | `source`: `test_qt_addon_discovery`, `test_qt_addon_discovery_service`; `tst_AddonDiscovery`; [record](records/discovery-feeds-and-queue-fill.md) | Source credit shown in the queue; app run. |
 
 ## UI, themes and configuration (`04-ui-themes-and-configuration.md`)
 

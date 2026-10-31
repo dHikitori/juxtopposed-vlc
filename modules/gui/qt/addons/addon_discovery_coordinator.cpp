@@ -12,6 +12,7 @@
 #include <QUrl>
 #include <QUuid>
 #include <algorithm>
+#include <cmath>
 
 namespace {
 constexpr int MaxRequests = 64, MaxViews = 64, MaxHandles = 4096, MaxCursors = 512, MaxPage = 200;
@@ -85,7 +86,6 @@ QVariantList AddonDiscoveryCoordinator::sources() const
     if (m_backend.sources) for (const auto& value : m_backend.sources()) {
         const auto entry = value.toMap();
         auto operations = declaredOperations(entry);
-        operations.removeAll(QStringLiteral("subscribe"));
         if (!m_backend.authorizePlayable) operations.removeAll(QStringLiteral("resolve"));
         output.append(QVariantMap{{QStringLiteral("id"), entry.value(QStringLiteral("id"))},
             {QStringLiteral("name"), entry.value(QStringLiteral("name"))}, {QStringLiteral("enabled"), entry.value(QStringLiteral("enabled"))},
@@ -97,7 +97,7 @@ QVariantList AddonDiscoveryCoordinator::sources() const
 }
 bool AddonDiscoveryCoordinator::supports(const QString& source, const QString& operation) const
 {
-    if (operation == QLatin1String("subscribe") || (operation == QLatin1String("resolve") && !m_backend.authorizePlayable)) return false;
+    if (operation == QLatin1String("resolve") && !m_backend.authorizePlayable) return false;
     return available(registration(source), operation);
 }
 bool AddonDiscoveryCoordinator::current(const Handle& handle) const
@@ -165,9 +165,22 @@ QString AddonDiscoveryCoordinator::suggest(const QString& source, const QVariant
     if (context.contains(QStringLiteral("language"))) safe.insert(QStringLiteral("language"), context.value(QStringLiteral("language")).toString().left(32));
     return start(source, QStringLiteral("suggest"), safe, view, generation);
 }
-QString AddonDiscoveryCoordinator::subscribe(const QString&, const QString& view, quint64 generation)
+QString AddonDiscoveryCoordinator::subscribe(const QString& source, const QString& node, const QString& revision,
+                                            const QString& view, quint64 generation)
 {
-    return rejected(view, generation, QStringLiteral("unsupported"), tr("This host profile does not support live discovery subscriptions."));
+    static const QRegularExpression token(QStringLiteral("^[\\x21-\\x7e]{0,256}$"));
+    if (!token.match(revision).hasMatch())
+        return rejected(view, generation, QStringLiteral("error"), tr("The discovery revision is not correct."));
+    QString collection;
+    if (!node.isEmpty()) {
+        const auto found = m_handles.constFind(node);
+        if (found == m_handles.cend() || found->kind != QLatin1String("node") || found->source != source || !current(*found)
+            || found->view != view || found->generation != generation)
+            return rejected(view, generation, QStringLiteral("error"), tr("This discovery folder is no longer valid. Open its source again."));
+        collection = found->item;
+    }
+    return start(source, QStringLiteral("subscribe"), {{QStringLiteral("collectionRef"), collection}, {QStringLiteral("revision"), revision}},
+                 view, generation);
 }
 
 QString AddonDiscoveryCoordinator::start(const QString& source, const QString& operation, QVariantMap context,
@@ -249,7 +262,10 @@ void AddonDiscoveryCoordinator::complete(const QString& invocation, const QStrin
     if (status != QLatin1String("match") && status != QLatin1String("partial") && status != QLatin1String("no_match")) {
         finish(request, status, {}, error.left(512)); return;
     }
-    if (status == QLatin1String("no_match")) { finish(request, status, {{QStringLiteral("items"), QVariantList{}}}); return; }
+    // A change feed reports no change with its revision and next check.
+    if (status == QLatin1String("no_match") && found->operation != QLatin1String("subscribe")) {
+        finish(request, status, {{QStringLiteral("items"), QVariantList{}}}); return;
+    }
     if (found->operation == QLatin1String("resolve")) authorize(request, data);
     else page(request, data);
 }
@@ -259,7 +275,7 @@ void AddonDiscoveryCoordinator::page(const QString& request, const QVariantMap& 
     const auto found = m_requests.constFind(request);
     if (found == m_requests.cend()) return;
     const auto job = *found;
-    if ((!data.contains(QStringLiteral("items")) && !data.contains(QStringLiteral("nodes")))
+    if ((!data.contains(QStringLiteral("items")) && !data.contains(QStringLiteral("nodes")) && job.operation != QLatin1String("subscribe"))
         || (data.contains(QStringLiteral("items")) && data.value(QStringLiteral("items")).metaType().id() != QMetaType::QVariantList)
         || (data.contains(QStringLiteral("nodes")) && data.value(QStringLiteral("nodes")).metaType().id() != QMetaType::QVariantList)) {
         finish(request, QStringLiteral("error"), {}, tr("The discovery source returned an invalid page.")); return;
@@ -320,9 +336,35 @@ void AddonDiscoveryCoordinator::page(const QString& request, const QVariantMap& 
         m_cursors.insert(cursor, {job.source, job.operation, partition(job.registration), job.view, fingerprint(context), job.generation, data.value(QStringLiteral("cursor"))});
         result.insert(QStringLiteral("cursor"), cursor);
     }
+    // A source can name its revision and when to check again; a change feed
+    // also names the items it removed. Anything else is ignored.
+    static const QRegularExpression token(QStringLiteral("^[\\x21-\\x7e]{1,256}$"));
+    const auto revision = data.value(QStringLiteral("revision"));
+    if (revision.metaType().id() == QMetaType::QString && token.match(revision.toString()).hasMatch())
+        result.insert(QStringLiteral("revision"), revision.toString());
+    const auto next = data.value(QStringLiteral("nextCheckSeconds"));
+    if (next.canConvert<double>() && next.metaType().id() != QMetaType::QString && std::isfinite(next.toDouble()))
+        result.insert(QStringLiteral("nextCheckSeconds"), int(std::clamp(next.toDouble(), 60.0, 3600.0)));
+    QVariantList removed;
+    if (job.operation == QLatin1String("subscribe")) {
+        const auto ids = data.value(QStringLiteral("removed")).toList();
+        if (ids.size() > MaxPage) { finish(request, QStringLiteral("error"), {}, tr("The discovery source removed too many items at once.")); return; }
+        for (const auto& id : ids) {
+            const QString stable = job.source + '\n' + partition(job.registration) + '\n' + account(job.registration)
+                + '\n' + job.view + '\n' + QString::number(job.generation) + '\n' + id.toString();
+            const auto ref = m_stable.value(stable);
+            if (!identifier(id.toString()) || ref.isEmpty() || seen.contains(id.toString())) continue;
+            removed.append(ref);
+        }
+        result.insert(QStringLiteral("removed"), removed);
+    }
     for (auto it = stagedHandles.cbegin(); it != stagedHandles.cend(); ++it) m_handles.insert(it.key(), it.value());
     for (auto it = stagedStable.cbegin(); it != stagedStable.cend(); ++it) m_stable.insert(it.key(), it.value());
-    finish(request, items.isEmpty() && updates.isEmpty() ? QStringLiteral("no_match") : QStringLiteral("match"), result);
+    for (const auto& ref : removed) {
+        const auto handle = m_handles.take(ref.toString());
+        m_stable.remove(handle.stable);
+    }
+    finish(request, items.isEmpty() && updates.isEmpty() && removed.isEmpty() ? QStringLiteral("no_match") : QStringLiteral("match"), result);
 }
 
 QVariantMap AddonDiscoveryCoordinator::queueReference(const QString& item) const

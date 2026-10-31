@@ -287,6 +287,93 @@ private slots:
         QVERIFY(service.play(view, items(service, view)[0].toMap().value("ref").toString()).isEmpty());
         QCOMPARE(fixture.calls.size(), 1);
     }
+    void anOpenViewChecksItsFeedUntilItCloses() {
+        Fixture fixture; auto row = fixture.sources[0].toMap(); row["operations"] = QStringList{"roots", "search", "subscribe"}; fixture.sources[0] = row;
+        AddonDiscoveryService service(fixture.backend(), {}); service.setTimingForTests(20, 50, 0);
+        const auto view = service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 1);
+        fixture.complete(service, 0, {{"items", QVariantList{Fixture::item("a"), Fixture::item("b")}}, {"revision", "r1"}});
+        QTRY_COMPARE(fixture.calls.size(), 2);
+        const auto check = fixture.calls[1].toMap();
+        QCOMPARE(check.value("operation").toString(), "subscribe"); QCOMPARE(check.value("context").toMap().value("revision").toString(), "r1");
+        fixture.complete(service, 1, {{"items", QVariantList{Fixture::item("c")}}, {"removed", QVariantList{"a"}}, {"revision", "r2"}});
+        QTRY_COMPARE(items(service, view).size(), 2);
+        QCOMPARE(items(service, view)[0].toMap().value("title").toString(), QStringLiteral("<b>Station</b>"));
+        QTRY_COMPARE(fixture.calls.size(), 3);
+        QCOMPARE(fixture.calls[2].toMap().value("context").toMap().value("revision").toString(), "r2");
+        // A search shows no feed; a closed view checks nothing.
+        QVERIFY(service.search(view, "news")); QTRY_COMPARE(fixture.calls.size(), 4);
+        fixture.complete(service, 3, {{"items", QVariantList{Fixture::item("d")}}});
+        QTest::qWait(200); QCOMPARE(fixture.calls.size(), 4);
+        QVERIFY(service.back(view)); QTRY_COMPARE(fixture.calls.size(), 5);
+        service.closeView(view); fixture.complete(service, 4, {{"items", QVariantList{Fixture::item("a")}}});
+        QTest::qWait(200); QCOMPARE(fixture.calls.size(), 5);
+    }
+    void aQueueFillKeepsAFewSuggestionsAheadAndOnlyAppends() {
+        Fixture fixture; auto row = fixture.sources[0].toMap(); row["operations"] = QStringList{"roots", "suggest"}; fixture.sources[0] = row;
+        QList<AddonQueueTransactions::Transaction> appended; int consumed = 0;
+        AddonQueueTransactions::Backend queues;
+        queues.snapshot = [](const QString& target) { return AddonQueueTransactions::Snapshot{target == QLatin1String("queue"), "queue-1", 1}; };
+        queues.append = [&](const auto& transaction, auto done) { appended.append(transaction); done(true, {}); return []{}; };
+        queues.pendingAhead = [&](const QString& tag) {
+            int count = 0; for (const auto& value : appended) if (value.fillTag == tag) count += int(value.references.size());
+            return count - consumed;
+        };
+        AddonDiscoveryService service(fixture.backend(), queues); service.setTimingForTests(20, 50, 0);
+        const auto view = service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 1);
+        fixture.complete(service, 0, {{"items", QVariantList{Fixture::item("station")}}}); QTRY_COMPARE(items(service, view).size(), 1);
+        QVERIFY(service.canFillQueue(view));
+        QVERIFY(!service.startQueueFill(view, 11));
+        QVERIFY(service.startQueueFill(view, 3)); QTRY_COMPARE(fixture.calls.size(), 2);
+        QCOMPARE(fixture.calls[1].toMap().value("operation").toString(), "suggest");
+        QCOMPARE(fixture.calls[1].toMap().value("context").toMap().value("limit").toInt(), 3);
+        fixture.complete(service, 1, {{"items", QVariantList{Fixture::item("s1"), Fixture::item("s2"), Fixture::item("s3")}}});
+        QTRY_COMPARE(appended.size(), 1);
+        QCOMPARE(appended[0].references.size(), 3); QVERIFY(!appended[0].fillTag.isEmpty());
+        QCOMPARE(appended[0].fillCredit, QStringLiteral("Radio")); QVERIFY(!appended[0].references[0].toMap().contains("url"));
+        QTRY_COMPARE(service.queueFill().value("added").toInt(), 3);
+        QCOMPARE(service.queueFill().value("pending").toInt(), 3);
+        // Two still ahead: nothing to do. One ahead: ask for the difference.
+        consumed = 1; service.noteQueueChanged(); QTest::qWait(50); QCOMPARE(fixture.calls.size(), 2);
+        consumed = 2; service.noteQueueChanged(); QTRY_COMPARE(fixture.calls.size(), 3);
+        QCOMPARE(fixture.calls[2].toMap().value("context").toMap().value("limit").toInt(), 2);
+        // A suggestion that this session already added is not added again.
+        fixture.complete(service, 2, {{"items", QVariantList{Fixture::item("s1"), Fixture::item("s4")}}});
+        QTRY_COMPARE(appended.size(), 2); QCOMPARE(appended[1].references.size(), 1);
+        QCOMPARE(appended[1].references[0].toMap().value("itemId").toString(), "s4");
+        // Paused: queue changes ask for nothing.
+        service.pauseQueueFill(true); consumed = 4; service.noteQueueChanged(); QTest::qWait(50); QCOMPARE(fixture.calls.size(), 3);
+        service.pauseQueueFill(false); QTRY_COMPARE(fixture.calls.size(), 4);
+        // A source with nothing new twice ends the session; queued entries stay.
+        fixture.complete(service, 3, {{"items", QVariantList{Fixture::item("s1")}}});
+        QTest::qWait(20); service.noteQueueChanged(); QTRY_COMPARE(fixture.calls.size(), 5);
+        fixture.complete(service, 4, {{"items", QVariantList{}}});
+        QTRY_VERIFY(!service.queueFill().value("active").toBool());
+        QCOMPARE(service.queueFill().value("error").toString(), QStringLiteral("The source has no more suggestions."));
+        QCOMPARE(appended.size(), 2);
+    }
+    void aQueueFillEndsWhenTheSourceAccountChanges() {
+        Fixture fixture; auto row = fixture.sources[0].toMap(); row["operations"] = QStringList{"roots", "suggest"}; fixture.sources[0] = row;
+        int appended = 0;
+        AddonQueueTransactions::Backend queues;
+        queues.snapshot = [](const QString& target) { return AddonQueueTransactions::Snapshot{target == QLatin1String("queue"), "queue-1", 1}; };
+        queues.append = [&](const auto&, auto done) { ++appended; done(true, {}); return []{}; };
+        queues.pendingAhead = [](const QString&) { return 0; };
+        AddonDiscoveryService service(fixture.backend(), queues); service.setTimingForTests(20, 50, 0);
+        const auto view = service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 1);
+        fixture.complete(service, 0, {{"items", QVariantList{}}});
+        QVERIFY(service.startQueueFill(view, 2)); QTRY_COMPARE(fixture.calls.size(), 2);
+        auto changed = fixture.sources[0].toMap(); changed["cachePartition"] = "release-2"; fixture.sources[0] = changed;
+        // The late answer of the old account is not queued.
+        fixture.complete(service, 1, {{"items", QVariantList{Fixture::item("s1")}}});
+        service.noteQueueChanged();
+        QTRY_VERIFY(!service.queueFill().value("active").toBool());
+        QCOMPARE(appended, 0);
+        // Without a queue that can count its entries, filling is not offered.
+        AddonQueueTransactions::Backend plain; plain.snapshot = queues.snapshot; plain.append = queues.append;
+        AddonDiscoveryService other(fixture.backend(), plain);
+        const auto second = other.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(), 3);
+        QVERIFY(!other.canFillQueue(second)); QVERIFY(!other.startQueueFill(second));
+    }
     void queueReceivesOneReferenceBatchWithoutUrls() {
         Fixture fixture; QVariantList applied;
         AddonQueueTransactions::Backend queues;

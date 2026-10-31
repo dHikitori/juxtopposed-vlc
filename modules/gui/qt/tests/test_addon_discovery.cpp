@@ -106,13 +106,55 @@ private slots:
         deleteOnCancel = fake.calls[2].id; discovery->cancel(request); QVERIFY(!discovery);
         QCOMPARE(fake.canceledGates.count("gate-0"), 1); QCOMPARE(fake.canceled.count(deleteOnCancel), 1);
     }
-    void hostProfileReportsUnimplementedPlaybackAndSubscriptions() {
+    void hostProfileReportsUnimplementedPlaybackAndDeclaredSubscriptions() {
         Fake fake; AddonDiscoveryCoordinator discovery(fake.backend());
         QVERIFY(discovery.supports(sourceId, "roots"));
         QVERIFY(!discovery.supports(sourceId, "resolve"));
-        QVERIFY(!discovery.supports(sourceId, "subscribe"));
+        QVERIFY(discovery.supports(sourceId, "subscribe"));
         const auto operations = discovery.sources()[0].toMap().value("operations").toStringList();
-        QVERIFY(!operations.contains("resolve")); QVERIFY(!operations.contains("subscribe"));
+        QVERIFY(!operations.contains("resolve")); QVERIFY(operations.contains("subscribe"));
+    }
+    void aChangeFeedReportsAddedChangedAndRemovedItems() {
+        Fake fake; AddonDiscoveryCoordinator discovery(fake.backend()); QSignalSpy done(&discovery, &AddonDiscoveryCoordinator::finished);
+        discovery.roots(sourceId, "view", 1); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(discovery, fake.calls[0], {{"items", QVariantList{media("a"), media("b")}}, {"revision", "r1"}, {"nextCheckSeconds", 5}});
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done[0][2].toMap().value("revision").toString(), "r1");
+        QCOMPARE(done[0][2].toMap().value("nextCheckSeconds").toInt(), 60);
+        const auto rows = done[0][2].toMap().value("items").toList();
+        const auto refA = rows[0].toMap().value("ref").toString(), refB = rows[1].toMap().value("ref").toString();
+        discovery.subscribe(sourceId, {}, "r1", "view", 1); QTRY_COMPARE(fake.calls.size(), 2);
+        QCOMPARE(fake.calls[1].operation, "subscribe");
+        QCOMPARE(fake.calls[1].context.value("revision").toString(), "r1");
+        QCOMPARE(fake.calls[1].context.value("collectionRef").toString(), "");
+        auto changed = media("a"); changed["title"] = "Renamed";
+        complete(discovery, fake.calls[1], {{"items", QVariantList{changed, media("c")}}, {"removed", QVariantList{"b", "unknown", "a"}},
+            {"revision", "r2"}, {"nextCheckSeconds", 99999}});
+        QTRY_COMPARE(done.size(), 2);
+        const auto delta = done[1][2].toMap();
+        QCOMPARE(delta.value("revision").toString(), "r2"); QCOMPARE(delta.value("nextCheckSeconds").toInt(), 3600);
+        QCOMPARE(delta.value("updates").toList().first().toMap().value("ref").toString(), refA);
+        QCOMPARE(delta.value("updates").toList().first().toMap().value("title").toString(), "Renamed");
+        QCOMPARE(delta.value("items").toList().size(), 1);
+        // A removed item that the same reply also lists is not removed.
+        QCOMPARE(delta.value("removed").toList(), QVariantList{refB});
+        QVERIFY(discovery.queueReference(refB).isEmpty()); QVERIFY(!discovery.queueReference(refA).isEmpty());
+        // No change: the source keeps its revision and the next check.
+        discovery.subscribe(sourceId, {}, "r2", "view", 1); QTRY_COMPARE(fake.calls.size(), 3);
+        complete(discovery, fake.calls[2], {{"revision", "r2"}}, "no_match");
+        QTRY_COMPARE(done.size(), 3); QCOMPARE(done[2][1].toString(), "no_match");
+        QCOMPARE(done[2][2].toMap().value("revision").toString(), "r2");
+    }
+    void aChangeFeedNeedsAFolderOfTheSameViewAndACorrectRevision() {
+        Fake fake; AddonDiscoveryCoordinator discovery(fake.backend()); QSignalSpy done(&discovery, &AddonDiscoveryCoordinator::finished);
+        discovery.roots(sourceId, "view", 1); QTRY_COMPARE(fake.calls.size(), 1);
+        complete(discovery, fake.calls[0], {{"nodes", QVariantList{node()}}}); QTRY_COMPARE(done.size(), 1);
+        const auto folder = firstRef(done);
+        discovery.subscribe(sourceId, folder, "r 1", "view", 1); QTRY_COMPARE(done.size(), 2); QCOMPARE(done[1][1].toString(), "error");
+        discovery.subscribe(sourceId, folder, "r1", "other", 1); QTRY_COMPARE(done.size(), 3); QCOMPARE(done[2][1].toString(), "error");
+        QCOMPARE(fake.calls.size(), 1);
+        discovery.subscribe(sourceId, folder, "r1", "view", 1); QTRY_COMPARE(fake.calls.size(), 2);
+        QCOMPARE(fake.calls[1].context.value("collectionRef").toString(), "radio-root");
     }
     void operationDeclarationMayComeFromTheValidatedContributionDocument() {
         Fake fake;
@@ -282,11 +324,11 @@ private slots:
         discovery.cancel(request); QCOMPARE(fake.canceledGates, QStringList{"gate-0"});
         fake.completions.value("gate-0")("late-handle", {}); QTest::qWait(1); QCOMPARE(done.size(), 1);
     }
-    void operationsMustBeDeclaredAndSubscriptionsStayExplicitlyUnsupported() {
+    void operationsMustBeDeclaredIncludingSubscriptions() {
         Fake fake; fake.registrations[0] = QVariantMap{{"id", sourceId}, {"enabled", true}, {"configured", true}, {"cachePartition", "a"}};
         AddonDiscoveryCoordinator discovery(fake.backend()); QSignalSpy done(&discovery, &AddonDiscoveryCoordinator::finished);
         discovery.roots(sourceId, "view", 1); QTRY_COMPARE(done.size(), 1); QCOMPARE(done[0][1].toString(), "unsupported");
-        discovery.subscribe("any", "view", 1); QTRY_COMPARE(done.size(), 2); QCOMPARE(done.last()[1].toString(), "unsupported");
+        discovery.subscribe(sourceId, {}, {}, "view", 1); QTRY_COMPARE(done.size(), 2); QCOMPARE(done.last()[1].toString(), "unsupported");
         QVERIFY(fake.calls.isEmpty());
     }
 };

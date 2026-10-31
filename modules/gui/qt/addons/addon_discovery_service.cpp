@@ -4,6 +4,8 @@
 #include "addon_catalogue_view.hpp"
 #include <QTimer>
 #include <QUuid>
+#include <algorithm>
+#include <utility>
 
 namespace vlc::addons {
 namespace {
@@ -67,6 +69,16 @@ AddonDiscoveryService::AddonDiscoveryService(AddonDiscoveryCoordinator::Backend 
 {
     connect(&m_coordinator, &AddonDiscoveryCoordinator::finished, this, &AddonDiscoveryService::completed);
     connect(&m_transactions, &AddonQueueTransactions::finished, this, [this](const QString& request, bool success, const QString& error) {
+        if (m_fill.active && request == m_fill.transaction) {
+            m_fill.transaction.clear(); m_fill.busy = false;
+            const auto adding = std::exchange(m_fill.adding, {});
+            if (success) { m_fill.added += int(adding.size()); m_fill.failures = 0; m_fill.error.clear(); }
+            // A queue that changed during the append gets the items next time.
+            else for (const auto& item : adding) m_fill.seen.remove(item);
+            if (!success && ++m_fill.failures >= 3) { endFill(error.isEmpty() ? tr("The app cannot add suggestions to the queue.") : error.left(512)); return; }
+            emit queueFillChanged();
+            return;
+        }
         m_playActions.remove(request);
         const auto view = m_actions.take(request); const auto target=m_libraryActions.take(request);
         const auto release=m_playlists.release; const QPointer<AddonDiscoveryService> owner(this);
@@ -115,7 +127,8 @@ void AddonDiscoveryService::releaseDisplay(const QString& request)
 }
 bool AddonDiscoveryService::needsDisplayDemand() const
 {
-    if (m_closing || !m_displayAttached || !m_display || m_displayRequests.isEmpty()) return false;
+    // A queue-fill session keeps the source list current after its page closes.
+    if (m_closing || !m_displayAttached || !m_display || (m_displayRequests.isEmpty() && !m_fill.active)) return false;
     for (const auto& value : sources()) if (value.toMap().value("enabled").toBool()) return true;
     return false;
 }
@@ -174,6 +187,7 @@ void AddonDiscoveryService::displayChanged()
 void AddonDiscoveryService::close()
 {
     if (m_closing) return;
+    endFill({});
     m_closing = true; m_displayRequests.clear(); ++m_demandGeneration;
     const QPointer<AddonDiscoveryService> owner(this); syncDisplayDemand(); if (!owner) return;
     const auto views = m_views.keys();
@@ -219,7 +233,7 @@ QVariantMap AddonDiscoveryService::view(const QString& id) const
     return {{"id", id}, {"source", it->source}, {"items", it->items}, {"busy", it->busy}, {"error", it->error},
         {"available", viewCurrent(*it)}, {"loading", loading()},
         {"canGoBack", !it->path.isEmpty() || !it->query.isEmpty()}, {"hasMore", !it->cursor.isEmpty()},
-        {"query", it->query}, {"canPlay", canPlay(id)}, {"canEnqueue", canEnqueue(id)},
+        {"query", it->query}, {"canPlay", canPlay(id)}, {"canEnqueue", canEnqueue(id)}, {"canFillQueue", canFillQueue(id)},
         {"playlistAvailable",it->playlistAvailable},{"playlistBusy",it->playlistBusy},{"playlists",it->playlists},
         {"playlistTarget",it->playlistTarget},{"playlistError",it->playlistError},{"morePlaylists",it->morePlaylists},
         {"canAddToPlaylist",viewCurrent(*it) && !it->playlistTarget.isEmpty() && m_transactions.appendAvailable() && m_transactions.snapshot(it->playlistTarget).available}};
@@ -233,6 +247,16 @@ bool AddonDiscoveryService::fetch(const QString& id, bool append)
     if (!owner) return false;
     it = m_views.find(id); if (it == m_views.end() || it->generation != generation || !viewCurrent(*it)) return false;
     it->error.clear(); it->busy = true; it->append = append;
+    // A new page replaces the feed of the previous folder.
+    if (!append) {
+        ++it->feed; it->revision.clear(); it->nextCheckSeconds = 0;
+        const auto feedRequest = std::exchange(it->feedRequest, QString{});
+        if (!feedRequest.isEmpty()) {
+            m_coordinator.cancel(feedRequest);
+            if (!owner) return false;
+            it = m_views.find(id); if (it == m_views.end() || it->generation != generation) return false;
+        }
+    }
     const auto cursor = append ? it->cursor : QString();
     if (!append) { it->items.clear(); it->cursor.clear(); }
     if (!it->query.isEmpty()) it->pending = m_coordinator.search(it->source, it->query, {}, id, it->generation, cursor);
@@ -381,6 +405,10 @@ QString AddonDiscoveryService::play(const QString& id, const QString& item)
 }
 void AddonDiscoveryService::completed(const QString& request, const QString& status, const QVariantMap& data, const QString& error)
 {
+    if (m_fill.active && request == m_fill.request) { fillFinished(status, data, error); return; }
+    if (const auto feedView = data.value("view").toString(); m_views.contains(feedView) && m_views.value(feedView).feedRequest == request) {
+        feedFinished(feedView, status, data); return;
+    }
     if (m_plays.contains(request)) {
         const auto action = m_plays.take(request); const auto it = m_views.constFind(action.view);
         const auto handle = data.value("playbackHandle").toString();
@@ -414,8 +442,188 @@ void AddonDiscoveryService::completed(const QString& request, const QString& sta
         }
         if (it->items.size() + items.size() > 1000) it->error = tr("The view has 1000 items. Use search to reduce the result list.");
         else { it->items.append(items); it->cursor = data.value("cursor").toString(); }
+        if (!it->append) {
+            it->revision = data.value("revision").toString();
+            it->nextCheckSeconds = data.value("nextCheckSeconds").toInt();
+            const QPointer<AddonDiscoveryService> owner(this);
+            emit viewChanged(id);
+            if (owner) scheduleFeed(id);
+            return;
+        }
     }
     emit viewChanged(id);
+}
+void AddonDiscoveryService::scheduleFeed(const QString& id)
+{
+    auto it = m_views.find(id);
+    // Only the open root or folder, not a search; only while the view is open.
+    if (it == m_views.end() || !it->query.isEmpty() || !viewCurrent(*it) || !m_coordinator.supports(it->source, QStringLiteral("subscribe"))) return;
+    const auto feed = ++it->feed;
+    const int delay = it->nextCheckSeconds > 0 ? std::max(m_feedMinimumMs, it->nextCheckSeconds * 1000) : m_feedDefaultMs;
+    QTimer::singleShot(delay, this, [this, id, feed] {
+        auto it = m_views.find(id);
+        if (it == m_views.end() || it->feed != feed || !viewCurrent(*it)) return;
+        if (it->busy || !it->feedRequest.isEmpty()) { scheduleFeed(id); return; }
+        const auto request = m_coordinator.subscribe(it->source, it->path.isEmpty() ? QString{} : it->path.last(), it->revision, id, it->generation);
+        if (const auto view = m_views.find(id); view != m_views.end() && view->feed == feed) view->feedRequest = request;
+    });
+}
+void AddonDiscoveryService::feedFinished(const QString& id, const QString& status, const QVariantMap& data)
+{
+    auto it = m_views.find(id);
+    if (it == m_views.end()) return;
+    it->feedRequest.clear();
+    // A refused or failed check ends the feed; the shown items stay.
+    if (status != QLatin1String("match") && status != QLatin1String("no_match")) return;
+    if (data.value("generation").toULongLong() != it->generation || !viewCurrent(*it)) return;
+    QSet<QString> removed;
+    for (const auto& ref : data.value("removed").toList()) removed.insert(ref.toString());
+    QHash<QString, QVariantMap> updates;
+    for (const auto& value : data.value("updates").toList()) updates.insert(value.toMap().value("ref").toString(), value.toMap());
+    QVariantList items;
+    // New rows first, in source order: a feed reports what was added.
+    for (const auto& value : data.value("items").toList()) if (!removed.contains(value.toMap().value("ref").toString())) items.append(value);
+    for (const auto& value : std::as_const(it->items)) {
+        const auto ref = value.toMap().value("ref").toString();
+        if (removed.contains(ref)) continue;
+        items.append(updates.contains(ref) ? QVariant(updates.value(ref)) : value);
+    }
+    if (items.size() > 1000) items.resize(1000);
+    it->items = items;
+    if (data.contains("revision")) it->revision = data.value("revision").toString();
+    if (data.contains("nextCheckSeconds")) it->nextCheckSeconds = data.value("nextCheckSeconds").toInt();
+    const QPointer<AddonDiscoveryService> owner(this);
+    emit viewChanged(id);
+    if (owner) scheduleFeed(id);
+}
+bool AddonDiscoveryService::canFillQueue(const QString& id) const
+{
+    const auto it = m_views.constFind(id);
+    return it != m_views.cend() && canEnqueue(id) && m_transactions.fillAvailable()
+        && m_coordinator.supports(it->source, QStringLiteral("suggest"));
+}
+bool AddonDiscoveryService::startQueueFill(const QString& id, int maxPending)
+{
+    if (!canFillQueue(id) || maxPending < 1 || maxPending > 10) return false;
+    const QPointer<AddonDiscoveryService> owner(this);
+    endFill({});
+    if (!owner || !canFillQueue(id)) return false;
+    const auto& view = m_views[id];
+    QString name;
+    for (const auto& value : sources()) if (value.toMap().value("id").toString() == view.source) name = value.toMap().value("name").toString();
+    const auto generation = m_fill.generation + 1;
+    m_fill = {};
+    m_fill.generation = generation;
+    m_fill.active = true; m_fill.source = view.source; m_fill.sourceName = name.left(256);
+    m_fill.sourceIdentity = view.sourceIdentity; m_fill.maxPending = maxPending;
+    m_fill.view = QStringLiteral("queue-fill-") + QString::number(generation);
+    m_fill.tag = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    syncDisplayDemand(); if (!owner) return false;
+    emit queueFillChanged();
+    if (owner) evaluateFill();
+    return bool(owner);
+}
+void AddonDiscoveryService::pauseQueueFill(bool paused)
+{
+    if (!m_fill.active || m_fill.paused == paused) return;
+    m_fill.paused = paused;
+    const QPointer<AddonDiscoveryService> owner(this);
+    emit queueFillChanged();
+    if (owner && !paused) evaluateFill();
+}
+void AddonDiscoveryService::stopQueueFill() { endFill({}); }
+void AddonDiscoveryService::endFill(const QString& error)
+{
+    if (!m_fill.active) return;
+    const auto request = m_fill.request, transaction = m_fill.transaction, view = m_fill.view;
+    m_fill.active = false; m_fill.busy = false; m_fill.paused = false; m_fill.request.clear(); m_fill.transaction.clear();
+    m_fill.error = error; ++m_fill.generation;
+    const QPointer<AddonDiscoveryService> owner(this);
+    if (!request.isEmpty()) { m_coordinator.cancel(request); if (!owner) return; }
+    if (!transaction.isEmpty()) { m_transactions.cancel(transaction); if (!owner) return; }
+    m_coordinator.cancelView(view); if (!owner) return;
+    syncDisplayDemand(); if (!owner) return;
+    emit queueFillChanged();
+}
+QVariantMap AddonDiscoveryService::queueFill() const
+{
+    const int pending = m_fill.active ? m_transactions.pendingAhead(m_fill.tag) : 0;
+    return {{"active", m_fill.active}, {"paused", m_fill.paused}, {"busy", m_fill.busy}, {"source", m_fill.source},
+        {"sourceName", m_fill.sourceName}, {"maxPending", m_fill.maxPending}, {"pending", std::max(0, pending)},
+        {"added", m_fill.added}, {"error", m_fill.error}};
+}
+void AddonDiscoveryService::noteQueueChanged()
+{
+    if (!m_fill.active || m_fill.wake) return;
+    // Coalesce a burst of queue changes into one check.
+    m_fill.wake = true;
+    const auto generation = m_fill.generation;
+    QTimer::singleShot(0, this, [this, generation] {
+        if (m_fill.generation != generation) return;
+        m_fill.wake = false;
+        const QPointer<AddonDiscoveryService> owner(this);
+        emit queueFillChanged();
+        if (owner) evaluateFill();
+    });
+}
+void AddonDiscoveryService::evaluateFill()
+{
+    if (!m_fill.active || m_fill.paused || m_fill.busy) return;
+    if (!available() || m_coordinator.sourceIdentity(m_fill.source) != m_fill.sourceIdentity
+        || !m_coordinator.supports(m_fill.source, QStringLiteral("suggest")) || !m_transactions.fillAvailable()
+        || (m_sourcePlayback.ready && !m_sourcePlayback.ready(m_fill.source))) {
+        endFill(tr("The source or its account changed. The queue is no longer filled."));
+        return;
+    }
+    const int pending = m_transactions.pendingAhead(m_fill.tag);
+    if (pending < 0) { endFill(tr("The queue is not available.")); return; }
+    // Refill only when at most one suggestion is left ahead.
+    if (pending > std::min(1, m_fill.maxPending - 1)) return;
+    // At most one suggestion request every 5 s, also when the queue moves fast.
+    if (m_fill.last.isValid() && m_fill.last.elapsed() < m_fillSpacingMs) {
+        const auto generation = m_fill.generation;
+        QTimer::singleShot(int(m_fillSpacingMs - m_fill.last.elapsed()), this, [this, generation] { if (m_fill.generation == generation) evaluateFill(); });
+        return;
+    }
+    m_fill.last.start(); m_fill.busy = true;
+    const auto request = m_coordinator.suggest(m_fill.source, {}, m_fill.maxPending - pending, m_fill.view, 1);
+    if (m_fill.active && m_fill.busy) m_fill.request = request;
+    emit queueFillChanged();
+}
+void AddonDiscoveryService::fillFinished(const QString& status, const QVariantMap& data, const QString& error)
+{
+    m_fill.request.clear(); m_fill.busy = false;
+    if (status != QLatin1String("match") && status != QLatin1String("no_match")) {
+        endFill(error.isEmpty() ? tr("The source did not return suggestions.") : error.left(512)); return;
+    }
+    QVariantList references;
+    for (const auto& value : data.value("page").toList()) {
+        const auto row = value.toMap();
+        if (row.value("kind").toString() != QLatin1String("media") || !row.value("available", true).toBool()) continue;
+        const auto reference = m_coordinator.queueReference(row.value("ref").toString());
+        const auto item = reference.value("itemId").toString();
+        // A suggestion that this session already added is not added again.
+        if (reference.isEmpty() || m_fill.seen.contains(item)) continue;
+        if (m_sourcePlayback.referenceReady && !m_sourcePlayback.referenceReady(reference)) continue;
+        references.append(reference);
+    }
+    if (references.isEmpty()) {
+        if (++m_fill.empty >= 2) endFill(tr("The source has no more suggestions."));
+        else emit queueFillChanged();
+        return;
+    }
+    m_fill.empty = 0;
+    const QPointer<AddonDiscoveryService> owner(this);
+    const auto transaction = m_transactions.append(m_fill.view, references, QStringLiteral("queue"), m_fill.tag, m_fill.sourceName);
+    if (!owner || !m_fill.active) return;
+    if (transaction.isEmpty()) { endFill(tr("The app cannot add suggestions to the queue.")); return; }
+    for (const auto& reference : references) {
+        if (m_fill.seen.size() >= 1000) m_fill.seen.clear();
+        m_fill.seen.insert(reference.toMap().value("itemId").toString());
+        m_fill.adding.append(reference.toMap().value("itemId").toString());
+    }
+    m_fill.busy = true; m_fill.transaction = transaction;
+    emit queueFillChanged();
 }
 void AddonDiscoveryService::closeView(const QString& id)
 {
@@ -438,6 +646,7 @@ void AddonDiscoveryService::closeView(const QString& id)
 void AddonDiscoveryService::invalidate()
 {
     if (m_closing) return;
+    endFill(tr("The add-ons changed. The queue is no longer filled."));
     const auto views = m_views.keys(); const QPointer<AddonDiscoveryService> owner(this);
     for (const auto& id : views) { closeView(id); if (!owner) return; }
     ++m_revision; emit changed();

@@ -109,6 +109,10 @@ AddonQueueTransactions::Cancel AddonNativeQueueStore::append(const AddonQueueTra
         if(!policy) { input_item_Release(item); completion(false,tr("The source item cannot use its native policy.")); return {}; }
         vlc_input_policy_Release(policy);
         input_item_SetTitle(item, title.constData()); input_item_SetMetaExtra(item, "vlc:addon-source-title", title.constData());
+        if (!transaction.fillTag.isEmpty()) {
+            input_item_SetMetaExtra(item, "vlc:addon-fill", transaction.fillTag.toUtf8().constData());
+            if (!transaction.fillCredit.isEmpty()) input_item_SetMetaExtra(item, "vlc:addon-fill-source", transaction.fillCredit.toUtf8().constData());
+        }
         held.emplace_back(item, input_item_Release); items.push_back(item);
     }
     vlc_playlist_Lock(m_playlist);
@@ -176,12 +180,28 @@ AddonDiscoveryNativeBackend AddonNativeQueueStore::backend()
         done(false,QObject::tr("The queue is not available.")); return AddonQueueTransactions::Cancel{};
     };
     result.snapshot = [owner](const QString& target) { return owner ? owner->snapshot(target) : AddonQueueTransactions::Snapshot{}; };
+    result.pendingAhead = [owner](const QString& tag) { return owner ? owner->pendingAhead(tag) : -1; };
     result.append = [owner](const auto& transaction, auto completion) {
         if (!owner) { completion(false, QObject::tr("The queue is not available.")); return AddonQueueTransactions::Cancel{}; }
         return owner->append(transaction, std::move(completion));
     };
     // The source factory enables this path only while a native lazy owner is active.
     return result;
+}
+int AddonNativeQueueStore::pendingAhead(const QString& fillTag) const
+{
+    if (!m_playlist || fillTag.isEmpty()) return -1;
+    const auto tag = fillTag.toUtf8();
+    int count = 0;
+    vlc_playlist_Lock(m_playlist);
+    const auto current = vlc_playlist_GetCurrentIndex(m_playlist);
+    for (size_t index = current < 0 ? 0 : size_t(current) + 1; index < vlc_playlist_Count(m_playlist); ++index) {
+        char* value = input_item_GetMetaExtra(vlc_playlist_item_GetMedia(vlc_playlist_Get(m_playlist, index)), "vlc:addon-fill");
+        if (value && tag == value) ++count;
+        free(value);
+    }
+    vlc_playlist_Unlock(m_playlist);
+    return count;
 }
 QVariantMap AddonNativeQueueStore::queuedReference(quint64 itemId) const
 {

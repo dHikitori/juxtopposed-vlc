@@ -16,6 +16,7 @@ struct AddonDiscoveryNativeBackend {
     // lock. It retains the input item if the queue or player will use it later.
     std::function<bool(const AddonQueueTransactions::Transaction&, input_item_t*, QString* error)> play;
     std::function<AddonQueueTransactions::Cancel(const AddonQueueTransactions::Transaction&, AddonQueueTransactions::Completion)> playReference;
+    std::function<int(const QString& fillTag)> pendingAhead;
 };
 AddonDiscoveryNativeBackend combineDiscoveryBackends(AddonDiscoveryNativeBackend queue, AddonDiscoveryNativeBackend library);
 AddonDiscoveryService* createPlayerDiscovery(AddonManager*, AddonPlayableGate*, AddonDiscoveryNativeBackend, QObject* parent);

@@ -45,6 +45,13 @@ TestCase {
         function choosePlaylist(id, choice) { calls = calls.concat([{operation: "choose", id: id, choice: choice}]); return true }
         function clearPlaylist(id) { calls = calls.concat([{operation: "release", id: id}]); current = Object.assign({}, current, {playlistTarget: "", canAddToPlaylist: false}); viewChanged(id) }
         function play(id, ref) { calls = calls.concat([{operation: "play", id: id, ref: ref}]); return "play-request" }
+        property var queueFill: ({})
+        function startQueueFill(id, maximum) {
+            calls = calls.concat([{operation: "fill", id: id, maximum: maximum}])
+            queueFill = {active: true, paused: false, sourceName: "<b>Radio</b>", added: 0}; return true
+        }
+        function pauseQueueFill(paused) { queueFill = {active: true, paused: paused, sourceName: "<b>Radio</b>", added: 0} }
+        function stopQueueFill() { queueFill = {active: false, error: ""} }
     }
     QtObject {
         id: otherService
@@ -86,7 +93,7 @@ TestCase {
     SignalSpy { id: navigationSignal; signalName: "discoveryRequested" }
     SignalSpy { id: menuSignal; signalName: "discoveryRequested" }
     function init() {
-        service.calls = []; service.current = ({})
+        service.calls = []; service.current = ({}); service.queueFill = ({})
         service.available = true; service.loading = false; service.preparationError = ""; service.displaySerial = 0; service.releasedRequests = []; service.acquireHook = null
         otherService.requests = 0; otherService.released = []
         service.sources = [{id: "org.example.radio/source", name: "<b>Radio</b>", enabled: true, configured: true, operations: ["roots", "browse", "search"]}]
@@ -156,6 +163,30 @@ TestCase {
         compare(view.actionError, ""); compare(service.calls.length, 0)
         const status = findChild(view, "addonDiscoveryLoading")
         verify(status.visible); compare(status.text, service.preparationError)
+    }
+    function test_queueFillIsAnExplicitChoiceWithPauseAndStop() {
+        const view = page()
+        findChild(view, "addonDiscoverySources").activated(1)
+        tryVerify(() => findChild(view, "addonDiscoveryItem_item-1") !== null)
+        const start = findChild(view, "addonDiscoveryFill")
+        verify(!start.visible)
+        service.current = Object.assign({}, service.current, {canFillQueue: true}); service.viewChanged(service.current.id)
+        tryVerify(() => start.visible)
+        compare(service.calls.filter(call => call.operation === "fill").length, 0)
+        mouseClick(start)
+        compare(service.calls[service.calls.length - 1].operation, "fill"); compare(service.calls[service.calls.length - 1].maximum, 5)
+        tryVerify(() => !start.visible)
+        const status = findChild(view, "addonDiscoveryFillStatus")
+        compare(status.text, "<b>Radio</b> keeps the queue filled: 0 added."); compare(status.textFormat, Text.PlainText)
+        const pause = findChild(view, "addonDiscoveryFillPause")
+        // The row has just appeared: wait for its layout before a click.
+        tryVerify(() => pause.visible && findChild(view, "addonDiscoveryFillStop").x > pause.x)
+        mouseClick(pause)
+        compare(service.queueFill.paused, true)
+        compare(status.text, "Queue filling from <b>Radio</b> is paused.")
+        compare(findChild(view, "addonDiscoveryFillPause").caption, "Resume")
+        mouseClick(findChild(view, "addonDiscoveryFillStop"))
+        tryVerify(() => start.visible)
     }
     function test_openSourceDoesNotPlayOrEnqueue() {
         const view = page()

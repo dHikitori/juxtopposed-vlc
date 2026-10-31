@@ -34,6 +34,8 @@ FocusScope {
     readonly property bool displayLoading: !!backend && backend.loading === true
     readonly property bool sourceChecking: sourceId.length > 0 && source.configurationKnown === false
     readonly property bool actionable: displayAvailable && !sourceChecking
+    // The app's queue-fill session; its source can differ from the open one.
+    readonly property var queueFill: backend && backend.queueFill ? backend.queueFill : ({})
     signal configureRequested(string packageId)
     signal playlistRequested(var itemReferences)
     signal playbackReviewRequested(string source)
@@ -329,6 +331,40 @@ FocusScope {
                     root.playlistPickerOpen = true; root.playlistChoice = ""
                     root.backend.loadPlaylists(root.viewId, playlistQuery.text)
                 }
+            }
+            RedesignButton {
+                objectName: "addonDiscoveryFill"
+                visible: root.viewState.canFillQueue === true && root.queueFill.active !== true
+                caption: qsTr("Keep the queue filled"); enabled: root.actionable; tooltipTextFormat: Text.PlainText
+                text: qsTr("Keep the queue filled: add suggestions from this source to the end of the queue as it plays. The app keeps up to five ahead and changes nothing else in the queue.")
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onClicked: root.backend.startQueueFill(root.viewId, 5)
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: root.queueFill.active === true || (root.queueFill.error || "").length > 0
+            Text {
+                objectName: "addonDiscoveryFillStatus"
+                Layout.fillWidth: true; textFormat: Text.PlainText; wrapMode: Text.Wrap
+                color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
+                text: root.queueFill.active !== true ? root.queueFill.error || ""
+                    : root.queueFill.paused === true ? qsTr("Queue filling from %1 is paused.").arg(root.queueFill.sourceName || qsTr("a source"))
+                    : qsTr("%1 keeps the queue filled: %2 added.").arg(root.queueFill.sourceName || qsTr("A source")).arg(root.queueFill.added || 0)
+            }
+            RedesignButton {
+                objectName: "addonDiscoveryFillPause"
+                visible: root.queueFill.active === true
+                caption: root.queueFill.paused === true ? qsTr("Resume") : qsTr("Pause"); text: caption
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onClicked: root.backend.pauseQueueFill(root.queueFill.paused !== true)
+            }
+            RedesignButton {
+                objectName: "addonDiscoveryFillStop"
+                visible: root.queueFill.active === true
+                caption: qsTr("Stop"); text: caption
+                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                onClicked: root.backend.stopQueueFill()
             }
         }
     }

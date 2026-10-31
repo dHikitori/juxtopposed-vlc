@@ -31,6 +31,7 @@ public:
     static AddonNativeQueueNotifications* notifications();
     bool refreshDisplay(const QVariantMap& reference);
     QVariantMap queuedReference(quint64 itemId) const;
+    int pendingAhead(const QString& fillTag) const;
     QVariantMap admittedReference(const QString& uri) const;
     void close();
 signals:

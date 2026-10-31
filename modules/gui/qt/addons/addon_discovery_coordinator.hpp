@@ -41,7 +41,12 @@ public:
                               const QString& view, quint64 generation, const QString& cursor = {});
     Q_INVOKABLE QString suggest(const QString& source, const QVariantMap& context, int limit,
                                const QString& view, quint64 generation);
-    Q_INVOKABLE QString subscribe(const QString& node, const QString& view, quint64 generation);
+    // A bounded change feed for a view the user has open: node is a folder
+    // handle of this view, or empty for the source root. revision is the
+    // source's last revision. The result has items and updates as a page,
+    // removed (handles), revision and nextCheckSeconds (60 to 3600).
+    Q_INVOKABLE QString subscribe(const QString& source, const QString& node, const QString& revision,
+                                  const QString& view, quint64 generation);
     Q_INVOKABLE QVariantMap queueReference(const QString& item) const;
     Q_INVOKABLE QString resolve(const QString& item, const QString& intent,
                                const QString& view, quint64 generation);

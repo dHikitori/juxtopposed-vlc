@@ -481,6 +481,7 @@ Row 2 is mounted (31 October 2026); see [the record](records/self-test-and-healt
 Row 3 is mounted (31 October 2026); see [the record](records/result-retention.md).
 Row 4 is mounted (31 October 2026); see [the record](records/settings-accounts.md).
 Row 5 is mounted for reads (31 October 2026); see [the record](records/guest-projections.md).
+Row 6 is mounted (31 October 2026); see [the record](records/discovery-feeds-and-queue-fill.md).
 
 1. **Identity choice dialog** and persistent accepted revision. The Service
    already exists, so this has high user value for little work.

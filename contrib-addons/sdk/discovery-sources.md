@@ -28,10 +28,38 @@ The host invokes an operation through the common worker message protocol. The re
 | `search` | `query`, `filters`, and optional `cursor` |
 | `suggest` | `limit`, optional `identity`, and optional `language` |
 | `resolve` | `itemRef`: the stable source item ID; `intent`: `play` or `enqueue` |
+| `subscribe` | `collectionRef`: the folder's source item ID, or empty for the root; `revision`: the last revision the source sent, or empty |
 
 A query has a maximum of 512 UTF-16 code units. Filters have a maximum of 32 scalar fields. Each filter value has a maximum string representation of 256 UTF-16 code units. A suggestion limit must be from 1 through 50. Identity uses the fixed host media identity fields.
 
-The current browser supplies roots, folder navigation, search, and more pages. The coordinator has the separate suggestion API. The current host does not support `subscribe`.
+The current browser supplies roots, folder navigation, search, and more pages. The coordinator has the separate suggestion API.
+
+## Change feed (`subscribe`)
+
+While the user has a root or folder open (not a search), the host checks it
+again. A root, folder or change-feed page can add:
+
+- `revision`: 1 to 256 visible ASCII characters. The host sends it back in
+  the next `subscribe`.
+- `nextCheckSeconds`: when to check again. The host uses 60 to 3600 seconds,
+  and 300 when the page has no value.
+
+A `subscribe` reply is a page of new and changed items, plus `removed`: the
+IDs of items to take away (at most 200). Report no change with `no_match`
+and the same `revision`. New items appear first. An item that is also in
+`removed` stays. A failed check ends the feed for that view; the items shown
+stay. The host stops checking when the view closes or shows another page.
+
+## Keeping the queue filled
+
+When a source declares `suggest` and the queue can take source items, the
+page offers **Keep the queue filled**. The host then asks `suggest` (with
+`limit` only) whenever at most one of its suggestions is still ahead of the
+playing item, at most every 5 seconds, and appends up to five. It never
+removes or reorders entries, and it does not add an item it already added in
+the same session. Each entry records the source name. The user can pause or
+stop it; it also stops when the source or its account changes or after two
+answers with nothing new. Return only items that can play from the queue.
 
 ## Pages
 

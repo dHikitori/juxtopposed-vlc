@@ -2,6 +2,7 @@
 #pragma once
 #include "addon_discovery_coordinator.hpp"
 #include "addon_queue_transactions.hpp"
+#include <QElapsedTimer>
 #include <QPointer>
 #include <QSet>
 
@@ -18,6 +19,8 @@ class AddonDiscoveryService final : public QObject
     Q_PROPERTY(bool available READ available NOTIFY availabilityChanged FINAL)
     Q_PROPERTY(bool loading READ loading NOTIFY availabilityChanged FINAL)
     Q_PROPERTY(QString preparationError READ preparationError NOTIFY availabilityChanged FINAL)
+    // active, paused, busy, source, sourceName, maxPending, pending, added, error.
+    Q_PROPERTY(QVariantMap queueFill READ queueFill NOTIFY queueFillChanged FINAL)
 public:
     struct PlaylistBackend {
         using Choices = std::function<void(bool available, const QVariantList&, bool more, const QString&)>;
@@ -61,6 +64,22 @@ public:
     Q_INVOKABLE QString enqueue(const QString& view, const QStringList& items, const QString& target = QStringLiteral("queue"));
     Q_INVOKABLE QString play(const QString& view, const QString& item);
     Q_INVOKABLE void closeView(const QString& view);
+    // Keep the queue filled from a source's suggestions (one session at a
+    // time, started by the user). The session only appends, keeps at most
+    // maxPending (1 to 10) of its entries ahead of the playing one, marks
+    // each with the source, and never touches other entries. It reacts to
+    // queue changes only; it stops on Stop, a source or account change, a
+    // source with no more suggestions, or app close. Entries stay queued.
+    Q_INVOKABLE bool canFillQueue(const QString& view) const;
+    Q_INVOKABLE bool startQueueFill(const QString& view, int maxPending = 5);
+    Q_INVOKABLE void pauseQueueFill(bool paused);
+    Q_INVOKABLE void stopQueueFill();
+    QVariantMap queueFill() const;
+    // The app calls this when the queue changes.
+    void noteQueueChanged();
+    // C++ only: tests shorten the change-feed interval and the fill spacing.
+    void setTimingForTests(int feedMinimumMs, int feedDefaultMs, int fillSpacingMs)
+    { m_feedMinimumMs = feedMinimumMs; m_feedDefaultMs = feedDefaultMs; m_fillSpacingMs = fillSpacingMs; }
     void invalidate();
     void close();
 public slots:
@@ -72,6 +91,7 @@ signals:
     void viewChanged(const QString& view);
     void viewClosed(const QString& view);
     void actionFinished(const QString& view, bool success, const QString& error);
+    void queueFillChanged();
 private:
     struct View {
         QString source, pending, cursor, query, error;
@@ -85,6 +105,20 @@ private:
         AddonQueueTransactions::Cancel playlistCancel;
         quint64 playlistGeneration = 0;
         bool playlistAvailable = false, playlistBusy = false, morePlaylists = false;
+        // The change feed of the shown folder or root, while the view is open.
+        QString revision, feedRequest;
+        int nextCheckSeconds = 0;
+        quint64 feed = 0;
+    };
+    struct Fill {
+        bool active = false, paused = false, busy = false, wake = false;
+        QString source, sourceName, view, tag, request, transaction, error;
+        QVariantMap sourceIdentity;
+        int maxPending = 5, added = 0, empty = 0, failures = 0;
+        quint64 generation = 0;
+        QSet<QString> seen;
+        QStringList adding;
+        QElapsedTimer last;
     };
     struct Play { QString view, item; AddonQueueTransactions::Snapshot snapshot; };
     static AddonDiscoveryCoordinator::Backend managerBackend(AddonManager*, AddonDiscoveryCoordinator::Backend);
@@ -96,6 +130,11 @@ private:
     bool needsDisplayDemand() const;
     bool viewCurrent(const View&) const;
     void startView(const QString&);
+    void scheduleFeed(const QString& view);
+    void feedFinished(const QString& view, const QString& status, const QVariantMap& data);
+    void evaluateFill();
+    void fillFinished(const QString& status, const QVariantMap& data, const QString& error);
+    void endFill(const QString& error);
     AddonDiscoveryCoordinator m_coordinator;
     AddonQueueTransactions m_transactions;
     QHash<QString, View> m_views;
@@ -113,5 +152,7 @@ private:
     bool m_displayAttached = false, m_acquiringDemand = false, m_demandRefused = false;
     int m_revision = 0;
     bool m_closing = false;
+    Fill m_fill;
+    int m_feedMinimumMs = 60000, m_feedDefaultMs = 300000, m_fillSpacingMs = 5000;
 };
 }

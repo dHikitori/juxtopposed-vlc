@@ -668,6 +668,7 @@ AddonDiscoveryService* createPlayerDiscoveryWithSources(AddonManager* manager,Ad
             if(!guarded.authorityCurrent || !guarded.authorityCurrent()) { done(false,QObject::tr("The source approval changed. Try again.")); return AddonQueueTransactions::Cancel{}; }
             return play(guarded,std::move(done));
         };
+    if(supported) queues.pendingAhead=std::move(native.pendingAhead);
     auto* service=new AddonDiscoveryService(manager,{},std::move(queues),parent);
     service->setSourcePlayback({[owner,supported](const auto& source) { return supported && owner && owner->canUseSource(source); },
         [owner](const auto& reference) { return owner && owner->canUseReference(reference); },
