@@ -215,11 +215,15 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `8bfdd737fd` (clean tree): `vlc.exe`
-`d85c3729a96ef18e69df993d18ec00724a2c7f29fd49a918308368449840a199`,
+Package `05b791e4a2`: `vlc.exe`
+`c32d8a6f38be3aeaf5ff44110fc73f52de13f1fba2d9d8ba9973656bc245eec8`,
 `libqt_plugin.dll`
-`fab0b20c37985f3c732873324dbd775b4f7937691f88ab2d11b98a5596def65c`.
-It replaces the package above. The Episodes panel is now the bundled
+`a05e8c5f1bfbdaa5d14a3211511749ed17455bb49ef71c74d70e38bd115d8cf6`.
+`BUILD-INFO.json` says `dirty` only because two untracked worktree folders
+were under `.claude/`; the source copy takes files only, so the build is
+the committed tree. It replaces the `8bfdd737fd` package (`vlc.exe`
+`d85c3729…`), which did not have the SeriesModel cleanup (`05b791e4a2`),
+and the package above. The Episodes panel is now the bundled
 add-on `org.videolan.episodes` 1.0.0
 ([record](player-panels-design.md)). The checks above apply again; check
 1 now goes through the add-on's menu. New checks:
