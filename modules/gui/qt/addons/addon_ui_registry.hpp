@@ -3,6 +3,7 @@
 #include "addon_manager.hpp"
 #include <QMap>
 #include <QSet>
+#include <QTimer>
 #include <functional>
 
 namespace vlc::addons {
@@ -19,6 +20,12 @@ class AddonUiRegistry : public QObject
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY changed FINAL)
     Q_PROPERTY(QVariantList routes READ routes NOTIFY changed FINAL)
     Q_PROPERTY(QVariantList commands READ commands NOTIFY changed FINAL)
+    // Player panels (player.panels@1): one entry for each enabled panel, with
+    // its checked icon markup and whether it has content for the current media.
+    Q_PROPERTY(QVariantList panels READ panels NOTIFY panelsChanged FINAL)
+    // True when an enabled panel can read the media siblings, so the app
+    // prepares them for the current media. Otherwise the app does no work.
+    Q_PROPERTY(bool siblingsWanted READ siblingsWanted NOTIFY panelsChanged FINAL)
 public:
     struct Backend {
         std::function<QString(const QString&, const QString&, const QVariantMap&)> invoke;
@@ -35,6 +42,16 @@ public:
     QString errorMessage() const { return m_error; }
     QVariantList routes() const;
     QVariantList commands() const;
+    QVariantList panels() const;
+    bool siblingsWanted() const;
+    // The app calls this when the playing media changes. Each panel gets one
+    // context call; a reply for older media is ignored.
+    Q_INVOKABLE void setPanelMedia(const QVariantMap& media);
+    // Host data for open panels changed (titles, watch state, artwork).
+    // Open panels get one more context call, at most once a second.
+    Q_INVOKABLE void refreshPanels();
+    // An open panel's session. The registry sends it the context call now.
+    Q_INVOKABLE bool attachPanelSession(const QString& sessionId);
     Q_INVOKABLE QVariantList sections(const QString& hook) const;
     Q_INVOKABLE QVariantList replacementChoices(const QString& hook) const;
     Q_INVOKABLE QVariantMap replacement(const QString& hook) const;
@@ -78,6 +95,10 @@ signals:
     void modalSessionRequested(const QString& ticket, const QString& contribution, const QVariantMap& parameters);
     void modalFinished(const QString& ticket, bool accepted, const QVariantMap& result);
     void imageBudgetChanged();
+    void panelsChanged();
+    // A command reply that a user click started asked for a host effect:
+    // play, rescan, identify or source. The app checks the data and runs it.
+    void panelEffect(const QString& sessionId, const QString& packageId, const QString& effect, const QVariantMap& value);
 private:
     struct Session {
         QString contribution; QVariantMap descriptor, parameters, context;
@@ -87,8 +108,12 @@ private:
         QString documentTicket;
         bool ready=true,assetsOpened=false;
     };
-    struct Pending { QString command, session, replacement; quint64 generation = 0; };
-    bool dispatch(const QString& command, const QVariantMap& arguments, const QString& session, const QString& replacement);
+    struct Pending { QString command, session, replacement, panel; quint64 generation = 0, panelRevision = 0; bool gesture = false; };
+    bool dispatch(const QString& command, const QVariantMap& arguments, const QString& session, const QString& replacement,
+                  const QVariantMap& extra = {}, const QString& panel = {}, bool gesture = false);
+    void dispatchPanelContext(const QString& panel);
+    void askNewPanels();
+    void panelReply(const Pending&, bool success, const QVariantMap& data);
     QVariantMap projectContext(const QVariantMap& entry, const QVariantMap& context) const;
     void cancelSessionJobs(const QString& session);
     void reload();
@@ -115,6 +140,11 @@ private:
     QHash<QString, Pending> m_runningCommands;
     QHash<QString, Session> m_sessions;
     QHash<QString, QString> m_modals, m_replacementViews;
+    QHash<QString, QString> m_panelSessions; // panel contribution -> open session
+    QHash<QString, bool> m_panelAvailable;
+    QVariantMap m_panelMedia;
+    quint64 m_panelRevision = 0;
+    QTimer* m_panelRefresh = nullptr;
     Backend m_backend;
     quint64 m_generation = 0;
     QString m_error;

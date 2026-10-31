@@ -8,6 +8,7 @@ Item {
     property string contributionId: ""
     property var parameters: ({})
     property var hostContext: ({})
+    property var hostArtwork: ({})
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
@@ -137,6 +138,7 @@ Item {
         messages: root.descriptor.messages || ({})
         registeredCommands: root.descriptor.registeredCommands || []
         assetUrls: root.descriptor.assetUrls || ({})
+        hostArtwork: root.hostArtwork
         registry: root.sessionRegistry; sessionId: root.sessionId
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         onCommandRequested: (command, arguments) => {

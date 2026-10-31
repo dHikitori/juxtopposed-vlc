@@ -2,6 +2,10 @@
 import QtQuick
 
 QtObject {
+    // Enabled player panels from the add-on registry.
+    property var panels: []
+    readonly property var panelEntries: (panels || []).map(panel => ({id: "addon:" + panel.id, label: panel.name, icon: "episodes",
+        iconMarkup: panel.iconMarkup || "", panel: panel.id}))
     readonly property var entries: [
         {id: "spacer", label: qsTr("Spacer"), kind: "spacer", icon: ""},
         {id: "divider", label: qsTr("Divider"), kind: "divider", icon: "divider"},
@@ -30,7 +34,6 @@ QtObject {
         {id: "properties", label: qsTr("Properties"), icon: "info"},
         {id: "replay", label: qsTr("Replay"), icon: "replay"},
         {id: "chapters", label: qsTr("Chapters"), icon: "chapters"},
-        {id: "episodes", label: qsTr("Episodes"), icon: "episodes"},
         {id: "favorite", label: qsTr("Favorite"), icon: "favorite"},
         {id: "bookmark", label: qsTr("Bookmark"), icon: "bookmark"},
         {id: "bookmarks", label: qsTr("Bookmarks"), icon: "bookmarks"},
@@ -54,11 +57,16 @@ QtObject {
         {id: "settings", label: qsTr("Playback Settings"), icon: "playback-settings"},
         {id: "queue", label: qsTr("Queue"), icon: "queue"}
     ]
-    function definition(id) { return entries.find(row => row.id === id.split(":")[0]) }
+    function definition(id) {
+        if (id.startsWith("addon:"))
+            // A layout can name a panel whose package is not installed now.
+            return panelEntries.find(row => row.id === id) || {id: id, label: qsTr("Unavailable add-on panel"), icon: "info", panel: id.slice(6), missing: true}
+        return entries.find(row => row.id === id.split(":")[0])
+    }
     function available(layout) {
         const used = new Set()
         for (const zone of Object.keys(layout.zones))
             for (const id of layout.zones[zone]) used.add(id)
-        return entries.filter(row => row.kind === "spacer" || row.kind === "divider" || !used.has(row.id))
+        return entries.concat(panelEntries).filter(row => row.kind === "spacer" || row.kind === "divider" || !used.has(row.id))
     }
 }

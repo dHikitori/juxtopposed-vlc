@@ -11,6 +11,9 @@ Item {
     property var registeredCommands: []
     // Supplied by the host asset broker, never by a package document/state patch.
     property var assetUrls: ({})
+    // Artwork of app items in the view's state (media:<id> handles). The app
+    // supplies it; a package document or state cannot add an entry.
+    property var hostArtwork: ({})
     property var registry: null
     property string sessionId: ""
     property real scaleFactor: 1
@@ -47,6 +50,10 @@ Item {
         if (typeof handle !== "string" || !Contract.own(assetUrls, handle)) return ""
         const url = String(assetUrls[handle])
         return /^image:\/\/addonassets\/[A-Za-z0-9_-]{1,96}$/.test(url) ? url : ""
+    }
+    function hostArtworkFor(handle) {
+        if (typeof handle !== "string" || !handle.startsWith("media:") || !Contract.own(hostArtwork, handle)) return ""
+        return String(hostArtwork[handle])
     }
     function claimedAssetFor(handle, claim) {
         const base = assetFor(handle)

@@ -159,7 +159,7 @@ ColumnLayout {
         if (typeof backend.setSafeMode !== "function") return
         actionError = backend.setSafeMode(paused) ? "" : backend.errorMessage || qsTr("The app cannot change the extension state.")
     }
-    readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "media.stream", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background"]
+    readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "media.stream", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background", "media.siblings"]
     readonly property bool permissionsKnown: {
         const permissions = pendingPackage.permissions || {}
         if (!Object.keys(permissions).every(name => knownPermissions.includes(name))) return false
@@ -182,7 +182,7 @@ ColumnLayout {
         const playbackActions = {play: qsTr("play"), pause: qsTr("pause"), stop: qsTr("stop"), seek: qsTr("seek"), rate: qsTr("change speed"), setRate: qsTr("change speed"), setPosition: qsTr("seek")}
         const hooks = {"home.sections@1": qsTr("Home sections"), "home.content@1": qsTr("Home content"), "library.navigation@1": qsTr("Library navigation"),
             "media.details.sections@1": qsTr("Media details"), "subtitles.results.sections@1": qsTr("Subtitle search results"), "subtitles.search.content@1": qsTr("Subtitle search"),
-            "queue.item.actions@1": qsTr("Queue actions"), "player.actions@1": qsTr("Player controls"), "dialog.add-to-playlist.content@1": qsTr("Add-to-playlist picker"),
+            "queue.item.actions@1": qsTr("Queue actions"), "player.actions@1": qsTr("Player controls"), "player.panels@1": qsTr("Player panels and their buttons"), "dialog.add-to-playlist.content@1": qsTr("Add-to-playlist picker"),
             "settings.addons.sections@1": qsTr("Add-on settings"), "actions.subtitles.open@1": qsTr("Open subtitle search"), "visualizer.surface@1": qsTr("Visualizer")}
         for (const name of Object.keys(permissions || {}).sort()) {
             const scope = permissions[name] || {}
@@ -223,6 +223,7 @@ ColumnLayout {
                 break
             }
             case "session.background": summaries.push(qsTr("Continue an approved session while its screen is closed.")); break
+            case "media.siblings": summaries.push(qsTr("Read the other episodes in the folder or podcast feed of the playing media, without their file locations. Play one when you select it.")); break
             default: summaries.push(qsTr("The app cannot use a requested permission. You cannot install this package.")); break
             }
         }

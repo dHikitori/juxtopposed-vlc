@@ -60,6 +60,38 @@ QVariant SeriesModel::data(const QModelIndex& index, int role) const
     default: return {};
     }
 }
+QList<SeriesModel::Sibling> SeriesModel::siblings() const
+{
+    QList<Sibling> result;
+    for (const auto& row : m_rows) {
+        const bool current = isCurrent(row);
+        for (int version = 0; version < row.episode.urls.size(); ++version) {
+            const auto& url = row.episode.urls[version];
+            const auto state = m_states.value(url);
+            Sibling item;
+            item.url = url; item.feedIndex = row.feedIndex; item.version = version;
+            item.identity = row.episode.identity;
+            item.title = !row.title.isEmpty() ? row.title : state.title;
+            item.titleSource = row.title.isEmpty() ? state.titleSource : QUrl();
+            item.description = row.description;
+            item.artwork = state.artwork.isEmpty() ? row.thumbnail : state.artwork;
+            item.published = row.published;
+            item.progress = state.progress; item.played = state.played; item.video = row.videoEpisode;
+            item.current = row.feedIndex >= 0 ? current && (url == m_current || (version == 0 && !row.episode.urls.contains(m_current)))
+                                              : url == m_current;
+            result.append(item);
+        }
+    }
+    return result;
+}
+void SeriesModel::requestArtwork(const QUrl& url)
+{
+    for (const auto& row : m_rows)
+        if (row.feedIndex < 0 && row.episode.urls.contains(url)) {
+            if (m_requestedArtwork.contains(url)) return;
+            m_requestedArtwork.insert(url); emit artworkRequested(url); return;
+        }
+}
 QVariantMap SeriesModel::get(int row) const
 {
     QVariantMap result;
@@ -99,7 +131,7 @@ void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
     }
     project(true);
     if (!same) emit resetRequested();
-    emit contextChanged(); emit statusChanged(); emit selectedSeasonChanged();
+    emit contextChanged(); emit statusChanged(); emit selectedSeasonChanged(); emit siblingsChanged();
     if (!retained && available() && target.feedUrl.isEmpty()) scan();
 }
 
@@ -165,7 +197,7 @@ void SeriesModel::publish(const SeriesDiscovery::Result& result, bool complete)
             : result.error.isEmpty() ? QString() : tr("This folder could not be read. Choose the series folder to try again.");
         m_watcher.setPaths(result.directories);
     }
-    project(true); if (complete) loadStates(); emit statusChanged();
+    project(true); if (complete) loadStates(); emit statusChanged(); emit siblingsChanged();
 }
 
 void SeriesModel::setFeedEpisodes(const QUrl& source, const QVariantList& episodes)
@@ -205,13 +237,15 @@ void SeriesModel::setFeedEpisodes(const QUrl& source, const QVariantList& episod
         if (!x.episodes.isEmpty() && !y.episodes.isEmpty() && x.episodes != y.episodes) return x.episodes.first() < y.episodes.first();
         return a.published < b.published;
     });
-    project(true);
+    project(true); emit siblingsChanged();
 }
 void SeriesModel::setFeedStatus(bool loading, bool failed)
 {
     if (feed().isEmpty()) return;
-    m_loading = loading; m_message = failed ? tr("The podcast feed could not be loaded. Try refreshing it.") : QString();
-    emit statusChanged();
+    const auto message = failed ? tr("The podcast feed could not be loaded. Try refreshing it.") : QString();
+    if (m_loading == loading && m_message == message) return;
+    m_loading = loading; m_message = message;
+    emit statusChanged(); emit siblingsChanged();
 }
 void SeriesModel::setSelectedSeason(int season)
 {
@@ -263,16 +297,17 @@ void SeriesModel::setProgress(const QUrl& url, qreal progress)
         for (const auto& row : m_rows) if (isCurrent(row)) { key = row.episode.urls.first(); break; }
     if (m_states.value(key).progress == bounded) return;
     m_states[key].progress = bounded; update(key, Progress);
+    if (url != m_current) emit siblingsChanged();
 }
 void SeriesModel::setPlayed(const QUrl& url, bool played)
 {
     if (!m_requestedStates.contains(url) || m_states.value(url).played == played) return;
-    m_states[url].played = played; update(url, Played);
+    m_states[url].played = played; update(url, Played); emit siblingsChanged();
 }
 void SeriesModel::setArtwork(const QUrl& url, const QString& artwork)
 {
     if (!m_requestedArtwork.contains(url)) return;
-    m_states[url].artwork = artwork; update(url, Thumbnail);
+    m_states[url].artwork = artwork; update(url, Thumbnail); emit siblingsChanged();
 }
 void SeriesModel::requestDetails(int row)
 {
@@ -291,5 +326,5 @@ void SeriesModel::setEpisodeTitle(const QUrl& url, const QString& title, const Q
     if (cleaned.isEmpty()) return;
     m_states[url].title = cleaned;
     m_states[url].titleSource = source;
-    update(url, Title); update(url, TitleSource);
+    update(url, Title); update(url, TitleSource); emit siblingsChanged();
 }

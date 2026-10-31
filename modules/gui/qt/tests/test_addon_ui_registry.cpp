@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include "addons/addon_ui_registry.hpp"
+#include "addons/addon_panel_icon.hpp"
 #include "addons/addon_catalogue_view.hpp"
 #include "addons/addon_stream_lifetime.hpp"
 #include <memory>
@@ -68,6 +69,27 @@ class TestAddonUiRegistry : public QObject
             contributions.append(QJsonObject{{"id", pair.first}, {"type", "ui.replacement"}, {"contract", "ui@1"}, {"hook", pair.second},
                 {"view", "view.json"}, {"parameters", parameters}, {"resultSchema", result}});
         manifest.insert("contributions", contributions); write(path + QStringLiteral("/addon.json"), QJsonDocument(manifest).toJson());
+    }
+    static void panelPackage(const QString& path, const QByteArray& icon) {
+        const QJsonObject view{{"contract", "ui@1"}, {"id", "panel"},
+            {"root", QJsonObject{{"type", "Page"}, {"children", QJsonArray{QJsonObject{{"type", "Text"}, {"text", QJsonObject{{"bind", "state.status"}}}}}}}}};
+        const QJsonObject state{{"type", "object"}, {"additionalProperties", false}, {"properties", QJsonObject{{"status", QJsonObject{{"type", "string"}}}}}};
+        const QJsonArray contributions{
+            QJsonObject{{"id", "episodes"}, {"type", "ui.panel"}, {"contract", "ui@1"}, {"hook", "player.panels@1"}, {"name", "Episodes"},
+                {"label", "Show the episodes"}, {"icon", "icon.svg"}, {"view", "view.json"}, {"command", "context"},
+                {"placement", "footerRight"}, {"stateSchema", state}, {"state", QJsonObject{{"status", "loading"}}}},
+            QJsonObject{{"id", "context"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"label", "Context"}, {"command", "context"}},
+            QJsonObject{{"id", "play"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"label", "Play"}, {"command", "play"}}};
+        const QJsonObject manifest{{"formatVersion", 1}, {"id", "org.example.panel"}, {"name", "Example panel"}, {"version", "1.0.0"},
+            {"publisher", "Tests"}, {"license", "GPL-2.0-or-later"}, {"source", "https://example.org/panel.git"},
+            {"api", QJsonObject{{"addon", "^1.0.0"}, {"contracts", QJsonObject{{"ui", "^1.0.0"}}}}},
+            {"files", QJsonArray{"addon.json", "LICENSE", "view.json", "icon.svg"}}, {"contributions", contributions},
+            {"permissions", QJsonObject{{"required", QJsonObject{{"ui.contribute", QJsonObject{{"hooks", QJsonArray{"player.panels@1"}}}},
+                {"media.siblings", QJsonObject{{"sources", QJsonArray{"folder", "feed"}}}}}}, {"optional", QJsonObject{}}}}};
+        write(path + QStringLiteral("/addon.json"), QJsonDocument(manifest).toJson());
+        write(path + QStringLiteral("/LICENSE"), "Test fixture\n");
+        write(path + QStringLiteral("/view.json"), QJsonDocument(view).toJson());
+        write(path + QStringLiteral("/icon.svg"), icon);
     }
 private slots:
     void init() {
@@ -251,6 +273,121 @@ private slots:
         QVERIFY(!AddonUiRegistry::validViewDocument({{"contract", "ui@1"}, {"root", QJsonObject{{"type", "Loader"}}}}));
         QVERIFY(!AddonUiRegistry::validViewDocument({{"contract", "ui@1"}, {"root", QJsonObject{{"type", "Image"}, {"source", "https://example.org/x.svg"}}}}));
         QVERIFY(!AddonUiRegistry::validViewDocument({{"contract", "ui@1"}, {"root", QJsonObject{{"type", "Text"}, {"__proto__", QJsonObject{}}}}}));
+    }
+    void panelIconsAreSingleColorShapesOnly() {
+        const auto markup = panelIcon::markup("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#123456\" stroke-width=\"1.5\">\n            <!-- a comment --><rect x=\"3\" y=\"4\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M8 20h8\" fill=\"red\"/></svg>");
+        QVERIFY(markup.contains(QStringLiteral("stroke=\"COLOR\"")));
+        QVERIFY(markup.contains(QStringLiteral("fill=\"COLOR\"")) && markup.contains(QStringLiteral("fill=\"none\"")));
+        QVERIFY(!markup.contains(QStringLiteral("123456")) && !markup.contains(QStringLiteral("red")) && !markup.contains(QStringLiteral("comment")));
+        for (const QByteArray bad : {
+                 QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><script>alert(1)</script><path d=\"M1 1\"/></svg>"),
+                 QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><image href=\"https://example.org/a.png\"/></svg>"),
+                 QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M1 1\" onclick=\"x()\"/></svg>"),
+                 QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M1 1\" style=\"fill:url(#a)\"/></svg>"),
+                 QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\"><path d=\"M1 1\"/></svg>"),
+                 QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><text>A</text></svg>"),
+                 QByteArray("<!DOCTYPE svg [<!ENTITY a \"b\">]><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"&a;\"/></svg>"),
+                 QByteArray("<svg viewBox=\"0 0 24 24\"><path d=\"M1 1\"/></svg>"),
+                 QByteArray(16 * 1024 + 1, ' ')})
+            QVERIFY2(panelIcon::markup(bad).isEmpty(), bad.constData());
+    }
+    void panelsAskForContextAndTakeEffectsOnlyFromClicks() {
+        QTemporaryDir source, storage;
+        panelPackage(source.path(), "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 6h16M4 12h16\" stroke=\"#000\" stroke-width=\"1.5\"/></svg>");
+        AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled("org.example.panel", true));
+        QStringList requests, operations, canceled; QList<QVariantMap> contexts;
+        AddonUiRegistry registry(&manager, {
+            [&](const QString&, const QString& operation, const QVariantMap& context) {
+                requests.append(QString::number(requests.size() + 1)); operations.append(operation); contexts.append(context); return requests.last(); },
+            [&](const QString& id) { canceled.append(id); }});
+        const auto panels = registry.panels();
+        QCOMPARE(panels.size(), 1);
+        const auto panel = panels.first().toMap();
+        QCOMPARE(panel.value("id").toString(), QStringLiteral("org.example.panel/episodes"));
+        QCOMPARE(panel.value("placement").toString(), QStringLiteral("footerRight"));
+        QVERIFY(panel.value("iconMarkup").toString().contains(QStringLiteral("COLOR")));
+        QVERIFY(!panel.value("available").toBool());
+        QVERIFY(registry.siblingsWanted());
+        QVERIFY(requests.isEmpty()); // no media yet: no package work
+
+        QSignalSpy changed(&registry, &AddonUiRegistry::panelsChanged);
+        registry.setPanelMedia({{"kind", "video"}, {"durationMs", 1200000}, {"url", "file:///private/show.mkv"}, {"title", "Private"}});
+        QCOMPARE(requests.size(), 1); QCOMPARE(operations.last(), QStringLiteral("context"));
+        const auto media = contexts.last().value("media").toMap();
+        QCOMPARE(media.value("kind").toString(), QStringLiteral("video"));
+        QCOMPARE(media.value("durationMs").toDouble(), 1200000.0);
+        QVERIFY(!media.contains("url") && !media.contains("title"));
+        QCOMPARE(contexts.last().value("panel").toString(), QStringLiteral("episodes"));
+
+        // A newer media change cancels the old call, and its late reply is ignored.
+        const auto old = requests.last();
+        registry.setPanelMedia({{"kind", "video"}});
+        QVERIFY(canceled.contains(old)); QCOMPARE(requests.size(), 2);
+        registry.operationFinished(old, "org.example.panel/context", "match", {{"available", true}}, {});
+        QVERIFY(!registry.panels().first().toMap().value("available").toBool());
+        registry.operationFinished(requests.last(), "org.example.panel/context", "match", {{"available", true}}, {});
+        QVERIFY(registry.panels().first().toMap().value("available").toBool());
+        QVERIFY(changed.size() >= 1);
+
+        // An effect in a reply to the app's own context call is ignored.
+        QSignalSpy effects(&registry, &AddonUiRegistry::panelEffect);
+        const auto session = registry.createSession("org.example.panel/episodes");
+        QVERIFY(!session.isEmpty());
+        QVERIFY(registry.attachPanelSession(session));
+        QCOMPARE(requests.size(), 3); QCOMPARE(operations.last(), QStringLiteral("context"));
+        QCOMPARE(contexts.last().value("state").toMap().value("status").toString(), QStringLiteral("loading"));
+        registry.operationFinished(requests.last(), "org.example.panel/context", "match",
+            {{"available", true}, {"patch", QVariantMap{{"status", "Ready"}}}, {"effect", QVariantMap{{"play", QVariantMap{{"id", "file:1"}}}}}}, {});
+        QCOMPARE(registry.session(session).value("state").toMap().value("status").toString(), QStringLiteral("Ready"));
+        QCOMPARE(effects.size(), 0);
+
+        // A click in the view can ask for one known effect.
+        QVERIFY(registry.dispatchSession(session, "org.example.panel/play", {}));
+        registry.operationFinished(requests.last(), "org.example.panel/play", "match",
+            {{"effect", QVariantMap{{"play", QVariantMap{{"id", "file:1"}, {"fromStart", true}}}}}}, {});
+        QCOMPARE(effects.size(), 1);
+        QCOMPARE(effects.last()[1].toString(), QStringLiteral("org.example.panel"));
+        QCOMPARE(effects.last()[2].toString(), QStringLiteral("play"));
+        QCOMPARE(effects.last()[3].toMap().value("id").toString(), QStringLiteral("file:1"));
+        QVERIFY(registry.dispatchSession(session, "org.example.panel/play", {}));
+        registry.operationFinished(requests.last(), "org.example.panel/play", "match", {{"effect", QVariantMap{{"delete", QVariantMap{}}}}}, {});
+        QCOMPARE(effects.size(), 1);
+
+        // Host data changes reach an open panel at most once a second.
+        const int before = requests.size();
+        registry.refreshPanels(); registry.refreshPanels(); registry.refreshPanels();
+        QCOMPARE(requests.size(), before);
+        QTRY_COMPARE_WITH_TIMEOUT(requests.size(), before + 1, 3000);
+        QTest::qWait(1200); QCOMPARE(requests.size(), before + 1);
+        registry.closeSession(session);
+        registry.refreshPanels(); QTest::qWait(1200); QCOMPARE(requests.size(), before + 1);
+
+        // A failed view keeps the panel and its button.
+        registry.reportViewFailure("org.example.panel/episodes");
+        QCOMPARE(registry.panels().size(), 1);
+        QVERIFY(manager.setEnabled("org.example.panel", false));
+        QVERIFY(registry.panels().isEmpty()); QVERIFY(!registry.siblingsWanted());
+    }
+    void panelDeclarationsAreChecked() {
+        QTemporaryDir source; panelPackage(source.path(), "<svg/>");
+        QFile file(source.path() + QStringLiteral("/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto manifest = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        const auto mutate = [&](auto change) {
+            auto copy = manifest; auto contributions = copy.value("contributions").toArray();
+            auto panel = contributions.first().toObject(); change(panel, contributions); contributions.replace(0, panel);
+            copy.insert("contributions", contributions); Manifest parsed; QString error;
+            return Manifest::parse(QJsonDocument(copy).toJson(), &parsed, &error);
+        };
+        QVERIFY(mutate([](QJsonObject&, QJsonArray&) {}));
+        QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.insert("command", "missing"); }));
+        QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.insert("command", "episodes"); }));
+        QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.insert("hook", "home.sections@1"); }));
+        QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.insert("placement", "headerCenter"); }));
+        QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.insert("icon", "view.json"); }));
+        QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.remove("stateSchema"); panel.remove("state"); }));
+        QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.insert("label", ""); }));
+        QVERIFY(!mutate([](QJsonObject&, QJsonArray& list) { auto command = list[1].toObject(); command.insert("placement", "above"); list.replace(1, command); }));
     }
     void explicitReplacementAndSafeRouteCommand() {
         QTemporaryDir source, storage; package(source.path()); AddonManager manager(storage.path());

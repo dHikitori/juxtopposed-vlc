@@ -61,7 +61,26 @@ public:
     Q_INVOKABLE void setEpisodeTitle(const QUrl& url, const QString& title, const QUrl& source = {});
     Q_INVOKABLE void loadStates();
     Q_INVOKABLE QVariantMap get(int row) const;
+    // Every known file or feed entry of the series, one item for each
+    // version, in episode order: the source of the media.siblings
+    // projection for add-on panels. Memory only.
+    struct Sibling {
+        QUrl url;
+        int feedIndex = -1, version = 0;
+        SeriesDiscovery::Identity identity;
+        QString title, description, artwork;
+        QUrl titleSource;
+        QDateTime published;
+        qreal progress = 0;
+        bool played = false, current = false, video = true;
+    };
+    QList<Sibling> siblings() const;
+    // Artwork for one file, as an expanded row asks for it.
+    Q_INVOKABLE void requestArtwork(const QUrl& url);
 signals:
+    // A sibling, its state or the scan status changed. Not for the progress
+    // of the playing media, which changes all the time.
+    void siblingsChanged();
     void contextChanged();
     void statusChanged();
     void seasonsChanged();

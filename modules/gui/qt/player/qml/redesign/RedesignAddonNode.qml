@@ -28,6 +28,9 @@ Item {
             case "MediaCard": return cardComponent
             case "List": return listComponent
             case "Progress": return progressComponent
+            case "Tabs": return tabsComponent
+            case "Menu": return menuComponent
+            case "MediaRow": return mediaRowComponent
             default: return null
             }
         }
@@ -145,10 +148,15 @@ Item {
         id: listComponent
         Column {
             property var entries: root.renderer.resolve(root.node.items, root.itemContext) || []
+            // A list with "scroll": false shows every row; the frame around it
+            // scrolls. The add-on pages long lists with "more".
+            readonly property bool scrolls: root.node.scroll !== false
+            spacing: root.theme.dp(4)
             ListView {
                 id: list
                 objectName: "addonList_" + (root.node.id || "items")
-                width: parent.width; height: Math.min(contentHeight, root.theme.dp(360))
+                width: parent.width; height: parent.scrolls ? Math.min(contentHeight, root.theme.dp(360)) : contentHeight
+                interactive: parent.scrolls
                 visible: parent.entries.length > 0
                 model: parent.entries
                 clip: true; boundsBehavior: Flickable.StopAtBounds; keyNavigationEnabled: true
@@ -164,6 +172,147 @@ Item {
                 width: parent.width; visible: !parent.entries.length
                 text: root.node.emptyText ? root.text(root.node.emptyText) : qsTr("No items to display.")
                 textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
+            }
+            RedesignButton {
+                objectName: "addonListMore_" + (root.node.id || "items")
+                width: parent.width
+                visible: !!root.node.moreAction && root.renderer.resolve(root.node.more, root.itemContext) === true
+                caption: root.node.moreText ? root.text(root.node.moreText) : qsTr("Show more"); text: caption
+                scaleFactor: root.renderer.scaleFactor; lightTheme: root.renderer.lightTheme; accentColor: root.renderer.accentColor
+                onClicked: root.renderer.dispatch(root.node.moreAction, root.itemContext)
+            }
+        }
+    }
+    Component {
+        id: tabsComponent
+        Item {
+            id: tabs
+            readonly property var entries: root.renderer.resolve(root.node.items, root.itemContext) || []
+            readonly property var chosen: root.renderer.resolve(root.node.selected, root.itemContext)
+            // Few short choices are buttons; more become a combo box.
+            readonly property bool compact: entries.length > 4
+            function choose(entry) { root.renderer.dispatch(root.node.action, Object.assign({}, root.itemContext || {}, {tab: entry})) }
+            implicitHeight: compact ? combo.implicitHeight : buttons.implicitHeight
+            Accessible.role: Accessible.PageTabList; Accessible.name: root.text(root.node.text)
+            Flow {
+                id: buttons
+                width: parent.width; spacing: root.theme.dp(6)
+                visible: !tabs.compact
+                Repeater {
+                    model: tabs.compact ? [] : tabs.entries
+                    RedesignButton {
+                        required property var modelData
+                        objectName: "addonTab_" + modelData.key
+                        caption: modelData.label; text: caption; captionTextFormat: Text.PlainText; tooltipTextFormat: Text.PlainText
+                        selected: modelData.key === tabs.chosen
+                        scaleFactor: root.renderer.scaleFactor; lightTheme: root.renderer.lightTheme; accentColor: root.renderer.accentColor
+                        Accessible.role: Accessible.PageTab
+                        onClicked: if (!selected) tabs.choose(modelData)
+                    }
+                }
+            }
+            RedesignComboBox {
+                id: combo
+                objectName: "addonTabs_" + (root.node.id || "choice")
+                width: parent.width; visible: tabs.compact
+                scaleFactor: root.renderer.scaleFactor; lightTheme: root.renderer.lightTheme; accentColor: root.renderer.accentColor
+                model: tabs.compact ? tabs.entries.map(entry => entry.label) : []
+                labelTextFormat: Text.PlainText
+                currentIndex: tabs.entries.findIndex(entry => entry.key === tabs.chosen)
+                onActivated: index => { if (tabs.entries[index] && tabs.entries[index].key !== tabs.chosen) tabs.choose(tabs.entries[index]) }
+                Accessible.name: root.text(root.node.text)
+            }
+        }
+    }
+    Component {
+        id: menuComponent
+        Item {
+            readonly property var actionsMenu: actions
+            implicitHeight: menuButton.implicitHeight
+            readonly property var shown: root.node.entries.map((entry, index) => ({entry: entry, index: index}))
+                .filter(row => row.entry.visible === undefined || root.renderer.resolve(row.entry.visible, root.itemContext) === true)
+            RedesignButton {
+                id: menuButton
+                objectName: "addonMenu_" + (root.node.id || "actions")
+                iconName: root.node.icon || "more"; text: root.text(root.node.text); tooltipTextFormat: Text.PlainText
+                scaleFactor: root.renderer.scaleFactor; lightTheme: root.renderer.lightTheme; accentColor: root.renderer.accentColor
+                enabled: parent.shown.length > 0
+                onClicked: actions.toggleFrom(this)
+            }
+            RedesignActionMenu {
+                id: actions
+                objectName: "addonMenuActions_" + (root.node.id || "actions")
+                scaleFactor: root.renderer.scaleFactor; lightTheme: root.renderer.lightTheme; accentColor: root.renderer.accentColor
+                entries: parent.shown.map(row => ({action: String(row.index), label: root.text(row.entry.text), icon: row.entry.icon || ""}))
+                onActionRequested: action => {
+                    const entry = root.node.entries[Number(action)]
+                    if (entry) root.renderer.dispatch(entry.action, root.itemContext)
+                }
+            }
+        }
+    }
+    Component {
+        id: mediaRowComponent
+        Column {
+            id: mediaRow
+            readonly property bool expanded: root.renderer.resolve(root.node.expanded, root.itemContext) === true
+            readonly property real progress: Math.max(0, Math.min(1, Number(root.renderer.resolve(root.node.progress, root.itemContext) || 0)))
+            readonly property string mark: root.text(root.node.mark)
+            spacing: 0
+            RedesignButton {
+                objectName: "addonMediaRow_" + (root.itemContext && root.itemContext.key !== undefined ? root.itemContext.key : root.node.id || "row")
+                width: parent.width; height: Math.max(root.theme.dp(56), labels.implicitHeight + root.theme.dp(16))
+                cornerRadius: 0
+                text: root.text(root.node.title) + (mediaRow.mark ? ", " + mediaRow.mark : ""); tooltipTextFormat: Text.PlainText
+                selected: mediaRow.expanded
+                scaleFactor: root.renderer.scaleFactor; lightTheme: root.renderer.lightTheme; accentColor: root.renderer.accentColor
+                onClicked: if (root.node.primaryAction) root.renderer.dispatch(root.node.primaryAction, root.itemContext)
+                contentItem: RowLayout {
+                    spacing: root.theme.dp(10)
+                    Text {
+                        Layout.leftMargin: root.theme.dp(12)
+                        visible: text.length > 0
+                        text: root.text(root.node.number); textFormat: Text.PlainText
+                        color: root.theme.accent; font.pixelSize: root.theme.dp(14)
+                    }
+                    ColumnLayout {
+                        id: labels
+                        Layout.fillWidth: true; spacing: root.theme.dp(3)
+                        Text { Layout.fillWidth: true; text: root.text(root.node.title); textFormat: Text.PlainText; elide: Text.ElideRight; color: root.theme.foreground; font.pixelSize: root.theme.dp(14) }
+                        Text { Layout.fillWidth: true; visible: text.length > 0; text: root.text(root.node.subtitle); textFormat: Text.PlainText; elide: Text.ElideRight; color: root.theme.playerLabel; font.pixelSize: root.theme.dp(11) }
+                        Text { Layout.fillWidth: true; visible: text.length > 0; text: mediaRow.mark; textFormat: Text.PlainText; elide: Text.ElideRight; color: root.theme.accent; font.pixelSize: root.theme.dp(11) }
+                    }
+                    RedesignIcon {
+                        Layout.rightMargin: root.theme.dp(12); Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20)
+                        visible: (root.node.children || []).length > 0
+                        name: mediaRow.expanded ? "chevron-up" : "chevron-down"; color: root.theme.playerLabel
+                    }
+                }
+            }
+            Item {
+                width: parent.width; height: root.theme.dp(2)
+                visible: mediaRow.progress > 0
+                Rectangle { x: root.theme.dp(12); width: (parent.width - root.theme.dp(24)) * mediaRow.progress; height: parent.height; color: root.theme.accent }
+            }
+            Column {
+                width: parent.width - root.theme.dp(24); x: root.theme.dp(12)
+                topPadding: root.theme.dp(10); bottomPadding: root.theme.dp(12)
+                visible: mediaRow.expanded
+                spacing: root.theme.dp(10)
+                RedesignAddonAssetImage {
+                    width: parent.width; height: Math.min(width * 9 / 16, root.theme.dp(155))
+                    visible: mediaRow.expanded && root.text(root.node.artwork).length > 0
+                    renderer: root.renderer; artworkHandle: mediaRow.expanded ? root.text(root.node.artwork) : ""; iconName: "video"
+                    fillMode: Image.PreserveAspectFit
+                }
+                Repeater {
+                    model: mediaRow.expanded ? root.node.children || [] : []
+                    RedesignAddonChild {
+                        required property var modelData
+                        width: parent.width; height: implicitHeight
+                        node: modelData; renderer: root.renderer; itemContext: root.itemContext
+                    }
+                }
             }
         }
     }

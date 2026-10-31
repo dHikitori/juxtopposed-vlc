@@ -10,6 +10,7 @@ T.Button {
     property bool lightTheme: false
     property string iconName
     property string selectedIconName: iconName
+    property string iconMarkup: ""
     property int tooltipTextFormat: Text.AutoText
     property bool tooltipEnabled: true
     property string caption
@@ -83,10 +84,11 @@ T.Button {
         x: root.leftAligned ? theme.dp(root.contentLeftMargin) : (parent.width - width) / 2
         RedesignIcon {
             objectName: "redesignButtonIcon"
-            width: root.iconName ? root.iconSize : 0
+            width: root.iconName || root.iconMarkup ? root.iconSize : 0
             height: root.iconSize
             anchors.verticalCenter: parent.verticalCenter
             name: root.selected ? root.selectedIconName : root.iconName
+            markup: root.iconMarkup
             sidebarReveal: root.iconReveal
             color: root.iconName === "cone" ? theme.accent : root.accent ? theme.onAccent : root.selected ? root.selectedIconForeground : root.hovered || root.visualFocus ? theme.bright : root.iconForeground
             detailColor: root.iconDetailColor === undefined ? color : root.iconDetailColor

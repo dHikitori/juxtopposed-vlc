@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QUuid>
 #include <algorithm>
+#include <cmath>
 
 namespace vlc::addons {
 namespace {
@@ -26,10 +27,18 @@ const QMap<QString, QStringList>& hooks()
         {QStringLiteral("player.actions@1"), {QStringLiteral("ui.command")}},
         {QStringLiteral("dialog.add-to-playlist.content@1"), {QStringLiteral("ui.replacement")}},
         {QStringLiteral("settings.addons.sections@1"), {QStringLiteral("ui.section")}},
-        {QStringLiteral("actions.subtitles.open@1"), {QStringLiteral("ui.replacement")}}
+        {QStringLiteral("actions.subtitles.open@1"), {QStringLiteral("ui.replacement")}},
+        {QStringLiteral("player.panels@1"), {QStringLiteral("ui.panel")}}
     };
     return value;
 }
+const QStringList& uiTypes()
+{
+    static const QStringList value{QStringLiteral("ui.command"), QStringLiteral("ui.route"), QStringLiteral("ui.modal"),
+        QStringLiteral("ui.section"), QStringLiteral("ui.replacement"), QStringLiteral("ui.panel")};
+    return value;
+}
+QString type(const QVariantMap& entry) { return entry.value(QStringLiteral("document")).toMap().value(QStringLiteral("type")).toString(); }
 QString routeName(const QVariantMap& entry)
 { return QStringLiteral("addon/") + entry.value("packageId").toString() + '/' + entry.value("id").toString().section('/', 1); }
 bool boundedData(const QJsonValue& value, int depth, qsizetype& nodes)
@@ -75,6 +84,9 @@ AddonUiRegistry::AddonUiRegistry(AddonManager* manager, Backend backend, QObject
         connect(manager,&AddonManager::retiring,this,[this]{m_ownerRetired=true;const QPointer<AddonUiRegistry> alive(this);retireSessions();if(alive)emit availabilityChanged();});
         connect(manager,&QObject::destroyed,this,[this]{m_ownerRetired=true;const QPointer<AddonUiRegistry> alive(this);retireSessions();if(alive)emit availabilityChanged();});
     }
+    m_panelRefresh=new QTimer(this);m_panelRefresh->setSingleShot(true);m_panelRefresh->setInterval(1000);
+    connect(m_panelRefresh,&QTimer::timeout,this,[this]{for(const auto& panel:m_panelSessions.keys())dispatchPanelContext(panel);});
+    connect(this,&AddonUiRegistry::changed,this,&AddonUiRegistry::panelsChanged);
     reload();
 }
 AddonUiRegistry::~AddonUiRegistry()
@@ -128,7 +140,7 @@ void AddonUiRegistry::reloadAttached()
 {
     if(m_destroying || !m_catalogue || !m_catalogue->isCurrent())return;
     QMap<QString,QVariantMap> entries;
-    for(const auto& type:{QStringLiteral("ui.command"),QStringLiteral("ui.route"),QStringLiteral("ui.modal"),QStringLiteral("ui.section"),QStringLiteral("ui.replacement")})
+    for(const auto& type:uiTypes())
         for(const auto& value:m_catalogue->contributions(type)) {
             const auto entry=value.toMap(),document=entry.value(QStringLiteral("document")).toMap();const auto hook=document.value(QStringLiteral("hook")).toString();
             if(!hook.isEmpty()&&(!hooks().contains(hook)||!hooks().value(hook).contains(type)))continue;
@@ -149,7 +161,8 @@ void AddonUiRegistry::reloadAttached()
     for(auto it=m_failed.begin();it!=m_failed.end();)if(entries.value(*it)!=m_entries.value(*it))it=m_failed.erase(it);else ++it;
     m_entries=std::move(entries);m_selected=selected;m_reloading=false;
     if(changed){++m_revision;emit this->changed();if(!alive)return;}
-    emit availabilityChanged();if(!alive)return;viewDocumentsChanged();
+    emit availabilityChanged();if(!alive)return;viewDocumentsChanged();if(!alive)return;
+    askNewPanels();
 }
 void AddonUiRegistry::viewDocumentsChanged()
 {
@@ -191,7 +204,7 @@ void AddonUiRegistry::reload()
     if(m_attached){reloadAttached();return;}
     const QPointer<AddonUiRegistry> alive(this);retireSessions();if(!alive)return;
     m_entries.clear(); m_failed.clear();
-    if (m_manager) for (const auto& type : {QStringLiteral("ui.command"), QStringLiteral("ui.route"), QStringLiteral("ui.modal"), QStringLiteral("ui.section"), QStringLiteral("ui.replacement")}) {
+    if (m_manager) for (const auto& type : uiTypes()) {
         for (const auto& value : m_manager->contributionsOfType(type)) {
             const auto entry = value.toMap(); const auto document = entry.value("document").toMap();
             const auto hook = document.value("hook").toString();
@@ -200,7 +213,19 @@ void AddonUiRegistry::reload()
             m_entries.insert(entry.value("id").toString(), entry);
         }
     }
-    ++m_revision; emit changed();
+    ++m_revision; const QPointer<AddonUiRegistry> guard(this); emit changed(); if (!guard) return;
+    askNewPanels();
+}
+void AddonUiRegistry::askNewPanels()
+{
+    // A panel that appears while media plays gets its context call now.
+    const QPointer<AddonUiRegistry> alive(this);
+    for (const auto& entry : m_entries) {
+        const auto id = entry.value("id").toString();
+        if (type(entry) != QLatin1String("ui.panel") || m_panelAvailable.contains(id)) continue;
+        if (std::any_of(m_runningCommands.cbegin(), m_runningCommands.cend(), [&](const Pending& pending) { return pending.panel == id; })) continue;
+        dispatchPanelContext(id); if (!alive) return;
+    }
 }
 bool AddonUiRegistry::permitted(const QVariantMap& entry, const QString& hook) const
 {
@@ -280,7 +305,8 @@ bool AddonUiRegistry::validViewDocument(const QJsonObject& document)
     if (!boundedData(document, 0, nodes) || document.value("contract").toString() != QLatin1String("ui@1") || !document.value("root").isObject()) return false;
     static const QSet<QString> types{QStringLiteral("Page"), QStringLiteral("Section"), QStringLiteral("Column"), QStringLiteral("Row"),
         QStringLiteral("Heading"), QStringLiteral("Text"), QStringLiteral("Notice"), QStringLiteral("EmptyState"), QStringLiteral("Button"),
-        QStringLiteral("IconButton"), QStringLiteral("Image"), QStringLiteral("MediaCard"), QStringLiteral("List"), QStringLiteral("Progress")};
+        QStringLiteral("IconButton"), QStringLiteral("Image"), QStringLiteral("MediaCard"), QStringLiteral("List"), QStringLiteral("Progress"),
+        QStringLiteral("Tabs"), QStringLiteral("Menu"), QStringLiteral("MediaRow")};
     std::function<bool(const QJsonObject&, int)> validate = [&](const QJsonObject& node, int depth) {
         if (depth > 16 || !types.contains(node.value("type").toString())) return false;
         if (node.contains("source") || node.contains("qml") || node.contains("script") || node.contains("url")) return false;
@@ -354,7 +380,8 @@ bool AddonUiRegistry::triggerCommand(const QString& id, const QVariantMap& argum
 {
     return dispatch(id, arguments, {}, {});
 }
-bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, const QString& sessionId, const QString& replacement)
+bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, const QString& sessionId, const QString& replacement,
+                               const QVariantMap& extra, const QString& panel, bool gesture)
 {
     if(!available())return false;
     if (m_runningCommands.size() >= 64) return false;
@@ -382,6 +409,7 @@ bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, 
         return openModal(modalId, arguments);
     }
     QVariantMap context{{"arguments", arguments}};
+    for (auto it = extra.begin(); it != extra.end(); ++it) context.insert(it.key(), it.value());
     quint64 generation = 0;
     if (!sessionId.isEmpty()) {
         const auto session = m_sessions.constFind(sessionId);
@@ -404,7 +432,7 @@ bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, 
             && session->generation==generation && session->descriptor.value("packageId")==entry.value("packageId");
     }
     if(!current){cancel(request);return false;}
-    m_runningCommands.insert(request, {id, sessionId, replacement, generation});
+    m_runningCommands.insert(request, {id, sessionId, replacement, panel, generation, m_panelRevision, gesture});
     QTimer::singleShot(15000, this, [this, request] {
         if (!m_runningCommands.contains(request)) return;
         const auto pending = m_runningCommands.take(request);
@@ -428,6 +456,8 @@ void AddonUiRegistry::reportViewFailure(const QString& id)
     if(m_attached && !available())return;
     const auto tickets = m_replacementViews.keys(id);const QPointer<AddonUiRegistry> alive(this);
     for (const auto& ticket : tickets) { m_replacementViews.remove(ticket); emit replacementFinished(ticket, false);if(!alive)return; }
+    // A panel keeps its button: its frame offers Reload and Turn off.
+    if (m_entries.contains(id) && type(m_entries.value(id)) == QLatin1String("ui.panel")) return;
     if (m_entries.contains(id)) { m_failed.insert(id); m_error = tr("An add-on view is not available. Use the built-in view."); ++m_revision; emit changed(); }
 }
 
@@ -535,8 +565,10 @@ bool AddonUiRegistry::dispatchSession(const QString& id, const QString& command,
     const QPointer<AddonUiRegistry> alive(this);cancelSessionJobs(id);
     if(!alive || !available())return false;
     const auto current=m_sessions.constFind(id);
+    // Session commands come from a click in the view, so a reply can ask for
+    // a host effect. Context calls from the app are not gestures.
     return current!=m_sessions.cend() && current->ready && !current->suspended && current->generation==generation
-        && dispatch(command, arguments, id, {});
+        && dispatch(command, arguments, id, {}, {}, {}, true);
 }
 void AddonUiRegistry::cancelSessionJobs(const QString& id)
 {
@@ -560,7 +592,9 @@ void AddonUiRegistry::closeSession(const QString& id)
 {
     const auto session=m_sessions.constFind(id);QString ticket;
     if(session!=m_sessions.cend()){disconnect(session->ownerDestroyed);ticket=session->documentTicket;}
-    m_sessions.remove(id);QPointer<AddonUiRegistry> guard(this);dropDocument(ticket);if(!guard)return;
+    m_sessions.remove(id);
+    for(auto it=m_panelSessions.begin();it!=m_panelSessions.end();)if(it.value()==id)it=m_panelSessions.erase(it);else ++it;
+    QPointer<AddonUiRegistry> guard(this);dropDocument(ticket);if(!guard)return;
     if(m_assets)m_assets->closeSession(id);if(guard)cancelSessionJobs(id);
 }
 QString AddonUiRegistry::executeReplacement(const QString& hook, const QVariantMap& arguments)
@@ -582,6 +616,7 @@ void AddonUiRegistry::operationFinished(const QString& request, const QString& c
     }
     const QPointer<AddonUiRegistry> alive(this);
     bool success = contribution == pending.command && (status == QLatin1String("match") || status == QLatin1String("partial"));
+    if (!pending.panel.isEmpty()) { panelReply(pending, success, data); if (!alive) return; }
     auto session = m_sessions.find(pending.session);
     if (!pending.session.isEmpty()) {
         if (session == m_sessions.end() || !session->ready || session->suspended || session->generation != pending.generation) return;
@@ -602,8 +637,95 @@ void AddonUiRegistry::operationFinished(const QString& request, const QString& c
         }
         if (!success) emit sessionFailed(pending.session);if(!alive)return;
     }
+    if (success && pending.gesture && !pending.session.isEmpty() && data.contains(QStringLiteral("effect"))) {
+        const auto panel = m_sessions.value(pending.session).contribution;
+        const auto effect = data.value(QStringLiteral("effect")).toMap();
+        static const QStringList effects{QStringLiteral("play"), QStringLiteral("rescan"), QStringLiteral("identify"), QStringLiteral("source")};
+        if (type(m_entries.value(panel)) == QLatin1String("ui.panel") && effect.size() == 1 && effects.contains(effect.firstKey())
+            && effect.first().metaType().id() == QMetaType::QVariantMap) {
+            emit panelEffect(pending.session, m_entries.value(panel).value(QStringLiteral("packageId")).toString(), effect.firstKey(), effect.first().toMap());
+            if (!alive) return;
+        }
+    }
     emit commandCompleted(pending.command, success, success ? data : QVariantMap{});if(!alive)return;
     if (!pending.replacement.isEmpty()) emit replacementFinished(pending.replacement, success);
+}
+QVariantList AddonUiRegistry::panels() const
+{
+    QVariantList result;
+    if (!available()) return result;
+    for (const auto& entry : m_entries) {
+        if (type(entry) != QLatin1String("ui.panel")) continue;
+        const auto document = entry.value("document").toMap(); const auto id = entry.value("id").toString();
+        result.append(QVariantMap{{"id", id}, {"packageId", entry.value("packageId")}, {"name", document.value("name")},
+            {"label", document.value("label")}, {"placement", document.value("placement")},
+            {"iconMarkup", entry.value("iconMarkup").toString()}, {"available", m_panelAvailable.value(id, false)},
+            {"open", m_panelSessions.contains(id)}});
+    }
+    return result;
+}
+bool AddonUiRegistry::siblingsWanted() const
+{
+    if (!available()) return false;
+    for (const auto& entry : m_entries)
+        if (type(entry) == QLatin1String("ui.panel") && !scope(entry.value("packageId").toString(), QStringLiteral("media.siblings")).value("sources").toArray().isEmpty())
+            return true;
+    return false;
+}
+void AddonUiRegistry::setPanelMedia(const QVariantMap& media)
+{
+    // Copy only what a panel may know about the media: its kind and length.
+    QVariantMap projected{{"revision", double(++m_panelRevision)}};
+    const auto kind = media.value(QStringLiteral("kind")).toString();
+    if (QStringList{"video", "audio", "none"}.contains(kind)) projected.insert(QStringLiteral("kind"), kind);
+    const auto duration = media.value(QStringLiteral("durationMs")).toDouble();
+    if (std::isfinite(duration) && duration > 0 && duration < 1e12) projected.insert(QStringLiteral("durationMs"), std::floor(duration));
+    m_panelMedia = projected;
+    m_panelRefresh->stop();
+    // Old context calls cannot answer for the new media.
+    const auto cancel = m_backend.cancel; const QPointer<AddonUiRegistry> alive(this);
+    for (const auto& request : m_runningCommands.keys())
+        if (!m_runningCommands.value(request).panel.isEmpty()) { m_runningCommands.remove(request); cancel(request); if (!alive) return; }
+    if (!available()) return;
+    for (const auto& entry : m_entries)
+        if (type(entry) == QLatin1String("ui.panel")) { dispatchPanelContext(entry.value("id").toString()); if (!alive) return; }
+}
+void AddonUiRegistry::refreshPanels()
+{
+    if (!m_panelSessions.isEmpty() && !m_panelRefresh->isActive()) m_panelRefresh->start();
+}
+bool AddonUiRegistry::attachPanelSession(const QString& id)
+{
+    const auto session = m_sessions.constFind(id);
+    if (!available() || session == m_sessions.cend() || type(m_entries.value(session->contribution)) != QLatin1String("ui.panel")) return false;
+    m_panelSessions.insert(session->contribution, id);
+    dispatchPanelContext(session->contribution);
+    return true;
+}
+void AddonUiRegistry::dispatchPanelContext(const QString& panel)
+{
+    const auto entry = m_entries.value(panel);
+    if (!available() || type(entry) != QLatin1String("ui.panel") || m_panelMedia.isEmpty()) return;
+    const auto command = entry.value("packageId").toString() + QLatin1Char('/') + entry.value("document").toMap().value("command").toString();
+    const QVariantMap extra{{"media", m_panelMedia}, {"panel", panel.section(QLatin1Char('/'), 1)}};
+    const auto sessionId = m_panelSessions.value(panel);
+    if (sessionId.isEmpty()) { dispatch(command, {}, {}, {}, extra, panel, false); return; }
+    const auto session = m_sessions.find(sessionId);
+    if (session == m_sessions.end() || !session->ready || session->suspended) return;
+    // Like a session command: the newest call wins, older calls are canceled.
+    const auto generation = session->generation = ++m_generation;
+    const QPointer<AddonUiRegistry> alive(this); cancelSessionJobs(sessionId);
+    if (!alive || !m_sessions.contains(sessionId) || m_sessions.value(sessionId).generation != generation) return;
+    dispatch(command, {}, sessionId, {}, extra, panel, false);
+}
+void AddonUiRegistry::panelReply(const Pending& pending, bool success, const QVariantMap& data)
+{
+    if (pending.panelRevision != m_panelRevision || !m_entries.contains(pending.panel)) return;
+    // Without a clear answer the button stays hidden.
+    const bool value = success && data.value(QStringLiteral("available")).metaType().id() == QMetaType::Bool && data.value(QStringLiteral("available")).toBool();
+    if (m_panelAvailable.value(pending.panel, false) == value && m_panelAvailable.contains(pending.panel)) return;
+    m_panelAvailable.insert(pending.panel, value);
+    emit panelsChanged();
 }
 void AddonUiRegistry::acknowledgeSession(const QString& id)
 {

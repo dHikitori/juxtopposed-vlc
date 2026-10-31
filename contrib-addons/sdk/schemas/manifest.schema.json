@@ -3,7 +3,7 @@
   "$id": "https://hakone.invalid/schemas/manifest.schema.json",
   "title": "Hakone add-on manifest (addon.json)",
   "description": "The package manifest of a Hakone add-on, format version 1. The host refuses unknown keys.",
-  "$comment": "Host-only rules (Manifest::parse checks these; this schema does not): (1) The serialized manifest is at most 256 KiB. (2) api.addon and each api.contracts range must contain version 1.0.0. A range has at most 8 '||' clauses of at most 8 terms. (3) Each number in a semantic version fits in an unsigned 64-bit integer. (4) String limits count UTF-16 code units, not code points. (5) Each file path is in Unicode NFC, and no two paths are equal after case folding. (6) runtime.entry, settings.schema, settings.ui, each migration resource, each locale file, each nonempty contribution resource/view/theme/scene/icon, each asset path and the root icon must occur in files. (7) Contribution IDs are unique in the package. (8) completionPolicy: each feature occurs in the contribution's features, each operation occurs in its operations, and each feature/operation pair occurs once. (9) UI data schemas: each required name is a declared property; minimum <= maximum, minLength <= maxLength and minItems <= maxItems; at most 10 levels and 256 nodes; the initial state (or {}) agrees with stateSchema. (10) locales.files contains the locales.default key. (11) Each credential binding origin is a declared network.http origin (network.websocket for wss), and each field/origin/header triple (header case-insensitive) occurs once. (12) Origins and URLs must parse as strict URLs: port 1-65535, valid host syntax. (13) Settings and storage migrations: to = from + 1, to is not more than the declared version, and each from occurs once. (14) Manifest::validateContents (not part of parse) checks the package files: sizes, the settings schema document, account fields, account recipes and credential fields.",
+  "$comment": "Host-only rules (Manifest::parse checks these; this schema does not): (1) The serialized manifest is at most 256 KiB. (2) api.addon and each api.contracts range must contain version 1.0.0. A range has at most 8 '||' clauses of at most 8 terms. (3) Each number in a semantic version fits in an unsigned 64-bit integer. (4) String limits count UTF-16 code units, not code points. (5) Each file path is in Unicode NFC, and no two paths are equal after case folding. (6) runtime.entry, settings.schema, settings.ui, each migration resource, each locale file, each nonempty contribution resource/view/theme/scene/icon, each asset path and the root icon must occur in files. (7) Contribution IDs are unique in the package. (8) completionPolicy: each feature occurs in the contribution's features, each operation occurs in its operations, and each feature/operation pair occurs once. (9) UI data schemas: each required name is a declared property; minimum <= maximum, minLength <= maxLength and minItems <= maxItems; at most 10 levels and 256 nodes; the initial state (or {}) agrees with stateSchema. (10) locales.files contains the locales.default key. (11) Each credential binding origin is a declared network.http origin (network.websocket for wss), and each field/origin/header triple (header case-insensitive) occurs once. (12) Origins and URLs must parse as strict URLs: port 1-65535, valid host syntax. (13) Settings and storage migrations: to = from + 1, to is not more than the declared version, and each from occurs once. (14) A ui.panel command names a ui.command of the same package that has a command operation and no route. (15) Manifest::validateContents (not part of parse) checks the package files: sizes, the settings schema document, account fields, account recipes and credential fields.",
   "type": "object",
   "required": [
     "formatVersion",
@@ -1836,7 +1836,8 @@
           "playback.control",
           "audio.analysis",
           "ui.contribute",
-          "session.background"
+          "session.background",
+          "media.siblings"
         ]
       },
       "properties": {
@@ -2061,6 +2062,23 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {}
+        },
+        "media.siblings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sources": {
+              "type": "array",
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "folder",
+                  "feed"
+                ]
+              }
+            }
+          }
         }
       }
     },
@@ -2864,6 +2882,7 @@
             "ui.modal",
             "ui.section",
             "ui.replacement",
+            "ui.panel",
             "visualizer",
             "session.controller"
           ]
@@ -2901,7 +2920,8 @@
               "playback.control",
               "audio.analysis",
               "ui.contribute",
-              "session.background"
+              "session.background",
+              "media.siblings"
             ]
           }
         },
@@ -2960,6 +2980,16 @@
               }
             }
           }
+        },
+        "placement": {
+          "description": "ui.panel only: the layout zone that the app uses one time for the panel's button, if the zone has space.",
+          "enum": [
+            "headerLeft",
+            "headerRight",
+            "footerLeft",
+            "footerRight",
+            "above"
+          ]
         }
       },
       "allOf": [
@@ -3026,9 +3056,60 @@
                   "ui.route",
                   "ui.modal",
                   "ui.section",
-                  "ui.replacement"
+                  "ui.replacement",
+                  "ui.panel"
                 ]
               }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "ui.panel"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "hook",
+              "view",
+              "command",
+              "name",
+              "label",
+              "stateSchema"
+            ],
+            "properties": {
+              "contract": {
+                "const": "ui@1"
+              },
+              "hook": {
+                "const": "player.panels@1"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "\\S"
+              },
+              "icon": {
+                "type": "string",
+                "pattern": "\\.svg$"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "placement"
+              ]
             }
           }
         }

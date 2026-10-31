@@ -38,6 +38,7 @@
 #include "addons/addon_profile_host.hpp"
 #include "addons/addon_account_setup.hpp"
 #include "maininterface/addon_guest_sources.hpp"
+#include "addons/addon_media_siblings.hpp"
 #include <QFileDialog>
 #ifdef VLC_ADDON_TEST_DRIVER
 #include "addons/addon_test_driver.hpp"
@@ -232,6 +233,8 @@ bool MainUI::setup(QQmlEngine* engine)
     if (auto* assets = findChild<vlc::addons::AddonUiAssets*>())
         engine->addImageProvider(QStringLiteral("addonassets"), new vlc::addons::AddonAssetImageProvider(assets));
     engine->rootContext()->setContextProperty(QStringLiteral("redesignDiscoveryService"), findChild<vlc::addons::AddonDiscoveryService*>());
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignSeriesModel"), findChild<SeriesModel*>(QStringLiteral("redesignSeriesModel")));
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignMediaSiblings"), findChild<vlc::addons::AddonMediaSiblings*>(QStringLiteral("redesignMediaSiblings")));
     engine->addImageProvider(QStringLiteral("vlcaccess"), new VLCAccessImageProvider());
     engine->addImageProvider(QStringLiteral("seekpreview"), new SeekPreviewImageProvider());
 
@@ -425,6 +428,9 @@ void MainUI::registerQMLTypes()
             });
             // Read-only queue, library and playing-file projections for add-ons.
             mountAddonGuestSources(m_intf, m_mainCtx, addonManager->hostServices(), this);
+            // The other episodes of the playing media, for add-on player panels.
+            auto* series = new SeriesModel(this); series->setObjectName(QStringLiteral("redesignSeriesModel"));
+            mountAddonMediaSiblings(addonManager->hostServices(), series, this)->setObjectName(QStringLiteral("redesignMediaSiblings"));
             char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
             const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
             free(sharedDirectory);

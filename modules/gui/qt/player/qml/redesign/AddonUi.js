@@ -3,8 +3,9 @@
 
 // This is a data-only contract. Never compile package expressions or component names.
 var forbiddenKeys = ["__proto__", "prototype", "constructor"]
-var nodeTypes = ["Page", "Section", "Column", "Row", "Heading", "Text", "Notice", "EmptyState", "Button", "IconButton", "Image", "MediaCard", "List", "Progress"]
-var icons = ["play", "pause", "stop", "queue", "music", "video", "network", "folder", "playlist", "refresh", "search", "info", "close", "settings", "subtitles", "favorite", "home", "chevron-left", "chevron-right"]
+var nodeTypes = ["Page", "Section", "Column", "Row", "Heading", "Text", "Notice", "EmptyState", "Button", "IconButton", "Image", "MediaCard", "List", "Progress", "Tabs", "Menu", "MediaRow"]
+var icons = ["play", "pause", "stop", "queue", "music", "video", "network", "folder", "playlist", "refresh", "search", "info", "close", "settings", "subtitles", "favorite", "home", "chevron-left", "chevron-right",
+    "episodes", "chapters", "more", "check", "replay", "play-outline"]
 
 function own(object, key) {
     return object !== null && typeof object === "object" && Object.prototype.hasOwnProperty.call(object, key)
@@ -115,22 +116,46 @@ function nodeError(node, commands, depth, budget, insideList) {
         Heading: ["text"], Text: ["text"], Notice: ["text"], EmptyState: ["text"],
         Button: ["text", "icon", "intent", "action"], IconButton: ["text", "icon", "action"],
         Image: ["artwork", "text"], MediaCard: ["title", "subtitle", "artwork", "primaryAction"],
-        List: ["items", "keyField", "itemTemplate", "emptyText"], Progress: ["value", "text"]
+        List: ["items", "keyField", "itemTemplate", "emptyText", "scroll", "more", "moreAction", "moreText"], Progress: ["value", "text"],
+        Tabs: ["items", "selected", "text", "action"], Menu: ["text", "icon", "entries"],
+        MediaRow: ["title", "subtitle", "number", "mark", "artwork", "progress", "expanded", "primaryAction", "children"]
     }
     for (var key of Object.keys(node)) {
         if (!common.includes(key) && !fields[node.type].includes(key)) return "The app cannot use this component property."
-        if (["text", "title", "subtitle", "emptyText", "artwork"].includes(key)) { var textError = valueError(node[key], "text"); if (textError) return textError }
-        if (["visible", "enabled"].includes(key)) { var boolError = valueError(node[key], "bool"); if (boolError) return boolError }
+        if (["text", "title", "subtitle", "emptyText", "artwork", "number", "mark", "moreText"].includes(key)) { var textError = valueError(node[key], "text"); if (textError) return textError }
+        if (["visible", "enabled", "expanded", "more"].includes(key)) { var boolError = valueError(node[key], "bool"); if (boolError) return boolError }
     }
     if (node.id !== undefined && !safeKey(node.id)) return "A component ID is not correct."
     if (node.icon !== undefined && !icons.includes(node.icon)) return "The app cannot use this icon."
     if (node.intent !== undefined && !["primary", "secondary", "destructive"].includes(node.intent)) return "The app cannot use this button style."
-    for (var actionKey of ["action", "primaryAction"]) {
+    for (var actionKey of ["action", "primaryAction", "moreAction"]) {
         if (node[actionKey] !== undefined) { var actionProblem = actionError(node[actionKey], commands); if (actionProblem) return actionProblem }
     }
     if (["Button", "IconButton"].includes(node.type) && (!node.text || !node.action)) return "A button must have a label and a command."
     if (node.type === "MediaCard" && !node.title) return "A media card must have a title."
     if (node.type === "Progress" && node.value !== undefined) { var numberError = valueError(node.value, "number"); if (numberError) return numberError }
+    if (node.type === "MediaRow") {
+        if (!node.title) return "A media row must have a title."
+        if (node.progress !== undefined) { var rowProgress = valueError(node.progress, "number"); if (rowProgress) return rowProgress }
+    }
+    if (node.type === "Tabs") {
+        // The items are {key, label} from state. In the action, item.tab is
+        // the chosen entry and item is the enclosing list item, if any.
+        if (!record(node.items) || !bindingPath(node.items.bind) || Object.keys(node.items).length !== 1) return "Tabs must have a state binding."
+        if (!node.text || !node.action) return "Tabs must have a label and a command."
+        if (node.selected !== undefined && !(typeof node.selected === "number" && Number.isFinite(node.selected))) { var selectedError = valueError(node.selected, "text"); if (selectedError) return selectedError }
+    }
+    if (node.type === "Menu") {
+        if (!node.text || !Array.isArray(node.entries) || node.entries.length < 1 || node.entries.length > 16) return "A menu must have a label and 1 to 16 entries."
+        for (var entry of node.entries) {
+            if (!record(entry) || Object.keys(entry).some(key => !["text", "icon", "action", "visible"].includes(key)) || !entry.text || !entry.action) return "A menu entry must have a label and a command."
+            var entryText = valueError(entry.text, "text"); if (entryText) return entryText
+            if (entry.visible !== undefined) { var entryVisible = valueError(entry.visible, "bool"); if (entryVisible) return entryVisible }
+            if (entry.icon !== undefined && !icons.includes(entry.icon)) return "The app cannot use this icon."
+            var entryAction = actionError(entry.action, commands); if (entryAction) return entryAction
+        }
+    }
+    if (node.type === "List" && node.scroll !== undefined && typeof node.scroll !== "boolean") return "The list scroll value is not correct."
     if (node.children !== undefined) {
         if (!Array.isArray(node.children) || node.children.length > 64) return "The child list is not correct."
         for (var child of node.children) { var childError = nodeError(child, commands, depth + 1, budget, insideList); if (childError) return childError }
@@ -156,9 +181,47 @@ function validateProjection(node, state, item, messages) {
             if (value !== undefined && typeof value !== "string") return "A text binding returned a value that is not correct."
         }
     }
-    if (["Button", "IconButton", "MediaCard"].includes(node.type)) {
-        var label = resolve(node.type === "MediaCard" ? node.title : node.text, state, item, messages)
+    if (["Button", "IconButton", "MediaCard", "MediaRow", "Tabs", "Menu"].includes(node.type)) {
+        var label = resolve(["MediaCard", "MediaRow"].includes(node.type) ? node.title : node.text, state, item, messages)
         if (typeof label !== "string" || !label.trim()) return "A control must have a label for the screen reader."
+    }
+    for (var textKey of ["number", "mark", "moreText"]) {
+        if (node[textKey] !== undefined) {
+            var textValue = resolve(node[textKey], state, item, messages)
+            if (textValue !== undefined && typeof textValue !== "string") return "A text binding returned a value that is not correct."
+        }
+    }
+    for (var boolKey of ["expanded", "more"]) {
+        if (node[boolKey] !== undefined) {
+            var boolValue = resolve(node[boolKey], state, item, messages)
+            if (boolValue !== undefined && typeof boolValue !== "boolean") return "An availability binding returned a value that is not correct."
+        }
+    }
+    if (node.type === "MediaRow" && node.progress !== undefined) {
+        var rowValue = resolve(node.progress, state, item, messages)
+        if (rowValue !== undefined && (typeof rowValue !== "number" || !Number.isFinite(rowValue))) return "A progress binding returned a value that is not correct."
+    }
+    if (node.type === "Tabs") {
+        var tabs = resolve(node.items, state, item, messages)
+        if (tabs !== undefined) {
+            if (!Array.isArray(tabs) || tabs.length > 64) return "A tab binding returned a value that is not correct."
+            var tabKeys = new Set()
+            for (var tab of tabs) {
+                if (!record(tab) || !["string", "number"].includes(typeof tab.key) || typeof tab.label !== "string" || !tab.label.trim()) return "Each tab must have a key and a label."
+                if (tabKeys.has(typeof tab.key + ":" + tab.key)) return "Each tab must have a different key."
+                tabKeys.add(typeof tab.key + ":" + tab.key)
+            }
+        }
+        var chosen = resolve(node.selected, state, item, messages)
+        if (chosen !== undefined && !["string", "number"].includes(typeof chosen)) return "A tab binding returned a value that is not correct."
+    }
+    if (node.type === "Menu") {
+        for (var menuEntry of node.entries) {
+            var menuLabel = resolve(menuEntry.text, state, item, messages)
+            if (typeof menuLabel !== "string" || !menuLabel.trim()) return "A control must have a label for the screen reader."
+            var menuVisible = menuEntry.visible === undefined ? true : resolve(menuEntry.visible, state, item, messages)
+            if (menuVisible !== undefined && typeof menuVisible !== "boolean") return "An availability binding returned a value that is not correct."
+        }
     }
     for (var flag of ["visible", "enabled"]) {
         if (node[flag] !== undefined) {

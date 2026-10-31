@@ -7,7 +7,45 @@ TestCase {
     name: "JuxtopposedPlayerLayout"
     RedesignPlayerLayout { id: layout }
     Component { id: layoutComponent; RedesignPlayerLayout { } }
-    function init() { layout.savedLayout = ""; layout.reload() }
+    function init() { layout.panels = []; layout.savedLayout = ""; layout.reload() }
+    function test_legacyEpisodesControlBecomesThePanel() {
+        const saved = layout.defaults()
+        saved.zones.footerRight = ["mute", "volume", "episodes", "queue"]
+        layout.savedLayout = JSON.stringify(saved).split(layout.episodesPanel).join("x")
+        layout.reload()
+        compare(layout.layout.zones.footerRight, ["mute", "volume", layout.episodesPanel, "queue"])
+        verify(!layout.validId("episodes"))
+        verify(layout.validId("addon:org.example.panels/lyrics"))
+        verify(!layout.validId("addon:Org.Example/x") && !layout.validId("addon:org.example/") && !layout.validId("addon:/x"))
+    }
+    function test_requestedPanelZoneUntilDismissed() {
+        layout.panels = [{id: "org.example.panels/lyrics", name: "Lyrics", placement: "footerLeft"},
+                         {id: "org.example.panels/notes", name: "Notes"},
+                         {id: "org.example.panels/center", name: "Center", placement: "footerCenter"}]
+        // The requested zone is drawn, not saved.
+        compare(layout.layout.zones.footerLeft, ["previous", "play", "next", "addon:org.example.panels/lyrics"])
+        compare(layout.location("addon:org.example.panels/notes"), null)
+        compare(layout.location("addon:org.example.panels/center"), null)
+        verify(!layout.dirty)
+        layout.begin()
+        verify(!layout.dirty)
+        verify(layout.remove("addon:org.example.panels/lyrics"))
+        verify(layout.dirty)
+        const saved = JSON.parse(layout.serialize())
+        compare(saved.dismissed, ["addon:org.example.panels/lyrics"])
+        verify(layout.finish(true))
+        compare(layout.location("addon:org.example.panels/lyrics"), null)
+        // A dismissed panel does not come back after a restart either.
+        layout.savedLayout = JSON.stringify(saved); layout.reload()
+        compare(layout.location("addon:org.example.panels/lyrics"), null)
+        // Moving it back in the editor clears the dismissal.
+        layout.begin()
+        verify(layout.move("addon:org.example.panels/lyrics", "headerRight", 0))
+        const again = JSON.parse(layout.serialize())
+        compare(again.dismissed, undefined)
+        compare(again.zones.headerRight[0], "addon:org.example.panels/lyrics")
+        layout.cancel()
+    }
     function test_originalLayout() {
         verify(!layout.editing); verify(!layout.dirty)
         compare(layout.layout, layout.defaults())
@@ -51,7 +89,7 @@ TestCase {
     function test_groupMovesUseOriginalInsertionBoundary() {
         layout.begin()
         verify(layout.moveGroup(["mute", "volume"], "footerRight", 7))
-        compare(layout.layout.zones.footerRight, ["audio", "subtitles", "settings", "episodes", "queue", "mute", "volume"])
+        compare(layout.layout.zones.footerRight, ["audio", "subtitles", "settings", "addon:org.videolan.episodes/episodes", "queue", "mute", "volume"])
         verify(layout.moveGroup(["mute", "volume"], "footerRight", 0))
         compare(layout.layout, layout.defaults())
         verify(layout.moveGroup(["mute", "volume"], "above", 0))

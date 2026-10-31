@@ -14,6 +14,8 @@ Item {
     readonly property string sessionId: renderer ? renderer.sessionId : ""
     readonly property string available: renderer ? renderer.assetFor(artworkHandle) : ""
     readonly property string imageUrl: claim.length && renderer ? renderer.claimedAssetFor(artworkHandle, claim) : ""
+    // Media artwork that the app supplies for its own items (media: handles).
+    readonly property string hostUrl: renderer && typeof renderer.hostArtworkFor === "function" ? renderer.hostArtworkFor(artworkHandle) : ""
     clip: true
 
     function release() {
@@ -47,7 +49,7 @@ Item {
         id: picture
         objectName: "addonAssetImage"
         anchors.fill: parent
-        source: root.imageUrl
+        source: root.hostUrl || root.imageUrl
         sourceSize: Qt.size(512, 512)
         cache: false; asynchronous: true; fillMode: root.fillMode
         Accessible.ignored: true

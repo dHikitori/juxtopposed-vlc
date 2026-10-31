@@ -34,7 +34,7 @@ QString AddonHostServices::capability(const QString& operation)
     static const QHash<QString, QString> capabilities{
         {"storage.get", "storage.private"}, {"storage.set", "storage.private"}, {"storage.remove", "storage.private"},
         {"library.query", "library.read"}, {"queue.snapshot", "queue.read"}, {"queue.apply", "queue.modify"},
-        {"media.fingerprint", "media.fingerprint"},
+        {"media.fingerprint", "media.fingerprint"}, {"media.siblings", "media.siblings"},
         {"playback.observe", "playback.observe"}, {"playback.command", "playback.control"},
         {"session.renew", "playback.observe"}, {"session.end", "playback.observe"},
         {"network.websocket.open", "network.websocket"}, {"network.websocket.send", "network.websocket"},

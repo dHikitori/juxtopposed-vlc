@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_manager.hpp"
+#include "addon_panel_icon.hpp"
 #include "addon_candidate_check.hpp"
 #include "addon_catalogue_view.hpp"
 #include "addon_package_configuration.hpp"
@@ -742,11 +743,18 @@ QVariantList AddonManager::contributionsOfType(const QString& type, bool include
         const auto account = accountReference(package);
         for (const auto& contribution : package.manifest.contributions) {
             if (contribution.type != type) continue;
-            result.append(QVariantMap{{"id", QString(id + '/' + contribution.id)}, {"packageId", id},
+            QVariantMap entry{{"id", QString(id + '/' + contribution.id)}, {"packageId", id},
                 {"name", contribution.document.value("name").toString(package.manifest.name)}, {"enabled", package.enabled},
                 {"document", contribution.document.toVariantMap()},
                 {"accountReference", account}, {"configured", configured(package)},
-                {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + sessionPartition(id))}});
+                {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + sessionPartition(id))}};
+            const auto icon = contribution.document.value("icon").toString();
+            if (type == QLatin1String("ui.panel") && package.manifest.files.contains(icon)) {
+                QFile file(QDir(package.directory).filePath(icon));
+                if (file.open(QIODevice::ReadOnly) && file.size() <= panelIcon::MaximumBytes)
+                    entry.insert(QStringLiteral("iconMarkup"), panelIcon::markup(file.readAll()));
+            }
+            result.append(entry);
         }
     }
     return result;

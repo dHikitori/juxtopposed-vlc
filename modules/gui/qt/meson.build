@@ -111,6 +111,10 @@ addon_host_sources = files(
     'addons/addon_native_metadata_owner.hpp',
     'addons/addon_ui_registry.cpp',
     'addons/addon_ui_registry.hpp',
+    'addons/addon_panel_icon.cpp',
+    'addons/addon_panel_icon.hpp',
+    'addons/addon_media_siblings.cpp',
+    'addons/addon_media_siblings.hpp',
     'addons/addon_ui_assets.cpp',
     'addons/addon_ui_assets.hpp',
     'addons/addon_metadata_service.cpp',
@@ -228,6 +232,7 @@ addon_host_sources = files(
 )
 addon_host_moc_headers = files(
     'addons/addon_guest_projections.hpp',
+    'addons/addon_media_siblings.hpp',
     'addons/addon_account_setup.hpp',
     'addons/addon_device_authorization.hpp',
     'addons/addon_native_metadata_owner.hpp',
@@ -1175,6 +1180,7 @@ qml_modules += {
        'player/qml/redesign/RedesignGeneralAppearance.qml',
        'player/qml/redesign/RedesignAddonView.qml',
        'player/qml/redesign/RedesignAddonMount.qml',
+       'player/qml/redesign/RedesignAddonPanel.qml',
        'player/qml/redesign/RedesignAddonSections.qml',
        'player/qml/redesign/RedesignAddonSurface.qml',
        'player/qml/redesign/RedesignAddonReplacements.qml',
@@ -2043,7 +2049,7 @@ if qt6_dep.found()
         addon_visualizer_process = executable('addon_visualizer_process', files('tests/fixtures/addon_visualizer_process.c'), install: false, build_by_default: false)
         addon_discovery_source_process = executable('addon_discovery_source_process', files('tests/fixtures/addon_discovery_source_process.c'), install: false, build_by_default: false)
         addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
-        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'store_profile_writes', 'profile_host', 'worker_health', 'candidate_check', 'accounts', 'guest_projections', 'schema_corpus', 'identity_choice', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
+        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'store_profile_writes', 'profile_host', 'worker_health', 'candidate_check', 'accounts', 'guest_projections', 'media_siblings', 'schema_corpus', 'identity_choice', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority']
             native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
             addon_timeout = addon_test in ['catalogue_view', 'display_catalogue', 'package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'playable_gate', 'runtime', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'profile_host', 'worker_health', 'candidate_check'] ? 90 : 30
             if addon_test in ['display_integration', 'distribution_bootstrap']

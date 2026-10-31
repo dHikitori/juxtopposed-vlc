@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_guest_sources.hpp"
+#include "addons/addon_media_siblings.hpp"
+#include "player/series_model.hpp"
+#include <QDir>
+#include <QFileInfo>
 #include "addons/addon_guest_projections.hpp"
 #include "maininterface/mainctx.hpp"
 #include "medialibrary/medialib.hpp"
@@ -150,4 +154,45 @@ vlc::addons::AddonGuestProjections* mountAddonGuestSources(qt_intf_t* intf, Main
     if (!projections->mount(services, std::move(queue), std::move(library), std::move(media)))
         msg_Warn(intf, "Cannot offer every read-only add-on projection");
     return projections;
+}
+
+vlc::addons::AddonMediaSiblings* mountAddonMediaSiblings(vlc::addons::AddonHostServices* services, SeriesModel* model, QObject* parent)
+{
+    using Siblings = vlc::addons::AddonMediaSiblings;
+    auto* siblings = new Siblings(parent);
+    const QPointer<SeriesModel> series(model);
+    Siblings::Source source;
+    source.snapshot = [series]() {
+        Siblings::Snapshot snapshot;
+        if (!series) return snapshot;
+        snapshot.kind = !series->feed().isEmpty() ? QStringLiteral("feed") : series->available() ? QStringLiteral("folder") : QString();
+        if (snapshot.kind.isEmpty()) return snapshot;
+        snapshot.show = series->showTitle(); snapshot.message = series->message();
+        snapshot.loading = series->loading(); snapshot.limited = series->limited();
+        const QDir root(series->folder().isLocalFile() ? series->folder().toLocalFile() : QString());
+        for (const auto& sibling : series->siblings()) {
+            Siblings::Item item;
+            item.url = sibling.url; item.kind = snapshot.kind;
+            item.feedIndex = sibling.feedIndex; item.version = sibling.version;
+            item.title = sibling.title; item.titleSource = sibling.titleSource; item.description = sibling.description;
+            item.artwork = sibling.artwork; item.published = sibling.published;
+            item.season = sibling.identity.season; item.episodes = sibling.identity.episodes;
+            item.absolute = sibling.identity.absoluteEpisode; item.airDate = sibling.identity.airDate;
+            item.progress = sibling.progress; item.played = sibling.played; item.current = sibling.current; item.video = sibling.video;
+            if (snapshot.kind == QLatin1String("folder")) {
+                // Relative names only: the root and the path stay in the app.
+                item.name = sibling.url.fileName();
+                if (sibling.url.isLocalFile() && !series->folder().isEmpty()) {
+                    const auto folder = root.relativeFilePath(QFileInfo(sibling.url.toLocalFile()).path());
+                    if (folder != QLatin1String(".") && !folder.startsWith(QLatin1String(".."))) item.folder = folder;
+                }
+            }
+            snapshot.items.append(item);
+        }
+        return snapshot;
+    };
+    source.artwork = [series](const QUrl& url) { if (series) series->requestArtwork(url); };
+    QObject::connect(model, &SeriesModel::siblingsChanged, siblings, &Siblings::sourceChanged);
+    siblings->mount(services, std::move(source));
+    return siblings;
 }

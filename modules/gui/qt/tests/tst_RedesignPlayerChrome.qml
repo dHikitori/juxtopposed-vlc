@@ -32,7 +32,7 @@ TestCase {
         player.playerLayout = ""; player.layoutModel.reload()
         player.scaleFactor = 1; player.lightTheme = false
         player.libraryOpen = false; player.libraryExpanded = false
-        player.episodesAvailable = false; player.episodesOpen = false; player.settingsPage = ""
+        player.addonPanels = []; player.panelOpen = ""; player.settingsPage = ""
         player.fullscreen = false; player.controlsHideTimeout = 1800
         player.fullscreenControlsOpacity = 1
         player.maximized = false
@@ -53,8 +53,11 @@ TestCase {
         tryVerify(() => Math.abs(point("seekBar").x - 104) < 1 && Math.abs(point("seekBar").y - 986) < 1)
     }
     function test_defaultEpisodesButtonSitsBetweenSettingsAndQueue() {
-        player.episodesAvailable = true
-        compare(player.layoutModel.layout.zones.footerRight.slice(-3), ["settings", "episodes", "queue"])
+        verify(!item("episodesButton").visible)
+        player.addonPanels = [{id: "org.videolan.episodes/episodes", name: "Episodes", label: "Show the other episodes", available: true,
+            iconMarkup: "<path d=\"M4 6h16\" stroke=\"COLOR\"/>"}]
+        compare(player.layoutModel.layout.zones.footerRight.slice(-3), ["settings", "addon:org.videolan.episodes/episodes", "queue"])
+        compare(item("episodesButton").iconMarkup, "<path d=\"M4 6h16\" stroke=\"COLOR\"/>")
         tryVerify(() => item("episodesButton").visible
             && point("playbackSettingsButton").x + item("playbackSettingsButton").width <= point("episodesButton").x
             && point("episodesButton").x + item("episodesButton").width <= point("queueButton").x)

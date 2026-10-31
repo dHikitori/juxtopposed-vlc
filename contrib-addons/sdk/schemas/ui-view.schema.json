@@ -3,7 +3,7 @@
   "$id": "https://hakone.invalid/schemas/ui-view.schema.json",
   "title": "UI view document (ui@1)",
   "description": "A data-only view document that the host renders with its own components. The host does not run package code. Validator: validateView in modules/gui/qt/player/qml/redesign/AddonUi.js. Contract: contrib-addons/sdk/ui-document.md.",
-  "$comment": "Host-only rules that this schema cannot express: (1) The command in action and primaryAction must be in the command registry of the package (the commands list that the host supplies). (2) The complete view has at most 256 components. (3) The complete document has at most 10,000 JSON values and 131,072 UTF-16 code units across all strings. (4) The complete document has at most 20 nested JSON levels. This limit includes component nesting, so the effective component depth is less than the ten-level component limit, and deep command arguments in deep components are refused. (5) The host counts string lengths in UTF-16 code units. JSON Schema maxLength counts code points, so a string with characters outside the Basic Multilingual Plane can pass this schema and fail the host. (6) State projection checks (bound values have the correct type, list keys are present and different) run on each state update, not on the document.",
+  "$comment": "Host-only rules that this schema cannot express: (1) The command in action, primaryAction, moreAction and each menu entry action must be in the command registry of the package (the commands list that the host supplies). (2) The complete view has at most 256 components. (3) The complete document has at most 10,000 JSON values and 131,072 UTF-16 code units across all strings. (4) The complete document has at most 20 nested JSON levels. This limit includes component nesting, so the effective component depth is less than the ten-level component limit, and deep command arguments in deep components are refused. (5) The host counts string lengths in UTF-16 code units. JSON Schema maxLength counts code points, so a string with characters outside the Basic Multilingual Plane can pass this schema and fail the host. (6) State projection checks (bound values have the correct type, list keys are present and different, tab entries have a key and a label, at most 64 tabs) run on each state update, not on the document.",
   "type": "object",
   "required": [
     "contract",
@@ -639,7 +639,13 @@
         "favorite",
         "home",
         "chevron-left",
-        "chevron-right"
+        "chevron-right",
+        "episodes",
+        "chapters",
+        "more",
+        "check",
+        "replay",
+        "play-outline"
       ]
     },
     "node": {
@@ -664,7 +670,10 @@
             "Image",
             "MediaCard",
             "List",
-            "Progress"
+            "Progress",
+            "Tabs",
+            "Menu",
+            "MediaRow"
           ]
         }
       },
@@ -835,6 +844,42 @@
           },
           "then": {
             "$ref": "#/$defs/Progress"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Tabs"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Tabs"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Menu"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Menu"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "MediaRow"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/MediaRow"
           }
         }
       ]
@@ -1199,6 +1244,19 @@
         },
         "emptyText": {
           "$ref": "#/$defs/text"
+        },
+        "scroll": {
+          "description": "false shows every row and lets the frame around the view scroll. The default is true.",
+          "type": "boolean"
+        },
+        "more": {
+          "$ref": "#/$defs/flag"
+        },
+        "moreAction": {
+          "$ref": "#/$defs/action"
+        },
+        "moreText": {
+          "$ref": "#/$defs/text"
         }
       }
     },
@@ -1238,6 +1296,158 @@
         "children": {
           "items": {
             "$ref": "#/$defs/withoutList"
+          }
+        }
+      }
+    },
+    "Tabs": {
+      "description": "A choice of one entry from a state list of {key, label}. Few entries show as buttons, more as a combo box. In the action, item.tab is the chosen entry and item is the enclosing list item.",
+      "type": "object",
+      "required": [
+        "type",
+        "items",
+        "text",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "items": {
+          "$ref": "#/$defs/binding"
+        },
+        "selected": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "$ref": "#/$defs/text"
+            }
+          ]
+        },
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        }
+      }
+    },
+    "menuEntry": {
+      "type": "object",
+      "required": [
+        "text",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "icon": {
+          "$ref": "#/$defs/icon"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        }
+      }
+    },
+    "Menu": {
+      "description": "A button that opens a list of commands.",
+      "type": "object",
+      "required": [
+        "type",
+        "text",
+        "entries"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "icon": {
+          "$ref": "#/$defs/icon"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          }
+        }
+      }
+    },
+    "MediaRow": {
+      "description": "One media item: number, title, secondary text, a mark (for example 'Now playing'), progress and artwork. When expanded is true, the artwork and the children show below the row.",
+      "type": "object",
+      "required": [
+        "type",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "title": {
+          "$ref": "#/$defs/label"
+        },
+        "subtitle": {
+          "$ref": "#/$defs/text"
+        },
+        "number": {
+          "$ref": "#/$defs/text"
+        },
+        "mark": {
+          "$ref": "#/$defs/text"
+        },
+        "artwork": {
+          "$ref": "#/$defs/text"
+        },
+        "progress": {
+          "$ref": "#/$defs/progress"
+        },
+        "expanded": {
+          "$ref": "#/$defs/flag"
+        },
+        "primaryAction": {
+          "$ref": "#/$defs/action"
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/node"
           }
         }
       }

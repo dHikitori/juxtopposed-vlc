@@ -60,7 +60,7 @@ FocusScope {
         if (minimalView) {
             libraryOpen = false
             queueOpen = false
-            episodesOpen = false
+            panelOpen = ""
             settingsPage = ""
             forceActiveFocus()
         }
@@ -75,13 +75,22 @@ FocusScope {
     property bool libraryInitialized: false
     onLibraryOpenChanged: if (!libraryOpen) libraryExpanded = false
     property bool queueOpen: false
-    onQueueOpenChanged: if (queueOpen) episodesOpen = false
-    property bool episodesOpen: false
-    property bool episodesAvailable: false
-    onEpisodesAvailableChanged: if (!episodesAvailable) episodesOpen = false
+    onQueueOpenChanged: if (queueOpen) panelOpen = ""
+    // Player panels from add-ons (AddonUiRegistry.panels). One side panel at
+    // a time: opening one closes the queue and the playback settings.
+    property var addonPanels: []
+    property string panelOpen: ""
+    function panel(id) { return (addonPanels || []).find(entry => entry.id === id) || null }
+    // In the editor every panel item shows, also one whose package is gone,
+    // so the user can move or remove it.
+    function panelShown(id) {
+        const entry = panel(id)
+        return chromeLayout.editing || (!!entry && (entry.available === true || presentationOnly))
+    }
+    onAddonPanelsChanged: if (panelOpen.length && !panelShown(panelOpen)) panelOpen = ""
     readonly property bool floatingQueue: queueOpen && miniPlayer.visible
     property string settingsPage: ""
-    onSettingsPageChanged: if (settingsPage.length > 0) episodesOpen = false
+    onSettingsPageChanged: if (settingsPage.length > 0) panelOpen = ""
     property real position: 0
     property real volume: 1
     property real maxVolume: 1.25
@@ -114,7 +123,7 @@ FocusScope {
     property Component libraryContent
     property Component queueContent
     property Component settingsContent
-    property Component episodesContent
+    property Component panelContent
     property QtObject trackPopup
     readonly property alias videoItem: videoLoader.item
     readonly property rect subtitleArea: videoCanvas.width > 0 && videoCanvas.height > 0
@@ -131,7 +140,7 @@ FocusScope {
         for (let item = seek; item && item !== root; item = item.parent) y += item.y
         return y
     }
-    readonly property bool controlsLocked: elapsedTime.editing || chromeLayout.editing || customMenuOpen || queueOpen || episodesOpen || libraryOpen || settingsPage.length > 0 || resumeAvailable || !!trackPopup && trackPopup.visible
+    readonly property bool controlsLocked: elapsedTime.editing || chromeLayout.editing || customMenuOpen || queueOpen || panelOpen.length > 0 || libraryOpen || settingsPage.length > 0 || resumeAvailable || !!trackPopup && trackPopup.visible
     readonly property alias topVisible: header.visible
     readonly property alias bottomVisible: toolbar.visible
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
@@ -209,13 +218,13 @@ FocusScope {
     function revealControls() { revealTimer.restart() }
     function revealCursor() { if (fullscreen) cursorHideTimer.restart() }
     function toggleSettings(page: string) {
-        episodesOpen = false
+        panelOpen = ""
         if (trackPopup) trackPopup.close()
         queueOpen = false
         settingsPage = settingsPage.length > 0 ? "" : page
     }
     function toggleTracks(anchor, page) {
-        episodesOpen = false
+        panelOpen = ""
         if (!trackPopup) return
         if (settingsPage === page) {
             settingsPage = ""
@@ -227,25 +236,25 @@ FocusScope {
         trackPopup.toggleFrom(anchor, page)
     }
     function dismissPanels() {
-        episodesOpen = false
+        panelOpen = ""
         settingsPage = ""
         queueOpen = false
         libraryOpen = false
     }
 
     Keys.onEscapePressed: event => {
-        if (queueOpen || episodesOpen || libraryOpen || settingsPage.length > 0)
+        if (queueOpen || panelOpen.length > 0 || libraryOpen || settingsPage.length > 0)
             dismissPanels()
         else if (fullscreen)
             fullscreenRequested()
         else
             event.accepted = false
     }
-    function toggleEpisodes() {
-        if (!episodesAvailable && !presentationOnly) return
+    function togglePanel(id) {
+        if (panelOpen !== id && !panelShown(id)) return
         if (trackPopup) trackPopup.close()
         queueOpen = false; settingsPage = ""
-        episodesOpen = !episodesOpen
+        panelOpen = panelOpen === id ? "" : id
     }
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
@@ -566,7 +575,7 @@ FocusScope {
         id: rightPanel
         objectName: "redesignRightPanel"
         z: 3
-        visible: root.episodesOpen || (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
+        visible: root.panelOpen.length > 0 || (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
         width: Math.min(theme.dp(400), root.width * 0.48)
         anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
         anchors.topMargin: header.height + theme.dp(20); anchors.bottomMargin: toolbar.height + theme.dp(20)
@@ -578,7 +587,7 @@ FocusScope {
             anchors.fill: parent
             z: -1
             sourceComponent: root.videoBackdropContent
-            active: root.episodesOpen || (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
+            active: root.panelOpen.length > 0 || (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
         }
         MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onWheel: wheel => wheel.accepted = true }
         Loader {
@@ -598,9 +607,10 @@ FocusScope {
             visible: active
         }
         Loader {
+            objectName: "playerPanelLoader"
             anchors.fill: parent
-            sourceComponent: root.episodesContent
-            active: root.episodesOpen
+            sourceComponent: root.panelContent
+            active: root.panelOpen.length > 0
             visible: active
         }
     }
@@ -1060,24 +1070,28 @@ FocusScope {
                 onClicked: root.toggleSettings("playback")
             }
             ChromeButton {
+                // The default layout's button for the bundled Episodes panel.
                 id: episodesButton
                 objectName: "episodesButton"
-                visible: root.episodesAvailable || root.presentationOnly || chromeLayout.editing
+                readonly property string panelId: chromeLayout.episodesPanel.slice(6)
+                readonly property var entry: root.panel(panelId)
+                visible: root.panelShown(panelId)
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                iconName: "episodes"; text: qsTr("Episodes"); selected: root.episodesOpen
-                onClicked: root.toggleEpisodes()
+                iconName: "episodes"; iconMarkup: entry ? entry.iconMarkup || "" : ""
+                text: entry ? entry.label || entry.name : qsTr("Episodes"); selected: root.panelOpen === panelId
+                onClicked: root.togglePanel(panelId)
             }
             ChromeButton {
                 id: queueButton
                 objectName: "queueButton"
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 iconName: "lists"; selectedIconName: "lists-active"; text: qsTr("Play queue"); selected: root.queueOpen
-                onClicked: { root.episodesOpen = false; root.settingsPage = ""; root.queueOpen = !root.queueOpen }
+                onClicked: { root.panelOpen = ""; root.settingsPage = ""; root.queueOpen = !root.queueOpen }
             }
         }
     }
-    RedesignPlayerLayout { id: chromeLayout; savedLayout: root.playerLayout }
-    RedesignCustomizationCatalog { id: customizationCatalog }
+    RedesignPlayerLayout { id: chromeLayout; savedLayout: root.playerLayout; panels: root.addonPanels }
+    RedesignCustomizationCatalog { id: customizationCatalog; panels: root.addonPanels }
     RedesignPlayerChrome {
         id: chrome
         theme: root.theme; model: chromeLayout
@@ -1086,16 +1100,19 @@ FocusScope {
         headerHost: header; footerHost: toolbar
         extraControlComponent: Component {
             RedesignExtraControl {
+                readonly property string panelId: controlId.startsWith("addon:") ? controlId.slice(6) : ""
                 theme: root.theme
                 specification: customizationCatalog.definition(controlId)
-                controlState: root.customControlStates[controlId] || ({})
-                onTriggered: anchor => root.customActionRequested(controlId, anchor)
+                shown: !panelId.length || root.panelShown(panelId)
+                controlState: panelId.length ? {checked: root.panelOpen === panelId, description: (root.panel(panelId) || {}).label || ""}
+                    : root.customControlStates[controlId] || ({})
+                onTriggered: anchor => { if (panelId.length) root.togglePanel(panelId); else root.customActionRequested(controlId, anchor) }
             }
         }
         controls: ({menu: mainMenuButton, library: libraryToggleButton, "divider:1": headerDivider, folder: mediaFolderButton,
             title: titleControl, minimize: minimizeButton, maximize: maximizeButton, fullscreen: fullscreenButton, close: closeButton,
             previous: previousButton, play: playButton, next: nextButton, timeline: timelineControl,
             mute: muteButton, volume: volumeSlider, audio: audioButton, subtitles: subtitleButton,
-            settings: playbackSettingsButton, episodes: episodesButton, queue: queueButton})
+            settings: playbackSettingsButton, "addon:org.videolan.episodes/episodes": episodesButton, queue: queueButton})
     }
 }

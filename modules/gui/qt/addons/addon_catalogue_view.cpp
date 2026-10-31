@@ -165,10 +165,12 @@ std::shared_ptr<const AddonCatalogueView::Data> AddonCatalogueView::project(Disp
                 {"name",contribution.document.value(QStringLiteral("name")).toString(package.manifest.name)},
                 {"enabled",enabled},{"configured",configured},{"configurationKnown",known},{"configurationState",!known?QStringLiteral("unknown"):configured?QStringLiteral("ready"):QStringLiteral("missing")},
                 {"document",contribution.document.toVariantMap()},{"accountReference",account},
+                {"iconMarkup",row.resources.value(contribution.id+QStringLiteral("/@icon")).value(QStringLiteral("markup")).toString()},
                 {"features",contribution.features},{"operations",contribution.operations},{"mediaKinds",contribution.mediaKinds},
                 {"cachePartition",partition},{"displayPartition",displayPartition},{"settingsRevision",QVariant::fromValue(row.settingsRevision)}});
         }
         for(auto it=row.resources.cbegin();it!=row.resources.cend();++it) {
+            if(it.key().endsWith(QLatin1String("/@icon")))continue;
             const auto* declaration=package.manifest.contribution(it.key().section(QLatin1Char('/'),0,0));
             if(!row.messagesReady && (!declaration || declaration->type!=QLatin1String("theme")))continue;
             const QString key=id+QLatin1Char('/')+it.key();result->resources.insert(key,it.value());

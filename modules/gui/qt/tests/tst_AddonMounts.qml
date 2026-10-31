@@ -50,6 +50,8 @@ TestCase {
         function closeSession(id) { closedSessions = closedSessions.concat([id]); const copy = Object.assign({}, sessions); delete copy[id]; sessions = copy }
         function suspendSession(id, value) { suspended = suspended.concat([{id: id, value: value}]) }
         function acknowledgeSession(id) {}
+        property var attachedPanels: []
+        function attachPanelSession(id) { attachedPanels = attachedPanels.concat([id]); return true }
         function dispatchSession(id, command, arguments) { dispatches = dispatches.concat([{id: id, command: command, arguments: arguments}]); return true }
         function triggerCommand(command, arguments) { dispatches = dispatches.concat([{command: command, arguments: arguments}]); return true }
         function reportViewFailure(id) { failures = failures.concat([id]); revision++; changed() }
@@ -71,6 +73,33 @@ TestCase {
             const copy = JSON.parse(JSON.stringify(sessions)); copy[id].state = Object.assign({}, copy[id].state, values)
             sessions = copy; sessionChanged(id)
         }
+    }
+    Component {
+        id: panelComponent
+        RedesignAddonPanel { width: 380; height: 500; registry: fakeRegistry; panelId: "org.example.ui/panel"; entry: ({name: "<b>Episodes</b>"}) }
+    }
+    SignalSpy { id: panelCloseSpy; signalName: "closeRequested" }
+    function test_panelFrameAttachesItsSessionAndRecovers() {
+        fakeRegistry.badDocument = true
+        const panel = createTemporaryObject(panelComponent, test)
+        verify(panel)
+        const title = findChild(panel, "addonPanelTitle")
+        compare(title.textFormat, Text.PlainText); compare(title.text, "<b>Episodes</b>")
+        tryVerify(() => fakeRegistry.attachedPanels.length > 0)
+        // A view that fails shows the app's recovery, not an empty frame.
+        tryVerify(() => panel.failed)
+        verify(findChild(panel, "addonPanelRecovery").visible)
+        fakeRegistry.badDocument = false
+        fakeRegistry.failures = []
+        const attached = fakeRegistry.attachedPanels.length
+        mouseClick(findChild(panel, "addonPanelReload"))
+        tryVerify(() => !panel.failed && fakeRegistry.attachedPanels.length > attached)
+        tryVerify(() => findChild(panel, "addonPanelMount").usable)
+        panelCloseSpy.target = panel
+        panel.forceActiveFocus(); keyClick(Qt.Key_Escape)
+        compare(panelCloseSpy.count, 1)
+        mouseClick(findChild(panel, "addonPanelClose"))
+        compare(panelCloseSpy.count, 2)
     }
     QtObject {
         id: visualizers

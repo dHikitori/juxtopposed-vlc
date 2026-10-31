@@ -378,6 +378,68 @@ TestCase {
         compare(commandSpy.count, 1); compare(commandSpy.signalArguments[0][0], "org.example.radio/play")
         compare(commandSpy.signalArguments[0][1].item, "station-1")
     }
+    function test_panelComponentsDispatchWithItemContext() {
+        const command = name => ({command: "org.example.radio/" + name})
+        view.registeredCommands = ["org.example.radio/play", "org.example.radio/season", "org.example.radio/expand",
+                                   "org.example.radio/more", "org.example.radio/refresh"]
+        view.hostArtwork = {"media:abc": "image://thumbnail/1"}
+        view.document = viewDocument({type: "Column", children: [
+            {type: "Tabs", id: "seasons", items: {bind: "state.seasons"}, selected: {bind: "state.season"}, text: "Seasons",
+             action: Object.assign(command("season"), {arguments: {season: {bind: "item.tab.key"}}})},
+            {type: "Menu", id: "options", text: "Episode options", entries: [
+                {text: "Refresh", icon: "refresh", action: command("refresh")},
+                {text: "Hidden", visible: {bind: "state.hidden"}, action: command("refresh")}]},
+            {type: "List", id: "episodes", items: {bind: "state.episodes"}, keyField: "key", scroll: false,
+             more: {bind: "state.more"}, moreAction: command("more"),
+             itemTemplate: {type: "MediaRow", number: {bind: "item.number"}, title: {bind: "item.title"}, mark: {bind: "item.mark"},
+                progress: {bind: "item.progress"}, expanded: {bind: "item.expanded"}, artwork: {bind: "item.artwork"},
+                primaryAction: Object.assign(command("expand"), {arguments: {key: {bind: "item.key"}}}),
+                children: [
+                    {type: "Tabs", id: "versions", items: {bind: "item.versions"}, selected: {bind: "item.version"}, text: "Episode version",
+                     action: Object.assign(command("expand"), {arguments: {key: {bind: "item.key"}, version: {bind: "item.tab.key"}}})},
+                    {type: "Button", id: "play", text: "Play", action: Object.assign(command("play"), {arguments: {key: {bind: "item.key"}}})}]}}]})
+        view.state = {seasons: [{key: 1, label: "Season 1"}, {key: 2, label: "Season 2"}], season: 1, more: true, hidden: false,
+            episodes: [{key: "a", number: "1", title: "Pilot", mark: "Now playing", progress: 0.5, expanded: true, artwork: "media:abc",
+                        versions: [{key: "v0", label: "Show.S01E01.mkv"}, {key: "v1", label: "Show.S01E01.1080p.mkv"}], version: "v0"},
+                       {key: "b", number: "2", title: "Second", mark: "", progress: 0, expanded: false, artwork: "", versions: [], version: ""}]}
+        wait(60)
+        verify(view.valid, view.errorMessage)
+        tryVerify(() => !!findChild(view, "addonTab_2"))
+        mouseClick(findChild(view, "addonTab_2"))
+        compare(commandSpy.signalArguments[commandSpy.count - 1][0], "org.example.radio/season")
+        compare(commandSpy.signalArguments[commandSpy.count - 1][1].season, 2)
+        mouseClick(findChild(view, "addonMediaRow_b"))
+        compare(commandSpy.signalArguments[commandSpy.count - 1][1].key, "b")
+        tryVerify(() => !!findChild(view, "addonTab_v1"))
+        mouseClick(findChild(view, "addonTab_v1"))
+        compare(commandSpy.signalArguments[commandSpy.count - 1][1].key, "a")
+        compare(commandSpy.signalArguments[commandSpy.count - 1][1].version, "v1")
+        const more = findChild(view, "addonListMore_episodes")
+        verify(more.visible); mouseClick(more)
+        compare(commandSpy.signalArguments[commandSpy.count - 1][0], "org.example.radio/more")
+        const menu = findChild(view, "addonMenu_options").parent.actionsMenu
+        compare(menu.entries.length, 1)
+        menu.actionRequested("0")
+        compare(commandSpy.signalArguments[commandSpy.count - 1][0], "org.example.radio/refresh")
+        // Host artwork is used only for media: handles that the app supplied.
+        compare(view.hostArtworkFor("media:abc"), "image://thumbnail/1")
+        compare(view.hostArtworkFor("media:other"), "")
+        compare(view.hostArtworkFor("https://example.org/a.png"), "")
+        compare(view.assetFor("media:abc"), "")
+        // Tab entries need different keys and labels.
+        view.state = Object.assign({}, view.acceptedState, {seasons: [{key: 1, label: "One"}, {key: 1, label: "Again"}]}); wait(60)
+        verify(!view.valid)
+        for (const bad of [
+                {type: "Tabs", items: [{key: 1, label: "One"}], text: "Seasons", action: command("season")},
+                {type: "Tabs", items: {bind: "state.seasons"}, text: "Seasons"},
+                {type: "Menu", text: "Options", entries: []},
+                {type: "Menu", text: "Options", entries: Array(17).fill({text: "Refresh", action: command("refresh")})},
+                {type: "Menu", text: "Options", entries: [{text: "Refresh", action: command("refresh"), url: "x"}]},
+                {type: "MediaRow", number: "1"},
+                {type: "List", items: {bind: "state.episodes"}, keyField: "key", scroll: "no", itemTemplate: {type: "Text", text: "x"}}])
+            verify(Contract.validateView(viewDocument(bad), view.registeredCommands).length > 0, JSON.stringify(bad))
+        view.hostArtwork = ({})
+    }
     function test_untrustedButtonAndEnumLabelsUsePlainText() {
         const markup = "<img src='https://example.org/track'>"
         view.document = viewDocument({type: "Button", text: markup, action: {command: "org.example.radio/play"}})

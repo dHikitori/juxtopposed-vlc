@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_package_store.hpp"
+#include "addon_panel_icon.hpp"
 #include "addon_process_launch.hpp"
 #include "addon_store_profile_client.hpp"
 #include "addon_display_catalogue_reader.hpp"
@@ -2171,6 +2172,15 @@ bool PackageStore::readDisplayCatalogue(const StoreAuthorityToken& queued,const 
                 if(!document.isEmpty())row.resources.insert(contribution.id+QLatin1Char('/')+field,std::move(document));
                 localeNeeded|=!theme;
             }
+        }
+        // Panel icons are small and always shown, like the selected theme.
+        for(const auto& contribution:row.package.manifest.contributions) {
+            const auto icon=contribution.document.value(QStringLiteral("icon")).toString();
+            if(contribution.type!=QLatin1String("ui.panel") || !row.package.manifest.files.contains(icon))continue;
+            const auto found=contents.constFind(icon);
+            if(found==contents.cend() || found->size()>panelIcon::MaximumBytes)continue;
+            const auto markup=panelIcon::markup(*found);
+            if(!markup.isEmpty())row.resources.insert(contribution.id+QStringLiteral("/@icon"),QJsonObject{{"markup",markup}});
         }
         if(request.settingsPackages.contains(id) && !row.package.manifest.settingsUi.isEmpty())
             row.resources.insert(QStringLiteral("@settingsUi"),json(row.package.manifest.settingsUi));
