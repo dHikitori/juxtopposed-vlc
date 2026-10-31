@@ -30,6 +30,8 @@ public:
     void close();
     // The metadata command answers with this report.
     void setMetadataReport(std::function<QVariantMap()>);
+    // The panels command answers with this report.
+    void setPanelsReport(std::function<QVariantMap()>);
 
 private:
     AddonTestDriver(AddonManager*, AddonPackageSummaries*, AddonDiscoveryService*, QObject* parent);
@@ -51,6 +53,7 @@ private:
     QPointer<AddonPackageSummaries> m_summaries;
     QPointer<AddonDiscoveryService> m_discovery;
     std::function<QVariantMap()> m_metadata;
+    std::function<QVariantMap()> m_panels;
     QLocalServer* m_server = nullptr;
     QPointer<QLocalSocket> m_client;
     QObject* m_wait = nullptr;

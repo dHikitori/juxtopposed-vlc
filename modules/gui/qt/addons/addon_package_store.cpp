@@ -659,6 +659,22 @@ bool credentialSettingsValid(const Manifest& manifest, const QJsonObject& schema
     return true;
 }
 
+// A worker command names its operation in "command"; the worker runs only
+// operations that the contribution lists (sdk/ui-document.md). The catalogue
+// does not repeat this check, so a release installed before it still loads.
+bool validateCommandOperations(const Manifest& manifest, QString* error)
+{
+    for (const auto& contribution : manifest.contributions) {
+        if (contribution.type != QLatin1String("ui.command") || contribution.document.contains(QStringLiteral("route"))) continue;
+        const auto command = contribution.document.value(QStringLiteral("command")).toString();
+        const auto* target = manifest.contribution(command);
+        if (command.isEmpty() || command.contains(QLatin1Char('/')) || (target && target->type == QLatin1String("ui.modal"))) continue;
+        if (!contribution.operations.contains(command))
+            return fail(error, QStringLiteral("The UI command \"%1\" must list \"%2\" in its operations.").arg(contribution.id, command));
+    }
+    return true;
+}
+
 bool validateCandidate(const PackageCandidate& candidate, QString* error)
 {
     Manifest parsed;
@@ -801,7 +817,7 @@ bool PackageStore::inspectDirectory(const QString& directory, const ReleaseIdent
             ? QStringLiteral("distribution-sha256") : QStringLiteral("developer-sha256");
         candidate.identity.commitId = candidate.identity.tagObjectId = QString::fromLatin1(candidate.digest);
     }
-    if (!validateCandidate(candidate, error)) return false;
+    if (!validateCandidate(candidate, error) || !validateCommandOperations(candidate.manifest, error)) return false;
     if (output) *output = candidate;
     return true;
 }
@@ -894,7 +910,7 @@ bool PackageStore::fetchGitTag(const QString& source, const QString& tag, Packag
         candidate.contents.insert(path, value);
     }
     candidate.digest = packageDigest(candidate.contents);
-    if (!validateCandidate(candidate, error)) return false;
+    if (!validateCandidate(candidate, error) || !validateCommandOperations(candidate.manifest, error)) return false;
     QTemporaryDir check;
     if (!check.isValid()) return fail(error, QStringLiteral("The app cannot examine the staged package."));
     for (auto it = candidate.contents.begin(); it != candidate.contents.end(); ++it) {

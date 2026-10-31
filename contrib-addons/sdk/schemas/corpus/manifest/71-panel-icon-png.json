@@ -53,7 +53,10 @@
         "type": "ui.command",
         "contract": "ui@1",
         "label": "Context",
-        "command": "context"
+        "command": "context",
+        "operations": [
+          "context"
+        ]
       }
     ],
     "permissions": {

@@ -17,6 +17,8 @@ With --driver, the app must be built with meson -Daddon-test-driver=true.
 The run then also loads the Extensions list, installs the synthetic
 discovery fixture package, and opens, browses and searches it twice through
 the add-on worker. The fixture has no network, credential or file access.
+It then plays a short video in a series folder and waits for the bundled
+Episodes panel's button (player.panels@1 and media.siblings).
 
 Exit status 0 means every check passed, 77 means the build has no app.
 """
@@ -268,10 +270,11 @@ def run(args):
                     VLC_DATA_PATH=str(args.build / 'share'),
                     VLC_LIBEXEC_PATH=str(args.build / 'bin'))
     args.env.pop('DBUS_SESSION_BUS_ADDRESS', None)
-    if args.no_display:
-        # Builds without the offscreen compositor fix crash with a display.
-        args.env.pop('DISPLAY', None)
-        args.env.pop('WAYLAND_DISPLAY', None)
+    # No window reaches the desktop: Qt is offscreen, and without a display
+    # a video gets no native window either. (Builds without the offscreen
+    # compositor fix also crash with a display.)
+    args.env.pop('DISPLAY', None)
+    args.env.pop('WAYLAND_DISPLAY', None)
     store = home / 'data' / 'vlc' / 'addons'
     apps = []
     try:
@@ -344,6 +347,27 @@ def run(args):
                     raise Failure(f'{app.name}: the metadata owner is not as expected: {report}')
             if args.owner and not args.no_playback and results['metadata']['first']['coreRequests'] < 1:
                 raise Failure('playback sent no metadata request to the add-on owner')
+            if not args.no_playback and not args.no_addons:
+                # The bundled Episodes panel: its button turns on for a file
+                # in a series folder (player.panels@1 and media.siblings).
+                season = home / 'Series' / 'Show' / 'Season 01'
+                season.mkdir(parents=True)
+                for episode in (1, 2):
+                    shutil.copyfile(args.episode, season / f'Show - S01E0{episode}.mkv')
+                first.send(f'add {(season / "Show - S01E01.mkv").as_uri()}')
+                wait_for('series playback', first.playing, args.timeout)
+                panel = 'org.videolan.episodes/episodes'
+
+                def episodes_button():
+                    report = first.drive('panels', args.timeout)
+                    results['panels'] = report
+                    return any(row.get('id') == panel and row.get('available') for row in report.get('panels', []))
+                try:
+                    wait_for('the Episodes button', episodes_button, args.timeout)
+                except Failure as failure:
+                    raise Failure(f'{failure}: {results.get("panels")}')
+                first.send('stop')
+                wait_for('stop', lambda: not first.playing(), args.timeout)
             results['helper_launches'] = first.drive('stats', args.timeout)['launches']
         windows = [first] + ([second] if second else [])
         trees = [process_tree(app.pid) for app in windows]
@@ -408,6 +432,9 @@ def main():
     parser.add_argument('--build', type=Path, required=True, help='meson build directory')
     parser.add_argument('--sample', type=Path,
                         default=Path(__file__).resolve().parent / 'samples' / 'meta.mp3')
+    parser.add_argument('--episode', type=Path,
+                        default=Path(__file__).resolve().parent / 'samples' / 'episode.mkv',
+                        help='a video that is copied into a series folder (one minute, 16x16 FFV1)')
     parser.add_argument('--windows', type=int, choices=(1, 2), default=1)
     parser.add_argument('--quit-second-first', action='store_true')
     parser.add_argument('--trace', action='store_true', help='count process launches with strace')
@@ -423,7 +450,7 @@ def main():
     parser.add_argument('--no-addons', action='store_true',
                         help='do not wait for bundled add-ons, for a build without them')
     parser.add_argument('--no-display', action='store_true',
-                        help='remove DISPLAY and WAYLAND_DISPLAY from the app environment')
+                        help='kept for older scripts; the app never gets DISPLAY or WAYLAND_DISPLAY')
     parser.add_argument('--idle', type=float, default=30.0, help='idle measurement in seconds')
     parser.add_argument('--timeout', type=float, default=60.0)
     parser.add_argument('--work', type=Path, default=None, help='parent of the temporary home')
@@ -431,6 +458,7 @@ def main():
     args = parser.parse_args()
     args.build = args.build.resolve()
     args.sample = args.sample.resolve()
+    args.episode = args.episode.resolve()
     args.fixture = args.fixture.resolve()
     return run(args)
 

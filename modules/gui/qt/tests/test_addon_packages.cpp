@@ -698,6 +698,31 @@ private slots:
             QVERIFY2(Manifest::parse(QJsonDocument(document).toJson(), &parsed, &error), qPrintable(error));
         }
     }
+    void workerCommandsListTheirOperation()
+    {
+        // The worker runs only declared operations, so an install refuses a
+        // command that names one it does not list (Episodes 1.0.0 did).
+        const QDir bundled(QDir(QStringLiteral(VLC_ADDON_SOURCE_ROOT)).filePath(QStringLiteral("contrib-addons/examples/episodes")));
+        Manifest manifest; QMap<QString, QByteArray> contents; QString error;
+        QVERIFY2(Manifest::loadDirectory(bundled.path(), &manifest, &contents, &error), qPrintable(error));
+        ReleaseIdentity identity; identity.source = manifest.source.toString();
+        identity.tag = QStringLiteral("v") + manifest.version; identity.distributionSource = true;
+        QTemporaryDir copy;
+        for (auto it = contents.cbegin(); it != contents.cend(); ++it) QVERIFY(write(copy.filePath(it.key()), it.value()));
+        PackageCandidate candidate;
+        QVERIFY2(PackageStore::inspectDirectory(copy.path(), identity, &candidate, &error), qPrintable(error));
+        auto document = QJsonDocument::fromJson(contents.value(QStringLiteral("addon.json"))).object();
+        auto contributions = document.value("contributions").toArray();
+        for (qsizetype i = 0; i < contributions.size(); ++i) {
+            auto contribution = contributions.at(i).toObject();
+            if (contribution.value("id").toString() != QLatin1String("play")) continue;
+            QVERIFY(contribution.contains("operations")); contribution.remove("operations"); contributions.replace(i, contribution);
+        }
+        document.insert("contributions", contributions);
+        QVERIFY(write(copy.filePath(QStringLiteral("addon.json")), QJsonDocument(document).toJson()));
+        QVERIFY(!PackageStore::inspectDirectory(copy.path(), identity, &candidate, &error));
+        QVERIFY2(error.contains(QLatin1String("\"play\"")), qPrintable(error));
+    }
     void inventoryAndContentDigest()
     {
         QTemporaryDir directory;

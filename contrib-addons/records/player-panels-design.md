@@ -316,7 +316,7 @@ bundling) and `54cc3444cc` (instruction budget). The author guide is
   `SeriesModel` is a plain object with the scan, watch states, titles,
   artwork and `siblings()`; the season list and rows of the removed view
   are gone, and `test_qt_series_model` checks `siblings()`.
-- **Episodes package.** `examples/episodes`, version 1.0.0, bundled and on
+- **Episodes package.** `examples/episodes`, version 1.0.1, bundled and on
   by default. The built-in `RedesignEpisodesView.qml` is removed.
 
 ### Changes from the design
@@ -364,6 +364,34 @@ bundling) and `54cc3444cc` (instruction budget). The author guide is
 Two QML results fail on the commit before this work as well:
 `tst_AddonTheme::test_unknownTokensAndExecutablePropertiesFailClosed`, and
 `tst_Redesign`, which passes in 31.3 s but has a 30 s meson limit.
+
+### Windows check: the button never showed (fixed in 1.0.1)
+
+The user's first Windows run showed no Episodes button. Episodes 1.0.0
+declared its nine `ui.command` contributions without `operations`. The
+worker runs only listed operations (`sdk/ui-document.md`), so every context
+call ended `unsupported` before the package ran, and the button stayed
+hidden. No test saw it: the registry tests use a fake backend, their
+fixtures had the same gap, and the worker tests call the module directly.
+
+- Episodes 1.0.1 lists each command's operation. The Wasm is unchanged
+  (`43ac7220…`). Bundled packages install once, so an existing profile
+  gets 1.0.1 as the bundled update in Extensions.
+- An install, an update and `vlc-addon-validate` now refuse a worker
+  `ui.command` that does not list its own `command`
+  (`validateCommandOperations` in `inspectDirectory` and the Git release
+  check). The catalogue does not repeat it, so an installed 1.0.0 still
+  loads and can update. `test_qt_addon_packages` covers it with the
+  shipped package and a copy without `play`'s operation.
+- The app smoke test with `--driver` now plays a file in a series folder
+  and waits for the panel's button through a new `panels` driver command
+  (registry panels and series state). An audio file never counts as an
+  episode, so the run copies `test/samples/episode.mkv` (one minute of
+  16×16 FFV1, 2 KB). The smoke app no longer gets `DISPLAY` or
+  `WAYLAND_DISPLAY`: with a display, a video opened a native window on
+  the desktop.
+- Also fixed: the UI image capture in `AddonManager` left out `ui.panel`,
+  so a panel's own package images would have been refused.
 
 ### Open
 

@@ -807,7 +807,7 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
         InstalledPackage package;
         if (!authority.current() || store.packageRetiring(packagePart(global)) || !store.installed(packagePart(global), &package) || !package.enabled) return rejected();
         const auto* contribution = package.manifest.contribution(localPart(global));
-        if (!contribution || !QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement"}.contains(contribution->type)) return rejected();
+        if (!contribution || !QStringList{"ui.route", "ui.modal", "ui.section", "ui.replacement", "ui.panel"}.contains(contribution->type)) return rejected();
         const auto scope = package.grants.value(QStringLiteral("ui.contribute")).toObject();
         const auto hook = contribution->document.value(QStringLiteral("hook")).toString();
         if (scope.isEmpty() || (!hook.isEmpty() && !scope.value(QStringLiteral("hooks")).toArray().contains(hook))) return rejected();

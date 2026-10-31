@@ -53,6 +53,9 @@
         "contract": "ui@1",
         "label": "Context",
         "command": "context",
+        "operations": [
+          "context"
+        ],
         "placement": "above"
       }
     ],

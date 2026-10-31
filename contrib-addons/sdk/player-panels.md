@@ -32,6 +32,10 @@ gives the reasons for each rule.
   tooltip and screen reader text.
 - `command` names a `ui.command` of the same package that has a `command`
   operation and no `route`: the context command.
+- Each worker `ui.command` lists its `command` value in `operations`, for
+  example `"command": "context", "operations": ["context"]`. The worker runs
+  only listed operations; an install, an update and `vlc-addon-validate`
+  refuse a command that does not list its own.
 - `placement` (optional) is the zone where the button first appears:
   `headerLeft`, `headerRight`, `footerLeft`, `footerRight` or `above`. The
   app adds it when it draws the layout. If the user removes it in the

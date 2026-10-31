@@ -27,7 +27,7 @@ class TestAddonUiRegistry : public QObject
                 {"parameters", QJsonObject{{"type", "object"}, {"additionalProperties", false}, {"properties", QJsonObject{{"query", QJsonObject{{"type", "string"}}}}}}},
                 {"stateSchema", QJsonObject{{"type", "object"}, {"additionalProperties", false}, {"properties", QJsonObject{{"result", QJsonObject{{"type", "string"}}}}}}}},
             QJsonObject{{"id", "open"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"hook", "player.actions@1"}, {"route", "browser"}},
-            QJsonObject{{"id", "update"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"hook", "player.actions@1"}, {"command", "update"}},
+            QJsonObject{{"id", "update"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"hook", "player.actions@1"}, {"command", "update"}, {"operations", QJsonArray{"update"}}},
             QJsonObject{{"id", "section"}, {"type", "ui.section"}, {"contract", "ui@1"}, {"hook", "home.sections@1"}, {"view", "view.json"}},
             QJsonObject{{"id", "modal"}, {"type", "ui.modal"}, {"contract", "ui@1"}, {"view", "view.json"},
                 {"resultSchema", QJsonObject{{"type", "object"}, {"additionalProperties", false}, {"properties", QJsonObject{{"code", QJsonObject{{"type", "string"}, {"maxLength", 8}}}}}, {"required", QJsonArray{"code"}}}}},
@@ -78,8 +78,8 @@ class TestAddonUiRegistry : public QObject
             QJsonObject{{"id", "episodes"}, {"type", "ui.panel"}, {"contract", "ui@1"}, {"hook", "player.panels@1"}, {"name", "Episodes"},
                 {"label", "Show the episodes"}, {"icon", "icon.svg"}, {"view", "view.json"}, {"command", "context"},
                 {"placement", "footerRight"}, {"stateSchema", state}, {"state", QJsonObject{{"status", "loading"}}}},
-            QJsonObject{{"id", "context"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"label", "Context"}, {"command", "context"}},
-            QJsonObject{{"id", "play"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"label", "Play"}, {"command", "play"}}};
+            QJsonObject{{"id", "context"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"label", "Context"}, {"command", "context"}, {"operations", QJsonArray{"context"}}},
+            QJsonObject{{"id", "play"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"label", "Play"}, {"command", "play"}, {"operations", QJsonArray{"play"}}}};
         const QJsonObject manifest{{"formatVersion", 1}, {"id", "org.example.panel"}, {"name", "Example panel"}, {"version", "1.0.0"},
             {"publisher", "Tests"}, {"license", "GPL-2.0-or-later"}, {"source", "https://example.org/panel.git"},
             {"api", QJsonObject{{"addon", "^1.0.0"}, {"contracts", QJsonObject{{"ui", "^1.0.0"}}}}},

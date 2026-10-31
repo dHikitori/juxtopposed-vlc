@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "id": "org.videolan.episodes",
   "name": "Episodes",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "Hakone reference add-ons",
   "license": "GPL-2.0-or-later",
   "source": "https://github.com/hakone-org/addon-episodes.git",
@@ -269,7 +269,10 @@
       "type": "ui.command",
       "contract": "ui@1",
       "label": "Update the episode list",
-      "command": "context"
+      "command": "context",
+      "operations": [
+        "context"
+      ]
     },
     {
       "id": "season",
@@ -277,6 +280,9 @@
       "contract": "ui@1",
       "label": "Show a season",
       "command": "season",
+      "operations": [
+        "season"
+      ],
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -298,6 +304,9 @@
       "contract": "ui@1",
       "label": "Open or close an episode",
       "command": "expand",
+      "operations": [
+        "expand"
+      ],
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -324,14 +333,20 @@
       "type": "ui.command",
       "contract": "ui@1",
       "label": "Show the next episodes",
-      "command": "more"
+      "command": "more",
+      "operations": [
+        "more"
+      ]
     },
     {
       "id": "less",
       "type": "ui.command",
       "contract": "ui@1",
       "label": "Show the previous episodes",
-      "command": "less"
+      "command": "less",
+      "operations": [
+        "less"
+      ]
     },
     {
       "id": "play",
@@ -339,6 +354,9 @@
       "contract": "ui@1",
       "label": "Play an episode",
       "command": "play",
+      "operations": [
+        "play"
+      ],
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -362,6 +380,9 @@
       "contract": "ui@1",
       "label": "Open the episode source",
       "command": "source",
+      "operations": [
+        "source"
+      ],
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -382,6 +403,9 @@
       "contract": "ui@1",
       "label": "Look for episodes again",
       "command": "refresh",
+      "operations": [
+        "refresh"
+      ],
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -397,7 +421,10 @@
       "type": "ui.command",
       "contract": "ui@1",
       "label": "Choose the series",
-      "command": "identify"
+      "command": "identify",
+      "operations": [
+        "identify"
+      ]
     }
   ],
   "permissions": {

@@ -612,6 +612,17 @@ void MainUI::registerQMLTypes()
                         {QStringLiteral("ownerActive"), m_metadataOwner && m_metadataOwner->active()},
                         {QStringLiteral("coreRequests"), service ? qint64(service->coreRequestCount()) : -1}};
                 });
+                // What the player gets: the registry's panels, as QML reads them.
+                driver->setPanelsReport([registry = QPointer<vlc::addons::AddonUiRegistry>(findChild<vlc::addons::AddonUiRegistry*>()),
+                                         series = QPointer<SeriesModel>(findChild<SeriesModel*>(QStringLiteral("redesignSeriesModel")))] {
+                    if (!registry) return QVariantMap{{QStringLiteral("registry"), false}};
+                    QVariantMap result{{QStringLiteral("registry"), true}, {QStringLiteral("available"), registry->available()},
+                        {QStringLiteral("siblingsWanted"), registry->siblingsWanted()}, {QStringLiteral("panels"), registry->panels()}};
+                    if (series)
+                        result.insert(QStringLiteral("series"), QVariantMap{{QStringLiteral("available"), series->available()},
+                            {QStringLiteral("loading"), series->loading()}, {QStringLiteral("siblings"), qint64(series->siblings().size())}});
+                    return result;
+                });
             }
 #endif
         }
