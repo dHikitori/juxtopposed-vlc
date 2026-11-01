@@ -50,6 +50,8 @@ public:
     Q_INVOKABLE bool loadMore(const QString& view);
     Q_INVOKABLE bool canPlay(const QString& view) const;
     Q_INVOKABLE bool canEnqueue(const QString& view) const;
+    // The app plays this source only after the user approves it.
+    Q_INVOKABLE bool needsApproval(const QString& view) const;
     struct SourcePlayback {
         std::function<bool(const QString&)> ready;
         std::function<bool(const QVariantMap&)> referenceReady;
@@ -100,6 +102,8 @@ private:
         QVariantList items;
         quint64 generation = 1;
         bool busy = false, append = false, started = false;
+        // Read once on open: the manifest asks the app to resolve playback.
+        bool declaresResolve = false;
         QVariantList playlists;
         QString playlistTarget, playlistError;
         AddonQueueTransactions::Cancel playlistCancel;

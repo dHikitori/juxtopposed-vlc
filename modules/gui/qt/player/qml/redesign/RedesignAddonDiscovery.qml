@@ -34,6 +34,9 @@ FocusScope {
     readonly property bool displayLoading: !!backend && backend.loading === true
     readonly property bool sourceChecking: sourceId.length > 0 && source.configurationKnown === false
     readonly property bool actionable: displayAvailable && !sourceChecking
+    // Play and Add to queue open the approval review instead of staying
+    // disabled with no reason given.
+    readonly property bool approvalFirst: playbackReviewAvailable && viewState.needsApproval === true
     // The app's queue-fill session; its source can differ from the open one.
     readonly property var queueFill: backend && backend.queueFill ? backend.queueFill : ({})
     signal configureRequested(string packageId)
@@ -312,15 +315,19 @@ FocusScope {
             Layout.fillWidth: true
             RedesignButton {
                 objectName: "addonDiscoveryPlay"
-                caption: qsTr("Play"); text: caption; enabled: root.actionable && root.selected.length === 1 && root.viewState.canPlay === true
+                caption: qsTr("Play"); tooltipTextFormat: Text.PlainText
+                text: root.approvalFirst ? qsTr("Play: approve playback access for this source first.") : caption
+                enabled: root.actionable && root.selected.length === 1 && (root.viewState.canPlay === true || root.approvalFirst)
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                onClicked: root.play()
+                onClicked: root.approvalFirst ? root.playbackReviewRequested(root.sourceId) : root.play()
             }
             RedesignButton {
                 objectName: "addonDiscoveryEnqueue"
-                caption: qsTr("Add to queue"); text: caption; enabled: root.actionable && root.selected.length > 0 && root.viewState.canEnqueue === true
+                caption: qsTr("Add to queue"); tooltipTextFormat: Text.PlainText
+                text: root.approvalFirst ? qsTr("Add to queue: approve playback access for this source first.") : caption
+                enabled: root.actionable && root.selected.length > 0 && (root.viewState.canEnqueue === true || root.approvalFirst)
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                onClicked: root.enqueue()
+                onClicked: root.approvalFirst ? root.playbackReviewRequested(root.sourceId) : root.enqueue()
             }
             RedesignButton {
                 objectName: "addonDiscoveryPlaylist"

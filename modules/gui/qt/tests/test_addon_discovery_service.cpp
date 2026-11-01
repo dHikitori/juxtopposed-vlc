@@ -213,6 +213,29 @@ private slots:
         service.setSourcePlayback({[](const auto&) { return true; },[](const auto&) { return true; },[](const auto&) {}});
         QCOMPARE(service.sources().first().toMap().value("operations").toStringList(),(QStringList{"roots","search"}));
     }
+    void unapprovedSourcePlaybackAsksForApproval() {
+        Fixture fixture; bool approved=false;
+        AddonDiscoveryService service(fixture.backend(),{});
+        service.setSourcePlayback({[&](const auto&) { return approved; },[&](const auto&) { return approved; },[](const auto&) {}});
+        const auto view=service.openSource("org.example.radio/source"); QVERIFY(!view.isEmpty());
+        QVERIFY(service.needsApproval(view)); QVERIFY(service.view(view).value("needsApproval").toBool()); QVERIFY(!service.canEnqueue(view));
+        QSignalSpy changed(&service,&AddonDiscoveryService::viewChanged);
+        approved=true; service.refreshSourcePlayback();
+        QCOMPARE(changed.size(),1); QVERIFY(!service.needsApproval(view)); QVERIFY(!service.view(view).value("needsApproval").toBool());
+        QVERIFY(!service.needsApproval("missing"));
+    }
+    void sourceWithoutResolveNeverAsksForApproval() {
+        Fixture fixture; auto row=fixture.sources[0].toMap(); row["operations"]=QStringList{"roots","search"}; fixture.sources[0]=row;
+        AddonDiscoveryService service(fixture.backend(),{});
+        service.setSourcePlayback({[](const auto&) { return false; },[](const auto&) { return false; },[](const auto&) {}});
+        const auto view=service.openSource("org.example.radio/source"); QVERIFY(!view.isEmpty());
+        QVERIFY(!service.needsApproval(view));
+    }
+    void coordinatorPlaybackNeverAsksForApproval() {
+        Fixture fixture; AddonDiscoveryService service(fixture.backend(),{});
+        const auto view=service.openSource("org.example.radio/source"); QVERIFY(!view.isEmpty());
+        QVERIFY(!service.needsApproval(view));
+    }
     void playlistSelectionKeepsNativeAuthorityOutsideProviderCalls() {
         Fixture fixture; QString appended; QStringList released;
         AddonQueueTransactions::Backend queues;

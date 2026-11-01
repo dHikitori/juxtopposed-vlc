@@ -220,6 +220,35 @@ TestCase {
         compare(sourceReview.approvals, 0); compare(service.calls.length, 1)
         window.close(); tryCompare(window, "opened", false); compare(sourceReview.closes, 1)
     }
+    function test_unapprovedPlaybackOpensTheReview() {
+        service.sources = [Object.assign({}, service.sources[0], {operations: ["roots", "browse", "resolve"]})]
+        ++service.revision
+        const window = createTemporaryObject(windowComponent, test, {sourceConsentBackend: sourceReview})
+        window.openSource("org.example.radio/source"); tryCompare(window, "opened", true)
+        const browser = findChild(window, "addonDiscoveryWindowBrowser")
+        service.current = Object.assign({}, service.current, {needsApproval: true}); service.viewChanged(browser.viewId)
+        browser.select("item-1")
+        const play = findChild(window, "addonDiscoveryPlay"), enqueue = findChild(window, "addonDiscoveryEnqueue")
+        verify(play.enabled); verify(enqueue.enabled)
+        compare(play.caption, "Play"); verify(play.text.indexOf("approve playback access") >= 0)
+        play.clicked()
+        compare(sourceReview.preparations, 1); compare(sourceReview.selected, "org.example.radio/source")
+        enqueue.clicked(); compare(sourceReview.preparations, 2)
+        compare(service.calls.length, 1)
+        // Once approved, the actions play and queue as usual.
+        service.current = Object.assign({}, service.current, {needsApproval: false, canPlay: true, canEnqueue: true}); service.viewChanged(browser.viewId)
+        compare(play.text, "Play")
+        play.clicked(); enqueue.clicked()
+        compare(service.calls[1].operation, "play"); compare(service.calls[2].operation, "enqueue")
+        compare(sourceReview.preparations, 2)
+    }
+    function test_unapprovedPlaybackStaysDisabledWithoutAReview() {
+        const view = page(); view.openSource("org.example.radio/source")
+        service.current = Object.assign({}, service.current, {needsApproval: true}); service.viewChanged(view.viewId)
+        view.select("item-1")
+        verify(!findChild(view, "addonDiscoveryPlay").enabled)
+        verify(!findChild(view, "addonDiscoveryEnqueue").enabled)
+    }
     function test_playlistNeedsAnOpaquePreparedTargetAndExplicitConfirmation() {
         const view = page(); view.openSource("org.example.radio/source"); view.select("item-1")
         service.current = Object.assign({}, service.current, {playlistAvailable: true, playlists: [{ref: "choice:one", name: "<b>Saved</b>"}], canAddToPlaylist: false})

@@ -207,6 +207,7 @@ QString AddonDiscoveryService::openSource(const QString& source)
     if (!owner || !available() || identity != m_coordinator.sourceIdentity(source)) return {};
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     View view; view.source = source; view.sourceIdentity = identity;
+    view.declaresResolve = m_coordinator.declares(source, QStringLiteral("resolve"));
     // The first page is requested next. Show loading from the first frame,
     // not "Use search" while the worker starts.
     view.busy = m_coordinator.supports(source, QStringLiteral("roots"));
@@ -234,6 +235,7 @@ QVariantMap AddonDiscoveryService::view(const QString& id) const
         {"available", viewCurrent(*it)}, {"loading", loading()},
         {"canGoBack", !it->path.isEmpty() || !it->query.isEmpty()}, {"hasMore", !it->cursor.isEmpty()},
         {"query", it->query}, {"canPlay", canPlay(id)}, {"canEnqueue", canEnqueue(id)}, {"canFillQueue", canFillQueue(id)},
+        {"needsApproval", needsApproval(id)},
         {"playlistAvailable",it->playlistAvailable},{"playlistBusy",it->playlistBusy},{"playlists",it->playlists},
         {"playlistTarget",it->playlistTarget},{"playlistError",it->playlistError},{"morePlaylists",it->morePlaylists},
         {"canAddToPlaylist",viewCurrent(*it) && !it->playlistTarget.isEmpty() && m_transactions.appendAvailable() && m_transactions.snapshot(it->playlistTarget).available}};
@@ -314,6 +316,11 @@ bool AddonDiscoveryService::canPlay(const QString& id) const
 bool AddonDiscoveryService::canEnqueue(const QString& id) const
 { const auto it=m_views.constFind(id); return it!=m_views.cend() && viewCurrent(*it) && m_transactions.appendAvailable() && m_transactions.snapshot().available
     && (!m_sourcePlayback.ready || m_sourcePlayback.ready(it->source)); }
+bool AddonDiscoveryService::needsApproval(const QString& id) const
+{
+    const auto it=m_views.constFind(id); if(it==m_views.cend() || !viewCurrent(*it) || !m_sourcePlayback.ready) return false;
+    return it->declaresResolve && !m_sourcePlayback.ready(it->source);
+}
 void AddonDiscoveryService::setSourcePlayback(SourcePlayback backend)
 { m_sourcePlayback=std::move(backend); refreshSourcePlayback(); }
 void AddonDiscoveryService::refreshSourcePlayback()
