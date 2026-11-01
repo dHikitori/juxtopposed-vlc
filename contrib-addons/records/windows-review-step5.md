@@ -215,11 +215,16 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `5938f2171b`: `vlc.exe`
-`dd20dfa007f6c06fc1ee669185ec4b549812be9290b84dca2716aed8fedd72a9`,
+Package `7c5ac69a74`: `vlc.exe`
+`0c7a397ebaaf182782cb8e7d632d682574ff185c36cf5884d73d0f51c45a0bfd`,
 `libqt_plugin.dll`
-`fada14da8117736e5832aa0661e25f084145c60ac7effe40f67f7a83c8d15291`.
-It is `e7d48e7f54` plus log lines for why an add-on view stops
+`f43b7e8c2a77aca6fb4c0a93ab06e4c21972e564338be5f30ba05bd73076aa73`.
+It was built from the `e7e8d9868c` worktree with the `7c5ac69a74` change
+not yet committed, so `BUILD-INFO.json` names `e7e8d9868c` (dirty). It is
+`5938f2171b` plus Add to playlist and Add to queue reading packages and
+saving admissions off the GUI thread (`b08772a60d`, `e7e8d9868c`), and
+Play and Add to queue opening the approval review for an unapproved
+source (`7c5ac69a74`, check 15). `5938f2171b` is `e7d48e7f54` plus log lines for why an add-on view stops
 (`46c393f493`, for the Episodes run below), the library toolbar
 staying at the top while a list loads (`183c841492`, check 13), and the
 loading message in the content area without an empty message before the
@@ -300,10 +305,20 @@ New checks:
     (not in the toolbar), and "This source has no media." does not show
     before the list appears.
 15. **Radio Browser playback.** Media sources › Radio Browser: search for a
-    station and select it. "Playback access" is enabled; approve the
-    source there. Play then starts the station, Add to queue adds it, and
-    Add to playlist returns at once without "Not Responding". The station
-    plays from that playlist.
+    station and select it. Play and Add to queue are enabled, and their
+    tooltip says to approve playback access first; clicking either opens
+    the Playback access review. Approve the source there. Play then starts
+    the station, Add to queue adds it, and Add to playlist returns at once
+    without "Not Responding". The station plays from that playlist.
+
+### Radio Browser Play still disabled (package `5938f2171b`)
+
+"Playback access" was enabled, but Play and Add to queue stayed disabled.
+The profile has no `addons/source-consent` folder, which the app creates
+on the first saved approval, so the source had not been approved; the
+disabled buttons gave no hint that approval was the missing step. They now
+stay enabled while the source needs approval and open the review
+(`7c5ac69a74`).
 
 ### Radio Browser cannot play (package `3795ac8c5f`)
 
