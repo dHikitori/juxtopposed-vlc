@@ -215,13 +215,14 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `5d71509ec5`: `vlc.exe`
-`381cb2423d2f01d6dfd6c906c5ea769939ff73bf5877f2560b5b159942cf7739`,
+Package `e7d48e7f54`: `vlc.exe`
+`d36c16a7a9e4c9bad87a72da225a40f8aa18c353c00342f5c3fad5cb580623bc`,
 `libqt_plugin.dll`
-`a5d74e0467f141ad7eb732514f4bc269f8d2057ee4803a196fc8c19fba22607a`.
-It adds the startup update prompt and evener Extensions rows (checks 9 and
-10) to `7ba1c6abf2`, which fixed late episode artwork; Episodes stays
-1.0.2.
+`887e27db07171c9a6b2cf9ce374df205359ef584df93a1d92fd94264c807a198`.
+It adds a memory cache for library thumbnails (`a00be55dad`, check 11)
+and a fix for the crash on opening Network › Radio (`e7d48e7f54`, check
+12) to `5d71509ec5`, which added the startup update prompt and evener
+Extensions rows (checks 9 and 10); Episodes stays 1.0.2.
 `BUILD-INFO.json` says `dirty` only because untracked worktree folders are
 under `.claude/`; the source copy takes files only, so the build is the
 committed tree. The Episodes panel is the bundled add-on
@@ -280,3 +281,20 @@ New checks:
     asks again only for a newer version), and the Extensions row still
     offers the update. An update that asks for new permissions (none in
     this package) lists them and has its own "Approve and update".
+11. **Thumbnails.** Open a large video folder in grid view and wait for
+    its artwork. Scroll far down and back up: tiles you have already seen
+    show their pictures at once instead of filling in again. Changing a
+    folder's `folder.jpg` still shows the new picture.
+12. **Radio.** Network › Radio lists countries without freezing or closing
+    the app; a country lists its stations.
+
+### Network › Radio crash (package `5d71509ec5`)
+
+The window froze for about 20 s and then closed. The Windows crash report
+(`vlc.exe.45712.dmp`) showed an access violation in `libqt_plugin.dll` at
+`QObjectPrivate::connectImpl`, under `NetworkDeviceModelPrivate`'s
+constructor as the Radio list's model was created; the freeze was Windows
+writing the dump. `e4f8923a76` connected the loading timer with the model
+as context from the private's constructor, which runs before the model's
+QObject base is built. Fixed in `e7d48e7f54`: the timer is its own
+context.
