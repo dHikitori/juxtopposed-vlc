@@ -2182,6 +2182,8 @@ bool PackageStore::readDisplayCatalogue(const StoreAuthorityToken& queued,const 
         if(!row.package.manifest.settingsSchema.isEmpty())row.schema=json(row.package.manifest.settingsSchema);
         bool localeNeeded=request.settingsPackages.contains(id);
         for(const auto& contribution:row.package.manifest.contributions) {
+            // A panel's button shows its name and label in the user's language.
+            localeNeeded|=contribution.type==QLatin1String("ui.panel");
             QString field;
             if(contribution.type==QLatin1String("theme"))
                 field=contribution.document.contains(QStringLiteral("theme"))?QStringLiteral("theme"):QStringLiteral("resource");

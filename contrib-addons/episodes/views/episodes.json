@@ -65,18 +65,24 @@
           {
             "type": "Menu",
             "id": "options",
-            "text": "Episode options",
+            "text": {
+              "message": "menu.options"
+            },
             "icon": "more",
             "entries": [
               {
-                "text": "Refresh",
+                "text": {
+                  "message": "menu.refresh"
+                },
                 "icon": "refresh",
                 "action": {
                   "command": "org.videolan.episodes/refresh"
                 }
               },
               {
-                "text": "Choose series folder…",
+                "text": {
+                  "message": "menu.chooseFolder"
+                },
                 "icon": "folder",
                 "visible": {
                   "bind": "state.files"
@@ -89,7 +95,9 @@
                 }
               },
               {
-                "text": "Choose series…",
+                "text": {
+                  "message": "menu.chooseSeries"
+                },
                 "icon": "search",
                 "visible": {
                   "bind": "state.files"
@@ -124,7 +132,9 @@
         },
         "keyField": "key",
         "scroll": false,
-        "emptyText": "No seasons found.",
+        "emptyText": {
+          "message": "seasons.empty"
+        },
         "itemTemplate": {
           "type": "MediaRow",
           "title": {
@@ -153,7 +163,9 @@
         "visible": {
           "bind": "state.less"
         },
-        "text": "Previous episodes",
+        "text": {
+          "message": "episodes.previous"
+        },
         "icon": "chevron-left",
         "action": {
           "command": "org.videolan.episodes/less"
@@ -170,14 +182,18 @@
         },
         "keyField": "key",
         "scroll": false,
-        "emptyText": "No episodes found in this season.",
+        "emptyText": {
+          "message": "episodes.empty"
+        },
         "more": {
           "bind": "state.more"
         },
         "moreAction": {
           "command": "org.videolan.episodes/more"
         },
-        "moreText": "Next episodes",
+        "moreText": {
+          "message": "episodes.next"
+        },
         "itemTemplate": {
           "type": "MediaRow",
           "number": {
@@ -235,7 +251,9 @@
               "visible": {
                 "bind": "item.hasSource"
               },
-              "text": "Episode source",
+              "text": {
+                "message": "episode.source"
+              },
               "action": {
                 "command": "org.videolan.episodes/source",
                 "arguments": {
@@ -258,7 +276,9 @@
               "selected": {
                 "bind": "item.version"
               },
-              "text": "Episode version",
+              "text": {
+                "message": "episode.version"
+              },
               "action": {
                 "command": "org.videolan.episodes/expand",
                 "arguments": {
@@ -310,7 +330,9 @@
                 {
                   "type": "IconButton",
                   "id": "restart",
-                  "text": "Play from beginning",
+                  "text": {
+                    "message": "episode.playFromStart"
+                  },
                   "icon": "replay",
                   "action": {
                     "command": "org.videolan.episodes/play",
@@ -330,7 +352,9 @@
               "visible": {
                 "bind": "item.hasVideo"
               },
-              "text": "Play video",
+              "text": {
+                "message": "episode.playVideo"
+              },
               "icon": "video",
               "action": {
                 "command": "org.videolan.episodes/play",

@@ -422,3 +422,36 @@ fn the_sample_state_fixture_is_current() {
     let saved: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert_eq!(saved, state, "Run the tests with EPISODES_WRITE_FIXTURE=1 to write tests/sample-state.json again.");
 }
+
+#[test]
+fn text_follows_the_invocation_language() {
+    text::set_locale("fr-FR");
+    let state = render(&sample(), &Choice::reset(1.0), 1);
+    let rows = state["episodes"].as_array().cloned().unwrap_or_default();
+    assert_eq!(rows[0]["mark"], "En cours de lecture");
+    assert_eq!(state["seasonRows"][0]["label"], "Épisodes spéciaux");
+    assert_eq!(state["headerSubtitle"], "Saison 1");
+    text::set_locale("zh_CN");
+    assert_eq!(season_label(2), "第 2 季");
+    // A language without a file uses English.
+    text::set_locale("de-DE");
+    assert_eq!(season_label(2), "Season 2");
+    text::set_locale("");
+    assert_eq!(season_label(0), "Specials");
+}
+
+#[test]
+fn every_locale_has_the_same_keys() {
+    use hakone_addon_message_v1::serde_json;
+    let keys = |name: &str| -> Vec<String> {
+        let path = format!("{}/locales/{name}.json", env!("CARGO_MANIFEST_DIR"));
+        let value: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let mut keys: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        keys
+    };
+    let english = keys("en");
+    for name in ["fr", "es", "ja", "zh", "ru"] {
+        assert_eq!(keys(name), english, "{name}.json");
+    }
+}

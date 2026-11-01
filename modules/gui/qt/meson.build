@@ -1616,7 +1616,8 @@ if qt6_dep.found()
         install_data(meson.project_source_root() / 'contrib-addons/tvmaze' / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/tvmaze' / fs.parent(addon_resource))
     endforeach
-    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm', 'views/episodes.json', 'icons/episodes.svg']
+    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm', 'views/episodes.json', 'icons/episodes.svg',
+            'locales/en.json', 'locales/es.json', 'locales/fr.json', 'locales/ja.json', 'locales/ru.json', 'locales/zh.json']
         install_data(meson.project_source_root() / 'contrib-addons/episodes' / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/episodes' / fs.parent(addon_resource))
     endforeach

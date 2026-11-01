@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <QLocale>
+#include <QScopeGuard>
+#include <QJsonObject>
+#include <QDir>
 #include <QTest>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -328,6 +332,35 @@ private slots:
         QVERIFY(contexts.last().contains("state"));
         registry.closeSession(id);
     }
+    void panelNameAndLabelFollowTheLocaleFiles() {
+        QTemporaryDir source, storage;
+        panelPackage(source.path(), "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 6h16\" stroke=\"#000\"/></svg>");
+        QFile file(source.path() + QStringLiteral("/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
+        auto manifest = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        auto files = manifest.value("files").toArray(); files.append("locales/en.json"); files.append("locales/fr.json");
+        manifest.insert("files", files);
+        manifest.insert("locales", QJsonObject{{"default", "en"}, {"files", QJsonObject{{"en", "locales/en.json"}, {"fr", "locales/fr.json"}}}});
+        QDir(source.path()).mkpath("locales");
+        write(source.path() + QStringLiteral("/addon.json"), QJsonDocument(manifest).toJson());
+        write(source.path() + QStringLiteral("/locales/en.json"), R"({"episodes.name": "Episodes", "episodes.label": "Show the episodes"})");
+        write(source.path() + QStringLiteral("/locales/fr.json"), R"({"episodes.name": "Épisodes", "episodes.label": "Afficher les épisodes"})");
+        const QLocale previous; QLocale::setDefault(QLocale(QStringLiteral("fr_FR")));
+        const auto restore = qScopeGuard([previous] { QLocale::setDefault(previous); });
+        AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled("org.example.panel", true));
+        auto catalogue = std::make_unique<AddonCatalogueView>(&manager, m_lifetime->handle());
+        QList<QVariantMap> contexts;
+        AddonUiRegistry registry(&manager, {
+            [&](const QString&, const QString&, const QVariantMap& context) { contexts.append(context); return QStringLiteral("r1"); },
+            [](const QString&) {}});
+        QTRY_VERIFY(catalogue->isCurrent()); QTRY_VERIFY(registry.available());
+        QTRY_COMPARE(registry.panels().size(), 1);
+        const auto panel = registry.panels().first().toMap();
+        QCOMPARE(panel.value("name").toString(), QStringLiteral("Épisodes"));
+        QCOMPARE(panel.value("label").toString(), QStringLiteral("Afficher les épisodes"));
+        registry.setPanelMedia({{"kind", "video"}});
+        QCOMPARE(contexts.size(), 1); QCOMPARE(contexts.last().value("locale").toString(), QStringLiteral("fr-FR"));
+    }
     void panelsAskForContextAndTakeEffectsOnlyFromClicks() {
         QTemporaryDir source, storage;
         panelPackage(source.path(), "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 6h16M4 12h16\" stroke=\"#000\" stroke-width=\"1.5\"/></svg>");
@@ -356,6 +389,7 @@ private slots:
         QCOMPARE(media.value("durationMs").toDouble(), 1200000.0);
         QVERIFY(!media.contains("url") && !media.contains("title"));
         QCOMPARE(contexts.last().value("panel").toString(), QStringLiteral("episodes"));
+        QCOMPARE(contexts.last().value("locale").toString(), QLocale().name().replace(QLatin1Char('_'), QLatin1Char('-')));
 
         // A newer media change cancels the old call, and its late reply is ignored.
         const auto old = requests.last();

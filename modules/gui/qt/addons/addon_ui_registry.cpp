@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocale>
 #include <QSaveFile>
 #include <QTimer>
 #include <QUuid>
@@ -408,7 +409,8 @@ bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, 
         if (!modalId.startsWith(entry.value("packageId").toString() + '/')) return false;
         return openModal(modalId, arguments);
     }
-    QVariantMap context{{"arguments", arguments}};
+    // The UI language, so a worker can choose its text, as in "fr-CA".
+    QVariantMap context{{"arguments", arguments}, {"locale", QLocale().name().replace(QLatin1Char('_'), QLatin1Char('-'))}};
     for (auto it = extra.begin(); it != extra.end(); ++it) context.insert(it.key(), it.value());
     quint64 generation = 0;
     if (!sessionId.isEmpty()) {

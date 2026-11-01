@@ -12,6 +12,58 @@ use hakone_addon_message_v1::{
     Addon, Incoming, Pending,
 };
 
+/// Text in the user's language. The same locale files give the view its
+/// messages; the app sends the language in each invocation context.
+pub mod text {
+    use super::{Map, Value};
+    use std::cell::RefCell;
+
+    const LOCALES: [(&str, &str); 6] = [
+        ("en", include_str!("../locales/en.json")),
+        ("fr", include_str!("../locales/fr.json")),
+        ("es", include_str!("../locales/es.json")),
+        ("ja", include_str!("../locales/ja.json")),
+        ("zh", include_str!("../locales/zh.json")),
+        ("ru", include_str!("../locales/ru.json")),
+    ];
+
+    thread_local! {
+        static CURRENT: RefCell<(String, Map<String, Value>)> = RefCell::new((String::new(), Map::new()));
+        static ENGLISH: Map<String, Value> = parse(LOCALES[0].1);
+    }
+
+    fn parse(source: &str) -> Map<String, Value> {
+        hakone_addon_message_v1::serde_json::from_str(source).unwrap_or_default()
+    }
+
+    /// Chooses the language for a tag such as "fr-CA" or "zh-CN". Parsing
+    /// happens only when the language changes.
+    pub fn set_locale(tag: &str) {
+        let base = tag.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
+        let language = LOCALES.iter().find(|(code, _)| *code == base).map(|(code, _)| *code).unwrap_or("en");
+        CURRENT.with(|current| {
+            let mut current = current.borrow_mut();
+            if current.0 != language {
+                let source = LOCALES.iter().find(|(code, _)| *code == language).map(|(_, source)| *source).unwrap_or("{}");
+                *current = (language.to_owned(), if language == "en" { Map::new() } else { parse(source) });
+            }
+        });
+    }
+
+    /// The text for a key, in English when the language lacks it.
+    pub fn get(key: &str) -> String {
+        let found = CURRENT.with(|current| current.borrow().1.get(key).and_then(Value::as_str).map(str::to_owned));
+        found
+            .or_else(|| ENGLISH.with(|english| english.get(key).and_then(Value::as_str).map(str::to_owned)))
+            .unwrap_or_else(|| key.to_owned())
+    }
+
+    /// The text for a key with "{n}" replaced.
+    pub fn with(key: &str, value: &str) -> String {
+        get(key).replace("{n}", value)
+    }
+}
+
 /// Items on one page. Each dispatch has a fixed instruction budget, and a
 /// row costs about 120,000 instructions, mostly in allocation: 40 rows use
 /// about half of it. Longer seasons page with Next and Previous.
@@ -157,9 +209,9 @@ pub fn group(items: &[Sibling]) -> Vec<&[Sibling]> {
 
 pub fn season_label(season: i64) -> String {
     match season {
-        0 => "Specials".into(),
-        season if season < 0 => "Episodes".into(),
-        season => format!("Season {season}"),
+        0 => text::get("season.specials"),
+        season if season < 0 => text::get("season.all"),
+        season => text::with("season.number", &season.to_string()),
     }
 }
 
@@ -179,8 +231,8 @@ pub fn title(item: &Sibling) -> String {
         return item.title.clone();
     }
     match number(item) {
-        number if number.is_empty() => "Episode".into(),
-        number => format!("Episode {number}"),
+        number if number.is_empty() => text::get("episode.untitled"),
+        number => text::with("episode.number", &number),
     }
 }
 
@@ -246,16 +298,16 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
             let played = versions.iter().any(|item| item.played);
             let progress = versions.iter().map(|item| item.progress).fold(0.0, f64::max);
             // The playing episode is marked; a finished one says so quietly.
-            let mark = if current { "Now playing" } else { "" };
-            let subtitle = if !current && played { if feed { "Listened" } else { "Watched" } } else { "" };
+            let mark = if current { text::get("mark.nowPlaying") } else { String::new() };
+            let subtitle = if !current && played { text::get(if feed { "subtitle.listened" } else { "subtitle.watched" }) } else { String::new() };
             let playing = chosen.current;
-            let label = if playing { "Playing" } else if chosen.progress > 0.0 { "Resume" } else { "Play" };
+            let label = text::get(if playing { "play.playing" } else if chosen.progress > 0.0 { "play.resume" } else { "play.start" });
             let expanded = open(key, versions);
             let mut row = json!({"key": key, "title": title(first), "playKey": chosen.id, "playLabel": label});
             if let Some(row) = row.as_object_mut() {
                 // Empty values stay out: a missing text binding shows nothing.
                 let number = number(first);
-                for (name, value) in [("number", number.as_str()), ("mark", mark), ("subtitle", subtitle)] {
+                for (name, value) in [("number", number.as_str()), ("mark", mark.as_str()), ("subtitle", subtitle.as_str())] {
                     if !value.is_empty() {
                         row.insert(name.into(), value.into());
                     }
@@ -290,9 +342,9 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
     let notice = if !listing.message.is_empty() {
         listing.message.clone()
     } else if listing.loading {
-        "Finding episodes…".into()
+        text::get("notice.finding")
     } else if listing.limited {
-        "Some folders could not be fully searched. Refresh to try again, or choose the series folder.".into()
+        text::get("notice.limited")
     } else {
         String::new()
     };
@@ -306,7 +358,7 @@ pub fn render(listing: &Listing, choice: &Choice, season: i64) -> Value {
     let episodes_shown = !showing && (!rows.is_empty() || (!listing.loading && notice.is_empty()));
     json!({
         "status": "ready", "revision": choice.revision, "kind": listing.kind, "files": listing.kind == "folder",
-        "show": if listing.show.is_empty() { "Episodes".to_owned() } else { listing.show.clone() },
+        "show": if listing.show.is_empty() { text::get("title") } else { listing.show.clone() },
         "notice": notice, "hasNotice": !notice.is_empty(),
         "seasonRows": listing.seasons.iter().map(|(value, _)| json!({"key": value, "label": season_label(*value),
             "icon": if listing.current_season == Some(*value) { "check" } else { "" },
@@ -331,8 +383,8 @@ pub fn open_key(listing: &Listing, choice: &Choice) -> Option<String> {
 
 /// The state when the media has no series.
 fn empty(revision: f64) -> Value {
-    json!({"status": "none", "revision": revision, "kind": "none", "files": false, "show": "Episodes",
-           "notice": "This media has no other episodes.", "hasNotice": true, "seasonRows": [], "showingSeasons": false,
+    json!({"status": "none", "revision": revision, "kind": "none", "files": false, "show": text::get("title"),
+           "notice": text::get("notice.none"), "hasNotice": true, "seasonRows": [], "showingSeasons": false,
            "seasonsClosed": false, "oneSeason": true, "headerSubtitle": "", "episodesShown": false,
            "season": -1, "seasonLabel": "", "page": 0, "more": false, "less": false, "expanded": "", "versionEpisode": "",
            "version": "", "episodes": []})
@@ -399,6 +451,8 @@ impl Episodes {
     }
 
     fn invoke(&mut self, id: &str, operation: &str, context: &Map<String, Value>) -> Vec<Value> {
+        // Later host results render in the language of this invocation.
+        text::set_locale(context.get("locale").and_then(Value::as_str).unwrap_or(""));
         let empty_map = Map::new();
         let arguments = context.get("arguments").and_then(Value::as_object).unwrap_or(&empty_map);
         let text = |key: &str| arguments.get(key).and_then(Value::as_str).unwrap_or("").to_owned();
@@ -557,6 +611,7 @@ pub fn sample() -> Listing {
 
 impl Addon for Episodes {
     fn self_test(&mut self) -> bool {
+        text::set_locale("en");
         let listing = sample();
         let state = render(&listing, &Choice::reset(1.0), 1);
         let rows = state["episodes"].as_array().cloned().unwrap_or_default();

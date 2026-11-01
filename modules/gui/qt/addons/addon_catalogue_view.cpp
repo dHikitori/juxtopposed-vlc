@@ -161,10 +161,19 @@ std::shared_ptr<const AddonCatalogueView::Data> AddonCatalogueView::project(Disp
             const QString global=id+QLatin1Char('/')+contribution.id;
             const QString partition=QString::fromLatin1(package.digest)+QLatin1Char(':')+QString::number(package.generation);
             const QString displayPartition=partition+QLatin1Char(':')+QString::number(row.settingsRevision);
+            // A panel can translate its name and label with the messages
+            // "<contribution>.name" and "<contribution>.label".
+            auto document=contribution.document;
+            if(contribution.type==QLatin1String("ui.panel"))
+                for(const auto& field:{QStringLiteral("name"),QStringLiteral("label")}) {
+                    const auto message=row.messages.value(contribution.id+QLatin1Char('.')+field);
+                    if(message.isString() && !message.toString().trimmed().isEmpty() && message.toString().size()<=128)
+                        document.insert(field,message.toString());
+                }
             result->contributions.append(QVariantMap{{"id",global},{"packageId",id},
-                {"name",contribution.document.value(QStringLiteral("name")).toString(package.manifest.name)},
+                {"name",document.value(QStringLiteral("name")).toString(package.manifest.name)},
                 {"enabled",enabled},{"configured",configured},{"configurationKnown",known},{"configurationState",!known?QStringLiteral("unknown"):configured?QStringLiteral("ready"):QStringLiteral("missing")},
-                {"document",contribution.document.toVariantMap()},{"accountReference",account},
+                {"document",document.toVariantMap()},{"accountReference",account},
                 {"iconMarkup",row.resources.value(contribution.id+QStringLiteral("/@icon")).value(QStringLiteral("markup")).toString()},
                 {"features",contribution.features},{"operations",contribution.operations},{"mediaKinds",contribution.mediaKinds},
                 {"cachePartition",partition},{"displayPartition",displayPartition},{"settingsRevision",QVariant::fromValue(row.settingsRevision)}});

@@ -15,6 +15,10 @@ other add-on.
 - **What the package does:** groups the items into seasons, episodes and
   versions; chooses the open row, the version, the marks and the play
   labels; pages long seasons.
+- **Languages:** English, French, Spanish, Japanese, Chinese (Simplified)
+  and Russian, in `locales/`. The view uses these messages, and the module
+  embeds the same files for the text it builds, in the language the app
+  sends with each command. Other languages use English.
 
 ## Build and test
 

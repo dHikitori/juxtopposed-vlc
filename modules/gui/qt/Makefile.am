@@ -4106,6 +4106,8 @@ addon_episodes_viewsdir = $(datadir)/vlc/addons/reference/episodes/views
 addon_episodes_views_DATA = $(top_srcdir)/contrib-addons/episodes/views/episodes.json
 addon_episodes_iconsdir = $(datadir)/vlc/addons/reference/episodes/icons
 addon_episodes_icons_DATA = $(top_srcdir)/contrib-addons/episodes/icons/episodes.svg
+addon_episodes_localesdir = $(datadir)/vlc/addons/reference/episodes/locales
+addon_episodes_locales_DATA = $(addprefix $(top_srcdir)/contrib-addons/episodes/locales/,en.json es.json fr.json ja.json ru.json zh.json)
 # The examples are not bundled; the tests load these package copies.
 addon_radio_browser_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/radio-browser/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
 addon_musicbrainz_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
@@ -4170,7 +4172,7 @@ EXTRA_DIST += tests/test_addon_metadata_family_plan.cpp tests/test_addon_native_
 EXTRA_DIST += tests/discovery-source/CMakeLists.txt tests/discovery-source/native_module_baseline.cpp \
 	tests/fixtures/addon_source_tls_fixture.hpp
 
-EXTRA_DIST += $(addon_episodes_DATA) $(addon_episodes_dist_DATA) $(addon_episodes_views_DATA) $(addon_episodes_icons_DATA) \
+EXTRA_DIST += $(addon_episodes_DATA) $(addon_episodes_dist_DATA) $(addon_episodes_views_DATA) $(addon_episodes_icons_DATA) $(addon_episodes_locales_DATA) \
     $(addprefix $(top_srcdir)/contrib-addons/episodes/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/sample-state.json)
 
 EXTRA_DIST += tests/test_addon_metadata_attempt.cpp tests/fixtures/addon_metadata_attempt_process.c \

@@ -28,7 +28,9 @@ The bundled [Episodes](../episodes) package is a complete panel.
 ```
 
 - `name` is the panel title and the layout item name. `label` is the button
-  tooltip and screen reader text.
+  tooltip and screen reader text. To translate them, add the messages
+  `<id>.name` and `<id>.label` (here `lyrics.name` and `lyrics.label`) to
+  your locale files.
 - `command` names a `ui.command` of the same package that has a `command`
   operation and no `route`: the context command.
 - Each worker `ui.command` lists its `command` value in `operations`, for
@@ -82,6 +84,7 @@ for each panel. The invocation context has:
   `audio` or `none`) and `durationMs` when known. Never a URL, a path or a
   title.
 - `panel`: the panel's contribution ID.
+- `locale`: the app's language, as in `fr-FR`.
 - `state`, `parameters`, `ui`: only when the panel is open (see below).
 
 Reply with `data.available`: `true` shows the button, anything else hides
@@ -175,7 +178,10 @@ property. New icon names: `episodes`, `chapters`, `more`, `check`,
 - **State.** At most 128 KiB, 4096 JSON values and 16 levels, checked
   against your `stateSchema` on each update.
 - **Text.** Dynamic text in state is shown as it is. Use `message` keys
-  from your locale files for fixed text in the view.
+  from your locale files for fixed text in the view. For text the worker
+  builds, read `locale` from the invocation context; every view command
+  receives it. Episodes embeds its locale files in the module and uses them
+  for both.
 
 ## Test a panel
 
