@@ -738,8 +738,14 @@ std::optional<MetadataCatalogueSource> AddonManager::metadataCatalogueSource() c
 QVariantList AddonManager::contributionsOfType(const QString& type, bool includeDisabled) const
 {
     QVariantList result;
+    const bool safe = m_store.safeMode();
     for (const auto& id : m_store.installedIds()) {
-        InstalledPackage package; if (!m_store.installed(id, &package) || (!includeDisabled && !package.enabled)) continue;
+        // Cached like packages(): a full read hashes every package file, and
+        // discovery checks this for each item it adds or plays. Safe mode and
+        // retirement are not in the cache stamp, so they are checked here.
+        InstalledPackage package; if (!installedCached(id, &package, nullptr)) continue;
+        package.enabled = package.enabled && !safe && !m_store.packageRetiring(id);
+        if (!includeDisabled && !package.enabled) continue;
         const auto account = accountReference(package);
         for (const auto& contribution : package.manifest.contributions) {
             if (contribution.type != type) continue;

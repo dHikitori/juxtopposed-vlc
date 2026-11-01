@@ -174,6 +174,19 @@ private slots:
         QVERIFY(manager.busy()); manager.discardPendingPackage(); QTRY_VERIFY(!manager.busy());
         QVERIFY(manager.safeMode()); QVERIFY(manager.setSafeMode(false)); QVERIFY(!manager.safeMode());
     }
+    void cachedContributionListingsFollowSafeMode()
+    {
+        QTemporaryDir storage; AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(reference(), true));
+        QVERIFY(manager.setEnabled(QStringLiteral("org.hakone.thesubtitledb"), true));
+        const auto type = QStringLiteral("metadata.provider");
+        const auto enabled = [&] { return manager.contributionsOfType(type, true).first().toMap().value("enabled").toBool(); };
+        QVERIFY(enabled()); QCOMPARE(manager.contributionsOfType(type).size(), 1);
+        QVERIFY(manager.setSafeMode(true));
+        QVERIFY(!enabled()); QVERIFY(manager.contributionsOfType(type).isEmpty());
+        QVERIFY(manager.setSafeMode(false));
+        QVERIFY(enabled()); QCOMPARE(manager.contributionsOfType(type).size(), 1);
+    }
     void pendingRemovalWithdrawsEveryManagerBeforeTheWorkerStarts()
     {
 #ifdef Q_OS_LINUX
