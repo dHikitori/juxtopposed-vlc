@@ -215,15 +215,16 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `002c0466b5`: `vlc.exe`
-`7702281102d06daf23e3fc05ed904c457e94bd0e8f2d6c0189639adf076cefbe`,
+Package `5938f2171b`: `vlc.exe`
+`dd20dfa007f6c06fc1ee669185ec4b549812be9290b84dca2716aed8fedd72a9`,
 `libqt_plugin.dll`
-`f0838fbf8f2ee53df69ddbd1621fd1f39cc580fcbaff46f6a5e9cff67660253e`.
+`fada14da8117736e5832aa0661e25f084145c60ac7effe40f67f7a83c8d15291`.
 It is `e7d48e7f54` plus log lines for why an add-on view stops
 (`46c393f493`, for the Episodes run below), the library toolbar
 staying at the top while a list loads (`183c841492`, check 13), and the
 loading message in the content area without an empty message before the
-rows (`002c0466b5`, check 14).
+rows (`002c0466b5`, check 14), and Radio Browser playback access and a
+faster Add to playlist (`aae2a5d9f0`, `5938f2171b`, check 15).
 `e7d48e7f54` adds a memory cache for library thumbnails (`a00be55dad`, check 11)
 and a fix for the crash on opening Network › Radio (`e7d48e7f54`, check
 12) to `5d71509ec5`, which added the startup update prompt and evener
@@ -298,6 +299,31 @@ New checks:
     While each loads, "Loading…" shows in the middle of the content area
     (not in the toolbar), and "This source has no media." does not show
     before the list appears.
+15. **Radio Browser playback.** Media sources › Radio Browser: search for a
+    station and select it. "Playback access" is enabled; approve the
+    source there. Play then starts the station, Add to queue adds it, and
+    Add to playlist returns at once without "Not Responding". The station
+    plays from that playlist.
+
+### Radio Browser cannot play (package `3795ac8c5f`)
+
+Play and Add to queue stayed disabled, "Playback access" was disabled too,
+Add to playlist made the window stop responding, and the added station did
+not play.
+
+- Play and Add to queue need the user's source approval, and the
+  "Playback access" button is enabled only when the source lists
+  `resolve`. The app plays through the native source owner, so the
+  discovery service has no playable gate, and the coordinator dropped
+  `resolve` from every listed source. The source could never be approved,
+  so the playlist entry could not play either. Fixed in `aae2a5d9f0`.
+- Add to playlist checks the source three times, and each check read and
+  hashed every installed package (about 1.8 MB) on the GUI thread. From
+  Windows over `\\wsl.localhost`, one such scan took 0.33–0.5 s.
+  `5938f2171b` uses the cached read that the package list already uses.
+  The append still reads the package and writes `source-admissions.json`
+  on the GUI thread once; that is smaller, but it is still file work on
+  the GUI thread.
 
 ### Network › Radio crash (package `5d71509ec5`)
 
