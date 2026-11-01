@@ -32,6 +32,8 @@ public:
 
     Q_INVOKABLE QVariantList sources() const;
     Q_INVOKABLE bool supports(const QString& source, const QString& operation) const;
+    // What the package declares, whether or not this owner can run it.
+    bool declares(const QString& source, const QString& operation) const;
     QVariantMap sourceIdentity(const QString& source) const;
     bool isCurrent() const;
     Q_INVOKABLE QString roots(const QString& source, const QString& view, quint64 generation, const QString& cursor = {});

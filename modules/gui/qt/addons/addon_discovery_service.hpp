@@ -33,7 +33,7 @@ public:
     AddonDiscoveryService(AddonDiscoveryCoordinator::Backend, AddonQueueTransactions::Backend, QObject* parent = nullptr);
     AddonDiscoveryService(AddonManager*, AddonDiscoveryCoordinator::Backend, AddonQueueTransactions::Backend, QObject* parent = nullptr);
     ~AddonDiscoveryService() override;
-    QVariantList sources() const { return m_closing ? QVariantList{} : m_coordinator.sources(); }
+    QVariantList sources() const;
     int revision() const { return m_revision; }
     bool available() const;
     bool loading() const;

@@ -100,6 +100,10 @@ bool AddonDiscoveryCoordinator::supports(const QString& source, const QString& o
     if (operation == QLatin1String("resolve") && !m_backend.authorizePlayable) return false;
     return available(registration(source), operation);
 }
+bool AddonDiscoveryCoordinator::declares(const QString& source, const QString& operation) const
+{
+    return declaredOperations(registration(source)).contains(operation);
+}
 bool AddonDiscoveryCoordinator::current(const Handle& handle) const
 {
     const auto source = registration(handle.source);

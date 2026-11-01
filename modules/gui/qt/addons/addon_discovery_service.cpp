@@ -290,6 +290,21 @@ bool AddonDiscoveryService::visibleMedia(const View& view, const QString& item) 
         if (row.value("ref").toString() == item && row.value("kind").toString() == QLatin1String("media") && row.value("available", true).toBool()) return true; }
     return false;
 }
+QVariantList AddonDiscoveryService::sources() const
+{
+    if (m_closing) return {};
+    auto output = m_coordinator.sources();
+    if (!m_sourcePlayback.ready) return output;
+    // The app's source owner resolves for playback, not the coordinator, so
+    // a declared resolve stays listed: the panel offers its playback review.
+    for (auto& value : output) {
+        auto entry = value.toMap(); auto operations = entry.value(QStringLiteral("operations")).toStringList();
+        if (operations.contains(QStringLiteral("resolve"))
+            || !m_coordinator.declares(entry.value(QStringLiteral("id")).toString(), QStringLiteral("resolve"))) continue;
+        operations.append(QStringLiteral("resolve")); entry.insert(QStringLiteral("operations"), operations); value = entry;
+    }
+    return output;
+}
 bool AddonDiscoveryService::canPlay(const QString& id) const
 {
     const auto it=m_views.constFind(id); if(it==m_views.cend() || !viewCurrent(*it)) return false;

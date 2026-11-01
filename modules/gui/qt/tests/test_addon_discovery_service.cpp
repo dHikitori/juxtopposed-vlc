@@ -191,7 +191,11 @@ private slots:
         queues.append=[&](const auto& value,auto done) { ++appended; saved=value.references; done(true,{}); return []{}; };
         queues.playReference=[&](const auto& value,auto done) { ++played; saved=value.references; emptyHandle=value.playbackHandle.isEmpty(); done(true,{}); return AddonQueueTransactions::Cancel{}; };
         AddonDiscoveryService service(fixture.backend(),queues);
+        const auto operations=[&] { return service.sources().first().toMap().value("operations").toStringList(); };
+        QVERIFY(!operations().contains("resolve"));
         service.setSourcePlayback({[&](const auto&) { return approved; },[&](const auto& ref) { return approved && ref.value("accountReference")==QLatin1String("public:fixture"); },[&](const auto&) { ++refreshed; }});
+        // The panel offers its playback review only for a listed resolve.
+        QVERIFY(operations().contains("resolve"));
         const auto view=service.openSource("org.example.radio/source"); QTRY_COMPARE(fixture.calls.size(),1); QCOMPARE(refreshed,1);
         fixture.complete(service,0,{{"items",QVariantList{Fixture::item("station")}}}); QTRY_COMPARE(items(service,view).size(),1);
         const auto item=items(service,view).first().toMap().value("ref").toString();
@@ -202,6 +206,12 @@ private slots:
         QCOMPARE(saved.first().toMap().value("itemId").toString(),QStringLiteral("station")); QVERIFY(!saved.first().toMap().contains("url"));
         approved=false; QVERIFY(service.play(view,item).isEmpty()); QVERIFY(service.enqueue(view,{item}).isEmpty());
         QCOMPARE(appended,1); QCOMPARE(played,1);
+    }
+    void sourcePlaybackListsOnlyADeclaredResolve() {
+        Fixture fixture; auto row=fixture.sources[0].toMap(); row["operations"]=QStringList{"roots","search"}; fixture.sources[0]=row;
+        AddonDiscoveryService service(fixture.backend(),{});
+        service.setSourcePlayback({[](const auto&) { return true; },[](const auto&) { return true; },[](const auto&) {}});
+        QCOMPARE(service.sources().first().toMap().value("operations").toStringList(),(QStringList{"roots","search"}));
     }
     void playlistSelectionKeepsNativeAuthorityOutsideProviderCalls() {
         Fixture fixture; QString appended; QStringList released;
