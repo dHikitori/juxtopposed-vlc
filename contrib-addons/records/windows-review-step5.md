@@ -215,13 +215,15 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `183c841492`: `vlc.exe`
-`ea080a06466b8f7afdca64d0aeab788ff023175687a1a79a96f6903d69e537a0`,
+Package `002c0466b5`: `vlc.exe`
+`7702281102d06daf23e3fc05ed904c457e94bd0e8f2d6c0189639adf076cefbe`,
 `libqt_plugin.dll`
-`adbfe3f115327b3551d23fec413e934429aac5270d54d56455d1fe3f49a0d2be`.
+`f0838fbf8f2ee53df69ddbd1621fd1f39cc580fcbaff46f6a5e9cff67660253e`.
 It is `e7d48e7f54` plus log lines for why an add-on view stops
-(`46c393f493`, for the Episodes run below) and the library toolbar
-staying at the top while a list loads (`183c841492`, check 13).
+(`46c393f493`, for the Episodes run below), the library toolbar
+staying at the top while a list loads (`183c841492`, check 13), and the
+loading message in the content area without an empty message before the
+rows (`002c0466b5`, check 14).
 `e7d48e7f54` adds a memory cache for library thumbnails (`a00be55dad`, check 11)
 and a fix for the crash on opening Network › Radio (`e7d48e7f54`, check
 12) to `5d71509ec5`, which added the startup update prompt and evener
@@ -292,6 +294,10 @@ New checks:
     the app; a country lists its stations.
 13. **Loading header.** Open Network › Podcasts (or a slow share): while it
     says "Loading…", the toolbar and breadcrumbs stay at the top.
+14. **Loading message.** Open Network › Radio and then a share folder.
+    While each loads, "Loading…" shows in the middle of the content area
+    (not in the toolbar), and "This source has no media." does not show
+    before the list appears.
 
 ### Network › Radio crash (package `5d71509ec5`)
 
