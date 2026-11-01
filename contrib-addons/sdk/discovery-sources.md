@@ -119,7 +119,7 @@ Enqueue stores the stable locator without a stream lookup. Play uses that same l
 
 The app also binds the native library adapter when the media library is available. The trusted picker supplies an opaque playlist choice. The adapter validates and appends the selection under one database transaction. Saving a reference does not resolve a stream or grant later playback approval.
 
-The native owner, approval panel, queue route, and actual MainUI object have focused checks. The fresh full application link, compiled QML, and supported-platform app checks remain open.
+The native owner, queue route, and actual MainUI object have focused checks. The fresh full application link, compiled QML, and supported-platform app checks remain open.
 
 ## Source and tests
 

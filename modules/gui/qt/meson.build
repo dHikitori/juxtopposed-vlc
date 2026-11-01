@@ -165,7 +165,6 @@ addon_host_sources = files(
     'addons/addon_native_source_resolver.hpp',
     'addons/addon_discovery_source_owner.cpp',
     'addons/addon_discovery_source_owner.hpp',
-    'addons/addon_source_consent_ui_owner.cpp',
     'addons/addon_native_player_analysis.cpp',
     'addons/addon_native_player_analysis.hpp',
     'addons/addon_visualizer_worker_runtime.cpp',
@@ -193,8 +192,6 @@ addon_host_sources = files(
     'addons/addon_session_ui.cpp',
     'addons/addon_session_ui.hpp',
     'addons/addon_session_ui_manager.cpp',
-    'addons/addon_source_consent_ui.cpp',
-    'addons/addon_source_consent_ui.hpp',
     'addons/addon_native_session_player.cpp',
     'addons/addon_native_session_player.hpp',
     'addons/addon_player_sessions.cpp',
@@ -259,7 +256,6 @@ addon_host_moc_headers = files(
     'addons/addon_visualizers.hpp',
     'addons/addon_session_ui.hpp',
     'addons/addon_player_sessions.hpp',
-    'addons/addon_source_consent_ui.hpp',
     'addons/addon_visualizer_catalog.hpp',
     'addons/addon_visualizer_resources.hpp',
     'addons/addon_visualizer_worker.hpp',
@@ -1168,7 +1164,6 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonDiscovery.qml',
        'player/qml/redesign/RedesignAddonDiscoveryWindow.qml',
        'player/qml/redesign/RedesignAddonSessions.qml',
-       'player/qml/redesign/RedesignAddonSourceConsentDialog.qml',
        'player/qml/redesign/RedesignAddonSelection.qml',
        'player/qml/redesign/RedesignAddonRecovery.qml',
        'player/qml/redesign/RedesignAddonNode.qml',
@@ -1482,7 +1477,6 @@ qml_tests = {
     'tst_AddonPlainText': files('tests/tst_AddonPlainText.qml'),
     'tst_AddonDiscovery': files('tests/tst_AddonDiscovery.qml'),
     'tst_AddonSessions': files('tests/tst_AddonSessions.qml'),
-    'tst_AddonSourceConsent': files('tests/tst_AddonSourceConsent.qml'),
     'tst_AddonInstaller': files('tests/tst_AddonInstaller.qml'),
     'tst_AddonUpdates': files('tests/tst_AddonUpdates.qml'),
     'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),
@@ -2267,7 +2261,7 @@ if qt6_dep.found()
             'cpp_args': ['-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'],
             'link_args': qt_link_args,
         }
-        foreach addon_test : ['discovery_source_owner', 'source_consent_ui_owner']
+        foreach addon_test : ['discovery_source_owner']
             vlc_tests += {
                 'name': 'test_qt_addon_' + addon_test,
                 'sources': files('tests/test_addon_' + addon_test + '.cpp'),

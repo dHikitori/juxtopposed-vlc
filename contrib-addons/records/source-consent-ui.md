@@ -1,9 +1,9 @@
 # Host source playback review
 
-The app no longer mounts this panel. Accepting an add-on's `media.stream`
-permission now approves its sources (see
-[source consent](../native-source-consent-contract.md)). The class, dialog,
-and their tests remain until a later cleanup removes them.
+Removed. Accepting an add-on's `media.stream` permission now approves its
+sources (see [source consent](../native-source-consent-contract.md)). The
+`AddonSourceConsentUi` class, its dialog, their tests, and the owner's review
+API are gone. The text below records the former design.
 
 `AddonSourceConsentUi` owns one review for the trusted host UI. It keeps the
 native review ID private. The backend can prepare, read, approve, revoke, or

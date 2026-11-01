@@ -10,28 +10,11 @@ Use `createPlayerDiscoveryWithSources()` with the same owner and native queue ba
 
 Connect app retirement to `close()` before native Core or the app is destroyed. The owner closes native authority first. Its counted app work releases file readers and Qt data before app drain ends. Keep the native instance and the Qt app valid through that drain. A publication gate alone does not meet this requirement.
 
-## Core approval UI
+## Source approval
 
-The app no longer shows this review. The API remains for host tests and a
-possible future revoke control.
-
-`requestApproval(source)` returns a private request ID. A successful capture emits `approvalReady(id)`. It does not emit a successful `actionFinished` signal. A failed capture emits `actionFinished(id, false, error)`.
-
-`approval(id)` returns these captured properties:
-
-| Property | Meaning |
-| --- | --- |
-| `id`, `name` | Contribution ID and package display name |
-| `source`, `kind` | Approved repository, developer source, or app distribution identity |
-| `accountLabel`, `accountFields` | Bounded nonsecret account labels |
-| `accountReference` | Opaque account identity for technical details |
-| `profile`, `profiles` | Exact native media profile |
-| `publisherVerified` | False; this owner does not verify a publisher |
-| `approved` | Current saved playback approval |
-
-No key, credential reference, provider API address, or resolved stream address enters this map. Render package labels as plain text.
-
-The review expires after 30 seconds of steady time. The UI must reread and compare the exact displayed map before it calls `approve(id)` or `revoke(id)`. Each accepted action consumes the review. A successful saved action emits `actionFinished(id, true, {})`; a failed action supplies a host error. `discardApproval(id)` closes the review and preserves saved approval. An immediate false action result means no save task was admitted.
+The owner has no review or approval API. Accepting the package's `media.stream`
+permission approves its sources (see [source consent](native-source-consent-contract.md)).
+Turning the add-on off withdraws playback and closes admitted native transport.
 
 `refreshSource(source)` reads current saved approval on joined work, and saves it first from the accepted permission. `canUseSource(source)` reads memory only and remains false until that capture succeeds. It is false while the owner is inactive or closing. `canUseReference(reference)` also compares the exact account. `changed()` updates readiness in open browser views.
 
@@ -71,6 +54,6 @@ The native sanitizer fixture uses the observed HTTP/WAV decoder modules, their c
 
 The portable process fixture repeats the source-owner suite with 13 normal and 13 sanitizer cases against the updated Core. Six protocol and bound cases also pass on Linux, in an actual Windows process, and under focused sanitizers. Windows execution proves the fixture; the native owner playback runs execute on Linux. The old Python fixture is removed. See `/tmp/hakone-portable-source-worker-validation.json`.
 
-MainUI now mounts the owner, trusted approval panel, and stable-reference factory. The actual MainUI object compiles. The panel binding passes nine normal and nine sanitizer cases. All 39 runtime cases pass in each build, including explicit capability activation, retirement, callback reentry, and the packaged worker. See [the app binding](records/source-consent-ui.md). Full app linking, compiled QML, and supported-platform app execution remain open.
+MainUI now mounts the owner and stable-reference factory. The actual MainUI object compiles. All 39 runtime cases pass in each build, including explicit capability activation, retirement, callback reentry, and the packaged worker. The former approval panel is described in [its record](records/source-consent-ui.md). Full app linking, compiled QML, and supported-platform app execution remain open.
 
 The C++ fixture friend can install synthetic DNS, TLS trust, and a loopback connection for native tests. The production constructor and factory expose no endpoint override. No public service or account key is required for these tests.

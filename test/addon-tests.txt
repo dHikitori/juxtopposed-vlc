@@ -123,8 +123,6 @@ test_qt_addon_playable_gate                     source      all
 test_qt_addon_queue_transactions                source      all
 test_qt_addon_source_admissions                 source      all
 test_qt_addon_source_consent                    source      all
-test_qt_addon_source_consent_ui                 source      cmake
-test_qt_addon_source_consent_ui_owner           source      all
 test_qt_addon_stream_http                       source      all
 test_qt_addon_stream_manifest                   source      all
 test_qt_addon_stream_native                     source      cmake

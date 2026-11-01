@@ -13,8 +13,9 @@ class AddonManager;
 class AddonSourceAdmissions;
 struct DiscoverySourceTestAccess;
 // Call this owner on the manager thread. The native instance must outlive close().
-// Activation does not give a source playback approval. Only a native primary
-// input open can consume a source intent and ask a provider for a stream URL.
+// A source capture or a native primary open saves the approval that accepting
+// the package's media.stream permission gave. Only a native primary input open
+// can consume a source intent and ask a provider for a stream URL.
 class AddonDiscoverySourceOwner final : public QObject
 {
     Q_OBJECT
@@ -26,8 +27,8 @@ public:
     ~AddonDiscoverySourceOwner() override;
     bool activate();
     bool active() const;
-    // These are memory-only platform hints. Unknown does not prevent review,
-    // configuration capture, or stable-reference queue admission.
+    // These are memory-only platform hints. Unknown does not prevent
+    // configuration capture or stable-reference queue admission.
     bool transportKnown() const;
     bool transportAvailable() const;
     QString errorMessage() const { return m_error; }
@@ -35,23 +36,14 @@ public:
     Q_INVOKABLE bool canUseSource(const QString& contribution) const;
     bool canUseReference(const QVariantMap& reference) const;
     std::function<bool()> referenceGuard(const QVariantList& references) const;
-    Q_INVOKABLE QString requestApproval(const QString& contribution);
-    Q_INVOKABLE QVariantMap approval(const QString& request) const;
-    Q_INVOKABLE bool approve(const QString& request);
-    Q_INVOKABLE bool revoke(const QString& request);
-    Q_INVOKABLE bool resetApprovals();
-    Q_INVOKABLE void discardApproval(const QString& request);
     void close();
 signals:
     void changed();
-    void approvalReady(const QString& request);
-    void actionFinished(const QString& request, bool success, const QString& error);
 private:
     friend struct DiscoverySourceTestAccess;
     struct NativeStop;
     struct Shared;
     struct Gate;
-    struct Review;
     struct Cache;
     struct Resolve;
     struct SourceCapture;
@@ -64,10 +56,8 @@ private:
     static std::optional<AddonSourceConsent::Binding> binding(const AddonNativeAuthority&);
     static bool admitted(const std::shared_ptr<AddonSourceAdmissions>&,const AddonSourceConsent::Binding&,const QString&);
     void initialized(bool,const QString&);
-    QString captureSource(const QString&,bool review);
+    QString captureSource(const QString&);
     void captured(const QString&,const QString&,std::shared_ptr<SourceCapture>,const QString&);
-    bool changeApproval(const QString&,bool approve);
-    void changedApproval(const QString&,const QString&,bool,const QString&);
     AddonNativeSourceResolver::AdmissionReader captureAdmission(const QString&,quint64);
     Cancel resolve(const Admission&,Current,Prepared);
     void resolved(const QString&,const QString&,const QString&,const QVariantMap&,const QString&);
@@ -82,7 +72,6 @@ private:
     std::shared_ptr<Shared> m_shared;
     std::shared_ptr<Gate> m_gate;
     std::unique_ptr<AddonNativeSourceResolver> m_resolver;
-    QHash<QString,std::shared_ptr<Review>> m_reviews;
     QHash<QString,std::shared_ptr<Cache>> m_cache;
     QHash<QString,QString> m_refreshes,m_invocations;
     QHash<QString,std::shared_ptr<Resolve>> m_resolves;
@@ -90,7 +79,6 @@ private:
     std::unique_ptr<AddonNativeWake> m_wake;
     QTimer m_poll;
     QString m_error;
-    unsigned m_controls=0;
     bool m_starting=false,m_closing=false,m_noticeQueued=false;
 };
 }

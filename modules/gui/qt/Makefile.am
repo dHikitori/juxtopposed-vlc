@@ -271,7 +271,6 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_native_source_resolver.hpp \
 	addons/addon_discovery_source_owner.cpp \
 	addons/addon_discovery_source_owner.hpp \
-	addons/addon_source_consent_ui_owner.cpp \
 	addons/addon_native_player_analysis.cpp \
 	addons/addon_native_player_analysis.hpp \
 	addons/addon_visualizer_worker_runtime.cpp \
@@ -299,8 +298,6 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_session_ui.cpp \
 	addons/addon_session_ui.hpp \
 	addons/addon_session_ui_manager.cpp \
-	addons/addon_source_consent_ui.cpp \
-	addons/addon_source_consent_ui.hpp \
 	addons/addon_native_session_player.cpp \
 	addons/addon_native_session_player.hpp \
 	addons/addon_player_sessions.cpp \
@@ -361,7 +358,6 @@ QT_ADDON_HOST_MOC = \
 	addons/addon_sessions.moc.cpp \
 	addons/addon_session_host.moc.cpp \
 	addons/addon_session_ui.moc.cpp \
-	addons/addon_source_consent_ui.moc.cpp \
 	addons/addon_native_metadata_owner.moc.cpp \
 	addons/addon_player_sessions.moc.cpp \
 	addons/addon_visualizers.moc.cpp \
@@ -1635,7 +1631,6 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonDiscovery.qml \
 	player/qml/redesign/RedesignAddonDiscoveryWindow.qml \
 	player/qml/redesign/RedesignAddonSessions.qml \
-	player/qml/redesign/RedesignAddonSourceConsentDialog.qml \
 	player/qml/redesign/RedesignAddonSelection.qml \
 	player/qml/redesign/RedesignAddonRecovery.qml \
 	player/qml/redesign/RedesignAddonNode.qml \
@@ -3287,17 +3282,6 @@ test_qt_addon_discovery_source_owner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDO
 check_PROGRAMS += test_qt_addon_discovery_source_owner
 TESTS += test_qt_addon_discovery_source_owner
 
-test_qt_addon_source_consent_ui_owner_SOURCES = tests/test_addon_source_consent_ui_owner.cpp
-nodist_test_qt_addon_source_consent_ui_owner_SOURCES = tests/test_addon_source_consent_ui_owner.moc
-BUILT_SOURCES += tests/test_addon_source_consent_ui_owner.moc
-CLEANFILES += tests/test_addon_source_consent_ui_owner.moc
-test_qt_addon_source_consent_ui_owner_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
-test_qt_addon_source_consent_ui_owner_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
-test_qt_addon_source_consent_ui_owner_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
-test_qt_addon_source_consent_ui_owner_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
-check_PROGRAMS += test_qt_addon_source_consent_ui_owner
-TESTS += test_qt_addon_source_consent_ui_owner
-
 if HAVE_LINUX
 test_qt_addon_metadata_registry_epoch_SOURCES = tests/test_addon_metadata_registry_epoch.cpp tests/fixtures/addon_artwork_attempt_keeper.c
 nodist_test_qt_addon_metadata_registry_epoch_SOURCES = tests/test_addon_metadata_registry_epoch.moc
@@ -4010,7 +3994,7 @@ endif
 QML_LOG_COMPILER = $(builddir)/qml_test -input
 
 if HAVE_QT_QUICK_TEST
-TESTS += tests/tst_AddonSessions.qml tests/tst_AddonSourceConsent.qml
+TESTS += tests/tst_AddonSessions.qml
 EXTRA_DIST += tests/tst_AddonInstaller.qml
 TESTS += tests/tst_AddonInstaller.qml
 EXTRA_DIST += tests/tst_AddonUpdates.qml
@@ -4185,8 +4169,6 @@ EXTRA_DIST += tests/player-sessions/CMakeLists.txt tests/test_addon_player_sessi
 EXTRA_DIST += tests/package-namespaces/CMakeLists.txt
 
 EXTRA_DIST += tests/invocation-guard/CMakeLists.txt tests/test_addon_invocation_guard.cpp
-
-EXTRA_DIST += tests/source-consent-ui/CMakeLists.txt tests/test_addon_source_consent_ui.cpp tests/tst_AddonSourceConsent.qml
 
 EXTRA_DIST += tests/builtin-ids/CMakeLists.txt
 

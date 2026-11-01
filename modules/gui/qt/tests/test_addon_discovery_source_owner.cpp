@@ -36,7 +36,6 @@
 #include "addons/addon_player_discovery.hpp"
 #include "addons/addon_discovery_service.hpp"
 #include "addons/addon_stream_proxy_native.hpp"
-#include "addons/addon_source_consent_ui.hpp"
 #include "fixtures/addon_source_tls_fixture.hpp"
 using namespace vlc::addons;
 #ifdef HAKONE_SOURCE_TLS_PROBE_WRAP
@@ -67,8 +66,6 @@ struct DiscoverySourceTestAccess {
     static void prepare(AddonDiscoverySourceOwner& owner,AddonDiscoverySourceOwner::PrepareTransport value) { owner.m_prepareTransport=std::move(value); }
     static bool polling(const AddonDiscoverySourceOwner& owner) { return owner.m_poll.isActive(); }
     static void closeWake(AddonDiscoverySourceOwner& owner) { owner.m_wake->close(); }
-    static int remaining(const AddonDiscoverySourceOwner& owner) { return owner.m_poll.remainingTime(); }
-    static void notify(AddonDiscoverySourceOwner& owner) { owner.notify(); }
 
 };
 }
@@ -205,29 +202,23 @@ private slots:
         QTest::qWait(80); QCOMPARE(tlsCalls.load(),0u); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
         QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner)); QCOMPARE(f.resolves(),0);
     }
-    void anUnavailableTlsHintStillAllowsReviewApprovalAndStableReferences() {
+    void anUnavailableTlsHintStillAllowsApprovalAndStableReferences() {
         Fixture f; QVERIFY(f.valid); tlsOverride=0; tlsCalls=0; tlsOwnerThreadCalls=0;
         const auto reset=qScopeGuard([] { tlsOverride=-1; });
         QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        AddonSourceConsentUi panel(f.owner.get()); QVERIFY(panel.available());
-        QVERIFY(!f.owner->transportKnown()); QVERIFY(panel.prepare(source));
-        QTRY_VERIFY(!panel.review().isEmpty()); QVERIFY(f.owner->transportKnown());
-        QVERIFY(!f.owner->transportAvailable()); QVERIFY(panel.available());
+        QVERIFY(!f.owner->transportKnown()); QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(f.owner->transportKnown()); QVERIFY(!f.owner->transportAvailable());
         QCOMPARE(tlsCalls.load(),1u); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
-        QVERIFY(panel.approve()); QTRY_VERIFY(f.owner->canUseSource(source));
         const auto guard=f.owner->referenceGuard({f.reference()}); QVERIFY(guard); QVERIFY(guard());
         QCOMPARE(f.resolves(),0); QCOMPARE(f.starts->load(),0u);
-        panel.viewClosed(); tlsOverride=-1; QVERIFY(panel.prepare(source));
-        QTRY_VERIFY(!panel.review().isEmpty()); QVERIFY(panel.review().value("approved").toBool());
-        QVERIFY(f.owner->transportAvailable()); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
+        tlsOverride=-1; QVERIFY(!f.owner->refreshSource(source).isEmpty());
+        QTRY_VERIFY(f.owner->transportAvailable()); QCOMPARE(tlsOwnerThreadCalls.load(),0u);
     }
     void actualPrimaryAdmissionRequiresAJoinedTlsProbeBeforeTheProvider() {
         Fixture f; QVERIFY(f.valid); tlsOverride=-1;
         const auto reset=qScopeGuard([] { tlsOverride=-1; });
         QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1);
-        QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source)); f.owner->discardApproval(id);
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         const auto uri=f.uri(); QVERIFY(!uri.isEmpty()); tlsOverride=0; tlsCalls=0; tlsOwnerThreadCalls=0;
         { NativeJob denied(VLC_OBJECT(f.instance),uri,1); QCOMPARE(denied.start(),VLC_SUCCESS); QTRY_COMPARE(denied.ended.load(),1);
           QCOMPARE(denied.status.load(),VLC_EACCES); }
@@ -242,7 +233,7 @@ private slots:
         Fixture f; QVERIFY(f.valid); tlsOverride=2; tlsEntered=false; tlsReleased=false;
         const auto release=qScopeGuard([] { tlsOverride=-1; tlsReleased.store(true,std::memory_order_release); tlsCondition.notify_all(); });
         QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QVERIFY(!f.owner->requestApproval(source).isEmpty()); QTRY_VERIFY(tlsEntered.load(std::memory_order_acquire));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(tlsEntered.load(std::memory_order_acquire));
         f.owner->close(); f.owner.reset(); f.lifetime.close();
         QVERIFY(!f.lifetime.handle().waitQt(std::chrono::milliseconds(20)));
         tlsReleased.store(true,std::memory_order_release); tlsCondition.notify_all();
@@ -250,7 +241,8 @@ private slots:
     }
 #endif
     void refreshApprovesASourceWhosePermissionWasAccepted() {
-        Fixture f; QVERIFY(f.valid);
+        Fixture f; QVERIFY(f.valid); QVERIFY(!f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
+        QVERIFY(f.owner->refreshSource(source).isEmpty());
         QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
         QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         QCOMPARE(f.resolves(),0); QCOMPARE(f.starts->load(),0u);
@@ -277,18 +269,6 @@ private slots:
         QCoreApplication::processEvents(); QVERIFY(!f.owner->active());
         QVERIFY(!vlc_source_owner_Hold(VLC_OBJECT(f.instance))); QCOMPARE(f.resolves(),0);
     }
-    void repeatedNoticesDoNotPostponeThePendingReviewDeadline() {
-        Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1);
-        QVERIFY(DiscoverySourceTestAccess::polling(*f.owner));
-        const auto before=DiscoverySourceTestAccess::remaining(*f.owner); QVERIFY(before>0);
-        QTest::qWait(30);
-        for(unsigned index=0;index<100;++index) DiscoverySourceTestAccess::notify(*f.owner);
-        const auto after=DiscoverySourceTestAccess::remaining(*f.owner);
-        QVERIFY(after>=0); QVERIFY(after<before);
-        f.owner->discardApproval(id); QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
-    }
     void anUnavailableWakeCannotStartTheSourceInitializer() {
         Fixture f; QVERIFY(f.valid); DiscoverySourceTestAccess::closeWake(*f.owner);
         QVERIFY(!f.owner->activate()); QVERIFY(!f.owner->active()); QVERIFY(!f.owner->errorMessage().isEmpty());
@@ -298,16 +278,14 @@ private slots:
     }
     void anEmptyExternalCoreCloseCannotAuthorizeACachedSource() {
         Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1);
-        QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source)); f.owner->discardApproval(id);
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner)); QCOMPARE(f.resolves(),0);
         auto* backend=vlc_source_owner_Hold(VLC_OBJECT(f.instance)); QVERIFY(backend);
         vlc_source_backend_Close(backend); vlc_source_backend_Release(backend);
         // An empty arbitrary Core close has no notification hook. Explicit
         // queries still reject immediately. Production retirement calls close.
         QVERIFY(!f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
-        QVERIFY(f.owner->refreshSource(source).isEmpty()); QVERIFY(f.owner->requestApproval(source).isEmpty());
+        QVERIFY(f.owner->refreshSource(source).isEmpty());
         f.owner->close(); f.lifetime.close();
         QVERIFY(f.lifetime.handle().waitQt(std::chrono::seconds(3))); QCOMPARE(f.resolves(),0);
     }
@@ -318,10 +296,8 @@ private slots:
     }
     void cachedAvailabilityWakesOnStoreChangeWithoutRecurringTimer() {
         Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QVERIFY(!id.isEmpty()); QTRY_COMPARE(review.size(),1);
-        QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
-        f.owner->discardApproval(id); QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(!DiscoverySourceTestAccess::polling(*f.owner));
         QCoreApplication::processEvents(); QSignalSpy changed(f.owner.get(),&AddonDiscoverySourceOwner::changed);
         const auto directory=f.profile.path(); std::thread writer([directory] { PackageStore(directory).invalidateAuthority(); }); writer.join();
         QVERIFY(!f.owner->canUseSource(source));
@@ -368,8 +344,7 @@ private slots:
             return prepareContainedSourceForTesting(admission,std::move(current),std::move(spec),testing,std::move(ready));
         });
         QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto approval=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1); QVERIFY(f.owner->approve(approval)); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         const auto playlist=std::unique_ptr<vlc_playlist_t,decltype(&vlc_playlist_Delete)>(vlc_playlist_New(VLC_OBJECT(f.instance),VLC_PLAYLIST_PREPARSING_DISABLED,1,0),vlc_playlist_Delete); QVERIFY(playlist);
         AddonNativeQueueStore queue(playlist.get(),f.admissions);
         const auto service=std::unique_ptr<AddonDiscoveryService>(createPlayerDiscoveryWithSources(f.manager.get(),f.owner.get(),queue.backend(),nullptr));
@@ -404,8 +379,7 @@ private slots:
     }
     void keyReplacementOrDeletionRevokesTheOldAccountAndQueuedLocator() {
         QFETCH(bool,removeKey); Fixture f(true,false,true); QVERIFY2(f.valid,qPrintable(f.manager?f.manager->errorMessage():QStringLiteral("The fixture package is not complete."))); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1); QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         const auto old=f.reference(); QVERIFY(old.value("accountReference").toString().startsWith(QLatin1String("account:")));
         const auto nativeGuard=f.owner->referenceGuard({old}); QVERIFY(nativeGuard); QVERIFY(nativeGuard());
         const auto uri=f.uri(); NativeJob active(VLC_OBJECT(f.instance),uri,1); QCOMPARE(active.start(),VLC_SUCCESS); QTRY_COMPARE(active.ended.load(),1); QCOMPARE(active.status.load(),VLC_SUCCESS);
@@ -416,40 +390,30 @@ private slots:
         NativeJob stale(VLC_OBJECT(f.instance),uri,2); QCOMPARE(stale.start(),VLC_SUCCESS); QTRY_COMPARE(stale.ended.load(),1); QCOMPARE(stale.status.load(),VLC_EACCES); QCOMPARE(f.resolves(),1);
         if(!removeKey) {
             QVERIFY(f.reference().value("accountReference")!=old.value("accountReference"));
-            const auto next=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),2); QVERIFY(!f.owner->approval(next).value("approved").toBool());
-            QVERIFY(f.owner->approve(next)); QTRY_VERIFY(f.owner->canUseSource(source)); QVERIFY(!f.owner->canUseReference(old));
+            // The new account is a new binding. The accepted grant approves it.
+            QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source)); QVERIFY(!f.owner->canUseReference(old));
         }
     }
-    void discardedReviewsAndAppRetirementCannotGrantPlayback() {
+    void appRetirementClosesAnApprovedSource() {
         Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1); f.owner->discardApproval(id);
-        QVERIFY(f.owner->approval(id).isEmpty()); QVERIFY(!f.owner->approve(id)); QVERIFY(!f.owner->canUseSource(source));
-        id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),2); QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         NativeJob active(VLC_OBJECT(f.instance),f.uri(),1); QCOMPARE(active.start(),VLC_SUCCESS); QTRY_COMPARE(active.ended.load(),1); QCOMPARE(active.status.load(),VLC_SUCCESS);
         f.owner->close(); f.lifetime.close(); QCOMPARE(f.canceled->load(),1u); QVERIFY(!f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
         QVERIFY(f.lifetime.handle().waitQt(std::chrono::seconds(3)));
     }
-    void activationAndApprovalAreSeparate() {
-        Fixture f; QVERIFY(f.valid); QVERIFY(!f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
-        QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady),finished(f.owner.get(),&AddonDiscoverySourceOwner::actionFinished);
-        const auto id=f.owner->requestApproval(source); QVERIFY(!id.isEmpty()); QTRY_COMPARE(review.size(),1);
-        const auto shown=f.owner->approval(id); QCOMPARE(shown.value("id").toString(),source); QCOMPARE(shown.value("profile").toString(),QStringLiteral("public-https-media@1"));
-        QCOMPARE(shown.value("accountLabel").toString(),QStringLiteral("No account")); QVERIFY(!shown.value("approved").toBool()); QCOMPARE(finished.size(),0);
-        QCOMPARE(f.resolves(),0); QVERIFY(f.owner->approve(id)); QVERIFY(!f.owner->approve(id)); QTRY_COMPARE(finished.size(),1);
-        QVERIFY(finished.first()[1].toBool()); QTRY_VERIFY(f.owner->canUseSource(source)); QCOMPARE(f.resolves(),0);
-    }
-    void aMissingMediaGrantCannotCreateAReview() {
+    void aMissingMediaGrantIsNotApproved() {
         Fixture f(false); QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy finished(f.owner.get(),&AddonDiscoverySourceOwner::actionFinished);
-        const auto id=f.owner->requestApproval(source); QVERIFY(!id.isEmpty()); QTRY_COMPARE(finished.size(),1);
-        QVERIFY(!finished.first()[1].toBool()); QVERIFY(f.owner->approval(id).isEmpty()); QVERIFY(!f.owner->approve(id));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(!f.owner->errorMessage().isEmpty());
+        QVERIFY(!f.owner->canUseSource(source));
+        QVERIFY(!QFile::exists(QDir(f.manager->storageDirectory()).filePath(QStringLiteral("source-consent/approvals.json"))));
+        const auto uri=f.uri(); QVERIFY(!uri.isEmpty());
+        { NativeJob denied(VLC_OBJECT(f.instance),uri,1); QCOMPARE(denied.start(),VLC_SUCCESS); QTRY_COMPARE(denied.ended.load(),1);
+          QCOMPARE(denied.status.load(),VLC_EACCES); }
+        QCOMPARE(f.resolves(),0);
     }
     void anUnknownImportCannotAskTheProviderForAStream() {
         Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1); QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         auto forged=f.reference(); forged.insert("itemId","foreign");
         QStringList known; QVERIFY(f.admissions->admit({f.reference()},&known));
         auto uri=known.first(); uri.replace("station","foreign");
@@ -461,25 +425,25 @@ private slots:
     }
     void onlyNativeOpenResolvesAndEveryReplayIsFresh() {
         Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1); QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         const auto uri=f.uri(); QVERIFY(!uri.isEmpty()); QCOMPARE(f.resolves(),0);
         { NativeJob first(VLC_OBJECT(f.instance),uri,1); QCOMPARE(first.start(),VLC_SUCCESS); QTRY_COMPARE(first.ended.load(),1); QCOMPARE(first.status.load(),VLC_SUCCESS); QCOMPARE(f.resolves(),1); }
         { NativeJob second(VLC_OBJECT(f.instance),uri,2); QCOMPARE(second.start(),VLC_SUCCESS); QTRY_COMPARE(second.ended.load(),1); QCOMPARE(second.status.load(),VLC_SUCCESS); QCOMPARE(f.resolves(),2); }
         QCOMPARE(f.starts->load(),2u); QCOMPARE(f.canceled->load(),2u);
     }
-    void revokeClosesNativeTransportBeforeItsSavedWriteCompletes() {
+    void turningTheAddonOffClosesNativeTransport() {
         Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1); QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
-        NativeJob job(VLC_OBJECT(f.instance),f.uri(),1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1); QCOMPARE(job.status.load(),VLC_SUCCESS);
-        id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),2); QVERIFY(f.owner->approval(id).value("approved").toBool());
-        QVERIFY(f.owner->revoke(id)); QCOMPARE(f.canceled->load(),1u); QVERIFY(!f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
+        const auto uri=f.uri(); QVERIFY(!uri.isEmpty());
+        NativeJob job(VLC_OBJECT(f.instance),uri,1); QCOMPARE(job.start(),VLC_SUCCESS); QTRY_COMPARE(job.ended.load(),1); QCOMPARE(job.status.load(),VLC_SUCCESS);
+        QVERIFY(f.manager->setEnabled("org.hakone.discovery-fixture",false));
+        QCOMPARE(f.canceled->load(),1u); QVERIFY(!f.owner->canUseSource(source));
+        NativeJob denied(VLC_OBJECT(f.instance),uri,2); QCOMPARE(denied.start(),VLC_SUCCESS); QTRY_COMPARE(denied.ended.load(),1);
+        QCOMPARE(denied.status.load(),VLC_EACCES); QCOMPARE(f.resolves(),1);
     }
     void targetAccountAndManagerRetirementCloseReadiness() {
         Fixture f; QVERIFY(f.valid); QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active());
-        QSignalSpy review(f.owner.get(),&AddonDiscoverySourceOwner::approvalReady);
-        const auto id=f.owner->requestApproval(source); QTRY_COMPARE(review.size(),1); QVERIFY(f.owner->approve(id)); QTRY_VERIFY(f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
         auto foreign=f.reference(); foreign.insert("accountReference","account:foreign"); QVERIFY(!f.owner->canUseReference(foreign));
         QVERIFY(f.owner->canUseReference(f.reference())); f.manager.reset(); QVERIFY(!f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
     }

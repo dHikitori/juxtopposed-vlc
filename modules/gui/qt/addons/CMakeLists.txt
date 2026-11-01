@@ -43,7 +43,6 @@ add_library(vlc_addon_host STATIC
     addon_session_websocket.cpp addon_session_websocket.hpp addon_session_host.cpp addon_session_host.hpp
     addon_session_controller.cpp addon_session_controller.hpp addon_session_player.hpp
     addon_session_ui.cpp addon_session_ui.hpp addon_session_ui_manager.cpp
-    addon_source_consent_ui.cpp addon_source_consent_ui.hpp
     addon_metadata_family_plan.cpp addon_metadata_family_plan.hpp
     addon_metadata_choices.cpp addon_metadata_choices.hpp
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
@@ -137,7 +136,7 @@ else()
     message(STATUS "Metadata completion fixture needs a native Linux worker path")
 endif()
 
-foreach(name session_websocket session_host session_ui source_consent_ui metadata_family_plan artwork_attempt_plan git_objects)
+foreach(name session_websocket session_host session_ui metadata_family_plan artwork_attempt_plan git_objects)
     add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
     target_link_libraries(test_addon_${name} PRIVATE vlc_addon_host Qt6::Test)
     add_test(NAME addon_${name} COMMAND test_addon_${name})
@@ -200,7 +199,6 @@ if(VLC_BUILD_DIR)
         addon_native_artwork_assets.cpp addon_native_artwork_assets.hpp
         addon_native_source_resolver.cpp addon_native_source_resolver.hpp
         addon_discovery_source_owner.cpp addon_discovery_source_owner.hpp
-        addon_source_consent_ui_owner.cpp
         addon_stream_proxy_native.cpp addon_stream_proxy_native.hpp
         addon_native_player_analysis.cpp addon_native_player_analysis.hpp)
     target_sources(vlc_addon_native_metadata PRIVATE addon_native_session_player.cpp addon_native_session_player.hpp)
@@ -343,7 +341,7 @@ if(VLC_BUILD_DIR)
 
     add_executable(addon_discovery_source_process "../tests/fixtures/addon_discovery_source_process.c")
     set_target_properties(addon_discovery_source_process PROPERTIES AUTOMOC OFF)
-    foreach(name discovery_source_owner source_consent_ui_owner)
+    foreach(name discovery_source_owner)
         add_executable(test_addon_${name} "../tests/test_addon_${name}.cpp")
         target_link_libraries(test_addon_${name} PRIVATE vlc_addon_native_metadata Qt6::Test "${VLC_PUBLIC_LIBRARY}")
         target_include_directories(test_addon_${name} PRIVATE "${VLC_SOURCE_ROOT}")
