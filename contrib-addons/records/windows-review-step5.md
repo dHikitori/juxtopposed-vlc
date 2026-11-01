@@ -215,11 +215,13 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `d7fc74f615`: `vlc.exe`
-`b6533a5ccb0d8eb59ba9cdcaad48fe323aba90daaff4c9111afa69539d9dc71f`,
+Package `a01d06c4c1`: `vlc.exe`
+`9e1cddeda7bc3179240eb7f030f2d1363c30819fa1192b6d8e0184ff7358f4c8`,
 `libqt_plugin.dll`
-`780e5164e15e03f2b16c74545ae843a2ee2022facdd4ae6725e139c25ea14cc9`.
-It is `7c5ac69a74` with source approval moved into the add-on's accepted
+`3669419d3a521b07e687fa6c3587695a12ab7e309edc3b65a6f29679ab5e21a2`.
+It is `d7fc74f615` with only Episodes, TVmaze, Radio Browser and
+TheSubtitleDB bundled (`a01d06c4c1`, check 16); `addons/reference` holds
+those four folders. `d7fc74f615` is `7c5ac69a74` with source approval moved into the add-on's accepted
 permissions: Media sources has no Playback access step, and Play and Add to
 queue work for an enabled add-on (`fd4059dfa5`, check 15). The unused review
 panel and API are removed (`d7fc74f615`). `7c5ac69a74` was built from the `e7e8d9868c` worktree with the `7c5ac69a74` change
@@ -315,6 +317,21 @@ New checks:
     The Extensions install review for an add-on with online playback says
     "Play selected media from public online services." with no extra
     approval note.
+16. **Bundled add-ons.** In a new profile, Extensions lists Episodes,
+    TVmaze episode titles, Radio Browser and TheSubtitleDB, and not the
+    MusicBrainz, Last.fm, French TV or Google Images artwork add-ons. The
+    existing portable profile keeps the four it already has; remove them in
+    Extensions if wanted. Album artwork still loads as before (the Lua art
+    scripts serve it).
+
+### Artwork add-ons no longer bundled (package `d7fc74f615`)
+
+The app calls the MusicBrainz, Last.fm, French TV and Google Images
+add-ons only with the opt-in `--metadata-native-owner` option, so by default
+they sat idle in Extensions. Google Images and Last.fm scrape web pages, and
+26 of French TV's 27 logo links returned HTTP 400 on 2 November 2026.
+`a01d06c4c1` bundles only Episodes, TVmaze, Radio Browser and TheSubtitleDB.
+With the owner option on, no artwork add-on is installed in a new profile.
 
 ### Separate approval step removed (package `7c5ac69a74`)
 
