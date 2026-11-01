@@ -110,6 +110,7 @@ TestCase {
         }
     }
     Component { id: viewComponent; RedesignLibraryView { visible: false; width: 1920; height: 1040; settingsContext: settings } }
+    Component { id: shownViewComponent; RedesignLibraryView { width: 1200; height: 900; settingsContext: settings; category: 3; expanded: true; showAddRow: false } }
     RedesignLibraryPath { id: folderPath }
     SignalSpy { id: homeSpy; target: library; signalName: "homeActivated" }
     SignalSpy { id: homeQueueSpy; target: library; signalName: "homeEnqueueRequested" }
@@ -1197,6 +1198,22 @@ TestCase {
         view=createTemporaryObject(viewComponent,testCase)
         compare(view.grid,true); compare(settings.writes,2)
         view.expanded=true; compare(view.grid,false); compare(settings.writes,2)
+    }
+    function test_toolbarStaysAtTheTopWhileAListLoads() {
+        const view = createTemporaryObject(shownViewComponent, testCase)
+        verify(view !== null)
+        verify(!view.homeSectionsVisible)
+        const divider = findChild(view, "libraryToolbarDivider")
+        const top = () => divider.mapToItem(view, 0, 0).y
+        view.loading = false
+        waitForRendering(view)
+        const settled = top()
+        verify(settled < view.height / 4)
+        // A network folder is loading and has no rows yet.
+        view.loading = true
+        waitForRendering(view)
+        compare(top(), settled)
+        compare(findChild(view, "libraryEmptyMessage").text, "")
     }
     function test_invalidViewChoicesUseTheDesignDefaults() {
         for (const value of ["invalid", "[]", "null", "42", "false", '{"compact":"grid","expanded":"list"}']) {

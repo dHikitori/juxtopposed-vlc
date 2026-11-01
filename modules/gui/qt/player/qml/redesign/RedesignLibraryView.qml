@@ -692,9 +692,11 @@ Item {
         Text {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: !root.homeSectionsVisible && !root.loading && root.itemCount === 0
+            // Kept while a list loads, without text: it takes the spare
+            // height, so the toolbar stays at the top.
+            visible: !root.homeSectionsVisible && root.itemCount === 0
             objectName: "libraryEmptyMessage"
-            text: root.searchText.length > 0 ? qsTr("No media matches your search.") : root.emptyText
+            text: root.loading ? "" : root.searchText.length > 0 ? qsTr("No media matches your search.") : root.emptyText
             wrapMode: Text.WordWrap; color: theme.foreground; font.pixelSize: theme.dp(14)
             verticalAlignment: Text.AlignTop
         }
