@@ -215,12 +215,14 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `46c393f493`: `vlc.exe`
-`b696150b9395ae65176de5d20056fa47a859ef6512b4507812b1280955e74f98`,
+Package `183c841492`: `vlc.exe`
+`ea080a06466b8f7afdca64d0aeab788ff023175687a1a79a96f6903d69e537a0`,
 `libqt_plugin.dll`
-`0f45d28545cf1267fadb581a07c52dd470d6c5d46af7a50b86c8617d047eff8c`.
+`adbfe3f115327b3551d23fec413e934429aac5270d54d56455d1fe3f49a0d2be`.
 It is `e7d48e7f54` plus log lines for why an add-on view stops
-(`46c393f493`), for the Episodes run below. `e7d48e7f54` adds a memory cache for library thumbnails (`a00be55dad`, check 11)
+(`46c393f493`, for the Episodes run below) and the library toolbar
+staying at the top while a list loads (`183c841492`, check 13).
+`e7d48e7f54` adds a memory cache for library thumbnails (`a00be55dad`, check 11)
 and a fix for the crash on opening Network › Radio (`e7d48e7f54`, check
 12) to `5d71509ec5`, which added the startup update prompt and evener
 Extensions rows (checks 9 and 10); Episodes stays 1.0.2.
@@ -288,6 +290,8 @@ New checks:
     folder's `folder.jpg` still shows the new picture.
 12. **Radio.** Network › Radio lists countries without freezing or closing
     the app; a country lists its stations.
+13. **Loading header.** Open Network › Podcasts (or a slow share): while it
+    says "Loading…", the toolbar and breadcrumbs stay at the top.
 
 ### Network › Radio crash (package `5d71509ec5`)
 
@@ -323,3 +327,6 @@ reason. Run with:
 
 and look for lines starting `Add-on view` or `Add-on ... stopped`.
 
+Later the same day Episodes opened normally on The Walking Dead, so the
+failure is intermittent. The diagnostic run has not happened yet; no
+`vlc-log.txt` was written.
