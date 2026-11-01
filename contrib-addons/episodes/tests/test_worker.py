@@ -10,13 +10,15 @@ import unittest
 
 PACKAGE = Path(__file__).resolve().parent.parent
 WORKER = None
+# The build stages the package with its module; ./build.sh puts it in dist/.
+MODULE = PACKAGE / "dist/addon.wasm"
 PAGE = 40
 
 
 class Worker:
     def __enter__(self):
         self.process = subprocess.Popen(
-            [str(WORKER), str(PACKAGE / "dist/addon.wasm")],
+            [str(WORKER), str(MODULE)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, env={"LANG": "C"},
         )
@@ -160,6 +162,8 @@ class PortableWorkerTests(unittest.TestCase):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker", type=Path, required=True)
+    parser.add_argument("--package", type=Path, default=PACKAGE, help="the staged package folder")
     args = parser.parse_args()
     WORKER = args.worker.resolve()
+    MODULE = args.package.resolve() / "dist/addon.wasm"
     unittest.main(argv=[__file__], verbosity=2)

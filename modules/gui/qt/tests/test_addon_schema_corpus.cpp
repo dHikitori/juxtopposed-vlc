@@ -188,7 +188,7 @@ private slots:
         QCOMPARE(detail, QStringLiteral("revision dropped"));
     }
     // The bundled Episodes package and the sample state its renderer makes
-    // (examples/episodes/tests/sample-state.json) pass the app's own rules.
+    // (contrib-addons/episodes/tests/sample-state.json) pass the app's own rules.
     void theEpisodesPackageAgreesWithTheApp()
     {
         const QDir package(Root + QStringLiteral("/contrib-addons/episodes"));

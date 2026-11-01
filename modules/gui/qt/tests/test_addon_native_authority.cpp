@@ -60,7 +60,7 @@ bool saveObject(const QString& path, const QJsonObject& value)
 class TestAddonNativeAuthority : public QObject
 {
     Q_OBJECT
-    static QString example() { return QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/thesubtitledb"); }
+    static QString example() { return QStringLiteral(VLC_ADDON_BUNDLED_ROOT "/thesubtitledb"); }
     static QVariantMap key(const QString& field = QStringLiteral("apiKey"), const QString& value = QStringLiteral("unit-native-authority"))
     { return {{field, QVariantMap{{"operation", "replace"}, {"value", value}, {"sessionOnly", true}}}}; }
     static bool setup(AddonManager& manager, const QString& source = example())

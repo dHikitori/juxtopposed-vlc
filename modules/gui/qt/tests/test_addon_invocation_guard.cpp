@@ -209,7 +209,7 @@ private slots:
     {
         QTemporaryDir directory, storage; AddonManager manager(storage.path());
         const QString id = QStringLiteral("org.hakone.thesubtitledb");
-        QVERIFY2(manager.installLocalPackage(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/thesubtitledb"), true), qPrintable(manager.errorMessage()));
+        QVERIFY2(manager.installLocalPackage(QStringLiteral(VLC_ADDON_BUNDLED_ROOT "/thesubtitledb"), true), qPrintable(manager.errorMessage()));
         QVERIFY(manager.saveAddonSettings(id, {{"language", "en"}}, {{"apiKey", QVariantMap{{"operation", "replace"}, {"value", "unit-guard-key"}, {"sessionOnly", true}}}}));
         QVERIFY(manager.setEnabled(id, true)); const auto executable = fixture(directory.path()); manager.setWorkerExecutable(executable);
         QSignalSpy completed(&manager, &AddonManager::operationFinished);

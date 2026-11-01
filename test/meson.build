@@ -129,32 +129,34 @@ test('addon_test_registry', find_program('python3'),
 # Full app runs. They measure idle CPU, so they do not run in parallel.
 if host_system == 'linux' and get_option('qt').allowed()
     addon_app_smoke = [files('addon_app_smoke.py'), '--build', meson.project_build_root()]
+    # The app loads the bundled add-ons that the build stages.
+    addon_app_depends = get_variable('bundled_addon_targets', [])
     test('addon_app_smoke', find_program('python3'),
         args: ['-B', addon_app_smoke],
         suite: ['addons', addon_test_labels['addon_app_smoke']],
-        is_parallel: false, timeout: 300)
+        depends: addon_app_depends, is_parallel: false, timeout: 300)
     test('addon_app_smoke_two_windows', find_program('python3'),
         args: ['-B', addon_app_smoke, '--windows', '2'],
         suite: ['addons', addon_test_labels['addon_app_smoke_two_windows']],
-        is_parallel: false, timeout: 300)
+        depends: addon_app_depends, is_parallel: false, timeout: 300)
     if get_option('addon-test-driver')
         test('addon_app_smoke_driver', find_program('python3'),
             args: ['-B', addon_app_smoke, '--driver'],
             suite: ['addons', addon_test_labels['addon_app_smoke_driver']],
-            is_parallel: false, timeout: 300)
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
         # Step 2's exit check: an install in one window shows in the other.
         test('addon_app_smoke_shared_profile', find_program('python3'),
             args: ['-B', addon_app_smoke, '--driver', '--windows', '2'],
             suite: ['addons', addon_test_labels['addon_app_smoke_shared_profile']],
-            is_parallel: false, timeout: 300)
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
         test('addon_app_smoke_owner', find_program('python3'),
             args: ['-B', addon_app_smoke, '--driver', '--owner'],
             suite: ['addons', addon_test_labels['addon_app_smoke_owner']],
-            is_parallel: false, timeout: 300)
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
         test('addon_app_smoke_owner_two_windows', find_program('python3'),
             args: ['-B', addon_app_smoke, '--driver', '--owner', '--windows', '2'],
             suite: ['addons', addon_test_labels['addon_app_smoke_owner_two_windows']],
-            is_parallel: false, timeout: 300)
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
     endif
 endif
 

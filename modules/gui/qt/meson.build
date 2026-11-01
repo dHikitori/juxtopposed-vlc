@@ -1601,33 +1601,39 @@ if qt6_dep.found()
     elif host_system == 'darwin'
         qt_extra_deps += dependency('appleframeworks', modules: ['Security'])
     endif
-    # Install the reference Wasm file without a source build.
-    addon_reference_root = meson.project_source_root() / 'contrib-addons/thesubtitledb'
+    # Build the bundled add-ons from source. Each package is staged in the
+    # build tree, where the app and the tests load it, and installed from there.
+    bundled_addon_names = ['thesubtitledb', 'tvmaze', 'episodes']
+    bundled_addon_root = meson.current_build_dir() / 'bundled-addons'
+    bundled_addon_targets = []
     addon_distribution_paths = custom_target('addon_distribution_paths',
         output: 'addon_distribution_paths.hpp',
         command: [prog_python, files('scripts/addon-distribution-paths.py'),
-            '--root', meson.project_source_root() / 'contrib-addons', '--output', '@OUTPUT@'])
-    foreach addon_resource : ['addon.json', 'LICENSE', 'dist/addon.wasm', 'settings/schema.json', 'settings/ui.json', 'locales/en.json']
-        addon_resource_directory = fs.parent(addon_resource)
-        install_data(addon_reference_root / addon_resource,
-            install_dir: get_option('datadir') / 'vlc/addons/reference/thesubtitledb' / addon_resource_directory)
-    endforeach
-    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm']
-        install_data(meson.project_source_root() / 'contrib-addons/tvmaze' / addon_resource,
-            install_dir: get_option('datadir') / 'vlc/addons/reference/tvmaze' / fs.parent(addon_resource))
-    endforeach
-    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm', 'views/episodes.json', 'icons/episodes.svg',
-            'locales/en.json', 'locales/es.json', 'locales/fr.json', 'locales/ja.json', 'locales/ru.json', 'locales/zh.json']
-        install_data(meson.project_source_root() / 'contrib-addons/episodes' / addon_resource,
-            install_dir: get_option('datadir') / 'vlc/addons/reference/episodes' / fs.parent(addon_resource))
-    endforeach
+            '--root', bundled_addon_root, '--output', '@OUTPUT@'])
+    if addon_worker_dependencies != []
+        foreach name : bundled_addon_names
+            bundled_addon_targets += custom_target('bundled-addon-' + name,
+                input: meson.project_source_root() / 'contrib-addons' / name / 'Cargo.toml',
+                output: 'bundled-addon-' + name + '.stamp', depfile: 'bundled-addon-' + name + '.d',
+                command: [prog_python, files('scripts/build-bundled-addon.py'), 'build',
+                    '--cargo', addon_cargo.full_path(), '--package', meson.project_source_root() / 'contrib-addons' / name,
+                    '--output', bundled_addon_root / name, '--target-dir', meson.current_build_dir() / 'bundled-addons-cargo',
+                    '--stamp', '@OUTPUT@', '--depfile', '@DEPFILE@'],
+                build_by_default: true)
+        endforeach
+        meson.add_install_script(prog_python, files('scripts/build-bundled-addon.py'), 'install',
+            '--staged', bundled_addon_root, '--destination', get_option('datadir') / 'vlc/addons/reference',
+            bundled_addon_names)
+    endif
     if addon_worker_dependencies != [] and not meson.is_cross_build()
         test('addon_tvmaze_worker', prog_python,
-            args: ['-B', meson.project_source_root() / 'contrib-addons/tvmaze/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
-            depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_tvmaze_worker']], timeout: 90)
+            args: ['-B', meson.project_source_root() / 'contrib-addons/tvmaze/tests/test_worker.py', '--worker', addon_worker_target.full_path(),
+                '--package', bundled_addon_root / 'tvmaze'],
+            depends: addon_worker_dependencies + bundled_addon_targets, suite: ['qt', 'addons', addon_test_labels['addon_tvmaze_worker']], timeout: 90)
         test('addon_episodes_worker', prog_python,
-            args: ['-B', meson.project_source_root() / 'contrib-addons/episodes/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
-            depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_episodes_worker']], timeout: 90)
+            args: ['-B', meson.project_source_root() / 'contrib-addons/episodes/tests/test_worker.py', '--worker', addon_worker_target.full_path(),
+                '--package', bundled_addon_root / 'episodes'],
+            depends: addon_worker_dependencies + bundled_addon_targets, suite: ['qt', 'addons', addon_test_labels['addon_episodes_worker']], timeout: 90)
     endif
     modules_qrc = []
     foreach module : qml_modules
@@ -1955,15 +1961,15 @@ if qt6_dep.found()
         cpp_args: [qt_extra_flags, qt_cppargs],
         install: false, build_by_default: false)
     addon_validate_examples = []
-    foreach example : ['episodes', 'thesubtitledb', 'tvmaze']
-        addon_validate_examples += meson.project_source_root() / 'contrib-addons' / example
+    foreach example : bundled_addon_names
+        addon_validate_examples += bundled_addon_root / example
     endforeach
     foreach fixture : ['discovery-fixture', 'french-tv', 'google-images', 'lastfm', 'midnight', 'musicbrainz', 'radio-browser', 'visual-scenes']
         addon_validate_examples += meson.current_source_dir() / 'tests/fixtures/addons' / fixture
     endforeach
     test('addon_validate_examples', addon_validate,
         args: ['--ui', meson.current_source_dir() / 'player/qml/redesign/AddonUi.js'] + addon_validate_examples,
-        suite: ['qt', 'addons', addon_test_labels['addon_validate_examples']], timeout: 60)
+        depends: bundled_addon_targets, suite: ['qt', 'addons', addon_test_labels['addon_validate_examples']], timeout: 60)
     test('addon_validate_refuses', addon_validate, args: [meson.current_source_dir() / 'tests/fixtures/invalid-addon'],
         should_fail: true, suite: ['qt', 'addons', addon_test_labels['addon_validate_refuses']], timeout: 30)
     addon_preview_args = ['--qml', meson.current_source_dir() / 'player/qml/redesign', '--output', meson.current_build_dir() / 'addon-preview']
@@ -2046,15 +2052,12 @@ if qt6_dep.found()
             endif
             display_defines = []
             display_links = []
-            display_roots = []
             if addon_test == 'display_integration'
-                display_roots += ['-DHAKONE_DISPLAY_SOURCE_ROOT="' + meson.project_source_root() + '"']
                 if host_system == 'linux'
                     display_defines += ['-DHAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP', '-DHAKONE_DISPLAY_ACQUIRE_WRAP']
                     display_links += ['-Wl,--wrap=_ZN3vlc6addons15CredentialStore6createERK7QStringS4_RK10QByteArrayb', '-Wl,--wrap=_ZN3vlc6addons18AddonCatalogueView15acquireSettingsERK7QString']
                 endif
             elif addon_test == 'distribution_bootstrap'
-                display_roots += ['-DHAKONE_STARTUP_SOURCE_ROOT="' + meson.project_source_root() + '"']
                 if host_system == 'linux'
                     display_defines += ['-DHAKONE_BOOTSTRAP_RUN_WRAP']
                     display_links += ['-Wl,--wrap=_ZN3vlc6addons21distributionBootstrap3runENS0_12PackageStoreE5QListINS0_26DistributionBootstrapEntryEE']
@@ -2083,9 +2086,9 @@ if qt6_dep.found()
                 'suite': ['qt', 'addons'],
                 'include_directories': addon_test in ['native_artwork_assets', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_proxy'] ? [qt_include_dir, include_directories('../../..')] : qt_include_dir,
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines + display_roots,
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines,
                 'link_args': qt_link_args + display_links,
-                'depends': [addon_worker_dependencies, addon_visualizer_process],
+                'depends': [addon_worker_dependencies, addon_visualizer_process, bundled_addon_targets],
                 'env': addon_worker_environment,
             }
         endforeach
@@ -2230,7 +2233,7 @@ if qt6_dep.found()
             'suite': ['qt', 'addons'],
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-            'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"'],
+            'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"'],
             'link_args': qt_link_args,
             'env': ['QT_QPA_PLATFORM=offscreen', 'QT_QUICK_BACKEND=software'],
         }
@@ -2256,8 +2259,8 @@ if qt6_dep.found()
                 'module_depends': addon_test == 'discovery_source_owner' ? ['http', 'https', 'console_logger', 'prefetch', 'record', 'wav', 'araw', 'adummy', 'float_mixer', 'scaletempo', 'audio_format', 'ugly_resampler'] : [],
                 'include_directories': [qt_include_dir, include_directories('../../..')],
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'] + (addon_test == 'discovery_source_owner' ? ['-DVLC_ADDON_DISCOVERY_PROCESS_FIXTURE="' + addon_discovery_source_process.full_path() + '"'] : []),
-                'depends': addon_test == 'discovery_source_owner' ? [addon_discovery_source_process] : [],
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'] + (addon_test == 'discovery_source_owner' ? ['-DVLC_ADDON_DISCOVERY_PROCESS_FIXTURE="' + addon_discovery_source_process.full_path() + '"'] : []),
+                'depends': (addon_test == 'discovery_source_owner' ? [addon_discovery_source_process] : []) + bundled_addon_targets,
                 'link_args': qt_link_args,
                 'env': addon_worker_environment,
             }

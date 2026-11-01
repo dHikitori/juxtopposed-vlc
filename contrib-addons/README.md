@@ -30,8 +30,16 @@ can turn each one off in Extensions.
 | [TVmaze episode titles](tvmaze) | Episode titles for TV series from [TVmaze](https://www.tvmaze.com/api). |
 | [TheSubtitleDB](thesubtitledb) | Subtitle search for movies and episodes. It needs your own API key in its settings. |
 
-Each folder holds the package files and the source of its module. Its
-README describes how to build and test it.
+Each folder holds the package files and the source of its module. The app
+build compiles each module with Cargo for `wasm32-unknown-unknown` and
+installs the package, so the build needs that Rust target:
+
+```sh
+rustup target add wasm32-unknown-unknown
+```
+
+The README in each folder describes how to build and test the add-on on its
+own.
 
 ## Write an add-on
 

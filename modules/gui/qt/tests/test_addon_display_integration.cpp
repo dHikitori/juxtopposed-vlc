@@ -17,11 +17,11 @@
 using namespace vlc::addons;
 #ifdef HAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP
 namespace {
-// Bundled add-ons are at the top of contrib-addons; the others are test fixtures.
+// The build stages the bundled add-ons with their modules; the others are test fixtures.
 QString packageRoot(const QString& name)
 {
-    const auto bundled=QStringLiteral(HAKONE_DISPLAY_SOURCE_ROOT "/contrib-addons/")+name;
-    return QFile::exists(bundled+QStringLiteral("/addon.json"))?bundled:QStringLiteral(HAKONE_DISPLAY_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/")+name;
+    const auto bundled=QStringLiteral(VLC_ADDON_BUNDLED_ROOT "/")+name;
+    return QFile::exists(bundled+QStringLiteral("/addon.json"))?bundled:QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/")+name;
 }
 }
 namespace {

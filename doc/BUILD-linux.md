@@ -94,10 +94,20 @@ The install step puts the worker next to VLC. The build-tree UI uses the
 configured worker path. The add-on manager does not run Cargo or repository
 build scripts during an add-on install.
 
+The build also compiles the bundled add-ons in `contrib-addons` from source.
+Their modules need the `wasm32-unknown-unknown` target of the same toolchain:
+
+```sh
+rustup target add wasm32-unknown-unknown
+```
+
+The build stages each package in `modules/gui/qt/bundled-addons` in the build
+tree. The build-tree UI and the tests use those copies. The install step puts
+them in `share/vlc/addons/reference`.
+
 For HTTPS Git installs, install a Git program on `PATH`. If Git is missing, the manager
-shows an error. TheSubtitleDB reference package installs at
-`share/vlc/addons/reference/thesubtitledb`. Each user must supply a separate API
-key. The package does not contain a global TheSubtitleDB key.
+shows an error. Each user must supply a separate TheSubtitleDB API key. The
+package does not contain a global TheSubtitleDB key.
 
 Set `-Daddon-runtime=disabled` to omit the worker. Package checks, settings and
 data-only UI resources operate without the worker. Executable providers cannot run

@@ -702,7 +702,7 @@ private slots:
     {
         // The worker runs only declared operations, so an install refuses a
         // command that names one it does not list (Episodes 1.0.0 did).
-        const QDir bundled(QDir(QStringLiteral(VLC_ADDON_SOURCE_ROOT)).filePath(QStringLiteral("contrib-addons/episodes")));
+        const QDir bundled(QStringLiteral(VLC_ADDON_BUNDLED_ROOT "/episodes"));
         Manifest manifest; QMap<QString, QByteArray> contents; QString error;
         QVERIFY2(Manifest::loadDirectory(bundled.path(), &manifest, &contents, &error), qPrintable(error));
         ReleaseIdentity identity; identity.source = manifest.source.toString();
@@ -1046,11 +1046,9 @@ private slots:
     }
     void referenceSubtitleAddonManifest()
     {
-        const auto file = QFINDTESTDATA("../../../../contrib-addons/thesubtitledb/addon.json");
-        QVERIFY(!file.isEmpty());
         Manifest parsed;
         QString error;
-        QVERIFY2(Manifest::loadDirectory(QFileInfo(file).absolutePath(), &parsed, nullptr, &error), qPrintable(error));
+        QVERIFY2(Manifest::loadDirectory(QStringLiteral(VLC_ADDON_BUNDLED_ROOT "/thesubtitledb"), &parsed, nullptr, &error), qPrintable(error));
         QCOMPARE(parsed.id, QStringLiteral("org.hakone.thesubtitledb"));
         QVERIFY(parsed.contribution("search"));
         QVERIFY(parsed.permissionDeclared("credentials.use"));

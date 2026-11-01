@@ -41,7 +41,10 @@ EXTRA_DIST = qt6.pro qtest.pro quicktest.pro scripts
 vlc_qt_libs = $(QT_LIBS) $(LIBZ)
 RCC_EXTRA_PARAMS =
 
-all-local: $(VLC_QT_CHECK_DEP) $(QML_MODULE_STAMPS)
+# The bundled add-ons; see the build rule below.
+addon_bundled_names = thesubtitledb tvmaze episodes
+addon_bundled_stamps =
+all-local: $(VLC_QT_CHECK_DEP) $(QML_MODULE_STAMPS) $(addon_bundled_stamps)
 
 BUILT_SOURCES += subtitle_consumer_key.hpp addon_distribution_paths.hpp
 CLEANFILES += subtitle_consumer_key.hpp addon_distribution_paths.hpp
@@ -51,7 +54,7 @@ subtitle_consumer_key.hpp: subtitle-consumer-key-force $(srcdir)/scripts/subtitl
 
 addon_distribution_paths.hpp: $(srcdir)/scripts/addon-distribution-paths.py
 	$(AM_V_GEN)$(PYTHON3) $(srcdir)/scripts/addon-distribution-paths.py \
-		--root "$(abs_top_srcdir)/contrib-addons" --output $@
+		--root "$(abs_builddir)/bundled-addons" --output $@
 
 if !HAVE_QT_ZSTD
 RCC_EXTRA_PARAMS += --no-zstd
@@ -402,6 +405,23 @@ vlc-addon-worker$(EXEEXT): $(srcdir)/addons/worker/Cargo.toml $(srcdir)/addons/w
 		--output "$@" --target "$(ADDON_RUST_TARGET)" --linker "$(ADDON_RUST_LINKER)" \
 		--system "$(ADDON_RUNTIME_HOST_OS)" --cpu "$(ADDON_RUNTIME_HOST_CPU)" $(ADDON_RUNTIME_CROSS)
 libqt_plugin_la_CPPFLAGS += -DVLC_ADDON_WORKER_BUILD_PATH='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"'
+
+# Build the bundled add-ons from source. Each package is staged in the build
+# tree, where the app and the tests load it, and installed from there. Cargo
+# decides what to rebuild, so the rule always runs.
+addon_bundled_stamps += $(addprefix bundled-addons/,$(addsuffix .stamp,$(addon_bundled_names)))
+.PHONY: bundled-addons-force
+bundled-addons/%.stamp: bundled-addons-force $(srcdir)/scripts/build-bundled-addon.py
+	$(AM_V_GEN)$(PYTHON3) $(srcdir)/scripts/build-bundled-addon.py build --cargo "$(ADDON_CARGO)" \
+		--package "$(abs_top_srcdir)/contrib-addons/$*" --output "$(abs_builddir)/bundled-addons/$*" \
+		--target-dir "$(abs_builddir)/bundled-addons-cargo" --stamp $@
+install-data-local:
+	$(PYTHON3) $(srcdir)/scripts/build-bundled-addon.py install --staged "$(abs_builddir)/bundled-addons" \
+		--destination "$(DESTDIR)$(datadir)/vlc/addons/reference" $(addon_bundled_names)
+uninstall-local:
+	for name in $(addon_bundled_names); do rm -rf "$(DESTDIR)$(datadir)/vlc/addons/reference/$$name"; done
+clean-local:
+	rm -rf bundled-addons bundled-addons-cargo
 endif
 
 libqt_plugin_la_SOURCES = \
@@ -2372,7 +2392,7 @@ test_qt_addon_package_summaries_SOURCES = tests/test_addon_package_summaries.cpp
 nodist_test_qt_addon_package_summaries_SOURCES = tests/test_addon_package_summaries.moc
 BUILT_SOURCES += tests/test_addon_package_summaries.moc
 CLEANFILES += tests/test_addon_package_summaries.moc
-test_qt_addon_package_summaries_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_package_summaries_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_package_summaries_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_package_summaries_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_package_summaries_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2439,7 +2459,7 @@ test_qt_addon_packages_SOURCES = tests/test_addon_packages.cpp
 nodist_test_qt_addon_packages_SOURCES = tests/test_addon_packages.moc
 BUILT_SOURCES += tests/test_addon_packages.moc
 CLEANFILES += tests/test_addon_packages.moc
-test_qt_addon_packages_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_packages_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_packages_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_packages_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_packages_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2450,7 +2470,7 @@ test_qt_addon_runtime_SOURCES = tests/test_addon_runtime.cpp
 nodist_test_qt_addon_runtime_SOURCES = tests/test_addon_runtime.moc
 BUILT_SOURCES += tests/test_addon_runtime.moc
 CLEANFILES += tests/test_addon_runtime.moc
-test_qt_addon_runtime_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_runtime_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_runtime_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_runtime_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_runtime_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2461,7 +2481,7 @@ test_qt_addon_metadata_SOURCES = tests/test_addon_metadata.cpp
 nodist_test_qt_addon_metadata_SOURCES = tests/test_addon_metadata.moc
 BUILT_SOURCES += tests/test_addon_metadata.moc
 CLEANFILES += tests/test_addon_metadata.moc
-test_qt_addon_metadata_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_metadata_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_metadata_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_metadata_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_metadata_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2472,7 +2492,7 @@ test_qt_addon_broker_SOURCES = tests/test_addon_broker.cpp
 nodist_test_qt_addon_broker_SOURCES = tests/test_addon_broker.moc
 BUILT_SOURCES += tests/test_addon_broker.moc
 CLEANFILES += tests/test_addon_broker.moc
-test_qt_addon_broker_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_broker_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_broker_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_broker_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_broker_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2484,7 +2504,7 @@ test_qt_addon_ui_registry_SOURCES = tests/test_addon_ui_registry.cpp
 nodist_test_qt_addon_ui_registry_SOURCES = tests/test_addon_ui_registry.moc
 BUILT_SOURCES += tests/test_addon_ui_registry.moc
 CLEANFILES += tests/test_addon_ui_registry.moc
-test_qt_addon_ui_registry_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_ui_registry_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_ui_registry_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_ui_registry_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_ui_registry_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2495,7 +2515,7 @@ test_qt_addon_ui_assets_SOURCES = tests/test_addon_ui_assets.cpp tests/addon_ui_
 nodist_test_qt_addon_ui_assets_SOURCES = tests/test_addon_ui_assets.moc
 BUILT_SOURCES += tests/test_addon_ui_assets.moc
 CLEANFILES += tests/test_addon_ui_assets.moc
-test_qt_addon_ui_assets_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_ui_assets_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_ui_assets_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_ui_assets_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_ui_assets_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2517,7 +2537,7 @@ test_qt_addon_metadata_service_SOURCES = tests/test_addon_metadata_service.cpp
 nodist_test_qt_addon_metadata_service_SOURCES = tests/test_addon_metadata_service.moc
 BUILT_SOURCES += tests/test_addon_metadata_service.moc
 CLEANFILES += tests/test_addon_metadata_service.moc
-test_qt_addon_metadata_service_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_metadata_service_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_metadata_service_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_metadata_service_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_metadata_service_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2528,7 +2548,7 @@ test_qt_addon_discovery_SOURCES = tests/test_addon_discovery.cpp
 nodist_test_qt_addon_discovery_SOURCES = tests/test_addon_discovery.moc
 BUILT_SOURCES += tests/test_addon_discovery.moc
 CLEANFILES += tests/test_addon_discovery.moc
-test_qt_addon_discovery_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_discovery_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_discovery_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_discovery_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_discovery_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2539,7 +2559,7 @@ test_qt_addon_theme_SOURCES = tests/test_addon_theme.cpp
 nodist_test_qt_addon_theme_SOURCES = tests/test_addon_theme.moc
 BUILT_SOURCES += tests/test_addon_theme.moc
 CLEANFILES += tests/test_addon_theme.moc
-test_qt_addon_theme_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_theme_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_theme_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_theme_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_theme_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2550,7 +2570,7 @@ test_qt_addon_sessions_SOURCES = tests/test_addon_sessions.cpp
 nodist_test_qt_addon_sessions_SOURCES = tests/test_addon_sessions.moc
 BUILT_SOURCES += tests/test_addon_sessions.moc
 CLEANFILES += tests/test_addon_sessions.moc
-test_qt_addon_sessions_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_sessions_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_sessions_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_sessions_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_sessions_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2562,7 +2582,7 @@ test_qt_addon_audio_analysis_SOURCES = tests/test_addon_audio_analysis.cpp
 nodist_test_qt_addon_audio_analysis_SOURCES = tests/test_addon_audio_analysis.moc
 BUILT_SOURCES += tests/test_addon_audio_analysis.moc
 CLEANFILES += tests/test_addon_audio_analysis.moc
-test_qt_addon_audio_analysis_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_audio_analysis_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_audio_analysis_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_audio_analysis_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_audio_analysis_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2574,7 +2594,7 @@ test_qt_addon_visual_scene_SOURCES = tests/test_addon_visual_scene.cpp
 nodist_test_qt_addon_visual_scene_SOURCES = tests/test_addon_visual_scene.moc
 BUILT_SOURCES += tests/test_addon_visual_scene.moc
 CLEANFILES += tests/test_addon_visual_scene.moc
-test_qt_addon_visual_scene_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_visual_scene_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_visual_scene_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visual_scene_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visual_scene_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2684,7 +2704,7 @@ test_qt_addon_store_profile_writes_SOURCES = tests/test_addon_store_profile_writ
 nodist_test_qt_addon_store_profile_writes_SOURCES = tests/test_addon_store_profile_writes.moc
 BUILT_SOURCES += tests/test_addon_store_profile_writes.moc
 CLEANFILES += tests/test_addon_store_profile_writes.moc
-test_qt_addon_store_profile_writes_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_store_profile_writes_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_store_profile_writes_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_store_profile_writes_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_store_profile_writes_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2717,7 +2737,7 @@ test_qt_addon_worker_health_SOURCES = tests/test_addon_worker_health.cpp
 nodist_test_qt_addon_worker_health_SOURCES = tests/test_addon_worker_health.moc
 BUILT_SOURCES += tests/test_addon_worker_health.moc
 CLEANFILES += tests/test_addon_worker_health.moc
-test_qt_addon_worker_health_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_worker_health_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_worker_health_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_worker_health_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2728,7 +2748,7 @@ test_qt_addon_schema_corpus_SOURCES = tests/test_addon_schema_corpus.cpp
 nodist_test_qt_addon_schema_corpus_SOURCES = tests/test_addon_schema_corpus.moc
 BUILT_SOURCES += tests/test_addon_schema_corpus.moc
 CLEANFILES += tests/test_addon_schema_corpus.moc
-test_qt_addon_schema_corpus_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_schema_corpus_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_schema_corpus_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_schema_corpus_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_schema_corpus_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2771,7 +2791,7 @@ test_qt_addon_candidate_check_SOURCES = tests/test_addon_candidate_check.cpp
 nodist_test_qt_addon_candidate_check_SOURCES = tests/test_addon_candidate_check.moc
 BUILT_SOURCES += tests/test_addon_candidate_check.moc
 CLEANFILES += tests/test_addon_candidate_check.moc
-test_qt_addon_candidate_check_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_candidate_check_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_candidate_check_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_candidate_check_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_candidate_check_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2863,7 +2883,7 @@ test_qt_addon_display_integration_SOURCES = tests/test_addon_display_integration
 nodist_test_qt_addon_display_integration_SOURCES = tests/test_addon_display_integration.moc
 BUILT_SOURCES += tests/test_addon_display_integration.moc
 CLEANFILES += tests/test_addon_display_integration.moc
-test_qt_addon_display_integration_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DHAKONE_DISPLAY_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_display_integration_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_display_integration_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_display_integration_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_display_integration_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2874,7 +2894,7 @@ test_qt_addon_distribution_bootstrap_SOURCES = tests/test_addon_distribution_boo
 nodist_test_qt_addon_distribution_bootstrap_SOURCES = tests/test_addon_distribution_bootstrap.moc
 BUILT_SOURCES += tests/test_addon_distribution_bootstrap.moc
 CLEANFILES += tests/test_addon_distribution_bootstrap.moc
-test_qt_addon_distribution_bootstrap_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DHAKONE_STARTUP_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_distribution_bootstrap_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_distribution_bootstrap_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_distribution_bootstrap_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_distribution_bootstrap_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2885,7 +2905,7 @@ test_qt_addon_catalogue_view_SOURCES = tests/test_addon_catalogue_view.cpp
 nodist_test_qt_addon_catalogue_view_SOURCES = tests/test_addon_catalogue_view.moc
 BUILT_SOURCES += tests/test_addon_catalogue_view.moc
 CLEANFILES += tests/test_addon_catalogue_view.moc
-test_qt_addon_catalogue_view_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_catalogue_view_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_catalogue_view_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_catalogue_view_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_catalogue_view_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2896,7 +2916,7 @@ test_qt_addon_display_catalogue_SOURCES = tests/test_addon_display_catalogue.cpp
 nodist_test_qt_addon_display_catalogue_SOURCES = tests/test_addon_display_catalogue.moc
 BUILT_SOURCES += tests/test_addon_display_catalogue.moc
 CLEANFILES += tests/test_addon_display_catalogue.moc
-test_qt_addon_display_catalogue_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_display_catalogue_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_display_catalogue_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_display_catalogue_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_display_catalogue_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3029,7 +3049,7 @@ test_qt_addon_source_consent_SOURCES = tests/test_addon_source_consent.cpp
 nodist_test_qt_addon_source_consent_SOURCES = tests/test_addon_source_consent.moc
 BUILT_SOURCES += tests/test_addon_source_consent.moc
 CLEANFILES += tests/test_addon_source_consent.moc
-test_qt_addon_source_consent_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_source_consent_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_source_consent_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_source_consent_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_source_consent_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3040,7 +3060,7 @@ test_qt_addon_visualizer_resources_SOURCES = tests/test_addon_visualizer_resourc
 nodist_test_qt_addon_visualizer_resources_SOURCES = tests/test_addon_visualizer_resources.moc
 BUILT_SOURCES += tests/test_addon_visualizer_resources.moc
 CLEANFILES += tests/test_addon_visualizer_resources.moc
-test_qt_addon_visualizer_resources_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_resources_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_visualizer_resources_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizer_resources_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visualizer_resources_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3051,7 +3071,7 @@ test_qt_addon_visualizer_worker_SOURCES = tests/test_addon_visualizer_worker.cpp
 nodist_test_qt_addon_visualizer_worker_SOURCES = tests/test_addon_visualizer_worker.moc
 BUILT_SOURCES += tests/test_addon_visualizer_worker.moc
 CLEANFILES += tests/test_addon_visualizer_worker.moc
-test_qt_addon_visualizer_worker_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_worker_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_visualizer_worker_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizer_worker_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visualizer_worker_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3062,7 +3082,7 @@ test_qt_addon_visualizer_worker_runtime_SOURCES = tests/test_addon_visualizer_wo
 nodist_test_qt_addon_visualizer_worker_runtime_SOURCES = tests/test_addon_visualizer_worker_runtime.moc
 BUILT_SOURCES += tests/test_addon_visualizer_worker_runtime.moc
 CLEANFILES += tests/test_addon_visualizer_worker_runtime.moc
-test_qt_addon_visualizer_worker_runtime_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_worker_runtime_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_visualizer_worker_runtime_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizer_worker_runtime_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visualizer_worker_runtime_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3074,7 +3094,7 @@ test_qt_addon_visualizer_render_queue_SOURCES = tests/test_addon_visualizer_rend
 nodist_test_qt_addon_visualizer_render_queue_SOURCES = tests/test_addon_visualizer_render_queue.moc
 BUILT_SOURCES += tests/test_addon_visualizer_render_queue.moc
 CLEANFILES += tests/test_addon_visualizer_render_queue.moc
-test_qt_addon_visualizer_render_queue_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_render_queue_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_visualizer_render_queue_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizer_render_queue_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visualizer_render_queue_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3085,7 +3105,7 @@ test_qt_addon_native_source_resolver_SOURCES = tests/test_addon_native_source_re
 nodist_test_qt_addon_native_source_resolver_SOURCES = tests/test_addon_native_source_resolver.moc
 BUILT_SOURCES += tests/test_addon_native_source_resolver.moc
 CLEANFILES += tests/test_addon_native_source_resolver.moc
-test_qt_addon_native_source_resolver_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_native_source_resolver_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_native_source_resolver_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_native_source_resolver_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_native_source_resolver_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3096,7 +3116,7 @@ test_qt_addon_native_player_analysis_SOURCES = tests/test_addon_native_player_an
 nodist_test_qt_addon_native_player_analysis_SOURCES = tests/test_addon_native_player_analysis.moc
 BUILT_SOURCES += tests/test_addon_native_player_analysis.moc
 CLEANFILES += tests/test_addon_native_player_analysis.moc
-test_qt_addon_native_player_analysis_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_native_player_analysis_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_native_player_analysis_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_native_player_analysis_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_native_player_analysis_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3114,7 +3134,7 @@ test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.cpp
 nodist_test_qt_addon_visualizer_clock_SOURCES = tests/test_addon_visualizer_clock.moc
 BUILT_SOURCES += tests/test_addon_visualizer_clock.moc
 CLEANFILES += tests/test_addon_visualizer_clock.moc
-test_qt_addon_visualizer_clock_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_clock_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_visualizer_clock_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizer_clock_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visualizer_clock_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3125,7 +3145,7 @@ test_qt_addon_visualizer_surface_SOURCES = tests/test_addon_visualizer_surface.c
 nodist_test_qt_addon_visualizer_surface_SOURCES = tests/test_addon_visualizer_surface.moc addons/addon_visualizer_surface.moc.cpp
 BUILT_SOURCES += tests/test_addon_visualizer_surface.moc
 CLEANFILES += tests/test_addon_visualizer_surface.moc
-test_qt_addon_visualizer_surface_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizer_surface_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_visualizer_surface_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizer_surface_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_visualizer_surface_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3136,7 +3156,7 @@ test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.cpp
 nodist_test_qt_addon_visualizers_SOURCES = tests/test_addon_visualizers.moc
 BUILT_SOURCES += tests/test_addon_visualizers.moc
 CLEANFILES += tests/test_addon_visualizers.moc
-test_qt_addon_visualizers_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
+test_qt_addon_visualizers_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE='"$(abs_builddir)/addon_visualizer_process$(EXEEXT)"'
 test_qt_addon_visualizers_DEPENDENCIES = libqt_addon_host.la addon_visualizer_process
 test_qt_addon_visualizers_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_visualizers_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
@@ -3149,7 +3169,7 @@ test_qt_addon_host_services_SOURCES = tests/test_addon_host_services.cpp
 nodist_test_qt_addon_host_services_SOURCES = tests/test_addon_host_services.moc
 BUILT_SOURCES += tests/test_addon_host_services.moc
 CLEANFILES += tests/test_addon_host_services.moc
-test_qt_addon_host_services_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_host_services_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_host_services_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_host_services_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_host_services_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3161,7 +3181,7 @@ test_qt_addon_repository_updates_SOURCES = tests/test_addon_repository_updates.c
 nodist_test_qt_addon_repository_updates_SOURCES = tests/test_addon_repository_updates.moc
 BUILT_SOURCES += tests/test_addon_repository_updates.moc
 CLEANFILES += tests/test_addon_repository_updates.moc
-test_qt_addon_repository_updates_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_repository_updates_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_repository_updates_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_repository_updates_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_repository_updates_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3172,7 +3192,7 @@ test_qt_addon_playable_gate_SOURCES = tests/test_addon_playable_gate.cpp
 nodist_test_qt_addon_playable_gate_SOURCES = tests/test_addon_playable_gate.moc
 BUILT_SOURCES += tests/test_addon_playable_gate.moc
 CLEANFILES += tests/test_addon_playable_gate.moc
-test_qt_addon_playable_gate_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_playable_gate_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_playable_gate_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_playable_gate_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_playable_gate_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3206,7 +3226,7 @@ test_qt_addon_artwork_assets_SOURCES = tests/test_addon_artwork_assets.cpp
 nodist_test_qt_addon_artwork_assets_SOURCES = tests/test_addon_artwork_assets.moc
 BUILT_SOURCES += tests/test_addon_artwork_assets.moc
 CLEANFILES += tests/test_addon_artwork_assets.moc
-test_qt_addon_artwork_assets_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_artwork_assets_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"'
 test_qt_addon_artwork_assets_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_artwork_assets_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_artwork_assets_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -3274,7 +3294,7 @@ test_qt_addon_discovery_source_owner_SOURCES = tests/test_addon_discovery_source
 nodist_test_qt_addon_discovery_source_owner_SOURCES = tests/test_addon_discovery_source_owner.moc
 BUILT_SOURCES += tests/test_addon_discovery_source_owner.moc
 CLEANFILES += tests/test_addon_discovery_source_owner.moc
-test_qt_addon_discovery_source_owner_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_DISCOVERY_PROCESS_FIXTURE='"$(abs_builddir)/addon_discovery_source_process$(EXEEXT)"'
+test_qt_addon_discovery_source_owner_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"' -DVLC_ADDON_BUNDLED_ROOT='"$(abs_builddir)/bundled-addons"' -DVLC_ADDON_NATIVE_BUILD_ROOT='"$(abs_top_builddir)"' -DVLC_ADDON_DISCOVERY_PROCESS_FIXTURE='"$(abs_builddir)/addon_discovery_source_process$(EXEEXT)"'
 test_qt_addon_discovery_source_owner_DEPENDENCIES = libqt_addon_host.la addon_discovery_source_process
 test_qt_addon_discovery_source_owner_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_discovery_source_owner_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
@@ -4086,28 +4106,6 @@ endif
 endif
 
 if ENABLE_QT
-addon_referencedir = $(datadir)/vlc/addons/reference/thesubtitledb
-addon_reference_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/addon.json $(top_srcdir)/contrib-addons/thesubtitledb/LICENSE
-addon_reference_distdir = $(datadir)/vlc/addons/reference/thesubtitledb/dist
-addon_reference_dist_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/dist/addon.wasm
-addon_reference_settingsdir = $(datadir)/vlc/addons/reference/thesubtitledb/settings
-addon_reference_settings_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/settings/schema.json $(top_srcdir)/contrib-addons/thesubtitledb/settings/ui.json
-addon_reference_localesdir = $(datadir)/vlc/addons/reference/thesubtitledb/locales
-addon_reference_locales_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/locales/en.json
-addon_tvmazedir = $(datadir)/vlc/addons/reference/tvmaze
-addon_tvmaze_DATA = $(top_srcdir)/contrib-addons/tvmaze/addon.json $(top_srcdir)/contrib-addons/tvmaze/LICENSE $(top_srcdir)/contrib-addons/tvmaze/NOTICE.md
-addon_tvmaze_distdir = $(datadir)/vlc/addons/reference/tvmaze/dist
-addon_tvmaze_dist_DATA = $(top_srcdir)/contrib-addons/tvmaze/dist/addon.wasm
-addon_episodesdir = $(datadir)/vlc/addons/reference/episodes
-addon_episodes_DATA = $(addprefix $(top_srcdir)/contrib-addons/episodes/,addon.json LICENSE NOTICE.md)
-addon_episodes_distdir = $(datadir)/vlc/addons/reference/episodes/dist
-addon_episodes_dist_DATA = $(top_srcdir)/contrib-addons/episodes/dist/addon.wasm
-addon_episodes_viewsdir = $(datadir)/vlc/addons/reference/episodes/views
-addon_episodes_views_DATA = $(top_srcdir)/contrib-addons/episodes/views/episodes.json
-addon_episodes_iconsdir = $(datadir)/vlc/addons/reference/episodes/icons
-addon_episodes_icons_DATA = $(top_srcdir)/contrib-addons/episodes/icons/episodes.svg
-addon_episodes_localesdir = $(datadir)/vlc/addons/reference/episodes/locales
-addon_episodes_locales_DATA = $(addprefix $(top_srcdir)/contrib-addons/episodes/locales/,en.json es.json fr.json ja.json ru.json zh.json)
 # The examples are not bundled; the tests load these package copies.
 addon_radio_browser_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/radio-browser/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
 addon_musicbrainz_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
@@ -4122,8 +4120,10 @@ install-data-hook:
 	done
 endif
 
-EXTRA_DIST += $(addon_reference_DATA) $(addon_reference_dist_DATA) $(addon_reference_settings_DATA) $(addon_reference_locales_DATA)
-EXTRA_DIST += $(addon_tvmaze_DATA) $(addon_tvmaze_dist_DATA)
+# The bundled add-on sources, and the SDK crate that they use.
+dist-hook:
+	tar -C "$(top_srcdir)" -cf - --exclude=target --exclude=dist --exclude=__pycache__ \
+		$(addprefix contrib-addons/,README.md sdk/message-v1 $(addon_bundled_names)) | tar -C "$(top_distdir)" -xf -
 EXTRA_DIST += $(addon_musicbrainz_files) $(addon_lastfm_files) $(addon_french_tv_files) $(addon_google_images_files) $(addon_radio_browser_files)
 EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/test_addon_artwork_consumers.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp util/artwork_approval.hpp
 EXTRA_DIST += tests/build_addon_native_library_tests.py tests/test_addon_native_library_store.cpp
@@ -4172,8 +4172,6 @@ EXTRA_DIST += tests/test_addon_metadata_family_plan.cpp tests/test_addon_native_
 EXTRA_DIST += tests/discovery-source/CMakeLists.txt tests/discovery-source/native_module_baseline.cpp \
 	tests/fixtures/addon_source_tls_fixture.hpp
 
-EXTRA_DIST += $(addon_episodes_DATA) $(addon_episodes_dist_DATA) $(addon_episodes_views_DATA) $(addon_episodes_icons_DATA) $(addon_episodes_locales_DATA) \
-    $(addprefix $(top_srcdir)/contrib-addons/episodes/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/sample-state.json)
 
 EXTRA_DIST += tests/test_addon_metadata_attempt.cpp tests/fixtures/addon_metadata_attempt_process.c \
     tests/fixtures/receipt_tls_fixture.hpp tests/fixtures/metadata-attempt/receipt-tls-cert.pem \
