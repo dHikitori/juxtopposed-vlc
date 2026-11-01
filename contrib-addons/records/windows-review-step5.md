@@ -215,11 +215,12 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `e7d48e7f54`: `vlc.exe`
-`d36c16a7a9e4c9bad87a72da225a40f8aa18c353c00342f5c3fad5cb580623bc`,
+Package `46c393f493`: `vlc.exe`
+`b696150b9395ae65176de5d20056fa47a859ef6512b4507812b1280955e74f98`,
 `libqt_plugin.dll`
-`887e27db07171c9a6b2cf9ce374df205359ef584df93a1d92fd94264c807a198`.
-It adds a memory cache for library thumbnails (`a00be55dad`, check 11)
+`0f45d28545cf1267fadb581a07c52dd470d6c5d46af7a50b86c8617d047eff8c`.
+It is `e7d48e7f54` plus log lines for why an add-on view stops
+(`46c393f493`), for the Episodes run below. `e7d48e7f54` adds a memory cache for library thumbnails (`a00be55dad`, check 11)
 and a fix for the crash on opening Network › Radio (`e7d48e7f54`, check
 12) to `5d71509ec5`, which added the startup update prompt and evener
 Extensions rows (checks 9 and 10); Episodes stays 1.0.2.
@@ -298,3 +299,27 @@ writing the dump. `e4f8923a76` connected the loading timer with the model
 as context from the private's constructor, which runs before the model's
 QObject base is built. Fixed in `e7d48e7f54`: the timer is its own
 context.
+
+### Episodes "stopped working" on first open (package `e7d48e7f54`)
+
+On `Silicon Valley - S01E01`, opened about 9 s into playback from
+`\\sojevic-nas\media\Series\Silicon Valley\Season 01`, the panel showed
+"This panel stopped working" at once. No crash dump, and nothing was
+logged: the failure paths were silent. Not reproduced here:
+
+- The app smoke test now opens Episodes on a copy of that layout (titled
+  episodes with `-thumb.jpg` files, more seasons, a
+  `Show.S06.1080p.WebRip.H264` folder) and the panel lists the season.
+- Worker states built for eight episodes with watched flags, progress,
+  artwork handles and long descriptions over six seasons pass the view's
+  own checks (`AddonUi.js`) and the manifest's state schema.
+- The installed Episodes 1.0.2 is byte-for-byte the bundled one.
+
+What is left is something only the share or Windows shows, for example a
+scan that is still running when the panel opens. `46c393f493` logs the
+reason. Run with:
+
+    vlc.exe --file-logging --logfile=%TEMP%\vlc-log.txt --log-verbose=2 --qt-hang-report
+
+and look for lines starting `Add-on view` or `Add-on ... stopped`.
+
