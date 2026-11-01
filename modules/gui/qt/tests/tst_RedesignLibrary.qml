@@ -1213,7 +1213,17 @@ TestCase {
         view.loading = true
         waitForRendering(view)
         compare(top(), settled)
-        compare(findChild(view, "libraryEmptyMessage").text, "")
+        // It says so in the middle of the content area, not in the toolbar.
+        const message = findChild(view, "libraryEmptyMessage")
+        compare(message.text, "Loading…")
+        compare(message.horizontalAlignment, Text.AlignHCenter)
+        compare(message.verticalAlignment, Text.AlignVCenter)
+        const middle = message.mapToItem(view, 0, message.height / 2).y
+        verify(middle > view.height / 3 && middle < view.height * 2 / 3)
+        compare(findChild(view, "libraryItemCount").text, "")
+        view.loading = false
+        compare(message.horizontalAlignment, Text.AlignLeft)
+        compare(message.text, view.emptyText)
     }
     function test_invalidViewChoicesUseTheDesignDefaults() {
         for (const value of ["invalid", "[]", "null", "42", "false", '{"compact":"grid","expanded":"list"}']) {

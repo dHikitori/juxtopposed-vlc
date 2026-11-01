@@ -1068,8 +1068,7 @@ void NetworkMediaModelPrivate::ListenerCb::onItemPreparseEnded(MediaTreePtr, inp
         if (p_node != model->d_func()->m_treeItem.media)
             return;
 
-        model->d_func()->m_loading = false;
-        emit model->loadingChanged();
+        model->d_func()->endLoading();
     });
 }
 

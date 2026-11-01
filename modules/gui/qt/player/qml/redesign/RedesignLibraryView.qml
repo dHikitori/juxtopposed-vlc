@@ -350,7 +350,9 @@ Item {
         onClicked: viewMenu.toggleFrom(button)
     }
     component ItemCount: Text {
-        text: root.loading ? qsTr("Loading…") : qsTr("%n item", "%n items", root.itemCount)
+        objectName: "libraryItemCount"
+        // An empty list says it is loading in the content area instead.
+        text: root.loading ? root.itemCount > 0 ? qsTr("Loading…") : "" : qsTr("%n item", "%n items", root.itemCount)
         color: root.theme.playerLabel
         font.pixelSize: root.theme.dp(14)
     }
@@ -692,13 +694,15 @@ Item {
         Text {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            // Kept while a list loads, without text: it takes the spare
-            // height, so the toolbar stays at the top.
+            // Takes the spare height, so the toolbar stays at the top. While
+            // the list loads it says so in the middle of the content area.
             visible: !root.homeSectionsVisible && root.itemCount === 0
             objectName: "libraryEmptyMessage"
-            text: root.loading ? "" : root.searchText.length > 0 ? qsTr("No media matches your search.") : root.emptyText
-            wrapMode: Text.WordWrap; color: theme.foreground; font.pixelSize: theme.dp(14)
-            verticalAlignment: Text.AlignTop
+            text: root.loading ? qsTr("Loading…") : root.searchText.length > 0 ? qsTr("No media matches your search.") : root.emptyText
+            wrapMode: Text.WordWrap; color: root.loading ? root.theme.playerLabel : theme.foreground
+            font.pixelSize: theme.dp(root.loading ? 16 : 14)
+            horizontalAlignment: root.loading ? Text.AlignHCenter : Text.AlignLeft
+            verticalAlignment: root.loading ? Text.AlignVCenter : Text.AlignTop
         }
     }
 }

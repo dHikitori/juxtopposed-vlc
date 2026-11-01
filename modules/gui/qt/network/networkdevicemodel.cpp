@@ -216,12 +216,10 @@ public:
     // view does not call a source empty while its first answer is on the way.
     void finishLoading()
     {
-        Q_Q(NetworkDeviceModel);
         m_settle.stop();
         if (!m_loading)
             return;
-        m_loading = false;
-        emit q->loadingChanged();
+        endLoading();
     }
     QTimer m_settle;
 
@@ -352,7 +350,6 @@ public:
 
     void onMediaAdded(const QSharedPointer<MediaSourceModel>& mediaSource, SharedInputItem media)
     {
-        finishLoading();
         std::size_t hash = qHash(media);
         auto it = std::find_if(
             m_items.begin(), m_items.end(),
@@ -369,6 +366,8 @@ public:
             m_revision += 1;
             invalidateCache();
         }
+        // After the cache starts counting the new row.
+        finishLoading();
     }
 
     void onMediaRemoved(const QSharedPointer<MediaSourceModel>& mediaSource, SharedInputItem media)
