@@ -206,7 +206,9 @@ public:
     {
         m_settle.setSingleShot(true);
         m_settle.setInterval(5000);
-        QObject::connect(&m_settle, &QTimer::timeout, pub, [this] { finishLoading(); });
+        // pub is not constructed yet: the model creates this before its
+        // QObject base, so the timer is its own context.
+        QObject::connect(&m_settle, &QTimer::timeout, &m_settle, [this] { finishLoading(); });
     }
 
     // Service discovery has no end signal. Loading ends with the first item,
