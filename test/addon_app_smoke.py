@@ -35,9 +35,11 @@ import tempfile
 import time
 from pathlib import Path
 
-BUNDLED = ('org.videolan.tvmaze', 'org.videolan.musicbrainz', 'org.videolan.lastfm',
-           'org.videolan.french-tv', 'org.videolan.google-images',
-           'org.hakone.radio-browser', 'org.hakone.thesubtitledb', 'org.videolan.episodes')
+BUNDLED = ('org.videolan.tvmaze', 'org.hakone.radio-browser',
+           'org.hakone.thesubtitledb', 'org.videolan.episodes')
+# The artwork examples are not bundled.
+UNBUNDLED = ('org.videolan.musicbrainz', 'org.videolan.lastfm',
+             'org.videolan.french-tv', 'org.videolan.google-images')
 CLOCK = os.sysconf('SC_CLK_TCK')
 PAGE = os.sysconf('SC_PAGE_SIZE')
 
@@ -285,6 +287,10 @@ def run(args):
         if not args.no_addons:
             wait_for('bundled add-ons', lambda: store.exists() and bundled_ready(store), args.timeout)
             results['bundled_ready_seconds'] = round(time.monotonic() - first.started, 3)
+            names = {entry.name for entry in store.rglob('*') if entry.is_dir()}
+            extra = [package for package in UNBUNDLED if any(name.startswith(package) for name in names)]
+            if extra:
+                raise Failure(f'unbundled add-ons were installed: {", ".join(extra)}')
 
         if not args.no_playback:
             # Ask the player itself, so the check does not depend on log text.

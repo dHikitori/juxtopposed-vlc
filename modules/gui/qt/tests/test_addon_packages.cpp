@@ -429,7 +429,7 @@ private slots:
         QVERIFY(store.install(candidate, {}, &error));
         QVERIFY(store.settings(candidate.manifest.id, &settings)); QVERIFY(!settings.contains("language"));
     }
-    void bundledArtworkPackagesHaveCompleteInventories()
+    void artworkExamplePackagesHaveCompleteInventories()
     {
         QTemporaryDir storage; AddonManager manager(storage.path());
         PackageStore store(storage.path());

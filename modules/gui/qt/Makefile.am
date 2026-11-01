@@ -4110,28 +4110,22 @@ addon_episodes_viewsdir = $(datadir)/vlc/addons/reference/episodes/views
 addon_episodes_views_DATA = $(top_srcdir)/contrib-addons/examples/episodes/views/episodes.json
 addon_episodes_iconsdir = $(datadir)/vlc/addons/reference/episodes/icons
 addon_episodes_icons_DATA = $(top_srcdir)/contrib-addons/examples/episodes/icons/episodes.svg
-addon_musicbrainzdir = $(datadir)/vlc/addons/reference/musicbrainz
-addon_musicbrainz_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
-addon_musicbrainz_distdir = $(datadir)/vlc/addons/reference/musicbrainz/dist
-addon_musicbrainz_dist_DATA = $(top_srcdir)/contrib-addons/examples/musicbrainz/dist/addon.wasm
-addon_lastfmdir = $(datadir)/vlc/addons/reference/lastfm
-addon_lastfm_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/lastfm/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
-addon_lastfm_distdir = $(datadir)/vlc/addons/reference/lastfm/dist
-addon_lastfm_dist_DATA = $(top_srcdir)/contrib-addons/examples/lastfm/dist/addon.wasm
-addon_french_tvdir = $(datadir)/vlc/addons/reference/french-tv
-addon_french_tv_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/french-tv/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
-addon_french_tv_distdir = $(datadir)/vlc/addons/reference/french-tv/dist
-addon_french_tv_dist_DATA = $(top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm
-addon_google_imagesdir = $(datadir)/vlc/addons/reference/google-images
-addon_google_images_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/google-images/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
-addon_google_images_distdir = $(datadir)/vlc/addons/reference/google-images/dist
-addon_google_images_dist_DATA = $(top_srcdir)/contrib-addons/examples/google-images/dist/addon.wasm
+# The artwork examples are not bundled; the tests still load their packages.
+addon_musicbrainz_files = $(addprefix $(top_srcdir)/contrib-addons/examples/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_lastfm_files = $(addprefix $(top_srcdir)/contrib-addons/examples/lastfm/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_french_tv_files = $(addprefix $(top_srcdir)/contrib-addons/examples/french-tv/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_google_images_files = $(addprefix $(top_srcdir)/contrib-addons/examples/google-images/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+
+# An earlier install bundled these; drop them so packaging does not copy them.
+install-data-hook:
+	for name in musicbrainz lastfm french-tv google-images; do \
+		rm -rf "$(DESTDIR)$(datadir)/vlc/addons/reference/$$name"; \
+	done
 endif
 
 EXTRA_DIST += $(addon_reference_DATA) $(addon_reference_dist_DATA) $(addon_reference_settings_DATA) $(addon_reference_locales_DATA)
 EXTRA_DIST += $(addon_tvmaze_DATA) $(addon_tvmaze_dist_DATA)
-EXTRA_DIST += $(addon_musicbrainz_DATA) $(addon_musicbrainz_dist_DATA) $(addon_lastfm_DATA) $(addon_lastfm_dist_DATA)
-EXTRA_DIST += $(addon_french_tv_DATA) $(addon_french_tv_dist_DATA) $(addon_google_images_DATA) $(addon_google_images_dist_DATA)
+EXTRA_DIST += $(addon_musicbrainz_files) $(addon_lastfm_files) $(addon_french_tv_files) $(addon_google_images_files)
 EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/test_addon_artwork_consumers.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp util/artwork_approval.hpp
 EXTRA_DIST += tests/build_addon_native_library_tests.py tests/test_addon_native_library_store.cpp
 
