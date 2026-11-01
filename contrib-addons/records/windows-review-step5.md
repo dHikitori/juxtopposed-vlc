@@ -215,11 +215,14 @@ loading) apply again. New checks:
 
 ## Package with player panels
 
-Package `7c5ac69a74`: `vlc.exe`
-`0c7a397ebaaf182782cb8e7d632d682574ff185c36cf5884d73d0f51c45a0bfd`,
+Package `d7fc74f615`: `vlc.exe`
+`b6533a5ccb0d8eb59ba9cdcaad48fe323aba90daaff4c9111afa69539d9dc71f`,
 `libqt_plugin.dll`
-`f43b7e8c2a77aca6fb4c0a93ab06e4c21972e564338be5f30ba05bd73076aa73`.
-It was built from the `e7e8d9868c` worktree with the `7c5ac69a74` change
+`780e5164e15e03f2b16c74545ae843a2ee2022facdd4ae6725e139c25ea14cc9`.
+It is `7c5ac69a74` with source approval moved into the add-on's accepted
+permissions: Media sources has no Playback access step, and Play and Add to
+queue work for an enabled add-on (`fd4059dfa5`, check 15). The unused review
+panel and API are removed (`d7fc74f615`). `7c5ac69a74` was built from the `e7e8d9868c` worktree with the `7c5ac69a74` change
 not yet committed, so `BUILD-INFO.json` names `e7e8d9868c` (dirty). It is
 `5938f2171b` plus Add to playlist and Add to queue reading packages and
 saving admissions off the GUI thread (`b08772a60d`, `e7e8d9868c`), and
@@ -304,12 +307,25 @@ New checks:
     While each loads, "Loading…" shows in the middle of the content area
     (not in the toolbar), and "This source has no media." does not show
     before the list appears.
-15. **Radio Browser playback.** Media sources › Radio Browser: search for a
-    station and select it. Play and Add to queue are enabled, and their
-    tooltip says to approve playback access first; clicking either opens
-    the Playback access review. Approve the source there. Play then starts
-    the station, Add to queue adds it, and Add to playlist returns at once
-    without "Not Responding". The station plays from that playlist.
+15. **Radio Browser playback.** Media sources › Radio Browser: there is no
+    Playback access button. Search for a station and select it. Play and
+    Add to queue are enabled with no approval step: Play starts the
+    station and Add to queue adds it. Add to playlist returns at once
+    without "Not Responding", and the station plays from that playlist.
+    The Extensions install review for an add-on with online playback says
+    "Play selected media from public online services." with no extra
+    approval note.
+
+### Separate approval step removed (package `7c5ac69a74`)
+
+The Playback access review expired after 30 seconds into an empty dialog,
+and approving it left the user to go back and click Play again, for an
+add-on that ships with the app. The install, Enable, and update reviews
+already list its online playback permission. Accepting that permission,
+or the grant a bundled add-on ships with, now approves its sources; the
+host saves it on the first source capture or native playback open
+(`fd4059dfa5`). Turning the add-on off withdraws it. The review panel,
+its dialog, and the owner's review API are removed (`d7fc74f615`).
 
 ### Radio Browser Play still disabled (package `5938f2171b`)
 
