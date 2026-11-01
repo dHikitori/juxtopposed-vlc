@@ -30,11 +30,16 @@ Item {
         color: root.placeholderColor
     }
     RedesignIcon { anchors.centerIn: parent; width: root.theme.dp(root.iconSize); height: width; name: root.iconName; color: root.theme.foreground; visible: !root.hasArtwork }
-    // Decode at the tile's pixel size: full-size posters cost several MB each
-    // and fall out of the image cache as soon as the tile scrolls away.
+    // Local files go through the app's thumbnail cache, which keeps them
+    // after a tile scrolls away; Qt's own cache keeps only about 2 MB.
+    readonly property var thumbnails: typeof redesignThumbnails === "undefined" ? null : redesignThumbnails
+    // Decode at the tile's pixel size: full-size posters cost several MB each.
+    // A picture the cache already holds is shown in the same frame.
     Image {
-        id: artworkImage; objectName: "libraryArtworkImage"; anchors.fill: parent; source: root.source
-        fillMode: Image.PreserveAspectCrop; asynchronous: true; visible: root.hasArtwork
+        id: artworkImage; objectName: "libraryArtworkImage"; anchors.fill: parent
+        source: root.thumbnails ? root.thumbnails.source(root.source) : root.source
+        fillMode: Image.PreserveAspectCrop; visible: root.hasArtwork
+        asynchronous: !root.thumbnails || !root.thumbnails.ready(source, sourceSize)
         sourceSize: Qt.size(Math.ceil(root.width * Screen.devicePixelRatio), Math.ceil(root.height * Screen.devicePixelRatio))
     }
     Rectangle {

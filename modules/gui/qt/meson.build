@@ -430,6 +430,7 @@ moc_headers = files(
     'playlist/playlist_tree_model.hpp',
     'util/github_release_service.hpp',
     'util/subtitle_source_service.hpp',
+    'util/thumbnail_cache.hpp',
     'util/asynctask.hpp',
     'util/accessible_compat_attached.hpp',
     'util/audio_device_model.hpp',
@@ -758,6 +759,8 @@ qt_plugin_sources = files(
     'player/subtitle_timeline_scanner.hpp',
     'util/seek_preview_cache.hpp',
     'util/seek_preview_image_provider.hpp',
+    'util/thumbnail_cache.cpp',
+    'util/thumbnail_cache.hpp',
     'util/subtitle_source_service.hpp',
     'util/subtitle_source_service.cpp',
     'util/github_release_service.cpp',
@@ -2476,6 +2479,17 @@ if qt6_dep.found()
             'moc_headers': files('util/effects_image_provider.hpp'),
             'suite': ['qt'],
             'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+        }
+        vlc_tests += {
+            'name': 'test_qt_thumbnail_cache',
+            'sources': files('tests/test_thumbnail_cache.cpp', 'util/thumbnail_cache.cpp'),
+            'moc_sources': files('tests/test_thumbnail_cache.cpp'),
+            'moc_headers': files('util/thumbnail_cache.hpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'link_with': [libvlccore, libvlc],
+            'link_args': qt_link_args,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
         }
         vlc_tests += {

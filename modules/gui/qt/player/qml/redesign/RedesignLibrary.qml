@@ -703,6 +703,7 @@ RedesignLibraryView {
             if (pin && pin.artwork !== artwork) pinStore.add(Object.assign({}, pin, {artwork: artwork}))
         }
         onInvalidated: {
+            if (typeof redesignThumbnails !== "undefined") redesignThumbnails.revalidate()
             root.pendingArtwork = ({})
             root.resolvedArtwork = ({})
             if (folderLoader.item) folderLoader.item.refresh()

@@ -630,6 +630,7 @@ libqt_plugin_la_SOURCES = \
 	player/episode_metadata.cpp player/episode_metadata.hpp \
 	util/seek_preview_cache.hpp util/seek_preview_image_provider.hpp \
 	util/subtitle_source_service.hpp util/subtitle_source_service.cpp \
+	util/thumbnail_cache.hpp util/thumbnail_cache.cpp \
 	util/github_release_service.hpp util/github_release_service.cpp \
 	util/release_info.hpp util/release_info.cpp \
 	player/subtitle_timeline_scanner.cpp player/subtitle_timeline_scanner.hpp \
@@ -870,6 +871,7 @@ nodist_libqt_plugin_la_SOURCES = \
 	player/delay_estimator.moc.cpp \
 	player/input_models.moc.cpp \
 	util/subtitle_source_service.moc.cpp \
+	util/thumbnail_cache.moc.cpp \
 	util/github_release_service.moc.cpp \
 	player/player_controller.moc.cpp \
 	player/series_model.moc.cpp \
@@ -3501,6 +3503,17 @@ test_redesign_folder_model_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_redesign_folder_model_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_redesign_folder_model
 TESTS += test_redesign_folder_model
+
+test_qt_thumbnail_cache_SOURCES = tests/test_thumbnail_cache.cpp util/thumbnail_cache.cpp util/thumbnail_cache.hpp
+nodist_test_qt_thumbnail_cache_SOURCES = tests/test_thumbnail_cache.moc util/thumbnail_cache.moc.cpp
+BUILT_SOURCES += tests/test_thumbnail_cache.moc
+CLEANFILES += tests/test_thumbnail_cache.moc
+test_qt_thumbnail_cache_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_thumbnail_cache_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_thumbnail_cache_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_qt_thumbnail_cache_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_qt_thumbnail_cache
+TESTS += test_qt_thumbnail_cache
 
 test_seek_preview_image_provider_SOURCES = tests/test_seek_preview_image_provider.cpp util/seek_preview_image_provider.hpp util/seek_preview_cache.hpp
 nodist_test_seek_preview_image_provider_SOURCES = tests/test_seek_preview_image_provider.moc

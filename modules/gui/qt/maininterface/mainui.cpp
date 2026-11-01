@@ -64,6 +64,7 @@
 #include "util/effects_image_provider.hpp"
 #include "util/vlcaccess_image_provider.hpp"
 #include "util/seek_preview_image_provider.hpp"
+#include "util/thumbnail_cache.hpp"
 #include "util/csdbuttonmodel.hpp"
 #include "util/vlctick.hpp"
 #include "util/list_selection_model.hpp"
@@ -237,6 +238,9 @@ bool MainUI::setup(QQmlEngine* engine)
     engine->rootContext()->setContextProperty(QStringLiteral("redesignMediaSiblings"), findChild<vlc::addons::AddonMediaSiblings*>(QStringLiteral("redesignMediaSiblings")));
     engine->addImageProvider(QStringLiteral("vlcaccess"), new VLCAccessImageProvider());
     engine->addImageProvider(QStringLiteral("seekpreview"), new SeekPreviewImageProvider());
+    auto* thumbnails = new ThumbnailCache(ThumbnailCache::defaultLimit, engine);
+    engine->addImageProvider(QLatin1String(ThumbnailCache::providerId), thumbnails->createProvider());
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignThumbnails"), thumbnails);
 
     m_component  = new QQmlComponent(engine, QStringLiteral("qrc:/qt/qml/VLC/MainInterface/MainInterface.qml"), QQmlComponent::PreferSynchronous, engine);
     if (m_component->isLoading())
