@@ -35,6 +35,15 @@ private slots:
         QStringList refreshed; QVERIFY(restored.admit({changed}, &refreshed)); QCOMPARE(refreshed, uris);
         QCOMPARE(restored.admittedReference(uris[0]), changed);
     }
+    void checkCallsOnlyTheValidatorAndRecordOnlyTheFile() {
+        QTemporaryDir profile; int validations = 0; bool sourceAvailable = true;
+        const AddonSourceAdmissions store(profile.path(), [&](const auto&) { ++validations; return sourceAvailable; });
+        QVERIFY(store.check({reference()})); QCOMPARE(validations, 1); QVERIFY(!QFile::exists(profile.filePath("source-admissions.json")));
+        sourceAvailable = false; QString error; QVERIFY(!store.check({reference()}, &error)); QVERIFY(!error.isEmpty());
+        QStringList uris; QVERIFY(store.record({reference()}, &uris)); QCOMPARE(validations, 2); QCOMPARE(uris.size(), 1);
+        QCOMPARE(store.admittedReference(uris[0]), reference());
+        auto invalid = reference(); invalid.remove("itemId"); QVERIFY(!store.record({invalid}, &uris)); QVERIFY(uris.isEmpty());
+    }
     void unknownAndImportedUrisHaveNoAuthority() {
         QTemporaryDir first, second;
         AddonSourceAdmissions source(first.path(), [](const auto&) { return true; });

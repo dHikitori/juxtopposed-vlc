@@ -57,6 +57,8 @@ private:
     void invalidate();
     void submitted(const std::shared_ptr<Pending>&, quint64 task);
     void completed(const std::shared_ptr<Pending>&);
+    bool resume(const std::shared_ptr<Pending>&);
+    void dispatchAppend(const std::shared_ptr<Pending>&);
     Dispatcher m_dispatcher;
     QPointer<QObject> m_dispatcherLifetime;
     QPointer<AddonManager> m_manager;

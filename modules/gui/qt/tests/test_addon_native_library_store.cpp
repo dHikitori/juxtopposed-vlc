@@ -150,6 +150,8 @@ public:
     }
     Task take() { auto it=tasks.begin(); auto value=std::move(it->second); tasks.erase(it); return value; }
     void run() { auto task=take(); std::thread worker([&] { task.work(ml); }); worker.join(); if (task.receiver) task.done(); }
+    // An append is two tasks: the package read, then the commit.
+    void drain() { while (!tasks.empty()) run(); }
 };
 AddonQueueTransactions::Transaction transaction(AddonNativeLibraryStore& store,const QString& target,const QVariantList& references)
 {
@@ -277,7 +279,7 @@ private slots:
         QVERIFY(store.snapshot(target).available); QVERIFY(dispatch.tasks.empty());
         QString reused; backend.prepare(choice.value("ref").toString(),[&](const QString& value,const QString&) { reused=value; }); QVERIFY(reused.isEmpty());
         store.append(transaction(store,target,{source.reference()}),[](bool success,const QString& error) { QVERIFY2(success,qPrintable(error)); });
-        dispatch.run(); QCOMPARE(library.members(id).size(),size_t(1));
+        dispatch.drain(); QCOMPARE(library.members(id).size(),size_t(1));
     }
     void pickerCannotRebindAChoiceAfterNativeIdReuse() {
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
@@ -288,7 +290,7 @@ private slots:
         QVERIFY(library.sql("UPDATE Playlist SET id_playlist="+std::to_string(id)+" WHERE id_playlist="+std::to_string(replacement)));
         backend.prepare(choice,[&](const QString& value,const QString&) { target=value; }); QVERIFY(!target.isEmpty());
         int calls=0; store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
-        dispatch.run(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
+        dispatch.drain(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
     }
     void pickerCancellationAndCloseDiscardLateListings() {
         Library library; QVERIFY(library.available()); QVERIFY(library.playlist()>0); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
@@ -302,14 +304,14 @@ private slots:
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); auto admissions=source.admissions(); Dispatcher dispatch(library.ml);
         AddonNativeLibraryStore store(dispatch.backend(),admissions,&source.manager);
         auto reference=source.reference(); reference.insert("snapshot",QVariantMap{{"title","Line\nbreak"},{"mediaKind","audio"}});
-        auto target=store.selectPlaylist(id); dispatch.run(); store.append(transaction(store,target,{reference}),[](bool success,const QString& error) { QVERIFY2(success,qPrintable(error)); }); dispatch.run();
+        auto target=store.selectPlaylist(id); dispatch.run(); store.append(transaction(store,target,{reference}),[](bool success,const QString& error) { QVERIFY2(success,qPrintable(error)); }); dispatch.drain();
         const auto uri=admissions->uriForReference(reference).toUtf8(); int64_t mediaId=0;
         const auto title=native([&] { auto* media=vlc_ml_get_media_by_mrl(library.ml,uri.constData()); if (!media) return QString();
             mediaId=media->i_id; const auto value=QString::fromUtf8(media->psz_title); vlc_ml_media_release(media); return value; });
         QCOMPARE(title,QStringLiteral("Line break")); QVERIFY(mediaId>0);
         QVERIFY(library.sql("UPDATE Media SET title='Manual title' WHERE id_media="+std::to_string(mediaId)));
         reference.insert("snapshot",QVariantMap{{"title","New catalog title"},{"mediaKind","audio"}});
-        target=store.selectPlaylist(id); dispatch.run(); store.append(transaction(store,target,{reference}),[](bool success,const QString& error) { QVERIFY2(success,qPrintable(error)); }); dispatch.run();
+        target=store.selectPlaylist(id); dispatch.run(); store.append(transaction(store,target,{reference}),[](bool success,const QString& error) { QVERIFY2(success,qPrintable(error)); }); dispatch.drain();
         QCOMPARE(native([&] { auto* media=vlc_ml_get_media_by_mrl(library.ml,uri.constData()); const auto value=media?QString::fromUtf8(media->psz_title):QString(); if (media) vlc_ml_media_release(media); return value; }),QStringLiteral("Manual title"));
     }
     void asyncTargetAndOneCasGroupPersistExactStableReferences() {
@@ -321,7 +323,8 @@ private slots:
         QVERIFY(store.metaObject()->indexOfMethod("selectPlaylist(qlonglong)")<0);
         const QVariantList selected{source.reference(),source.reference("item-2"),source.reference()}; int calls=0; bool saved=false;
         store.append(transaction(store,target,selected),[&](bool success,const QString& error) { ++calls; saved=success; QVERIFY2(success,qPrintable(error)); });
-        QCOMPARE(calls,0); QVERIFY(!store.snapshot(target).available); dispatch.run(); QCOMPARE(calls,1); QVERIFY(saved);
+        QCOMPARE(calls,0); QVERIFY(!store.snapshot(target).available); dispatch.run(); QCOMPARE(calls,0); QCOMPARE(dispatch.tasks.size(),size_t(1));
+        dispatch.run(); QCOMPARE(calls,1); QVERIFY(saved);
         QVERIFY(!store.snapshot(target).available); const auto members=library.members(id); QCOMPARE(members.size(),size_t(3));
         QCOMPARE(members[0],admissions->uriForReference(selected[0].toMap()).toStdString()); QCOMPARE(members[2],members[0]);
         QVERIFY(members[0].find("hakone-addon-source:v1:")==0); QVERIFY(members[0].find("https://")==std::string::npos);
@@ -339,7 +342,10 @@ private slots:
         AddonNativeLibraryStore store(dispatch.backend(),source.admissions(),&source.manager);
         const auto target=store.selectPlaylist(id); dispatch.run(); int calls=0;
         const auto cancel=store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
-        QVERIFY(bool(cancel)); cancel(); dispatch.run(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
+        QVERIFY(bool(cancel)); cancel(); dispatch.drain(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
+        const auto next=store.selectPlaylist(id); dispatch.run();
+        const auto between=store.append(transaction(store,next,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
+        dispatch.run(); QCOMPARE(calls,1); between(); dispatch.drain(); QCOMPARE(calls,2); QVERIFY(library.members(id).empty());
     }
     void nativeWriterChangesAndTargetReuseRejectOldSelections() {
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
@@ -348,19 +354,20 @@ private slots:
         QVERIFY(native([&] { auto* media=vlc_ml_new_external_media(library.ml,"file:///local-writer.mkv"); if (!media) return false;
             const auto mediaId=media->i_id; vlc_ml_media_release(media); return vlc_ml_playlist_append(library.ml,id,&mediaId,1)==VLC_SUCCESS; }));
         int calls=0; store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
-        dispatch.run(); QCOMPARE(calls,1); QCOMPARE(library.members(id).size(),size_t(1));
+        dispatch.drain(); QCOMPARE(calls,1); QCOMPARE(library.members(id).size(),size_t(1));
         const auto stale=store.selectPlaylist(id); dispatch.run();
         QVERIFY(native([&] { return vlc_ml_playlist_delete(library.ml,id)==VLC_SUCCESS; }));
         const auto replacement=library.playlist(); QVERIFY(replacement>0);
         QVERIFY(library.sql("UPDATE Playlist SET id_playlist="+std::to_string(id)+" WHERE id_playlist="+std::to_string(replacement)));
         store.append(transaction(store,stale,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
-        dispatch.run(); QCOMPARE(calls,2); QVERIFY(library.members(id).empty());
+        dispatch.drain(); QCOMPARE(calls,2); QVERIFY(library.members(id).empty());
     }
     void externalSettingsChangeNeedsNoQtEventAtTheCommitGuard() {
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); auto admissions=source.admissions(); Dispatcher dispatch(library.ml);
         AddonNativeLibraryStore store(dispatch.backend(),admissions,&source.manager); const auto target=store.selectPlaylist(id); dispatch.run();
         const auto reference=source.reference(); int calls=0;
         store.append(transaction(store,target,{reference}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
+        dispatch.run(); QCOMPARE(calls,0); QCOMPARE(dispatch.tasks.size(),size_t(1));
         PackageStore packages(source.manager.storageDirectory()); InstalledPackage package; QJsonObject settings; quint64 revision;
         QVERIFY(packages.installed(source.id,&package)); QVERIFY(packages.networkConfiguration(package,&settings,&revision));
         settings.insert("language","fr"); QVERIFY(packages.saveSettings(source.id,settings,revision));
@@ -369,33 +376,60 @@ private slots:
         QVERIFY(native([&] { auto* media=vlc_ml_get_media_by_mrl(library.ml,uri.constData()); if (!media) return false; vlc_ml_media_release(media); return true; }));
         const auto retry=store.selectPlaylist(id); dispatch.run();
         store.append(transaction(store,retry,{reference}),[&](bool success,const QString& error) { ++calls; QVERIFY2(success,qPrintable(error)); });
-        dispatch.run(); QCOMPARE(calls,2); QCOMPARE(library.members(id).size(),size_t(1));
+        dispatch.drain(); QCOMPARE(calls,2); QCOMPARE(library.members(id).size(),size_t(1));
+    }
+    void packageReadAndAdmissionWriteRunAsNativeWork() {
+        Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
+        AddonNativeLibraryStore store(dispatch.backend(),source.admissions(),&source.manager); auto target=store.selectPlaylist(id); dispatch.run();
+        const auto saved=QDir(source.directory.filePath("admissions")).filePath("source-admissions.json"); int calls=0;
+        store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString& error) { ++calls; QVERIFY2(success,qPrintable(error)); });
+        QCOMPARE(calls,0); QVERIFY(!QFile::exists(saved));
+        dispatch.run(); QCOMPARE(calls,0); QVERIFY(!QFile::exists(saved)); QCOMPARE(dispatch.tasks.size(),size_t(1));
+        dispatch.run(); QCOMPARE(calls,1); QVERIFY(QFile::exists(saved)); QCOMPARE(library.members(id).size(),size_t(1));
+        // A change to the package files after append() returns fails the read.
+        PackageStore packages(source.manager.storageDirectory()); InstalledPackage package; QVERIFY(packages.installed(source.id,&package));
+        target=store.selectPlaylist(id); dispatch.run();
+        store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
+        QFile license(QDir(package.directory).filePath("LICENSE")); QVERIFY(license.setPermissions(license.permissions()|QFileDevice::WriteOwner));
+        QVERIFY(license.open(QIODevice::Append)); QVERIFY(license.write("changed")>0); license.close();
+        dispatch.run(); QCOMPARE(calls,2); QVERIFY(dispatch.tasks.empty()); QCOMPARE(library.members(id).size(),size_t(1));
+    }
+    void accountChangeBeforeThePackageReadIsRefusedOnReturn() {
+        Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
+        AddonNativeLibraryStore store(dispatch.backend(),source.admissions(),&source.manager); const auto target=store.selectPlaylist(id); dispatch.run(); int calls=0;
+        store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
+        PackageStore packages(source.manager.storageDirectory()); InstalledPackage package; QJsonObject settings; quint64 revision;
+        QVERIFY(packages.installed(source.id,&package)); QVERIFY(packages.networkConfiguration(package,&settings,&revision));
+        settings.insert("username","robert"); QVERIFY(packages.saveSettings(source.id,settings,revision));
+        // The read sees the new account. The manager no longer offers the old one.
+        dispatch.run(); QCOMPARE(calls,1); QVERIFY(dispatch.tasks.empty()); QVERIFY(library.members(id).empty());
+        QVERIFY(!QFile::exists(QDir(source.directory.filePath("admissions")).filePath("source-admissions.json")));
     }
     void accountRotationAndTargetReleaseWithdrawPendingWork() {
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
         AddonNativeLibraryStore store(dispatch.backend(),source.admissions(),&source.manager); const auto target=store.selectPlaylist(id); dispatch.run(); int calls=0;
         store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
-        QVERIFY(source.replace("second-test-key")); dispatch.run(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
+        QVERIFY(source.replace("second-test-key")); dispatch.drain(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
         const auto next=store.selectPlaylist(id); dispatch.run();
         store.append(transaction(store,next,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
-        store.releaseTarget(next); dispatch.run(); QCOMPARE(calls,2); QVERIFY(library.members(id).empty());
+        store.releaseTarget(next); dispatch.drain(); QCOMPARE(calls,2); QVERIFY(library.members(id).empty());
     }
     void externalDisableAndSharedStoreLockStopNativeAdmission() {
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
         AddonNativeLibraryStore store(dispatch.backend(),source.admissions(),&source.manager); const auto target=store.selectPlaylist(id); dispatch.run(); int calls=0;
         store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
         PackageStore packages(source.manager.storageDirectory()); QVERIFY(packages.setEnabled(source.id,false));
-        dispatch.run(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
+        dispatch.drain(); QCOMPARE(calls,1); QVERIFY(library.members(id).empty());
         QVERIFY(packages.setEnabled(source.id,true)); const auto next=store.selectPlaylist(id); dispatch.run();
         store.append(transaction(store,next,{source.reference()}),[&](bool success,const QString& error) { ++calls; QVERIFY(!success); QVERIFY(error.contains("busy")); });
         QLockFile lock(QDir(source.manager.storageDirectory()).filePath("store.lock")); QVERIFY(lock.tryLock(0));
-        dispatch.run(); QCOMPARE(calls,2); QVERIFY(library.members(id).empty());
+        dispatch.drain(); QCOMPARE(calls,2); QVERIFY(library.members(id).empty());
     }
     void cancellationAfterAdmissionDoesNotClaimRollback() {
         Library library; QVERIFY(library.available()); const auto id=library.playlist(); Source source; QVERIFY(source.start()); Dispatcher dispatch(library.ml);
         AddonNativeLibraryStore store(dispatch.backend(),source.admissions(),&source.manager); const auto target=store.selectPlaylist(id); dispatch.run(); int calls=0;
         const auto cancel=store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString& error) { ++calls; QVERIFY2(success,qPrintable(error)); });
-        auto task=dispatch.take(); std::thread worker([&] { task.work(library.ml); }); worker.join();
+        dispatch.run(); auto task=dispatch.take(); std::thread worker([&] { task.work(library.ml); }); worker.join();
         cancel(); task.done(); QCOMPARE(calls,1); QCOMPARE(library.members(id).size(),size_t(1));
     }
     void anotherLibraryOwnerAndReadOnlyTargetsAreRefused() {
@@ -403,7 +437,7 @@ private slots:
         AddonNativeLibraryStore store(dispatch.backend(),source.admissions(),&source.manager); const auto target=store.selectPlaylist(id); dispatch.run();
         Library second; QVERIFY(second.available()); QCOMPARE(second.playlist(),id); dispatch.ml=second.ml; int calls=0;
         store.append(transaction(store,target,{source.reference()}),[&](bool success,const QString&) { ++calls; QVERIFY(!success); });
-        dispatch.run(); QCOMPARE(calls,1); QVERIFY(second.members(id).empty()); QVERIFY(first.members(id).empty());
+        dispatch.drain(); QCOMPARE(calls,1); QVERIFY(second.members(id).empty()); QVERIFY(first.members(id).empty());
         QVERIFY(native([&] { auto* media=vlc_ml_new_external_media(second.ml,"file:///read-only.m3u"); if (!media) return false; vlc_ml_media_release(media); return true; }));
         QVERIFY(second.sql("UPDATE File SET playlist_id="+std::to_string(id)+" WHERE mrl='file:///read-only.m3u'"));
         QSignalSpy ready(&store,&AddonNativeLibraryStore::targetReady); const auto readonly=store.selectPlaylist(id); dispatch.run();

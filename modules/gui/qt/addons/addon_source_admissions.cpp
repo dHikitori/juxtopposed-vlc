@@ -82,12 +82,28 @@ bool AddonSourceAdmissions::write(const QJsonObject& records, QString* error) co
 }
 bool AddonSourceAdmissions::admit(const QVariantList& references, QStringList* uris, QString* error)
 {
-    uris->clear(); if (error) error->clear();
+    uris->clear();
+    return check(references, error) && record(references, uris, error);
+}
+bool AddonSourceAdmissions::check(const QVariantList& references, QString* error) const
+{
+    if (error) error->clear();
     if (!m_currentSource || references.isEmpty() || references.size() > 200 || m_directory.isEmpty())
         return fail(error, QObject::tr("The app cannot admit this discovery selection."));
     for (const auto& reference : references) if (reference.metaType().id() != QMetaType::QVariantMap
         || !AddonQueueTransactions::validReference(reference.toMap()) || payload(reference.toMap()).size() > MaximumPayload
         || !m_currentSource(reference.toMap())) return fail(error, QObject::tr("The discovery source or account is not available."));
+    return true;
+}
+bool AddonSourceAdmissions::record(const QVariantList& references, QStringList* uris, QString* error) const
+{
+    uris->clear(); if (error) error->clear();
+    if (references.isEmpty() || references.size() > 200 || m_directory.isEmpty())
+        return fail(error, QObject::tr("The app cannot admit this discovery selection."));
+    for (const auto& reference : references) if (reference.metaType().id() != QMetaType::QVariantMap
+        || !AddonQueueTransactions::validReference(reference.toMap()) || payload(reference.toMap()).size() > MaximumPayload)
+        return fail(error, QObject::tr("The app cannot admit this discovery selection."));
+    const std::lock_guard<std::mutex> writer(m_writer);
     if (!QDir().mkpath(m_directory)) return fail(error, QObject::tr("The app cannot save the discovery references."));
     QLockFile lock(QDir(m_directory).filePath(QStringLiteral("source-admissions.lock")));
     if (!lock.tryLock(0)) return fail(error, QObject::tr("Another operation saves discovery references now. Try again."));

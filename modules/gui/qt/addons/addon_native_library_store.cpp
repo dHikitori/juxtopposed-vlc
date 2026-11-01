@@ -8,7 +8,6 @@
 #include <QDir>
 #include <QLockFile>
 #include <QUuid>
-#include <QSet>
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -36,12 +35,19 @@ struct AddonNativeLibraryStore::Pending {
     std::shared_ptr<Target> target;
     std::shared_ptr<std::atomic_int> phase = std::make_shared<std::atomic_int>(0);
     std::shared_ptr<vlc_addon_playlist_snapshot_t> native;
-    std::vector<std::string> uris;
+    // An append reads the packages in one native task (Reading), returns
+    // here to check the sources again, then commits in a second (Committing).
+    enum Stage { Selecting, Reading, Committing } stage = Selecting;
+    // Set before the first dispatch. Native work only reads them.
+    QVariantList references;
+    QStringList packages, sources;
     std::vector<std::string> titles;
     std::vector<Configuration> configurations;
     std::shared_ptr<PackageStore> store;
+    std::shared_ptr<AddonSourceAdmissions> admissions;
     AddonQueueTransactions::Completion completion;
-    bool append = false, success = false;
+    QString message;
+    bool success = false;
     enum Error { Unavailable, Changed, Canceled, Busy, Record, Commit } error = Unavailable;
 };
 namespace {
@@ -135,10 +141,16 @@ AddonQueueTransactions::Snapshot AddonNativeLibraryStore::snapshot(const QString
 }
 void AddonNativeLibraryStore::completed(const std::shared_ptr<Pending>& job)
 {
-    if (m_jobs.take(job->id) != job) return;
+    if (m_jobs.value(job->id) != job) return;
     bool current;
     { std::lock_guard<std::mutex> lock(m_shared->mutex); current = !m_shared->closed && m_shared->epoch == job->epoch && job->target->current->load(); }
-    if (!job->append) {
+    if (job->stage == Pending::Reading && job->success) {
+        job->success = false;
+        if (!current || job->phase->load() != 0 || m_targets.value(job->target->reference) != job->target) job->error = Pending::Canceled;
+        else if (resume(job)) return;
+    }
+    m_jobs.remove(job->id);
+    if (job->stage == Pending::Selecting) {
         const bool ready = current && job->phase->load() == 0 && job->success && m_targets.value(job->target->reference) == job->target;
         job->target->ready = ready; if (ready) job->target->native = job->native;
         const auto reference = job->target->reference;
@@ -150,8 +162,22 @@ void AddonNativeLibraryStore::completed(const std::shared_ptr<Pending>& job)
     if (m_targets.value(job->target->reference) == job->target) m_targets.remove(job->target->reference);
     const auto completion = job->completion;
     const QPointer<AddonNativeLibraryStore> owner(this);
-    if (completion) completion(job->success, job->success ? QString() : errorMessage(job->error));
+    if (completion) completion(job->success, job->success ? QString() : !job->message.isEmpty() ? job->message : errorMessage(job->error));
     if (owner) emit revisionChanged();
+}
+bool AddonNativeLibraryStore::resume(const std::shared_ptr<Pending>& job)
+{
+    // The packages were read after append() checked the sources. Check them
+    // again: the commit guard then proves no change since that read.
+    for (const auto& value : job->references)
+        if (!m_manager || !discoveryReferenceAvailable(m_manager, value.toMap())) { job->error = Pending::Changed; return false; }
+    const QPointer<AddonNativeLibraryStore> alive(this);
+    const bool admitted = m_admissions->check(job->references, &job->message);
+    if (!alive) return true;
+    if (!admitted) return false;
+    job->stage = Pending::Committing;
+    dispatchAppend(job);
+    return true;
 }
 AddonQueueTransactions::Cancel AddonNativeLibraryStore::append(const AddonQueueTransactions::Transaction& transaction,
                                                               AddonQueueTransactions::Completion completion)
@@ -161,45 +187,20 @@ AddonQueueTransactions::Cancel AddonNativeLibraryStore::append(const AddonQueueT
         || !m_manager || m_jobs.size() >= 4 || transaction.references.isEmpty() || transaction.references.size() > 200) {
         completion(false, errorMessage(Pending::Changed)); return {};
     }
-    auto job = std::make_shared<Pending>(); job->id = ++m_next; job->append = true; job->target = target;
+    // Only checks that need the manager run here. Reading a package hashes
+    // each of its files, and the profile can be on a slow share, so the
+    // package reads and the admission write run as native work.
+    auto job = std::make_shared<Pending>(); job->id = ++m_next; job->stage = Pending::Reading; job->target = target;
     job->native = target->native; job->store = std::make_shared<PackageStore>(m_manager->storageDirectory());
-    QSet<QString> capturedPackages;
+    job->admissions = m_admissions; job->references = transaction.references;
     for (const auto& value : transaction.references) {
         const auto reference = value.toMap();
         if (!discoveryReferenceAvailable(m_manager, reference)) { completion(false, errorMessage(Pending::Changed)); return {}; }
-        Pending::Configuration captured;
         const auto source = reference.value("source").toString();
         const auto packageId = source.section('/',0,0);
-        if (capturedPackages.contains(packageId)) {
-            const auto captured = std::find_if(job->configurations.begin(), job->configurations.end(),
-                [&](const auto& value) { return value.package.manifest.id == packageId; });
-            if (captured == job->configurations.end() || !permitted(captured->package, source)) { completion(false, errorMessage(Pending::Changed)); return {}; }
-            continue;
-        }
-        if (!job->store->installed(packageId, &captured.package)
-            || !job->store->networkConfiguration(captured.package, &captured.settings, &captured.revision)) {
-            completion(false, errorMessage(Pending::Changed)); return {};
-        }
-        if (!permitted(captured.package, source)) { completion(false, errorMessage(Pending::Changed)); return {}; }
-        if (!discoveryReferenceAvailable(m_manager, reference)
-            || !job->store->networkConfigurationMatches(captured.package, captured.settings, captured.revision)) {
-            completion(false, errorMessage(Pending::Changed)); return {};
-        }
-        capturedPackages.insert(packageId);
-        job->configurations.push_back(std::move(captured));
-    }
-    const QPointer<AddonNativeLibraryStore> alive(this);
-    const auto admissions = m_admissions;
-    QStringList uris; QString error;
-    if (!admissions->admit(transaction.references, &uris, &error)) { completion(false, error); return {}; }
-    if (!alive) { completion(false, errorMessage(Pending::Canceled)); return {}; }
-    const auto stillSelected = snapshot(transaction.target);
-    if (!stillSelected.available || stillSelected.identity != expected.identity || stillSelected.revision != expected.revision) {
-        completion(false, errorMessage(Pending::Canceled)); return {};
-    }
-    for (qsizetype index=0;index<uris.size();++index) {
-        job->uris.push_back(uris[index].toStdString());
-        auto title=transaction.references[index].toMap().value("snapshot").toMap().value("title").toString().left(512);
+        job->sources.append(source);
+        if (!job->packages.contains(packageId)) job->packages.append(packageId);
+        auto title=reference.value("snapshot").toMap().value("title").toString().left(512);
         for (auto& character:title)
             if (character.category()==QChar::Other_Control || character.category()==QChar::Separator_Line || character.category()==QChar::Separator_Paragraph) character=QLatin1Char(' ');
         title=title.trimmed(); if (title.isEmpty()) title=tr("Media item");
@@ -208,21 +209,48 @@ AddonQueueTransactions::Cancel AddonNativeLibraryStore::append(const AddonQueueT
     target->busy = true; job->completion = std::move(completion);
     { std::lock_guard<std::mutex> lock(m_shared->mutex); job->epoch = m_shared->epoch; }
     m_jobs.insert(job->id, job);
+    const auto phase = job->phase;
+    dispatchAppend(job);
+    return [phase] { int expectedPhase = 0; phase->compare_exchange_strong(expectedPhase, 1); };
+}
+void AddonNativeLibraryStore::dispatchAppend(const std::shared_ptr<Pending>& job)
+{
     const auto shared = m_shared; const QPointer<AddonNativeLibraryStore> owner(this);
     const auto dispatcher = m_dispatcher; const auto lifetime = m_dispatcherLifetime;
     const QObject* receiver = this;
-    const auto task = dispatcher.run(receiver, [shared, job](vlc_medialibrary_t* ml) {
-        const auto pending = [&] {
-            std::lock_guard<std::mutex> lock(shared->mutex);
-            return !shared->closed && shared->epoch == job->epoch && job->phase->load() == 0 && job->target->current->load();
-        };
+    const auto pending = [shared, job] {
+        std::lock_guard<std::mutex> lock(shared->mutex);
+        return !shared->closed && shared->epoch == job->epoch && job->phase->load() == 0 && job->target->current->load();
+    };
+    NativeWork work;
+    if (job->stage == Pending::Reading) work = [pending, job](vlc_medialibrary_t*) {
+        if (!pending()) { job->error = Pending::Canceled; return; }
+        for (const auto& packageId : job->packages) {
+            Pending::Configuration captured;
+            if (!job->store->installed(packageId, &captured.package)
+                || !job->store->networkConfiguration(captured.package, &captured.settings, &captured.revision)) {
+                job->error = Pending::Changed; return;
+            }
+            job->configurations.push_back(std::move(captured));
+        }
+        for (const auto& source : job->sources) {
+            const auto captured = std::find_if(job->configurations.begin(), job->configurations.end(),
+                [&](const auto& value) { return value.package.manifest.id == source.section('/',0,0); });
+            if (captured == job->configurations.end() || !permitted(captured->package, source)) { job->error = Pending::Changed; return; }
+        }
+        job->success = true;
+    };
+    else work = [shared, pending, job](vlc_medialibrary_t* ml) {
         if (!pending()) { job->error = Pending::Canceled; return; }
         if (!vlc_addon_playlist_cas_available(ml)) return;
+        QStringList uris;
+        if (!job->admissions->record(job->references, &uris, &job->message)) return;
+        if (size_t(uris.size()) != job->titles.size()) return;
         std::vector<int64_t> ids;
-        for (size_t index=0;index<job->uris.size();++index) {
+        for (size_t index=0;index<job->titles.size();++index) {
             if (!pending()) { job->error = Pending::Canceled; return; }
             int64_t id=0;
-            if (vlc_addon_source_media_prepare(ml,job->uris[index].c_str(),job->titles[index].c_str(),&id)!=VLC_SUCCESS || id<=0) {
+            if (vlc_addon_source_media_prepare(ml,uris[qsizetype(index)].toStdString().c_str(),job->titles[index].c_str(),&id)!=VLC_SUCCESS || id<=0) {
                 job->error=Pending::Record; return;
             }
             ids.push_back(id);
@@ -241,10 +269,10 @@ AddonQueueTransactions::Cancel AddonNativeLibraryStore::append(const AddonQueueT
         // reverse this one native transaction. No Qt event is necessary.
         job->success = vlc_addon_playlist_append_if_unchanged(ml, job->native.get(), ids.data(), ids.size()) == VLC_SUCCESS;
         if (!job->success) job->error = Pending::Commit;
-    }, [owner, job] { if (owner) owner->completed(job); });
+    };
+    const auto task = dispatcher.run(receiver, std::move(work), [owner, job] { if (owner) owner->completed(job); });
     if (owner) submitted(job, task);
     else if (lifetime && task) dispatcher.cancel(receiver, task);
-    return [phase = job->phase] { int expectedPhase = 0; phase->compare_exchange_strong(expectedPhase, 1); };
 }
 void AddonNativeLibraryStore::releaseTarget(const QString& reference)
 {
