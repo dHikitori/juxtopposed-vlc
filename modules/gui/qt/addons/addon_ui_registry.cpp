@@ -439,7 +439,10 @@ bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, 
         const auto cancel=m_backend.cancel;const QPointer<AddonUiRegistry> alive(this);cancel(request);if(!alive)return;
         emit commandCompleted(pending.command, false, {});if(!alive)return;
         if (!pending.replacement.isEmpty()) emit replacementFinished(pending.replacement, false);if(!alive)return;
-        if (!pending.session.isEmpty() && m_sessions.contains(pending.session) && available()) emit sessionFailed(pending.session);
+        if (!pending.session.isEmpty() && m_sessions.contains(pending.session) && available()) {
+            qWarning("Add-on view %s: %s did not answer within 15 s", qUtf8Printable(m_sessions.value(pending.session).contribution), qUtf8Printable(pending.command));
+            emit sessionFailed(pending.session);
+        }
     });
     return true;
 }
@@ -610,7 +613,7 @@ QString AddonUiRegistry::executeReplacement(const QString& hook, const QVariantM
     const auto ticket = QUuid::createUuid().toString(QUuid::WithoutBraces);
     return dispatch(entry.value("document").toMap().value("command").toString(), arguments, {}, ticket) ? ticket : QString();
 }
-void AddonUiRegistry::operationFinished(const QString& request, const QString& contribution, const QString& status, const QVariantMap& data, const QString&)
+void AddonUiRegistry::operationFinished(const QString& request, const QString& contribution, const QString& status, const QVariantMap& data, const QString& error)
 {
     if (!m_runningCommands.contains(request)) return;
     const auto pending = m_runningCommands.take(request);
@@ -640,7 +643,13 @@ void AddonUiRegistry::operationFinished(const QString& request, const QString& c
             success = success && !schema.isEmpty() && validateUiValue(schema, packageState);
             if (success) { session->descriptor.insert(QStringLiteral("state"), state); emit sessionChanged(pending.session);if(!alive)return; }
         }
-        if (!success) emit sessionFailed(pending.session);if(!alive)return;
+        if (!success) {
+            const bool answered = contribution == pending.command && (status == QLatin1String("match") || status == QLatin1String("partial"));
+            qWarning("Add-on view %s: %s %s%s%s", qUtf8Printable(session->contribution), qUtf8Printable(pending.command),
+                     answered ? "sent a state that does not fit its schema or size limit" : qUtf8Printable(QStringLiteral("ended with ") + status),
+                     error.isEmpty() ? "" : ": ", qUtf8Printable(error));
+            emit sessionFailed(pending.session);if(!alive)return;
+        }
     }
     if (success && pending.gesture && !pending.session.isEmpty() && data.contains(QStringLiteral("effect"))) {
         const auto panel = m_sessions.value(pending.session).contribution;

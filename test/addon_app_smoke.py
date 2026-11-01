@@ -350,11 +350,22 @@ def run(args):
             if not args.no_playback and not args.no_addons:
                 # The bundled Episodes panel: its button turns on for a file
                 # in a series folder (player.panels@1 and media.siblings).
-                season = home / 'Series' / 'Show' / 'Season 01'
+                # Laid out as a real library is: titled files with sidecar
+                # thumbnails, more seasons, and a release folder among them.
+                show = home / 'Series' / 'Show'
+                season = show / 'Season 01'
                 season.mkdir(parents=True)
-                for episode in (1, 2):
-                    shutil.copyfile(args.episode, season / f'Show - S01E0{episode}.mkv')
-                first.send(f'add {(season / "Show - S01E01.mkv").as_uri()}')
+                for name in ('folder.jpg', 'season01-poster.jpg'):
+                    shutil.copyfile(args.picture, show / name)
+                for episode, title in ((1, 'Minimum Viable Product'), (2, 'The Cap Table')):
+                    stem = f'Show - S01E0{episode} - {title}'
+                    shutil.copyfile(args.episode, season / f'{stem}.mkv')
+                    shutil.copyfile(args.picture, season / f'{stem}-thumb.jpg')
+                (show / 'Season 02').mkdir()
+                shutil.copyfile(args.episode, show / 'Season 02' / 'Show - S02E01 - Sand Hill Shuffle.mkv')
+                (show / 'Show.S06.1080p.WebRip.H264').mkdir()
+                shutil.copyfile(args.episode, show / 'Show.S06.1080p.WebRip.H264' / 'Show.S06E01.1080p.WebRip.H264.mkv')
+                first.send(f'add {(season / "Show - S01E01 - Minimum Viable Product.mkv").as_uri()}')
                 wait_for('series playback', first.playing, args.timeout)
                 panel = 'org.videolan.episodes/episodes'
 
@@ -366,6 +377,22 @@ def run(args):
                     wait_for('the Episodes button', episodes_button, args.timeout)
                 except Failure as failure:
                     raise Failure(f'{failure}: {results.get("panels")}')
+                # Opened as the player opens it, the panel lists the season.
+                opened = first.drive(f'panels open {panel}', args.timeout)
+                if not opened.get('session') or not opened.get('bound') or not opened.get('attached'):
+                    raise Failure(f'the Episodes panel did not open: {opened}')
+
+                def episodes_listed():
+                    report = first.drive(f'panels state {opened["session"]}', args.timeout)
+                    results['panel'] = report
+                    if report.get('failed') or report.get('descriptor', {}).get('unavailable'):
+                        raise Failure(f'the Episodes panel stopped working: {report}')
+                    state = report.get('descriptor', {}).get('state', {})
+                    return state.get('status') == 'ready' and len(state.get('episodes', [])) == 2
+                try:
+                    wait_for('the Episodes list', episodes_listed, args.timeout)
+                except Failure as failure:
+                    raise Failure(f'{failure}: {results.get("panel")}')
                 first.send('stop')
                 wait_for('stop', lambda: not first.playing(), args.timeout)
             results['helper_launches'] = first.drive('stats', args.timeout)['launches']
@@ -435,6 +462,9 @@ def main():
     parser.add_argument('--episode', type=Path,
                         default=Path(__file__).resolve().parent / 'samples' / 'episode.mkv',
                         help='a video that is copied into a series folder (one minute, 16x16 FFV1)')
+    parser.add_argument('--picture', type=Path,
+                        default=Path(__file__).resolve().parent / 'samples' / 'image.jpg',
+                        help='a picture that is copied in as series artwork')
     parser.add_argument('--windows', type=int, choices=(1, 2), default=1)
     parser.add_argument('--quit-second-first', action='store_true')
     parser.add_argument('--trace', action='store_true', help='count process launches with strace')
@@ -459,6 +489,7 @@ def main():
     args.build = args.build.resolve()
     args.sample = args.sample.resolve()
     args.episode = args.episode.resolve()
+    args.picture = args.picture.resolve()
     args.fixture = args.fixture.resolve()
     return run(args)
 

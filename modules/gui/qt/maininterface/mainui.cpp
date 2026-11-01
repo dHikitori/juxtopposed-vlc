@@ -618,8 +618,28 @@ void MainUI::registerQMLTypes()
                 });
                 // What the player gets: the registry's panels, as QML reads them.
                 driver->setPanelsReport([registry = QPointer<vlc::addons::AddonUiRegistry>(findChild<vlc::addons::AddonUiRegistry*>()),
-                                         series = QPointer<SeriesModel>(findChild<SeriesModel*>(QStringLiteral("redesignSeriesModel")))] {
+                                         series = QPointer<SeriesModel>(findChild<SeriesModel*>(QStringLiteral("redesignSeriesModel")))](const QString& argument) {
                     if (!registry) return QVariantMap{{QStringLiteral("registry"), false}};
+                    const auto verb = argument.section(QLatin1Char(' '), 0, 0), value = argument.section(QLatin1Char(' '), 1);
+                    if (verb == QLatin1String("open")) {
+                        // As the player's panel frame opens one: a session,
+                        // its owner, then the panel's media context.
+                        const auto session = registry->createSession(value, {}, {{QStringLiteral("surface"), QStringLiteral("player.panels@1")}});
+                        if (session.isEmpty()) return QVariantMap{{QStringLiteral("session"), QString()}};
+                        auto* owner = new QObject(registry);
+                        owner->setObjectName(QStringLiteral("driverPanel:") + session);
+                        connect(registry, &vlc::addons::AddonUiRegistry::sessionFailed, owner, [owner, session](const QString& id) {
+                            if (id == session) owner->setProperty("failed", true);
+                        });
+                        const bool bound = registry->bindSessionOwner(session, owner);
+                        return QVariantMap{{QStringLiteral("session"), session}, {QStringLiteral("bound"), bound},
+                            {QStringLiteral("attached"), registry->attachPanelSession(session)}};
+                    }
+                    if (verb == QLatin1String("state")) {
+                        auto* owner = registry->findChild<QObject*>(QStringLiteral("driverPanel:") + value);
+                        return QVariantMap{{QStringLiteral("descriptor"), registry->session(value)},
+                            {QStringLiteral("failed"), owner && owner->property("failed").toBool()}};
+                    }
                     QVariantMap result{{QStringLiteral("registry"), true}, {QStringLiteral("available"), registry->available()},
                         {QStringLiteral("siblingsWanted"), registry->siblingsWanted()}, {QStringLiteral("panels"), registry->panels()}};
                     if (series)

@@ -70,7 +70,7 @@ Item {
         if (registry.available === false) return
         sessionRegistry = registry
         sessionId = sessionRegistry.createSession(contributionId, parameters, hostContext)
-        if (!sessionId.length) { descriptor = ({}); sessionRegistry = null; failed(); return }
+        if (!sessionId.length) { console.warn("Add-on view " + contributionId + ": the app could not open it"); descriptor = ({}); sessionRegistry = null; failed(); return }
         if (typeof sessionRegistry.bindSessionOwner === "function" && !sessionRegistry.bindSessionOwner(sessionId, root)) { unavailable(); return }
         if (!loadDescriptor()) return
         if (!visible) sessionRegistry.suspendSession(sessionId, true)
@@ -82,10 +82,11 @@ Item {
             return true
         } catch (error) { fail(); return false }
     }
-    function unavailable() { release(); failed() }
+    function unavailable() { console.warn("Add-on view " + contributionId + ": it is not available"); release(); failed() }
     function fail() {
         if (!sessionId.length || pending || !catalogueAvailable) return
         const id = contributionId, backend = sessionRegistry
+        console.warn("Add-on view " + id + " stopped" + (view.errorMessage.length ? ": " + view.errorMessage : ""))
         release()
         failed()
         if (backend) backend.reportViewFailure(id)

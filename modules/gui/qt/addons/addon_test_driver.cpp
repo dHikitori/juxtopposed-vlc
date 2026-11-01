@@ -68,7 +68,7 @@ void AddonTestDriver::setMetadataReport(std::function<QVariantMap()> report)
     m_metadata = std::move(report);
 }
 
-void AddonTestDriver::setPanelsReport(std::function<QVariantMap()> report)
+void AddonTestDriver::setPanelsReport(std::function<QVariantMap(const QString&)> report)
 {
     m_panels = std::move(report);
 }
@@ -123,7 +123,7 @@ void AddonTestDriver::run(const QString& command, const QString& argument)
         reply(result);
     }
     else if (command == QLatin1String("panels") && m_panels) {
-        auto result = m_panels();
+        auto result = m_panels(argument);
         result.insert(QStringLiteral("ok"), true);
         reply(result);
     }

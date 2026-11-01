@@ -434,6 +434,7 @@ void AddonWorker::rememberRetired(const QString& id)
 void AddonWorker::fail(const QString& error)
 {
     if (m_stopping) return;
+    qWarning("Add-on %s stopped: %s", qUtf8Printable(m_package.manifest.id), qUtf8Printable(error));
     revokeAttemptGates();
     m_failed = true; m_stopping = true; m_ready = false; m_startup.stop(); m_queued.clear();
     if (m_process.state() != QProcess::NotRunning) m_process.kill();
