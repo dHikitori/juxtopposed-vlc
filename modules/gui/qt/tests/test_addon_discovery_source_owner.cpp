@@ -128,7 +128,7 @@ struct Fixture {
             const char* args[]={"--ignore-config","--quiet","--no-plugins-cache","--no-media-library","--no-metadata-network-access","--aout=adummy","--vout=vdummy","--text-renderer=tdummy"};
             native=libvlc_new(int(std::size(args)),args); if(!native) return; instance=native->p_libvlc_int;
         }
-        const QString base=QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/discovery-fixture");
+        const QString base=QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/discovery-fixture");
         QDir().mkpath(package.filePath("dist"));
         if(!QFile::copy(base+"/LICENSE",package.filePath("LICENSE")) || !QFile::copy(base+"/dist/addon.wasm",package.filePath("dist/addon.wasm"))) return;
         QFile manifestFile(base+"/addon.json"); if(!manifestFile.open(QIODevice::ReadOnly)) return;

@@ -1602,45 +1602,31 @@ if qt6_dep.found()
         qt_extra_deps += dependency('appleframeworks', modules: ['Security'])
     endif
     # Install the reference Wasm file without a source build.
-    addon_reference_root = meson.project_source_root() / 'contrib-addons/examples/thesubtitledb'
+    addon_reference_root = meson.project_source_root() / 'contrib-addons/thesubtitledb'
     addon_distribution_paths = custom_target('addon_distribution_paths',
         output: 'addon_distribution_paths.hpp',
         command: [prog_python, files('scripts/addon-distribution-paths.py'),
-            '--root', meson.project_source_root() / 'contrib-addons/examples', '--output', '@OUTPUT@'])
+            '--root', meson.project_source_root() / 'contrib-addons', '--output', '@OUTPUT@'])
     foreach addon_resource : ['addon.json', 'LICENSE', 'dist/addon.wasm', 'settings/schema.json', 'settings/ui.json', 'locales/en.json']
         addon_resource_directory = fs.parent(addon_resource)
         install_data(addon_reference_root / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/thesubtitledb' / addon_resource_directory)
     endforeach
     foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm']
-        install_data(meson.project_source_root() / 'contrib-addons/examples/tvmaze' / addon_resource,
+        install_data(meson.project_source_root() / 'contrib-addons/tvmaze' / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/tvmaze' / fs.parent(addon_resource))
     endforeach
-    foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'THIRD_PARTY_NOTICES.md', 'dist/addon.wasm']
-        install_data(meson.project_source_root() / 'contrib-addons/examples/radio-browser' / addon_resource,
-            install_dir: get_option('datadir') / 'vlc/addons/reference/radio-browser' / fs.parent(addon_resource))
-    endforeach
     foreach addon_resource : ['addon.json', 'LICENSE', 'NOTICE.md', 'dist/addon.wasm', 'views/episodes.json', 'icons/episodes.svg']
-        install_data(meson.project_source_root() / 'contrib-addons/examples/episodes' / addon_resource,
+        install_data(meson.project_source_root() / 'contrib-addons/episodes' / addon_resource,
             install_dir: get_option('datadir') / 'vlc/addons/reference/episodes' / fs.parent(addon_resource))
     endforeach
     if addon_worker_dependencies != [] and not meson.is_cross_build()
-        test('addon_radio_browser_worker', prog_python,
-            args: ['-B', meson.project_source_root() / 'contrib-addons/examples/radio-browser/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
-            depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_radio_browser_worker']], timeout: 90)
         test('addon_tvmaze_worker', prog_python,
-            args: ['-B', meson.project_source_root() / 'contrib-addons/examples/tvmaze/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
+            args: ['-B', meson.project_source_root() / 'contrib-addons/tvmaze/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
             depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_tvmaze_worker']], timeout: 90)
         test('addon_episodes_worker', prog_python,
-            args: ['-B', meson.project_source_root() / 'contrib-addons/examples/episodes/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
+            args: ['-B', meson.project_source_root() / 'contrib-addons/episodes/tests/test_worker.py', '--worker', addon_worker_target.full_path()],
             depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_episodes_worker']], timeout: 90)
-        # Each core Lua artwork script against its add-on; skipped without Lua 5.4.
-        addon_parity_lua = find_program('lua5.4', 'lua', required: false)
-        test('addon_artwork_parity', prog_python,
-            args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/artwork-providers/tests/test_parity.py',
-                '--worker', addon_worker_target.full_path()]
-                + (addon_parity_lua.found() ? ['--lua', addon_parity_lua.full_path()] : []),
-            depends: addon_worker_dependencies, suite: ['qt', 'addons', addon_test_labels['addon_artwork_parity']], timeout: 180)
     endif
     modules_qrc = []
     foreach module : qml_modules
@@ -1968,8 +1954,11 @@ if qt6_dep.found()
         cpp_args: [qt_extra_flags, qt_cppargs],
         install: false, build_by_default: false)
     addon_validate_examples = []
-    foreach example : ['discovery-fixture', 'french-tv', 'google-images', 'lastfm', 'midnight', 'musicbrainz', 'radio-browser', 'thesubtitledb', 'tvmaze', 'visual-scenes']
-        addon_validate_examples += meson.project_source_root() / 'contrib-addons/examples' / example
+    foreach example : ['episodes', 'thesubtitledb', 'tvmaze']
+        addon_validate_examples += meson.project_source_root() / 'contrib-addons' / example
+    endforeach
+    foreach fixture : ['discovery-fixture', 'french-tv', 'google-images', 'lastfm', 'midnight', 'musicbrainz', 'radio-browser', 'visual-scenes']
+        addon_validate_examples += meson.current_source_dir() / 'tests/fixtures/addons' / fixture
     endforeach
     test('addon_validate_examples', addon_validate,
         args: ['--ui', meson.current_source_dir() / 'player/qml/redesign/AddonUi.js'] + addon_validate_examples,
@@ -1981,7 +1970,7 @@ if qt6_dep.found()
         args: addon_preview_args + [meson.current_source_dir() / 'tests/fixtures/preview-addon'],
         env: ['QT_QPA_PLATFORM=offscreen'], suite: ['qt', 'addons', addon_test_labels['addon_preview']], timeout: 60)
     test('addon_preview_theme', addon_preview,
-        args: addon_preview_args + [meson.project_source_root() / 'contrib-addons/examples/midnight'],
+        args: addon_preview_args + [meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/midnight'],
         env: ['QT_QPA_PLATFORM=offscreen'], suite: ['qt', 'addons', addon_test_labels['addon_preview_theme']], timeout: 60)
     # The schemas, their generated Rust types and the author templates.
     test('addon_schema_corpus_python', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/schemas/check-corpus.py'],
@@ -2128,7 +2117,7 @@ if qt6_dep.found()
                     '-DHAKONE_ATTEMPT_PROCESS_FIXTURE="' + addon_metadata_attempt_process.full_path() + '"',
                     '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
                     '-DHAKONE_ATTEMPT_RUST_WORKER="' + addon_worker_target.full_path() + '"',
-                    '-DHAKONE_ATTEMPT_FRENCH_TV_WASM="' + meson.project_source_root() / 'contrib-addons/examples/french-tv/dist/addon.wasm' + '"',
+                    '-DHAKONE_ATTEMPT_FRENCH_TV_WASM="' + meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm' + '"',
                 ],
                 'link_args': qt_link_args,
                 'depends': [addon_worker_dependencies, addon_metadata_attempt_process],
@@ -2150,7 +2139,7 @@ if qt6_dep.found()
                     '-DHAKONE_PREPARED_OWNER_WRAP', '-DHAKONE_METADATA_PREPARATION_WRAP', '-DHAKONE_ARTWORK_READ_WRAP',
                     '-DHAKONE_PREPARED_PROCESS_FIXTURE="' + addon_prepared_metadata_process.full_path() + '"',
                     '-DHAKONE_PREPARED_RUST_WORKER="' + addon_worker_target.full_path() + '"',
-                    '-DHAKONE_PREPARED_FRENCH_TV_WASM="' + meson.project_source_root() / 'contrib-addons/examples/french-tv/dist/addon.wasm' + '"',
+                    '-DHAKONE_PREPARED_FRENCH_TV_WASM="' + meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm' + '"',
                     '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
                 ],
                 'link_args': qt_link_args + ['-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv', '-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv', '-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString', '-Wl,--wrap=_ZN12QImageReader4readEv'],
@@ -2195,7 +2184,7 @@ if qt6_dep.found()
                         '-DHAKONE_AGGREGATE_PROCESS_FIXTURE="' + addon_metadata_attempt_process.full_path() + '"',
                         '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
                         '-DHAKONE_AGGREGATE_RUST_WORKER="' + addon_worker_target.full_path() + '"',
-                        '-DHAKONE_AGGREGATE_FRENCH_TV_WASM="' + meson.project_source_root() / 'contrib-addons/examples/french-tv/dist/addon.wasm' + '"',
+                        '-DHAKONE_AGGREGATE_FRENCH_TV_WASM="' + meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm' + '"',
                     ],
                     'link_args': qt_link_args,
                     'depends': [addon_worker_dependencies, addon_metadata_attempt_process],

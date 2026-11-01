@@ -20,6 +20,14 @@
 #include "addons/addon_repository_jobs.hpp"
 using namespace vlc::addons;
 namespace {
+// Bundled add-ons are at the top of contrib-addons; the others are test fixtures.
+QString packageRoot(const QString& name)
+{
+    const auto bundled=QStringLiteral(HAKONE_STARTUP_SOURCE_ROOT "/contrib-addons/")+name;
+    return QFile::exists(bundled+QStringLiteral("/addon.json"))?bundled:QStringLiteral(HAKONE_STARTUP_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/")+name;
+}
+}
+namespace {
 bool write(const QString& path,const QByteArray& bytes)
 {QFile file(path);return file.open(QIODevice::WriteOnly)&&file.write(bytes)==bytes.size();}
 QByteArray read(const QString& path)
@@ -86,7 +94,7 @@ private slots:
         QList<DistributionBootstrapEntry> entries;
         for(const auto& item:QList<QPair<QString,QString>>{{"tvmaze","org.videolan.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
             {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},{"radio-browser","org.hakone.radio-browser"},{"thesubtitledb","org.hakone.thesubtitledb"},{"episodes","org.videolan.episodes"}})
-            entries.append({item.second,QString{},QDir(QStringLiteral(HAKONE_STARTUP_SOURCE_ROOT "/contrib-addons/examples")).filePath(item.first)});
+            entries.append({item.second,QString{},packageRoot(item.first)});
         connect(&manager,&AddonManager::distributionBootstrapChanged,this,[&]{QCOMPARE(QThread::currentThread(),manager.thread());});
         QVERIFY(manager.beginDistributionBootstrap(entries));QVERIFY(manager.distributionBootstrapInProgress());QCOMPARE(manager.distributionBootstrapGeneration(),quint64(1));QCOMPARE(revision.size(),0);
         QTRY_VERIFY_WITH_TIMEOUT(!manager.distributionBootstrapInProgress(),15000);QCOMPARE(state.size(),2);QCOMPARE(revision.size(),1);QCOMPARE(manager.distributionBootstrapGeneration(),quint64(2));

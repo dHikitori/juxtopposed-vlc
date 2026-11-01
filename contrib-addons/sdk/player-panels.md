@@ -5,9 +5,7 @@ layout. The app owns the frame (title, close button, focus, Back and Escape,
 scrolling, recovery) and the button placement. Your package supplies the
 view inside the frame, its state and its commands.
 
-The bundled Episodes package ([`examples/episodes`](../examples/episodes))
-is a complete panel. The [design record](../records/player-panels-design.md)
-gives the reasons for each rule.
+The bundled [Episodes](../episodes) package is a complete panel.
 
 ## Declare the panel
 

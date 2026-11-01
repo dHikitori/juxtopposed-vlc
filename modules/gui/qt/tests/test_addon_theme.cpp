@@ -90,7 +90,7 @@ class TestAddonTheme : public QObject
     Q_OBJECT
     static QJsonObject reference()
     {
-        QFile file(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/midnight/themes/midnight.json"));
+        QFile file(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/midnight/themes/midnight.json"));
         if (!file.open(QIODevice::ReadOnly)) return {};
         return QJsonDocument::fromJson(file.readAll()).object();
     }
@@ -102,7 +102,7 @@ class TestAddonTheme : public QObject
     }
     static bool copyExample(const QString& destination)
     {
-        const QDir source(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/midnight"));
+        const QDir source(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/midnight"));
         for (const auto& path : {QStringLiteral("addon.json"), QStringLiteral("LICENSE"), QStringLiteral("README.md"), QStringLiteral("themes/midnight.json")}) {
             const auto target = QDir(destination).filePath(path);
             if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !QFile::copy(source.filePath(path), target)) return false;

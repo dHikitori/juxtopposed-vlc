@@ -435,7 +435,7 @@ private slots:
         PackageStore store(storage.path());
         for (const auto& name : {QStringLiteral("musicbrainz"), QStringLiteral("lastfm"),
                 QStringLiteral("french-tv"), QStringLiteral("google-images")}) {
-            const auto directory = QDir(QStringLiteral(VLC_ADDON_SOURCE_ROOT)).filePath(QStringLiteral("contrib-addons/examples/") + name);
+            const auto directory = QDir(QStringLiteral(VLC_ADDON_SOURCE_ROOT)).filePath(QStringLiteral("modules/gui/qt/tests/fixtures/addons/") + name);
             const auto id = QStringLiteral("org.videolan.") + name;
             Manifest manifest; QMap<QString, QByteArray> contents; QString error;
             QVERIFY2(Manifest::loadDirectory(directory, &manifest, &contents, &error), qPrintable(error));
@@ -702,7 +702,7 @@ private slots:
     {
         // The worker runs only declared operations, so an install refuses a
         // command that names one it does not list (Episodes 1.0.0 did).
-        const QDir bundled(QDir(QStringLiteral(VLC_ADDON_SOURCE_ROOT)).filePath(QStringLiteral("contrib-addons/examples/episodes")));
+        const QDir bundled(QDir(QStringLiteral(VLC_ADDON_SOURCE_ROOT)).filePath(QStringLiteral("contrib-addons/episodes")));
         Manifest manifest; QMap<QString, QByteArray> contents; QString error;
         QVERIFY2(Manifest::loadDirectory(bundled.path(), &manifest, &contents, &error), qPrintable(error));
         ReleaseIdentity identity; identity.source = manifest.source.toString();
@@ -1046,7 +1046,7 @@ private slots:
     }
     void referenceSubtitleAddonManifest()
     {
-        const auto file = QFINDTESTDATA("../../../../contrib-addons/examples/thesubtitledb/addon.json");
+        const auto file = QFINDTESTDATA("../../../../contrib-addons/thesubtitledb/addon.json");
         QVERIFY(!file.isEmpty());
         Manifest parsed;
         QString error;

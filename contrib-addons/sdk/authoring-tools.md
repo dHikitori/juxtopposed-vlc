@@ -80,8 +80,7 @@ with its declared initial state. The images use the app's own components.
 `templates/check-templates.py` builds each one, runs its unit tests and
 self-test, and validates the package.
 
-For a player panel, start from the bundled Episodes package
-([`examples/episodes`](../examples/episodes)) and the
+For a player panel, start from the bundled [Episodes](../episodes) package and the
 [player panel guide](player-panels.md).
 
 ## Text check

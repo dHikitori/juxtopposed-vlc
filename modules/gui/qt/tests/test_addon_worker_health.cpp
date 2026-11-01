@@ -17,7 +17,7 @@ const QString FixtureContribution = Package + QStringLiteral("/catalogue");
 // fails before it is ready.
 bool brokenPackage(const QString& target, const QString& version = {})
 {
-    const QDir source(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/discovery-fixture"));
+    const QDir source(QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/discovery-fixture"));
     if (!QDir().mkpath(QDir(target).filePath(QStringLiteral("dist")))) return false;
     for (const auto* file : {"addon.json", "LICENSE"})
         if (!QFile::copy(source.filePath(QLatin1String(file)), QDir(target).filePath(QLatin1String(file)))) return false;
@@ -77,7 +77,7 @@ private slots:
     void anUpdateThatCrashesRestoresThePreviousRelease() {
         const auto worker = qEnvironmentVariable("VLC_ADDON_WORKER");
         if (worker.isEmpty()) QSKIP("VLC_ADDON_WORKER names no worker");
-        const QString good = QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/discovery-fixture");
+        const QString good = QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/discovery-fixture");
         QTemporaryDir profile, broken;
         QVERIFY(brokenPackage(broken.path(), QStringLiteral("9.9.9")));
         AddonManager manager(profile.path());

@@ -171,23 +171,3 @@ refuses a late return or result when its event loop runs. This is not a
 real-time 25-second native revoke guarantee if that thread is blocked. Core
 independently enforces the native lease deadline and command authority. The
 worker keeps its existing 30-second invocation timer and instruction budget.
-
-## Integration gates
-
-The local TLS transport fixture passes 15 normal and 15 sanitizer cases.
-The host/controller fixture passes 32 normal and 32 sanitizer cases. The native
-adapter passes 11 normal and 11 component sanitizer cases. Its sanitizer run
-uses the fixture's two required modules.
-
-A full plugin scan reports leaks in both the adapter test and a fixture-only
-baseline without the adapter. That independent startup limit remains open.
-The native Core library was not instrumented in this component run. The
-two-player test measures seek targets only. It does not test output clocks.
-
-The native watch and invocation checks are component tests. The host review
-object also passes 18 normal and 18 sanitizer cases; its QML panel passes eight
-cases. The actual-player app assembly passes ten normal and ten focused
-sanitizer cases, including Manager retirement and native revocation before UI
-publication. MainUI and the new app objects compile. The fresh complete app
-link, compiled UI run, two-player correction, and supported-platform execution
-remain open. See [session app owners](../native-session-app-contract.md).

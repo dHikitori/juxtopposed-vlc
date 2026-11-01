@@ -92,7 +92,7 @@ signals:
 class TestAddonRuntime : public QObject
 {
     Q_OBJECT
-    QString reference() const { return QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/thesubtitledb"); }
+    QString reference() const { return QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/thesubtitledb"); }
     static QVariantMap replace(const QString& key) {
         return {{"apiKey", QVariantMap{{"operation", "replace"}, {"value", key}, {"sessionOnly", true}}}};
     }
@@ -394,7 +394,7 @@ private slots:
     }
     void publicAccountMarkersRemainStableWithoutAccountSettings() {
         QTemporaryDir storage; AddonManager manager(storage.path());
-        const QString directory = QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/tvmaze");
+        const QString directory = QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/tvmaze");
         QVERIFY(manager.installLocalPackage(directory, true));
         const auto descriptor = manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap();
         const auto account = descriptor.value("accountReference").toString(); QVERIFY(account.startsWith(QStringLiteral("public:")));

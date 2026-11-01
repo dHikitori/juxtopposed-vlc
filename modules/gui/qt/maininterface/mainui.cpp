@@ -437,13 +437,11 @@ void MainUI::registerQMLTypes()
             const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
             free(sharedDirectory);
             QList<vlc::addons::DistributionBootstrapEntry> bundledAddons;
-            // The artwork examples (MusicBrainz, Last.fm, French TV, Google
-            // Images) are not bundled: the Lua art scripts serve artwork until
-            // the native metadata owner is on, and three of them scrape pages
-            // or use dead image links. Profiles that have them keep them.
+            // The artwork and Radio Browser examples are not bundled. The Lua
+            // art scripts serve artwork until the native metadata owner is on.
+            // Profiles that already have these add-ons keep them.
             for (const auto& entry : QList<QPair<QString,QString>>{
                     {QStringLiteral("tvmaze"),QStringLiteral("org.videolan.tvmaze")},
-                    {QStringLiteral("radio-browser"),QStringLiteral("org.hakone.radio-browser")},
                     {QStringLiteral("thesubtitledb"),QStringLiteral("org.hakone.thesubtitledb")},
                     {QStringLiteral("episodes"),QStringLiteral("org.videolan.episodes")}}) {
                 bundledAddons.append({entry.second,

@@ -36,7 +36,12 @@ PackageSummarySnapshot snapshot(const StoreAuthorityToken& token, const QString&
     return {id.isEmpty() ? QVariantList{} : QVariantList{QVariantMap{{"id", id}}}, token};
 }
 QString reference(const QString& name)
-{ return QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/examples/") + name; }
+{
+    // Bundled add-ons are at the top of contrib-addons; the others are test fixtures.
+    const auto bundled = QStringLiteral(VLC_ADDON_SOURCE_ROOT "/contrib-addons/") + name;
+    return QFile::exists(bundled + QStringLiteral("/addon.json")) ? bundled
+        : QStringLiteral(VLC_ADDON_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/") + name;
+}
 }
 class TestAddonPackageSummaries : public QObject {
     Q_OBJECT

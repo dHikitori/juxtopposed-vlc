@@ -53,7 +53,7 @@ can permit a later provider but cannot become a negative lookup result.
 The current portable artwork aggregate keeps the slot reserved during consumer
 acceptance and image work. It can transfer native Store watches and admission
 into Core after the caller has an approved local image. No receipt grants that
-image approval. See [the host transfer contract](../records/artwork-positive-host-transfer.md).
+image approval.
 
 ## HTTP status policy
 
@@ -127,21 +127,6 @@ The native plan must retain all required authority and account for unavailable
 providers before it can use an aggregate result. The final native field and
 revision admission remains required. A NoMatch receipt alone cannot write the
 artwork status or metadata.
-
-The earlier copied host fixture passed 74 completion cases and 79 shared identity cases
-in normal and sanitizer modes. It includes a real Rust worker, the committed
-French-TV Wasm table, adversarial native protocol frames, and actual local Qt TLS
-responses. This evidence does not prove a live service, the final native
-aggregate, or a mounted owner path. The current combined build passes all 200 completion, identity, catalogue, and
-store-authority cases after the explicit worker and Wasm path change.
-
-The portable receipt and artwork aggregate group passes 86 and 58 cases,
-respectively, both normally and with sanitizers. It verifies portable positive
-source transfer through final Core Apply. Native source and image consent
-transfer now pass 69 aggregate and 36 native image checks in each build.
-The serial Service runner and mounted owner remain integration gates. See
-[portable evidence](../records/artwork-positive-host-transfer.md) and
-[native evidence](../records/artwork-native-positive-authority.md).
 
 ## Retention
 

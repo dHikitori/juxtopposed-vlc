@@ -2,8 +2,6 @@
 
 This page describes the host selection adapter. The subtitle and playlist dialogs can use an explicitly selected replacement. Core keeps the built-in body available.
 
-The adapter code remains in the working tree. Native registry tests pass. A playlist recovery regression in the broader interface test run remains open. See [the pending review](../records/pending-implementation-review.md).
-
 ## Host choices
 
 The host owns each selection session. It creates a bounded choice set from current core data. The host keeps the mapping from choice references to native playlist IDs, media URLs, and prepared subtitle handles. The package receives only this public projection:

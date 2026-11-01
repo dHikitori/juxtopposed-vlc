@@ -18,4 +18,4 @@ The SDK does not grant authority. The native host validates each effect, the ins
 
 The fixture runner reads `HAKONE_ADDON_WORKER` and `HAKONE_ADDON_SDK_FIXTURE`. Set both to absolute paths. The second path selects the compiled `hakone_message_sdk_fixture.wasm` file.
 
-Run `RUSTUP_AUTO_INSTALL=0 RUSTUP_TOOLCHAIN=stable cargo test --locked --manifest-path contrib-addons/sdk/message-v1/Cargo.toml` for the unit suite. The separate worker fixture exercises the real Wasm ABI. Refer to [the architecture](../../01-architecture.md) and [the terminology list](../terminology.md) for the host contract and English terms.
+Run `RUSTUP_AUTO_INSTALL=0 RUSTUP_TOOLCHAIN=stable cargo test --locked --manifest-path contrib-addons/sdk/message-v1/Cargo.toml` for the unit suite. The separate worker fixture exercises the real Wasm ABI. Refer to [the terminology list](../terminology.md) for English terms.

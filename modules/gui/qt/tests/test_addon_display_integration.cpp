@@ -17,6 +17,14 @@
 using namespace vlc::addons;
 #ifdef HAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP
 namespace {
+// Bundled add-ons are at the top of contrib-addons; the others are test fixtures.
+QString packageRoot(const QString& name)
+{
+    const auto bundled=QStringLiteral(HAKONE_DISPLAY_SOURCE_ROOT "/contrib-addons/")+name;
+    return QFile::exists(bundled+QStringLiteral("/addon.json"))?bundled:QStringLiteral(HAKONE_DISPLAY_SOURCE_ROOT "/modules/gui/qt/tests/fixtures/addons/")+name;
+}
+}
+namespace {
 std::function<void(const CredentialStore::Created&)> afterCredentialCreate;
 unsigned credentialCreateCalls=0;
 }
@@ -45,7 +53,7 @@ QList<DistributionBootstrapEntry> bundles()
         {"tvmaze","org.videolan.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
         {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},
         {"radio-browser","org.hakone.radio-browser"},{"episodes","org.videolan.episodes"},{"thesubtitledb","org.hakone.thesubtitledb"}})
-        result.append({pair.second,{},QDir(QStringLiteral(HAKONE_DISPLAY_SOURCE_ROOT "/contrib-addons/examples")).filePath(pair.first)});
+        result.append({pair.second,{},packageRoot(pair.first)});
     return result;
 }
 bool write(const QString& path,const QByteArray& bytes)

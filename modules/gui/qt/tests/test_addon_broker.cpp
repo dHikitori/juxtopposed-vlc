@@ -171,7 +171,7 @@ private slots:
     }
     void manifestLimitsPacingAndRedirectProfiles()
     {
-        QFile file(QFINDTESTDATA("../../../../contrib-addons/examples/thesubtitledb/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
+        QFile file(QFINDTESTDATA("../../../../contrib-addons/thesubtitledb/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
         const auto original = QJsonDocument::fromJson(file.readAll()).object();
         for (const auto& interval : {QJsonValue(0), QJsonValue(1000), QJsonValue(60000), QJsonValue(-1), QJsonValue(60001), QJsonValue(1.5), QJsonValue(true)}) {
             auto document = original; auto permissions = document.value("permissions").toObject(); auto required = permissions.value("required").toObject();

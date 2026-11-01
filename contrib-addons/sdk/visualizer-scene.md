@@ -85,7 +85,7 @@ Audio playback does not wait for scene rendering. Missing analysis, rejected ass
 
 The renderer uses one global background job and one pending frame. A newer pending frame replaces the older pending frame. Close does not wait for an active render. Work that is still stopping keeps its job slot. A new timeline clears old results and feedback buffers. A scene graph loss stops the observer. A new scene graph initialization permits recovery; a late render notification cannot reopen a lost graph.
 
-The examples in [visual-scenes](../examples/visual-scenes/README.md) show four scene types.
+The Visual scenes example package shows four scene types.
 
 ## Parameter updates
 

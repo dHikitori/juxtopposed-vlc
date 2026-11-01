@@ -105,8 +105,8 @@ without the worker. The manager does not use Lua, QML or native libraries as a
 worker replacement.
 
 The current code has package installs, settings and subtitle providers.
-[The architecture proposal](../contrib-addons/README.md) also specifies other
-contracts. These contracts are not complete. More code and tests are necessary.
+[The add-on README](../contrib-addons/README.md) lists the bundled add-ons and
+links to the SDK guides for add-on authors.
 
 For a cross build, install the Rust target before you build VLC. Meson maps
 Linux, Windows and macOS x86_64/aarch64 targets. Use

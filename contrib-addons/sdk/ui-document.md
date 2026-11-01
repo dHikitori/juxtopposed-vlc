@@ -1,6 +1,6 @@
 # UI document contract
 
-This page describes the `ui@1` document that the current host can render. The [architecture proposal](../04-ui-themes-and-configuration.md) includes future components. Use only the components on this page for the current host.
+This page describes the `ui@1` document that the current host can render. Use only the components on this page for the current host.
 
 The package supplies JSON data. The host supplies the controls, layout, theme, focus behavior, and text display. The host does not execute package QML or JavaScript. Text uses plain text. Text cannot load HTML content.
 

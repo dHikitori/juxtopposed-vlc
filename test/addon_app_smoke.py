@@ -35,11 +35,10 @@ import tempfile
 import time
 from pathlib import Path
 
-BUNDLED = ('org.videolan.tvmaze', 'org.hakone.radio-browser',
-           'org.hakone.thesubtitledb', 'org.videolan.episodes')
-# The artwork examples are not bundled.
-UNBUNDLED = ('org.videolan.musicbrainz', 'org.videolan.lastfm',
-             'org.videolan.french-tv', 'org.videolan.google-images')
+BUNDLED = ('org.videolan.tvmaze', 'org.hakone.thesubtitledb', 'org.videolan.episodes')
+# The examples are not bundled.
+UNBUNDLED = ('org.videolan.musicbrainz', 'org.videolan.lastfm', 'org.videolan.french-tv',
+             'org.videolan.google-images', 'org.hakone.radio-browser')
 CLOCK = os.sysconf('SC_CLK_TCK')
 PAGE = os.sysconf('SC_PAGE_SIZE')
 
@@ -477,7 +476,7 @@ def main():
     parser.add_argument('--driver', action='store_true',
                         help='use the add-on test driver (needs -Daddon-test-driver=true)')
     parser.add_argument('--fixture', type=Path,
-                        default=Path(__file__).resolve().parent.parent / 'contrib-addons' / 'examples' / 'discovery-fixture')
+                        default=Path(__file__).resolve().parent.parent / 'modules' / 'gui' / 'qt' / 'tests' / 'fixtures' / 'addons' / 'discovery-fixture')
     parser.add_argument('--query', default='a', help='discovery fixture search text')
     parser.add_argument('--no-playback', action='store_true',
                         help='do not play the sample, for builds that cannot')

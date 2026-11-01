@@ -191,7 +191,7 @@ private slots:
     // (examples/episodes/tests/sample-state.json) pass the app's own rules.
     void theEpisodesPackageAgreesWithTheApp()
     {
-        const QDir package(Root + QStringLiteral("/contrib-addons/examples/episodes"));
+        const QDir package(Root + QStringLiteral("/contrib-addons/episodes"));
         QFile file(package.filePath(QStringLiteral("addon.json"))); QVERIFY(file.open(QIODevice::ReadOnly));
         Manifest manifest; QString error;
         QVERIFY2(Manifest::parse(file.readAll(), &manifest, &error), qPrintable(error));

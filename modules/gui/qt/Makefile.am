@@ -51,7 +51,7 @@ subtitle_consumer_key.hpp: subtitle-consumer-key-force $(srcdir)/scripts/subtitl
 
 addon_distribution_paths.hpp: $(srcdir)/scripts/addon-distribution-paths.py
 	$(AM_V_GEN)$(PYTHON3) $(srcdir)/scripts/addon-distribution-paths.py \
-		--root "$(abs_top_srcdir)/contrib-addons/examples" --output $@
+		--root "$(abs_top_srcdir)/contrib-addons" --output $@
 
 if !HAVE_QT_ZSTD
 RCC_EXTRA_PARAMS += --no-zstd
@@ -2965,7 +2965,7 @@ test_qt_addon_metadata_attempt_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) \
     -DHAKONE_ATTEMPT_PROCESS_FIXTURE='"$(abs_builddir)/addon_metadata_attempt_process$(EXEEXT)"' \
     -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(abs_srcdir)/tests/fixtures/metadata-attempt"' \
     -DHAKONE_ATTEMPT_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
-    -DHAKONE_ATTEMPT_FRENCH_TV_WASM='"$(abs_top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm"'
+    -DHAKONE_ATTEMPT_FRENCH_TV_WASM='"$(abs_top_srcdir)/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm"'
 test_qt_addon_metadata_attempt_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_metadata_attempt_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_metadata_attempt_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -2983,7 +2983,7 @@ test_qt_addon_prepared_metadata_invocation_CPPFLAGS = $(QT_QTEST_COMMON_cppflags
     -DHAKONE_PREPARED_OWNER_WRAP -DHAKONE_METADATA_PREPARATION_WRAP -DHAKONE_ARTWORK_READ_WRAP \
     -DHAKONE_PREPARED_PROCESS_FIXTURE='"$(abs_builddir)/addon_prepared_metadata_process$(EXEEXT)"' \
     -DHAKONE_PREPARED_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
-    -DHAKONE_PREPARED_FRENCH_TV_WASM='"$(abs_top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm"' \
+    -DHAKONE_PREPARED_FRENCH_TV_WASM='"$(abs_top_srcdir)/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm"' \
     -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(abs_srcdir)/tests/fixtures/metadata-attempt"'
 test_qt_addon_prepared_metadata_invocation_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_prepared_metadata_invocation_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
@@ -3318,7 +3318,7 @@ test_qt_addon_artwork_attempt_aggregate_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -
     -DHAKONE_AGGREGATE_PROCESS_FIXTURE='"$(abs_builddir)/addon_metadata_attempt_process$(EXEEXT)"' \
     -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(srcdir)/tests/fixtures/metadata-attempt"' \
     -DHAKONE_AGGREGATE_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
-    -DHAKONE_AGGREGATE_FRENCH_TV_WASM='"$(abs_top_srcdir)/contrib-addons/examples/french-tv/dist/addon.wasm"'
+    -DHAKONE_AGGREGATE_FRENCH_TV_WASM='"$(abs_top_srcdir)/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm"'
 test_qt_addon_artwork_attempt_aggregate_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_artwork_attempt_aggregate_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS) $(top_builddir)/lib/libvlc.la
 test_qt_addon_artwork_attempt_aggregate_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
@@ -4087,45 +4087,42 @@ endif
 
 if ENABLE_QT
 addon_referencedir = $(datadir)/vlc/addons/reference/thesubtitledb
-addon_reference_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/addon.json $(top_srcdir)/contrib-addons/examples/thesubtitledb/LICENSE
+addon_reference_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/addon.json $(top_srcdir)/contrib-addons/thesubtitledb/LICENSE
 addon_reference_distdir = $(datadir)/vlc/addons/reference/thesubtitledb/dist
-addon_reference_dist_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/dist/addon.wasm
+addon_reference_dist_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/dist/addon.wasm
 addon_reference_settingsdir = $(datadir)/vlc/addons/reference/thesubtitledb/settings
-addon_reference_settings_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/settings/schema.json $(top_srcdir)/contrib-addons/examples/thesubtitledb/settings/ui.json
+addon_reference_settings_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/settings/schema.json $(top_srcdir)/contrib-addons/thesubtitledb/settings/ui.json
 addon_reference_localesdir = $(datadir)/vlc/addons/reference/thesubtitledb/locales
-addon_reference_locales_DATA = $(top_srcdir)/contrib-addons/examples/thesubtitledb/locales/en.json
-addon_radio_browserdir = $(datadir)/vlc/addons/reference/radio-browser
-addon_radio_browser_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/radio-browser/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md)
-addon_radio_browser_distdir = $(datadir)/vlc/addons/reference/radio-browser/dist
-addon_radio_browser_dist_DATA = $(top_srcdir)/contrib-addons/examples/radio-browser/dist/addon.wasm
+addon_reference_locales_DATA = $(top_srcdir)/contrib-addons/thesubtitledb/locales/en.json
 addon_tvmazedir = $(datadir)/vlc/addons/reference/tvmaze
-addon_tvmaze_DATA = $(top_srcdir)/contrib-addons/examples/tvmaze/addon.json $(top_srcdir)/contrib-addons/examples/tvmaze/LICENSE $(top_srcdir)/contrib-addons/examples/tvmaze/NOTICE.md
+addon_tvmaze_DATA = $(top_srcdir)/contrib-addons/tvmaze/addon.json $(top_srcdir)/contrib-addons/tvmaze/LICENSE $(top_srcdir)/contrib-addons/tvmaze/NOTICE.md
 addon_tvmaze_distdir = $(datadir)/vlc/addons/reference/tvmaze/dist
-addon_tvmaze_dist_DATA = $(top_srcdir)/contrib-addons/examples/tvmaze/dist/addon.wasm
+addon_tvmaze_dist_DATA = $(top_srcdir)/contrib-addons/tvmaze/dist/addon.wasm
 addon_episodesdir = $(datadir)/vlc/addons/reference/episodes
-addon_episodes_DATA = $(addprefix $(top_srcdir)/contrib-addons/examples/episodes/,addon.json LICENSE NOTICE.md)
+addon_episodes_DATA = $(addprefix $(top_srcdir)/contrib-addons/episodes/,addon.json LICENSE NOTICE.md)
 addon_episodes_distdir = $(datadir)/vlc/addons/reference/episodes/dist
-addon_episodes_dist_DATA = $(top_srcdir)/contrib-addons/examples/episodes/dist/addon.wasm
+addon_episodes_dist_DATA = $(top_srcdir)/contrib-addons/episodes/dist/addon.wasm
 addon_episodes_viewsdir = $(datadir)/vlc/addons/reference/episodes/views
-addon_episodes_views_DATA = $(top_srcdir)/contrib-addons/examples/episodes/views/episodes.json
+addon_episodes_views_DATA = $(top_srcdir)/contrib-addons/episodes/views/episodes.json
 addon_episodes_iconsdir = $(datadir)/vlc/addons/reference/episodes/icons
-addon_episodes_icons_DATA = $(top_srcdir)/contrib-addons/examples/episodes/icons/episodes.svg
-# The artwork examples are not bundled; the tests still load their packages.
-addon_musicbrainz_files = $(addprefix $(top_srcdir)/contrib-addons/examples/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
-addon_lastfm_files = $(addprefix $(top_srcdir)/contrib-addons/examples/lastfm/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
-addon_french_tv_files = $(addprefix $(top_srcdir)/contrib-addons/examples/french-tv/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
-addon_google_images_files = $(addprefix $(top_srcdir)/contrib-addons/examples/google-images/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_episodes_icons_DATA = $(top_srcdir)/contrib-addons/episodes/icons/episodes.svg
+# The examples are not bundled; the tests load these package copies.
+addon_radio_browser_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/radio-browser/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_musicbrainz_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/musicbrainz/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_lastfm_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/lastfm/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_french_tv_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/french-tv/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
+addon_google_images_files = $(addprefix $(top_srcdir)/modules/gui/qt/tests/fixtures/addons/google-images/,addon.json LICENSE NOTICE.md THIRD_PARTY_NOTICES.md dist/addon.wasm)
 
 # An earlier install bundled these; drop them so packaging does not copy them.
 install-data-hook:
-	for name in musicbrainz lastfm french-tv google-images; do \
+	for name in musicbrainz lastfm french-tv google-images radio-browser; do \
 		rm -rf "$(DESTDIR)$(datadir)/vlc/addons/reference/$$name"; \
 	done
 endif
 
 EXTRA_DIST += $(addon_reference_DATA) $(addon_reference_dist_DATA) $(addon_reference_settings_DATA) $(addon_reference_locales_DATA)
 EXTRA_DIST += $(addon_tvmaze_DATA) $(addon_tvmaze_dist_DATA)
-EXTRA_DIST += $(addon_musicbrainz_files) $(addon_lastfm_files) $(addon_french_tv_files) $(addon_google_images_files)
+EXTRA_DIST += $(addon_musicbrainz_files) $(addon_lastfm_files) $(addon_french_tv_files) $(addon_google_images_files) $(addon_radio_browser_files)
 EXTRA_DIST += tests/build_addon_episode_tests.py tests/test_addon_episode_metadata.cpp tests/test_addon_artwork_consumers.cpp tests/addon_episode_probe.cpp tests/addon_metadata_probe.cpp tests/addon_artwork_probe.cpp util/artwork_approval.hpp
 EXTRA_DIST += tests/build_addon_native_library_tests.py tests/test_addon_native_library_store.cpp
 
@@ -4174,17 +4171,7 @@ EXTRA_DIST += tests/discovery-source/CMakeLists.txt tests/discovery-source/nativ
 	tests/fixtures/addon_source_tls_fixture.hpp
 
 EXTRA_DIST += $(addon_episodes_DATA) $(addon_episodes_dist_DATA) $(addon_episodes_views_DATA) $(addon_episodes_icons_DATA) \
-    $(addprefix $(top_srcdir)/contrib-addons/examples/episodes/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/sample-state.json)
-EXTRA_DIST += $(addon_radio_browser_DATA) $(addon_radio_browser_dist_DATA) \
-    $(addprefix $(top_srcdir)/contrib-addons/examples/radio-browser/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/native/CMakeLists.txt tests/native/live_probe.cpp)
-if ENABLE_QT
-if BUILD_ADDON_RUNTIME
-.PHONY: check-radio-browser-worker
-check-radio-browser-worker: vlc-addon-worker$(EXEEXT)
-	$(AM_V_at)$(PYTHON3) -B $(top_srcdir)/contrib-addons/examples/radio-browser/tests/test_worker.py --worker "$(abs_builddir)/vlc-addon-worker$(EXEEXT)"
-check-local: check-radio-browser-worker
-endif
-endif
+    $(addprefix $(top_srcdir)/contrib-addons/episodes/,Cargo.toml Cargo.lock build.sh README.md src/lib.rs src/tests.rs tests/test_worker.py tests/sample-state.json)
 
 EXTRA_DIST += tests/test_addon_metadata_attempt.cpp tests/fixtures/addon_metadata_attempt_process.c \
     tests/fixtures/receipt_tls_fixture.hpp tests/fixtures/metadata-attempt/receipt-tls-cert.pem \

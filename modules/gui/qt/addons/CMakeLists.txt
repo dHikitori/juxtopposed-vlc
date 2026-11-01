@@ -111,7 +111,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND EXISTS "$
         HAKONE_ATTEMPT_PROCESS_FIXTURE="$<TARGET_FILE:addon_metadata_attempt_process>"
         HAKONE_ATTEMPT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/metadata-attempt"
         HAKONE_ATTEMPT_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
-        HAKONE_ATTEMPT_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm")
+        HAKONE_ATTEMPT_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm")
     add_dependencies(test_addon_metadata_attempt addon_metadata_attempt_process)
     add_test(NAME addon_metadata_attempt COMMAND test_addon_metadata_attempt)
     set_tests_properties(addon_metadata_attempt PROPERTIES TIMEOUT 180)
@@ -123,7 +123,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND EXISTS "$
         HAKONE_PREPARED_OWNER_WRAP HAKONE_METADATA_PREPARATION_WRAP HAKONE_ARTWORK_READ_WRAP
         HAKONE_PREPARED_PROCESS_FIXTURE="$<TARGET_FILE:addon_prepared_metadata_process>"
         HAKONE_PREPARED_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
-        HAKONE_PREPARED_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm"
+        HAKONE_PREPARED_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm"
         HAKONE_ATTEMPT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/metadata-attempt")
     target_link_options(test_addon_prepared_metadata_invocation PRIVATE "-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv"
         "-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv"
@@ -285,7 +285,7 @@ if(VLC_BUILD_DIR)
                 HAKONE_AGGREGATE_PROCESS_FIXTURE="$<TARGET_FILE:addon_metadata_attempt_process>"
                 HAKONE_ATTEMPT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/metadata-attempt"
                 HAKONE_AGGREGATE_RUST_WORKER="${HAKONE_METADATA_ATTEMPT_WORKER}"
-                HAKONE_AGGREGATE_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/contrib-addons/examples/french-tv/dist/addon.wasm")
+                HAKONE_AGGREGATE_FRENCH_TV_WASM="${VLC_SOURCE_ROOT}/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm")
             add_dependencies(test_addon_artwork_attempt_aggregate addon_metadata_attempt_process)
             add_test(NAME addon_artwork_attempt_aggregate COMMAND test_addon_artwork_attempt_aggregate)
             set_tests_properties(addon_artwork_attempt_aggregate PROPERTIES TIMEOUT 180)
@@ -353,17 +353,6 @@ if(VLC_BUILD_DIR)
 
     target_compile_definitions(test_addon_discovery_source_owner PRIVATE VLC_ADDON_DISCOVERY_PROCESS_FIXTURE="$<TARGET_FILE:addon_discovery_source_process>")
     add_dependencies(test_addon_discovery_source_owner addon_discovery_source_process)
-
-    find_package(Python3 QUIET COMPONENTS Interpreter)
-    set(radio_worker "${VLC_BUILD_DIR}/modules/gui/qt/vlc-addon-worker")
-    if(WIN32)
-        string(APPEND radio_worker ".exe")
-    endif()
-    if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING AND EXISTS "${radio_worker}")
-        add_test(NAME addon_radio_browser_worker COMMAND "${Python3_EXECUTABLE}" -B
-            "${VLC_SOURCE_ROOT}/contrib-addons/examples/radio-browser/tests/test_worker.py" --worker "${radio_worker}")
-        set_tests_properties(addon_radio_browser_worker PROPERTIES TIMEOUT 90)
-    endif()
 
     find_package(SQLite3 QUIET)
     if(TARGET SQLite::SQLite3)

@@ -1,6 +1,6 @@
 # Discovery source contract
 
-This page describes the current `discovery@1` host. The [architecture proposal](../03-providers-and-discovery.md) also describes future functions.
+This page describes the current `discovery@1` host.
 
 ## Contribution
 

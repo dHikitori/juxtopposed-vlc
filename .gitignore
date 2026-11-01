@@ -57,6 +57,10 @@ Frameworks
 build*/
 target*/
 contrib-*
+# Bundled add-ons; their planning notes and build output stay local.
+!/contrib-addons/
+/contrib-addons/.planning/
+/contrib-addons/**/__pycache__/
 install-*
 xcodeproj/
 static-lib/
