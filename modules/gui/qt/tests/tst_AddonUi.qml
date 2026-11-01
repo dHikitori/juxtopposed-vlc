@@ -33,16 +33,24 @@ TestCase {
         function settingsSchema(id) { return schema }
         function settingsValues(id) { return values }
         function settingsSecretStatus(id) { return secrets }
-        function saveAddonSettings(id, nextValues, operations) {
+        // Store writes answer later, as the app's do.
+        signal writeFinished(string request, bool success, string error)
+        property int requests: 0
+        function finishLater(success) {
+            const request = String(++requests)
+            Qt.callLater(() => writeFinished(request, success, success ? "" : "The save failed."))
+            return request
+        }
+        function requestSaveSettings(id, nextValues, operations) {
             saveCount++; lastValues = nextValues; lastOperations = operations
-            if (!acceptSave) return false
+            if (!acceptSave) return finishLater(false)
             values = Contract.clone(nextValues)
             for (const field of Object.keys(operations)) {
                 if (operations[field].operation === "replace") secrets = Object.assign({}, secrets, {[field]: {present: true}})
                 else if (operations[field].operation === "delete") secrets = Object.assign({}, secrets, {[field]: {present: false}})
             }
             revision++
-            return true
+            return finishLater(true)
         }
     }
     RedesignAddonSettings { id: settings; width: 450; backend: backend; packageId: "org.example.radio" }

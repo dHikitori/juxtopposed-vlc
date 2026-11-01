@@ -38,11 +38,19 @@ TestCase {
                 return {id: id, packageId: pkg.id, name: pkg.name, enabled: pkg.enabled, configured: pkg.configured, builtin: firstBuiltin && pkg.id === "org.example.first"}
             })
         }
-        function setProviderOrder(feature, ids) { orderCalls++; lastFeature = feature; order = ids; revision++; return true }
-        function setEnabled(id, enabled) {
+        // Store writes answer later, as the app's do.
+        signal writeFinished(string request, bool success, string error)
+        property int requests: 0
+        function finishLater(success) {
+            const request = String(++requests)
+            Qt.callLater(() => writeFinished(request, success, ""))
+            return request
+        }
+        function requestProviderOrder(feature, ids) { orderCalls++; lastFeature = feature; order = ids; revision++; return finishLater(true) }
+        function requestEnabled(id, enabled) {
             enableCalls++; lastPackage = id
             packages = packages.map(row => row.id === id ? Object.assign({}, row, {enabled: enabled}) : row)
-            revision++; return true
+            revision++; return finishLater(true)
         }
         function settingsSchema(id) {
             return {type: "object", additionalProperties: false, properties: {
@@ -52,7 +60,7 @@ TestCase {
         function settingsMessages(id) { return {"settings.apiKey": "API credential"} }
         function settingsValues(id) { return values }
         function settingsSecretStatus(id) { return secrets }
-        function saveAddonSettings(id, next, operations) { saveCalls++; lastPackage = id; values = next; revision++; return true }
+        function requestSaveSettings(id, next, operations) { saveCalls++; lastPackage = id; values = next; revision++; return finishLater(true) }
     }
     RedesignSubtitleSourcePreferences {
         id: subtitlePreferences

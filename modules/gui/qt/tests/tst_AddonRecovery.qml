@@ -18,8 +18,16 @@ TestCase {
         property string errorMessage: ""
         property bool asyncRemoval: false
         function success(operation) { if (failure !== operation) return true; errorMessage = "<b>Operation failed</b>"; return false }
-        function setSafeMode(enabled) { calls = calls.concat([{operation: "safeMode", value: enabled}]); if (!success("safeMode")) return false; safeMode = enabled; ++revision; return true }
-        function recoverPackage(id) { calls = calls.concat([{operation: "recover", id: id}]); return success("recover") }
+        // Store writes answer later, as the app's do.
+        signal writeFinished(string request, bool success, string error)
+        property int requests: 0
+        function finishLater(success) {
+            const request = String(++requests)
+            Qt.callLater(() => writeFinished(request, success, success ? "" : errorMessage))
+            return request
+        }
+        function requestSafeMode(enabled) { calls = calls.concat([{operation: "safeMode", value: enabled}]); if (!success("safeMode")) return finishLater(false); safeMode = enabled; ++revision; return finishLater(true) }
+        function requestRecoverPackage(id) { calls = calls.concat([{operation: "recover", id: id}]); return finishLater(success("recover")) }
         function stageDistributionPackage(id) { calls = calls.concat([{operation: "restore", id: id}]); return success("restore") }
         function uninstall(id, removeData) { if (asyncRemoval) busy = true; calls = calls.concat([{operation: removeData ? "removeData" : "remove", id: id}]); return success(removeData ? "removeData" : "remove") }
         function retainedGenerations(id) { return [{version: "1.0.0"}] }

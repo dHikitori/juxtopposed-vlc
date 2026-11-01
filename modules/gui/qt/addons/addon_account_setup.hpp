@@ -43,8 +43,10 @@ signals:
     void changed();
     void connected();
 private:
+    void saveFinished(const QString& request, bool success, const QString& error);
     QPointer<AddonManager> m_manager;
-    QString m_packageId, m_field, m_message;
+    // The manager saves the account on background work.
+    QString m_packageId, m_field, m_message, m_saveRequest;
     bool m_sessionOnly = false;
     bool m_saved = false;
     std::unique_ptr<DeviceAuthorization> m_flow;

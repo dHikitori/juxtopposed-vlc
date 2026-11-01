@@ -51,7 +51,16 @@ TestCase {
                 digest: "0123456789abcdef", developerSource: developer, publisherVerified: false, permissions: {"network.http": {origins: ["https://api.example.org"]}}}
             revision++
         }
-        function approvePendingPackage(enable) { approvals++; lastEnable = enable; pendingPackage = ({}); updateResult = ({}); revision++; return true }
+        // Store writes answer later, as the app's do.
+        signal writeFinished(string request, bool success, string error)
+        property int requests: 0
+        property bool writing: false
+        function finishLater(success) {
+            const request = String(++requests)
+            Qt.callLater(() => writeFinished(request, success, success ? "" : errorMessage))
+            return request
+        }
+        function requestApprovePending(enable) { approvals++; lastEnable = enable; pendingPackage = ({}); updateResult = ({}); revision++; return finishLater(true) }
         function discardPendingPackage() { discards++; pendingPackage = ({}); busy = false; updateResult = updateResult.packageId ? {packageId: updateResult.packageId, checking: false, canceled: true} : ({}); revision++ }
         function checkRepositoryUpdates(id, range, prerelease) { updateRequests++; lastPackage = id; lastRange = range; lastPrerelease = prerelease; updateResult = {packageId: id, checking: true}; busy = true; revision++; return true }
         function completeUpdate(available) {
@@ -60,26 +69,26 @@ TestCase {
                 permissions: {}, hostCapabilities: capabilities, workerRequired: true}
             revision++
         }
-        function setEnabled(id, enabled) { enableRequests++; return true }
-        function setSafeMode(enabled) { safeMode = enabled; revision++; return true }
-        function recoverPackage(id) { recoveries++; lastPackage = id; return true }
+        function requestEnabled(id, enabled) { enableRequests++; return finishLater(true) }
+        function requestSafeMode(enabled) { safeMode = enabled; revision++; return finishLater(true) }
+        function requestRecoverPackage(id) { recoveries++; lastPackage = id; return finishLater(true) }
         function stageDistributionPackage(id) {
             restores++; lastPackage = id
             pendingPackage = {id: id, name: "App package", version: "2.0.0", source: "https://git.example.org/app.git", distributionSource: true, permissions: {}}
             revision++; return true
         }
         function retainedGenerations(id) { return [{version: "1.0.0"}] }
-        function rollback(id) { rollbacks++; lastPackage = id; return true }
+        function requestRollback(id) { rollbacks++; lastPackage = id; return finishLater(true) }
         function uninstall(id, removeData) {
             removals++; lastPackage = id; removedData = removeData
             if (asyncRemoval) { busy = true; summary.available = false; summary.loading = true; summary.rows = [] }
             return true
         }
-        function saveAddonSettings(id, values, secrets) {
+        function requestSaveSettings(id, values, secrets) {
             settingsSaves++
             if (invalidateSummaryDuringSave) { summary.available = false; summary.loading = true }
             revision++
-            return true
+            return finishLater(true)
         }
         function settingsSchema(id) {
             settingsReads++
@@ -511,7 +520,7 @@ TestCase {
             get errorMessage() { return manager.errorMessage },
             get capabilities() { ++counts.capabilities; return manager.capabilities },
             credentialPersistenceAvailable: true,
-            setSafeMode: value => manager.setSafeMode(value),
+            requestSafeMode: value => manager.requestSafeMode(value),
             retainedGenerations: id => [],
             settingsSchema: id => { ++counts.settings; return manager.settingsSchema(id) },
             settingsValues: id => { ++counts.settings; return {} },
@@ -568,7 +577,7 @@ TestCase {
             get pendingPackage() { return manager.pendingPackage },
             get updateResult() { return manager.updateResult },
             get errorMessage() { return manager.errorMessage },
-            setSafeMode: value => manager.setSafeMode(value)
+            requestSafeMode: value => manager.requestSafeMode(value)
         }
         const probe = createTemporaryObject(managementFactory, testCase, {backend: manager, summaryBackend: summary, width: 600})
         verify(probe !== null); probe.backend = proxy; wait(20)
@@ -691,7 +700,7 @@ TestCase {
             get pendingPackage() { return manager.pendingPackage },
             get updateResult() { return manager.updateResult },
             get errorMessage() { return manager.errorMessage },
-            setSafeMode: value => manager.setSafeMode(value)
+            requestSafeMode: value => manager.requestSafeMode(value)
         }
         const probe = createTemporaryObject(managementFactory, testCase,
             {backend: manager, summaryBackend: summary, width: 600})

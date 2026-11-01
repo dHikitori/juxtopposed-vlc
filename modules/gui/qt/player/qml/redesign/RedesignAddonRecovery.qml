@@ -19,8 +19,10 @@ ColumnLayout {
     property string actionError: ""
     property string actionStatus: ""
     property string pendingAction: ""
-    readonly property bool supported: !!backend && typeof backend.setSafeMode === "function"
-    readonly property bool busy: !!backend && backend.busy === true
+    property string safeModeRequest: ""
+    readonly property bool supported: !!backend && typeof backend.requestSafeMode === "function"
+    // Store writes run on background work; recovery waits for them like a request.
+    readonly property bool busy: !!backend && (backend.busy === true || backend.writing === true)
     readonly property bool safeMode: {
         if (safeModeSnapshot !== null) return safeModeSnapshot === true
         if (!ready || !backend) return false
@@ -45,7 +47,7 @@ ColumnLayout {
     function permitted(row, operation) {
         if (!row || row.builtin === true) return false
         if (operation === "restore") return row.suppressed === true && row.distributionSource === true && typeof backend.stageDistributionPackage === "function"
-        if (operation === "recover") return row.recoveryRequired === true && typeof backend.recoverPackage === "function"
+        if (operation === "recover") return row.recoveryRequired === true && typeof backend.requestRecoverPackage === "function"
         return (operation === "remove" && row.recoveryRequired === true || operation === "removeData" && (row.recoveryRequired === true || row.savedData === true)) && typeof backend.uninstall === "function"
     }
     function completedAction(operation) {
@@ -84,6 +86,15 @@ ColumnLayout {
         confirmation.packageState = signature(row); confirmation.revision = backend.revision; confirmation.savedDataOnly = row.installed === false
         confirmation.open(); return true
     }
+    Connections {
+        target: root.backend
+        ignoreUnknownSignals: true
+        function onWriteFinished(request, success, error) {
+            if (!request || request !== root.safeModeRequest) return
+            root.safeModeRequest = ""
+            if (!success) root.actionError = error || qsTr("The app cannot change the add-on state.")
+        }
+    }
     onBusyChanged: if (!busy && pendingAction) {
         const operation = pendingAction; pendingAction = ""; completedAction(operation)
     }
@@ -94,8 +105,8 @@ ColumnLayout {
         enabled: root.supported
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         onClicked: {
-            const success = root.backend.setSafeMode(!root.safeMode)
-            root.actionError = success ? "" : root.backend.errorMessage || qsTr("The app cannot change the add-on state.")
+            root.safeModeRequest = root.backend.requestSafeMode(!root.safeMode)
+            root.actionError = root.safeModeRequest ? "" : root.backend.errorMessage || qsTr("The app cannot change the add-on state.")
         }
     }
     Text {
@@ -141,7 +152,7 @@ ColumnLayout {
             RedesignButton {
                 objectName: "addonRecover_" + row.modelData.id
                 visible: row.modelData.recoveryRequired === true
-                enabled: root.actionsAvailable && !root.busy && typeof root.backend.recoverPackage === "function"
+                enabled: root.actionsAvailable && !root.busy && typeof root.backend.requestRecoverPackage === "function"
                 caption: qsTr("Recover add-on"); text: caption; tooltipTextFormat: Text.PlainText
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.request(row.modelData.id, "recover")
@@ -212,7 +223,7 @@ ColumnLayout {
             if (root.busy || !root.permitted(row, operation) || root.backend.revision !== revision || root.signature(row) !== packageState) {
                 root.actionError = qsTr("The add-on changed. Open this action again."); return
             }
-            root.result(operation, operation === "recover" ? root.backend.recoverPackage(packageId) : root.backend.uninstall(packageId, operation === "removeData"))
+            root.result(operation, operation === "recover" ? root.backend.requestRecoverPackage(packageId) !== "" : root.backend.uninstall(packageId, operation === "removeData"))
         }
     }
 }

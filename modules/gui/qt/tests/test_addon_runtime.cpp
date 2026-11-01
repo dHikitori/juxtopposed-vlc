@@ -482,13 +482,17 @@ private slots:
     }
 
     void reviewCapturesPackageAndCancellationDoesNotInstall() {
+        // The package review reads and hashes the package on the app's work.
+        AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
         QTemporaryDir storage; AddonManager manager(storage.path());
-        QVERIFY(manager.stageLocalPackage(reference()));
+        QVERIFY(manager.stageLocalPackage(reference())); QTRY_VERIFY(!manager.busy());
         QCOMPARE(manager.pendingPackage().value("id").toString(), QStringLiteral("org.hakone.thesubtitledb"));
         QVERIFY(manager.packages().isEmpty());
         manager.discardPendingPackage(); QVERIFY(manager.pendingPackage().isEmpty());
         QVERIFY(!manager.approvePendingPackage()); QVERIFY(manager.packages().isEmpty());
-        QVERIFY(manager.stageLocalPackage(reference())); QVERIFY(manager.approvePendingPackage());
+        QVERIFY(manager.stageLocalPackage(reference())); QTRY_VERIFY(!manager.busy()); QVERIFY(manager.approvePendingPackage());
         QVERIFY(manager.pendingPackage().isEmpty()); QCOMPARE(manager.packages().size(), 1);
         QVERIFY(!manager.packages().first().toMap().value("enabled").toBool());
     }

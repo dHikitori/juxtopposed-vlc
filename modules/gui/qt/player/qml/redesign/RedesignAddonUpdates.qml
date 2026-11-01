@@ -30,6 +30,7 @@ C.Dialog {
     property var queue: []
     property string current: ""
     property bool approving: false
+    property string approval: ""
     property bool shownThisRun: false
     readonly property bool working: current.length > 0 || queue.length > 0
     readonly property var simple: rows.filter(row => !needsApproval(row) && stateOf(row.id) !== "done")
@@ -99,14 +100,20 @@ C.Dialog {
         if (pendingPackage.id !== current) { finish(current, false, backend.errorMessage); return }
         const row = rows.find(entry => entry.id === current)
         approving = true
-        const ok = backend.approvePendingPackage(!!row && row.enabled === true)
-        approving = false
-        finish(current, ok, backend.errorMessage)
+        // The install runs on background work; approved has the result.
+        approval = backend.requestApprovePending(!!row && row.enabled === true)
+        if (!approval.length) { approving = false; finish(current, false, backend.errorMessage) }
+    }
+    function approved(request, ok, error) {
+        if (!request.length || request !== approval) return
+        approval = ""; approving = false
+        finish(current, ok, error)
     }
     Connections {
         target: root.backend
         ignoreUnknownSignals: true
         function onRevisionChanged() { root.settle() }
+        function onWriteFinished(request, success, error) { root.approved(request, success, error) }
         function onAppUpdatesChanged() { root.maybeOpen() }
     }
     onBlockedChanged: maybeOpen()

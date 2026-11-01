@@ -2744,6 +2744,22 @@ test_qt_addon_worker_health_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFOR
 check_PROGRAMS += test_qt_addon_worker_health
 TESTS += test_qt_addon_worker_health
 
+test_qt_addon_manager_writes_SOURCES = tests/test_addon_manager_writes.cpp
+nodist_test_qt_addon_manager_writes_SOURCES = tests/test_addon_manager_writes.moc
+BUILT_SOURCES += tests/test_addon_manager_writes.moc
+CLEANFILES += tests/test_addon_manager_writes.moc
+test_qt_addon_manager_writes_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DVLC_ADDON_SOURCE_ROOT='"$(abs_top_srcdir)"'
+test_qt_addon_manager_writes_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_manager_writes_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_manager_writes_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_manager_writes
+TESTS += test_qt_addon_manager_writes
+
+if HAVE_LINUX
+test_qt_addon_manager_writes_CPPFLAGS += -DHAKONE_MANAGER_WRITE_WRAP
+test_qt_addon_manager_writes_LDFLAGS += -Wl,--wrap=_ZN9QSaveFile6commitEv
+endif
+
 test_qt_addon_schema_corpus_SOURCES = tests/test_addon_schema_corpus.cpp
 nodist_test_qt_addon_schema_corpus_SOURCES = tests/test_addon_schema_corpus.moc
 BUILT_SOURCES += tests/test_addon_schema_corpus.moc

@@ -13,6 +13,7 @@
 #include "addon_prepared_metadata_invocation.hpp"
 #include "addon_prepared_artwork_asset.hpp"
 #include "addon_metadata_coordinator.hpp"
+#include "addon_native_notifications.hpp"
 #include <QObject>
 #include <QSet>
 #include <QElapsedTimer>
@@ -25,6 +26,7 @@ namespace vlc::addons {
 class AddonStorage;
 class AddonCatalogueView;
 class AddonRepositoryJobs;
+class AddonNativeWake;
 struct UiAssetCapture;
 struct PrivateStorageContext;
 class AddonManager : public QObject
@@ -39,6 +41,8 @@ class AddonManager : public QObject
     Q_PROPERTY(QVariantList packages READ packages NOTIFY revisionChanged FINAL)
     Q_PROPERTY(bool credentialPersistenceAvailable READ credentialPersistenceAvailable CONSTANT FINAL)
     Q_PROPERTY(bool busy READ busy NOTIFY revisionChanged FINAL)
+    // Store writes are queued or running (see the request calls).
+    Q_PROPERTY(bool writing READ writing NOTIFY revisionChanged FINAL)
     Q_PROPERTY(QVariantMap pendingPackage READ pendingPackage NOTIFY revisionChanged FINAL)
     Q_PROPERTY(bool safeMode READ safeMode NOTIFY revisionChanged FINAL)
     Q_PROPERTY(QVariantMap capabilities READ capabilities NOTIFY capabilitiesChanged FINAL)
@@ -111,6 +115,7 @@ public:
     QJsonObject grantedScope(const QString& packageId, const QString& capability) const;
     bool credentialPersistenceAvailable() const { return CredentialStore::persistentAvailable(); }
     bool busy() const;
+    bool writing() const;
     bool safeMode() const { return m_store.safeMode(); }
     QVariantMap pendingPackage() const;
     QVariantMap capabilities() const;
@@ -122,16 +127,35 @@ public:
     void setWorkerExecutable(const QString&);
     Q_INVOKABLE QVariantList providersForFeature(const QString& feature) const;
     Q_INVOKABLE QStringList providerOrder(const QString& feature) const;
-    Q_INVOKABLE bool setProviderOrder(const QString& feature, const QStringList& ids);
+    // Store writes for the app. Each call returns a request ID at once and
+    // ends with writeFinished. The writes run one at a time, in request
+    // order, on background work: the store lock, the shared profile's
+    // permit, package files and the platform credential store never block
+    // this thread. A write checks its arguments when it starts.
+    Q_INVOKABLE QString requestEnabled(const QString& packageId, bool enabled);
+    Q_INVOKABLE QString requestProviderOrder(const QString& feature, const QStringList& ids);
+    Q_INVOKABLE QString requestSaveSettings(const QString& packageId, const QVariantMap& values, const QVariantMap& secretOperations);
+    Q_INVOKABLE QString requestSaveDisplaySettings(const QString& packageId, const QString& expectedStamp,
+                                                   const QVariantMap& values, const QVariantMap& secretOperations);
+    Q_INVOKABLE QString requestApprovePending(bool enableAfterInstall = false);
+    Q_INVOKABLE QString requestRollback(const QString& packageId);
+    Q_INVOKABLE QString requestSafeMode(bool enabled);
+    Q_INVOKABLE QString requestRecoverPackage(const QString& packageId);
+    QString requestConnectAccount(const QString& packageId, const QString& field, const DeviceTokens&, bool sessionOnly);
+    // The same writes, done on the calling thread before they return. For
+    // tests and tools only: the app uses the request calls above.
+    bool setProviderOrder(const QString& feature, const QStringList& ids);
     void registerBuiltinProvider(const QString& feature, const QVariantMap& descriptor);
     void unregisterBuiltinProvider(const QString& contributionId);
     Q_INVOKABLE QVariantMap settingsSchema(const QString& packageId) const;
     Q_INVOKABLE QVariantMap settingsMessages(const QString& packageId) const;
     Q_INVOKABLE QVariantMap settingsValues(const QString& packageId) const;
     Q_INVOKABLE QVariantMap settingsSecretStatus(const QString& packageId) const;
-    Q_INVOKABLE bool saveAddonSettings(const QString& packageId, const QVariantMap& values, const QVariantMap& secretOperations);
-    Q_INVOKABLE bool saveDisplaySettings(const QString& packageId,const QString& expectedStamp,const QVariantMap& values,const QVariantMap& secretOperations);
-    Q_INVOKABLE QVariantMap inspectLocalPackage(const QString& directory) const;
+    // Tests and tools only, like setProviderOrder.
+    bool saveAddonSettings(const QString& packageId, const QVariantMap& values, const QVariantMap& secretOperations);
+    bool saveDisplaySettings(const QString& packageId,const QString& expectedStamp,const QVariantMap& values,const QVariantMap& secretOperations);
+    // Tests and tools only: these read and write package files on the calling thread.
+    QVariantMap inspectLocalPackage(const QString& directory) const;
     bool installLocalPackage(const QString& directory, bool approveRequiredPermissions);
     // Only the app distribution calls this API with its trusted package path.
     bool ensureDistributionPackage(const QString& directory, const QString& expectedPackageId);
@@ -149,15 +173,16 @@ public:
     Q_INVOKABLE bool stageLocalPackage(const QString& directory);
     Q_INVOKABLE bool stageRepository(const QString& source, const QString& tag);
     Q_INVOKABLE bool checkRepositoryUpdates(const QString& packageId, const QString& versionRange, bool allowPrerelease = false);
-    Q_INVOKABLE bool approvePendingPackage(bool enableAfterInstall = false);
     Q_INVOKABLE void discardPendingPackage();
-    Q_INVOKABLE bool setEnabled(const QString& packageId, bool enabled);
     // Worker health (finding F3): recent crashes and the restart wait. Memory
     // only, per process.
     Q_INVOKABLE QVariantMap health(const QString& packageId) const;
-    Q_INVOKABLE bool rollback(const QString& packageId);
-    Q_INVOKABLE bool setSafeMode(bool enabled);
-    Q_INVOKABLE bool recoverPackage(const QString& packageId);
+    // Tests and tools only, like setProviderOrder.
+    bool approvePendingPackage(bool enableAfterInstall = false);
+    bool setEnabled(const QString& packageId, bool enabled);
+    bool rollback(const QString& packageId);
+    bool setSafeMode(bool enabled);
+    bool recoverPackage(const QString& packageId);
     Q_INVOKABLE QVariantList retainedGenerations(const QString& packageId) const;
     Q_INVOKABLE bool uninstall(const QString& packageId, bool removeData);
     QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context);
@@ -220,13 +245,16 @@ signals:
     void packageWithdrawn(const QString& packageId);
     void operationFinished(const QString& invocation, const QString& contribution, const QString& status,
                            const QVariantMap& data, const QString& error);
+    // A request call's write ended. errorMessage holds the same error.
+    void writeFinished(const QString& request, bool success, const QString& error);
     void accountsChanged(const QString& packageId);
     void settingsPathPicked(const QString& packageId, const QString& field, const QString& handle, const QString& name);
 private:
     friend class ArtworkLookupRunner;
     friend class ::AddonArtworkAssets;
     AddonManager(const QString&, std::unique_ptr<QNetworkAccessManager>, QObject*);
-    QJsonObject schema(const InstalledPackage&) const;
+    // Reads the package's schema file. Any thread.
+    static QJsonObject schema(const InstalledPackage&);
     QJsonObject savedSettings(const QString&) const;
     QString accountReference(const InstalledPackage&) const;
     bool configured(const InstalledPackage&) const;
@@ -234,7 +262,43 @@ private:
     AddonWorker* worker(const InstalledPackage&);
     bool withdraw(const QString& packageId);
     bool changed(bool success, const QString& error = {});
-    bool saveSettingsImpl(const QString&,const QVariantMap&,const QVariantMap&,const QString& expectedStamp);
+    // One store write in three parts. prepare runs on this thread when the
+    // write starts: memory only, and it reports a refusal with changed().
+    // work runs on background work (or inline for the synchronous calls)
+    // and uses only the copies it captured. finish runs on this thread and
+    // reports the result with changed().
+    struct StoreWrite {
+        std::function<bool()> prepare;
+        std::function<void()> work;
+        std::function<bool()> finish;
+    };
+    bool writeNow(StoreWrite);
+    QString queueWrite(StoreWrite);
+    void pumpWrites();
+    void startWrite();
+    void endWrite(const QString& request, bool success);
+    StoreWrite enabledWrite(const QString&, bool);
+    StoreWrite providerOrderWrite(const QString&, const QStringList&);
+    StoreWrite settingsWrite(const QString&, const QVariantMap&, const QVariantMap&, const QString& expectedStamp, bool display);
+    StoreWrite approveWrite(bool enable);
+    StoreWrite packageWrite(const QString&, bool recover);
+    StoreWrite safeModeWrite(bool);
+    StoreWrite accountWrite(const QString&, const QString&, const DeviceTokens&, bool sessionOnly, QString* error, bool report);
+    void countCrash(const QString& packageId, const QString& error);
+    // Background copy of the owner's credential store. Its session values are
+    // wiped when the last write part that holds it ends.
+    struct SecretsCopy {
+        explicit SecretsCopy(const CredentialStore& value) : store(value) {}
+        ~SecretsCopy() { store.clearSession(); }
+        CredentialStore store;
+    };
+    struct QueuedWrite { QString request; StoreWrite write; };
+    QList<QueuedWrite> m_writes;
+    std::optional<QueuedWrite> m_runningWrite;
+    std::unique_ptr<AddonRepositoryJobs> m_writeJobs;
+    std::unique_ptr<AddonNativeWake> m_writeWake;
+    NativeNotification m_writeSlot;
+    quint64 m_writeRequests = 0;
     QString prepareDisplayRequest(const QString&,bool settings);
     struct DisplayRequest {
         QPointer<AddonCatalogueView> view;

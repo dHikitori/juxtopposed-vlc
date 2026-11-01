@@ -26,6 +26,8 @@ ColumnLayout {
     property string candidateKey: ""
     readonly property bool removalInProgress: removalRequested || packages.some(row => row.removing === true)
     readonly property bool busy: backend.busy === true
+    // A store write runs on background work; its result arrives later.
+    readonly property bool writing: backend.writing === true
     readonly property bool listReady: displayBacked ? !!summaryBackend && summaryBackend.available === true
         : !summaryBackend || summaryBackend.available === true
     readonly property bool listLoading: !!summaryBackend && summaryBackend.loading === true
@@ -105,7 +107,7 @@ ColumnLayout {
         if (!currentList()) return false
         const row = packages.find(entry => entry.id === id)
         if (busy || safeMode || !row || row.removing === true || row.builtin === true || row.installed === false || row.recoveryRequired === true) return false
-        return backend.setEnabled(id, enabled)
+        return backend.requestEnabled(id, enabled) !== ""
     }
     function findUpdates(id) {
         if (!currentList()) return false
@@ -159,8 +161,8 @@ ColumnLayout {
         return health.observing ? qsTr("New version on trial") : ""
     }
     function setPaused(paused) {
-        if (typeof backend.setSafeMode !== "function") return
-        actionError = backend.setSafeMode(paused) ? "" : backend.errorMessage || qsTr("The app cannot change the extension state.")
+        if (typeof backend.requestSafeMode !== "function") return
+        actionError = backend.requestSafeMode(paused) !== "" ? "" : backend.errorMessage || qsTr("The app cannot change the extension state.")
     }
     readonly property var knownPermissions: ["metadata.context", "media.fingerprint", "media.stream", "network.http", "network.websocket", "credentials.use", "storage.private", "library.read", "queue.read", "queue.modify", "playback.observe", "playback.control", "audio.analysis", "ui.contribute", "session.background", "media.siblings"]
     readonly property bool permissionsKnown: {
@@ -183,7 +185,7 @@ ColumnLayout {
     function requestPackageChange(id, operation) {
         if (!currentList()) return false
         const row = packages.find(entry => entry.id === id)
-        if (busy || !row || row.builtin === true || row.installed === false || row.recoveryRequired === true) return false
+        if (busy || writing || !row || row.builtin === true || row.installed === false || row.recoveryRequired === true) return false
         actionError = ""; changePackage.packageId = id; changePackage.operation = operation
         changePackage.packageState = packageSignature(row); changePackage.revision = backend.revision
         changePackage.open(); return true
@@ -296,7 +298,7 @@ ColumnLayout {
                         objectName: "addonPackageEnabled_" + packageRow.modelData.id
                         label: ""; accessibleName: qsTr("Enable %1").arg(packageRow.modelData.name || packageRow.modelData.id)
                         checked: packageRow.modelData.enabled === true && !root.safeMode
-                        enabled: root.listReady && !root.busy && !root.safeMode && packageRow.modelData.removing !== true
+                        enabled: root.listReady && !root.busy && !root.writing && !root.safeMode && packageRow.modelData.removing !== true
                         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                         onToggled: checked => root.setPackageEnabled(packageRow.modelData.id, checked)
                     }
@@ -430,7 +432,7 @@ ColumnLayout {
             }
             Flow {
                 Layout.fillWidth: true; spacing: root.theme.dp(6)
-                ActionButton { caption: qsTr("Use extensions"); visible: root.safeMode; enabled: typeof root.backend.setSafeMode === "function"; onClicked: root.setPaused(false) }
+                ActionButton { caption: qsTr("Use extensions"); visible: root.safeMode; enabled: typeof root.backend.requestSafeMode === "function"; onClicked: root.setPaused(false) }
                 ActionButton { objectName: "addonOpenRecovery"; caption: qsTr("Recovery and saved data…"); visible: root.recoveryCount > 0; onClicked: root.openRecovery() }
             }
         }
@@ -473,7 +475,7 @@ ColumnLayout {
         Text { Layout.fillWidth: true; text: qsTr("Use these controls if an extension causes a problem."); textFormat: Text.PlainText; wrapMode: Text.Wrap; color: root.theme.foreground; font.pixelSize: root.theme.dp(13) }
         Flow {
             Layout.fillWidth: true; spacing: root.theme.dp(8)
-            ActionButton { objectName: "addonSafeMode"; caption: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"); enabled: typeof root.backend.setSafeMode === "function"; onClicked: root.setPaused(!root.safeMode) }
+            ActionButton { objectName: "addonSafeMode"; caption: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"); enabled: typeof root.backend.requestSafeMode === "function"; onClicked: root.setPaused(!root.safeMode) }
             ActionButton { caption: qsTr("Recovery and saved data…"); onClicked: root.openRecovery() }
         }
     }
@@ -482,10 +484,10 @@ ColumnLayout {
         scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
         videoBackdropContent: root.videoBackdropContent
         entries: [
-            {action: "rollback", label: qsTr("Use previous version"), enabled: root.listReady && !!root.selectedPackage.id && root.selectedPackage.hasPrevious === true && !root.busy},
-            {action: "remove", label: qsTr("Remove extension…"), enabled: root.listReady && !!root.selectedPackage.id && !root.busy},
-            {action: "removeData", label: qsTr("Delete extension and saved data…"), enabled: root.listReady && !!root.selectedPackage.id && !root.busy},
-            {action: "pause", label: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"), enabled: typeof root.backend.setSafeMode === "function"},
+            {action: "rollback", label: qsTr("Use previous version"), enabled: root.listReady && !!root.selectedPackage.id && root.selectedPackage.hasPrevious === true && !root.busy && !root.writing},
+            {action: "remove", label: qsTr("Remove extension…"), enabled: root.listReady && !!root.selectedPackage.id && !root.busy && !root.writing},
+            {action: "removeData", label: qsTr("Delete extension and saved data…"), enabled: root.listReady && !!root.selectedPackage.id && !root.busy && !root.writing},
+            {action: "pause", label: root.safeMode ? qsTr("Use extensions") : qsTr("Temporarily disable extensions"), enabled: typeof root.backend.requestSafeMode === "function"},
             {action: "recovery", label: qsTr("Recovery and saved data…"), enabled: true}]
         onActionRequested: action => action === "recovery" ? root.openRecovery() : action === "pause" ? root.setPaused(!root.safeMode) : root.requestPackageChange(root.selectedPackage.id, action)
     }
@@ -675,13 +677,13 @@ ColumnLayout {
                                         ActionButton {
                                             objectName: "addonInstallApprove"
                                             caption: qsTr("Give approval and install"); primaryAction: true
-                                            enabled: !root.busy && root.permissionsKnown && (!root.enableAfterInstall || root.candidateCanRun)
-                                            onClicked: root.backend.approvePendingPackage(root.enableAfterInstall && !root.safeMode)
+                                            enabled: !root.busy && !root.writing && root.permissionsKnown && (!root.enableAfterInstall || root.candidateCanRun)
+                                            onClicked: root.backend.requestApprovePending(root.enableAfterInstall && !root.safeMode)
                                         }
                                         ActionButton {
                                             objectName: "addonInstallCancel"
                                             caption: qsTr("Cancel")
-                                            enabled: !root.busy
+                                            enabled: !root.busy && !root.writing
                                             onClicked: root.backend.discardPendingPackage()
                                         }
                                     }
@@ -696,8 +698,8 @@ ColumnLayout {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    C.BusyIndicator { running: root.busy; visible: running; Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20) }
-                    Text { Layout.fillWidth: true; visible: root.busy; text: qsTr("The app prepares the extension…"); textFormat: Text.PlainText; color: root.theme.foreground; font.pixelSize: root.theme.dp(13); wrapMode: Text.Wrap }
+                    C.BusyIndicator { running: root.busy || root.writing; visible: running; Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20) }
+                    Text { Layout.fillWidth: true; visible: root.busy || root.writing; text: qsTr("The app prepares the extension…"); textFormat: Text.PlainText; color: root.theme.foreground; font.pixelSize: root.theme.dp(13); wrapMode: Text.Wrap }
                     Item { Layout.fillWidth: true; visible: !root.busy }
                     ActionButton { objectName: "addonInstallRequestCancel"; caption: qsTr("Cancel request"); visible: root.busy && !root.removalInProgress; onClicked: root.backend.discardPendingPackage() }
                     ActionButton { caption: qsTr("Close"); onClicked: installer.close() }
@@ -770,10 +772,10 @@ ColumnLayout {
         onAccepted: {
             if (!root.currentList()) return
             const row = root.packages.find(entry => entry.id === packageId)
-            if (root.busy || !row || root.backend.revision !== revision || root.packageSignature(row) !== packageState) {
+            if (root.busy || root.writing || !row || root.backend.revision !== revision || root.packageSignature(row) !== packageState) {
                 root.actionError = qsTr("The add-on changed. Open this action again."); return
             }
-            if (operation === "rollback") root.backend.rollback(packageId)
+            if (operation === "rollback") root.backend.requestRollback(packageId)
             else {
                 root.removalRequested = true
                 const accepted = root.backend.uninstall(packageId, operation === "removeData")

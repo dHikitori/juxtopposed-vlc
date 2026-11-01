@@ -28,6 +28,7 @@ test_qt_addon_repository_updates                profile     all
 test_qt_addon_profile_host                      profile     all
 test_qt_addon_runtime                           profile     all
 test_qt_addon_worker_health                     profile     all
+test_qt_addon_manager_writes                    profile     all
 test_qt_addon_candidate_check                   profile     all
 test_qt_addon_accounts                          profile     all
 test_qt_addon_storage                           profile     all

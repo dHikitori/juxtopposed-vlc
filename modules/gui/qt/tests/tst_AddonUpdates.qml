@@ -24,11 +24,19 @@ TestCase {
         }
         // The staged copy arrives later, like the real background read.
         function complete() { busy = false; pendingPackage = {id: staged}; revision++ }
-        function approvePendingPackage(enable) {
+        // Store writes answer later, as the app's do.
+        signal writeFinished(string request, bool success, string error)
+        property int requests: 0
+        function finishLater(success) {
+            const request = String(++requests)
+            Qt.callLater(() => writeFinished(request, success, success ? "" : errorMessage))
+            return request
+        }
+        function requestApprovePending(enable) {
             approvals = approvals.concat([{id: pendingPackage.id, enable: enable}])
             const id = pendingPackage.id; pendingPackage = ({})
             appUpdates = appUpdates.filter(update => update.id !== id); appUpdatesChanged()
-            revision++; return true
+            revision++; return finishLater(true)
         }
     }
     QtObject {

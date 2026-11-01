@@ -16,6 +16,8 @@
 #include <QTimer>
 
 #include <memory>
+#include <optional>
+#include <utility>
 
 namespace vlc::addons {
 
@@ -150,8 +152,11 @@ void AddonTestDriver::waitFor(std::function<bool()> ready, int timeoutMs, std::f
         connect(m_summaries, &AddonPackageSummaries::stateChanged, m_wait, check);
         connect(m_summaries, &AddonPackageSummaries::loadingFinished, m_wait, check);
     }
-    if (m_manager)
+    if (m_manager) {
         connect(m_manager, &AddonManager::distributionBootstrapChanged, m_wait, check);
+        connect(m_manager, &AddonManager::revisionChanged, m_wait, check);
+        connect(m_manager, &AddonManager::writeFinished, m_wait, check);
+    }
     if (m_discovery) {
         connect(m_discovery, &AddonDiscoveryService::changed, m_wait, check);
         connect(m_discovery, &AddonDiscoveryService::availabilityChanged, m_wait, check);
@@ -202,30 +207,53 @@ void AddonTestDriver::install(const QString& directory)
         return;
     }
     const QPointer<AddonManager> manager(m_manager);
-    // Installation refuses a store that another owner holds. Wait for the
-    // bundled preparation, then retry a busy store for a short time.
-    waitFor([manager] { return !manager || !manager->distributionBootstrapInProgress(); }, 60000,
+    // The app's own install: stage the directory, then approve the package
+    // with it turned on. Both run on background work. Wait for the bundled
+    // preparation and any earlier request first.
+    waitFor([manager] { return !manager || (!manager->distributionBootstrapInProgress() && !manager->busy() && !manager->writing()); }, 60000,
         [this, manager, directory](bool) {
-            auto attempt = std::make_shared<std::function<void(int)>>();
-            *attempt = [this, manager, directory, weak = std::weak_ptr<std::function<void(int)>>(attempt)](int tries) {
-                if (!manager) {
-                    reply({{"ok", false}, {"error", QStringLiteral("no add-on manager")}});
+            if (!manager || !manager->stageLocalPackage(directory)) {
+                reply({{"ok", false}, {"error", manager ? manager->errorMessage() : QStringLiteral("no add-on manager")}});
+                return;
+            }
+            waitFor([manager] { return !manager || !manager->busy(); }, 60000, [this, manager](bool staged) {
+                const auto id = manager ? manager->pendingPackage().value(QStringLiteral("id")).toString() : QString();
+                if (!staged || id.isEmpty()) {
+                    reply({{"ok", false}, {"error", manager ? manager->errorMessage() : QStringLiteral("no add-on manager")}});
                     return;
                 }
-                const auto id = manager->inspectLocalPackage(directory).value(QStringLiteral("id")).toString();
-                const bool installed = !id.isEmpty() && manager->installLocalPackage(directory, true)
-                    && manager->setEnabled(id, true);
-                const auto error = installed ? QString() : manager->errorMessage();
-                if (!installed && tries < 50 && error.contains(QLatin1String("busy"))) {
-                    if (const auto next = weak.lock())
-                        QTimer::singleShot(100, this, [next, tries] { (*next)(tries + 1); });
-                    return;
-                }
-                reply({{"ok", installed}, {"id", id}, {"ms", m_clock.elapsed()}, {"tries", tries + 1},
-                       {"error", error}});
-            };
-            (*attempt)(0);
+                approve(id, 0);
+            });
         });
+}
+
+// Another window can hold the shared store for a moment. Retry a busy store.
+void AddonTestDriver::approve(const QString& id, int tries)
+{
+    const QPointer<AddonManager> manager(m_manager);
+    const auto request = manager ? manager->requestApprovePending(true) : QString();
+    if (request.isEmpty()) {
+        reply({{"ok", false}, {"id", id}, {"error", manager ? manager->errorMessage() : QStringLiteral("no add-on manager")}});
+        return;
+    }
+    auto result = std::make_shared<std::optional<std::pair<bool, QString>>>();
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(manager, &AddonManager::writeFinished, this,
+        [request, result, connection](const QString& finished, bool success, const QString& error) {
+            if (finished != request) return;
+            *result = std::make_pair(success, error);
+            QObject::disconnect(*connection);
+        });
+    waitFor([result] { return result->has_value(); }, 60000, [this, id, tries, result, connection](bool done) {
+        QObject::disconnect(*connection);
+        const bool installed = done && (*result)->first;
+        const auto error = done ? (*result)->second : QStringLiteral("the approval did not finish");
+        if (!installed && tries < 50 && error.contains(QLatin1String("busy"))) {
+            QTimer::singleShot(100, this, [this, id, tries] { approve(id, tries + 1); });
+            return;
+        }
+        reply({{"ok", installed}, {"id", id}, {"ms", m_clock.elapsed()}, {"tries", tries + 1}, {"error", error}});
+    });
 }
 
 // discover <package id> <query>: open the package's discovery source, load

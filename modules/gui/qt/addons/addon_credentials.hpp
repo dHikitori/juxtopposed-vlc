@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QString>
+#include <QStringList>
 #include <functional>
 
 namespace vlc::addons {
@@ -31,6 +32,10 @@ public:
     bool removePackage(const QString& packageId);
     // This call changes memory only. It does not contact the platform store.
     void forgetPackage(const QString& packageId);
+    // Memory only. A copy that created or removed keys on background work
+    // hands its result back to the owner's store with these two calls.
+    void adopt(const CredentialStore& from, const QString& packageId, const QStringList& references);
+    void forget(const QString& packageId, const QString& reference);
     void clearSession();
 private:
     struct Secret { QString packageId; QByteArray value; bool persistent; };

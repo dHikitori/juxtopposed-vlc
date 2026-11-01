@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <QScopeGuard>
 #include <QTest>
 #include <QSignalSpy>
 #include <QDir>
@@ -209,9 +210,13 @@ private slots:
     }
     void explicitSelectionPersistenceAndLiveFallback()
     {
+        // The package review reads and hashes the package on the app's work.
+        AddonStreamLifetime lifetime; const auto handle = lifetime.handle();
+        QVERIFY(AddonStreamLifetime::registerApplication(handle));
+        const auto close = qScopeGuard([&] { handle.close(); handle.waitQt(std::chrono::seconds(5)); AddonStreamLifetime::unregisterApplication(handle); });
         QTemporaryDir source, profile; QVERIFY(source.isValid() && profile.isValid()); QVERIFY(copyExample(source.path()));
         AddonManager manager(profile.path());
-        QVERIFY(manager.stageLocalPackage(source.path())); QVERIFY(manager.approvePendingPackage(false));
+        QVERIFY(manager.stageLocalPackage(source.path())); QTRY_VERIFY(!manager.busy()); QVERIFY(manager.approvePendingPackage(false));
         AddonThemeService themes(&manager);
         QCOMPARE(themes.availableThemes().size(), 0);
         const auto id = QStringLiteral("org.hakone.example.midnight/midnight");

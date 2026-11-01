@@ -28,6 +28,7 @@ ColumnLayout {
     property string schemaError: ""
     property int resetGeneration: 0
     property bool saving: false
+    property string saveRequest: ""
     property bool ready: false
     // Fixed for this backend. Losing an attached view never enables legacy I/O.
     property bool displayMode: false
@@ -236,14 +237,20 @@ ColumnLayout {
         fieldErrors = Contract.settingsErrors(schema, draftValues, secretStatus, secretOperations, credentialPersistenceAvailable)
         if (Object.keys(fieldErrors).length) { errorMessage = qsTr("Do a check of the highlighted settings."); return false }
         saving = true
-        // The backend revalidates the complete object and commits credential ops atomically.
-        const success = displayMode
-            ? backend.saveDisplaySettings(packageId, capturedStamp, Contract.clone(draftValues), Contract.clone(secretOperations))
-            : backend.saveAddonSettings(packageId, Contract.clone(draftValues), Contract.clone(secretOperations))
-        saving = false
-        if (!success) { errorMessage = qsTr("The app cannot save these settings. Your saved settings did not change."); return false }
+        // The backend revalidates the complete object and commits credential
+        // ops atomically, on background work. saveFinished has the result.
+        saveRequest = displayMode
+            ? backend.requestSaveDisplaySettings(packageId, capturedStamp, Contract.clone(draftValues), Contract.clone(secretOperations))
+            : backend.requestSaveSettings(packageId, Contract.clone(draftValues), Contract.clone(secretOperations))
+        if (!saveRequest.length) { saving = false; errorMessage = qsTr("The app cannot save these settings. Your saved settings did not change."); return false }
+        return true
+    }
+    function saveFinished(request, success) {
+        if (!request.length || request !== saveRequest) return
+        saveRequest = ""; saving = false
+        if (!success) { errorMessage = qsTr("The app cannot save these settings. Your saved settings did not change."); return }
         if (displayMode) releaseTicket(); else reload()
-        saved(); return true
+        saved()
     }
     onPackageIdChanged: if (ready) reload()
     onBackendChanged: if (ready) { releaseTicket(); setBackendMode(); reload() }
@@ -253,6 +260,7 @@ ColumnLayout {
         target: root.backend
         ignoreUnknownSignals: true
         function onRevisionChanged() { root.observeBackend() }
+        function onWriteFinished(request, success, error) { root.saveFinished(request, success) }
         function onChanged() { root.observeBackend() }
         function onCatalogueChanged() { root.observeBackend() }
         function onCatalogueFreshnessChanged() { root.observeBackend() }

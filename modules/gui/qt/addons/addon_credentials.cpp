@@ -132,6 +132,19 @@ void CredentialStore::forgetPackage(const QString& package)
         if (it->packageId == package) { it->value.fill('\0'); it = m_session.erase(it); }
         else ++it;
 }
+void CredentialStore::adopt(const CredentialStore& from, const QString& package, const QStringList& references)
+{
+    for (const auto& reference : references) {
+        const auto it = from.m_session.constFind(reference);
+        if (validReference(reference) && it != from.m_session.cend() && it->packageId == package) m_session.insert(reference, *it);
+    }
+}
+void CredentialStore::forget(const QString& package, const QString& reference)
+{
+    const auto it = m_session.find(reference);
+    if (it == m_session.end() || it->packageId != package) return;
+    it->value.fill('\0'); m_session.erase(it);
+}
 bool CredentialStore::removePackage(const QString& package)
 {
     if (!validPackage(package)) return false;

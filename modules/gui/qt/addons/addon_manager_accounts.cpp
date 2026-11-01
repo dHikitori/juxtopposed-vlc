@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
+#include <QScopeGuard>
 #include <QUuid>
 
 namespace vlc::addons {
@@ -38,50 +39,87 @@ std::optional<DeviceRecipe> AddonManager::accountRecipe(const QString& id, const
 
 bool AddonManager::connectAccount(const QString& id, const QString& field, const DeviceTokens& tokens, bool sessionOnly,
                                   QString* error)
+{ return writeNow(accountWrite(id, field, tokens, sessionOnly, error, false)); }
+QString AddonManager::requestConnectAccount(const QString& id, const QString& field, const DeviceTokens& tokens, bool sessionOnly)
+{ return queueWrite(accountWrite(id, field, tokens, sessionOnly, nullptr, true)); }
+AddonManager::StoreWrite AddonManager::accountWrite(const QString& id, const QString& field, const DeviceTokens& tokens,
+                                                     bool sessionOnly, QString* error, bool report)
 {
-    const auto refuse = [error](const QString& message) { if (error) *error = message; return false; };
-    if (m_retiring || m_removingPackages.contains(id) || m_store.packageRetiring(id)) return refuse(tr("The add-on removal is in progress."));
-    InstalledPackage package; QString reason;
-    if (!m_store.installed(id, &package, &reason)) return refuse(reason);
-    if (!accountRecipe(id, field) || tokens.accessToken.isEmpty()) return refuse(tr("The app cannot use this account."));
-    QJsonObject values; quint64 revision = 0;
-    if (!m_store.settings(id, &values, &revision, &reason)) return refuse(reason);
-    const QString stamp = QString::fromLatin1(package.digest) + QLatin1Char(':') + QString::number(package.generation)
-        + QLatin1Char(':') + QString::number(revision);
-    auto references = values.value("_credentials").toObject();
-    const QStringList previous{references.value(field).toString(), references.value(refreshField(field)).toString()};
-    QStringList created;
-    const auto discard = [&] { for (const auto& reference : created) m_secrets.remove(id, reference); };
-    const auto access = m_secrets.create(id, field, tokens.accessToken, sessionOnly);
-    if (access.reference.isEmpty())
-        return refuse(tr("The secure credential store is not available. Select temporary storage to keep the account until the app closes."));
-    created.append(access.reference);
-    references.insert(field, access.reference);
-    if (!tokens.refreshToken.isEmpty()) {
-        const auto refresh = m_secrets.create(id, refreshField(field), tokens.refreshToken, !access.persistent);
-        if (refresh.reference.isEmpty()) { discard(); return refuse(tr("The app cannot keep this account.")); }
-        created.append(refresh.reference);
-        references.insert(refreshField(field), refresh.reference);
-    } else references.remove(refreshField(field));
-    // A list, so that no ordinary settings key repeats a secret field name.
-    QJsonArray accounts;
-    for (const auto& value : values.value("_accounts").toArray())
-        if (value.toObject().value("field").toString() != field) accounts.append(value);
-    accounts.append(QJsonObject{{"field", field}, {"expiresAt", tokens.expiresIn > 0
-        ? double(QDateTime::currentMSecsSinceEpoch() + tokens.expiresIn * 1000) : 0.0}});
-    values.insert("_credentials", references);
-    values.insert("_accounts", accounts);
-    if (!m_store.change([&](QString* e) { return m_store.saveSettings(id, values, revision, stamp, e); },
-            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveSettings(c, id, values, revision, stamp, e); },
-            &reason)) { discard(); return refuse(reason); }
-    if (!withdraw(id)) return refuse(tr("The add-on removal is in progress."));
-    m_accountExpiry.remove(key(id, field));
-    // A new sign-in replaces the tokens; older settings generations that
-    // named them are no longer usable for this account.
-    for (const auto& reference : previous) if (!reference.isEmpty()) m_secrets.remove(id, reference);
-    changed(true);
-    emit accountsChanged(id);
-    return true;
+    struct State {
+        std::shared_ptr<SecretsCopy> secrets;
+        DeviceTokens tokens;
+        QStringList created, previous;
+        QString error;
+        bool success = false;
+    };
+    const auto state = std::make_shared<State>();
+    state->tokens = tokens;
+    auto store = m_store;
+    // The synchronous call reports through error; a request through errorMessage.
+    const auto refuse = [this, error, report](const QString& message) {
+        if (error) *error = message;
+        return report ? changed(false, message) : false;
+    };
+    return {[this, state, id, refuse] {
+        if (m_retiring || m_removingPackages.contains(id) || m_store.packageRetiring(id)) return refuse(tr("The add-on removal is in progress."));
+        state->secrets = std::make_shared<SecretsCopy>(m_secrets);
+        return true;
+    }, [state, store, id, field, sessionOnly]() mutable {
+        auto& secrets = state->secrets->store;
+        auto& tokens = state->tokens;
+        const auto wipe = qScopeGuard([&tokens] { tokens.accessToken.fill('\0'); tokens.refreshToken.fill('\0'); });
+        const auto discard = [&] { for (const auto& reference : state->created) secrets.remove(id, reference); state->created.clear(); };
+        InstalledPackage package;
+        if (!store.installed(id, &package, &state->error)) return;
+        const auto property = schema(package).value("properties").toObject().value(field).toObject();
+        if (!accountField(property) || !DeviceRecipe::from(property.value("x-hakone-account").toObject(), origins(package))
+            || tokens.accessToken.isEmpty()) { state->error = tr("The app cannot use this account."); return; }
+        QJsonObject values; quint64 revision = 0;
+        if (!store.settings(id, &values, &revision, &state->error)) return;
+        const QString stamp = QString::fromLatin1(package.digest) + QLatin1Char(':') + QString::number(package.generation)
+            + QLatin1Char(':') + QString::number(revision);
+        auto references = values.value("_credentials").toObject();
+        const QStringList previous{references.value(field).toString(), references.value(refreshField(field)).toString()};
+        const auto access = secrets.create(id, field, tokens.accessToken, sessionOnly);
+        if (access.reference.isEmpty()) {
+            state->error = tr("The secure credential store is not available. Select temporary storage to keep the account until the app closes.");
+            return;
+        }
+        state->created.append(access.reference);
+        references.insert(field, access.reference);
+        if (!tokens.refreshToken.isEmpty()) {
+            const auto refresh = secrets.create(id, refreshField(field), tokens.refreshToken, !access.persistent);
+            if (refresh.reference.isEmpty()) { discard(); state->error = tr("The app cannot keep this account."); return; }
+            state->created.append(refresh.reference);
+            references.insert(refreshField(field), refresh.reference);
+        } else references.remove(refreshField(field));
+        // A list, so that no ordinary settings key repeats a secret field name.
+        QJsonArray accounts;
+        for (const auto& value : values.value("_accounts").toArray())
+            if (value.toObject().value("field").toString() != field) accounts.append(value);
+        accounts.append(QJsonObject{{"field", field}, {"expiresAt", tokens.expiresIn > 0
+            ? double(QDateTime::currentMSecsSinceEpoch() + tokens.expiresIn * 1000) : 0.0}});
+        values.insert("_credentials", references);
+        values.insert("_accounts", accounts);
+        if (!store.change([&](QString* e) { return store.saveSettings(id, values, revision, stamp, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return store.saveSettings(c, id, values, revision, stamp, e); },
+                &state->error)) { discard(); return; }
+        // A new sign-in replaces the tokens; older settings generations that
+        // named them are no longer usable for this account.
+        for (const auto& reference : previous)
+            if (!reference.isEmpty()) { secrets.remove(id, reference); state->previous.append(reference); }
+        state->success = true;
+    }, [this, state, id, field, refuse] {
+        if (!state->success) return refuse(state->error);
+        // The saved settings name the new keys, so keep them before anything can refuse.
+        m_secrets.adopt(state->secrets->store, id, state->created);
+        for (const auto& reference : state->previous) m_secrets.forget(id, reference);
+        if (!withdraw(id)) return refuse(tr("The add-on removal is in progress."));
+        m_accountExpiry.remove(key(id, field));
+        changed(true);
+        emit accountsChanged(id);
+        return true;
+    }};
 }
 
 DevicePost AddonManager::accountTransport()

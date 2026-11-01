@@ -11,6 +11,7 @@
 #include "addon_store_authority.hpp"
 #include "addon_repository_jobs.hpp"
 #include "addon_repository_cancellation.hpp"
+#include "addon_native_wake.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -42,6 +43,11 @@ QJsonObject readObject(const QString& path)
 using packageConfiguration::secretField;
 using packageConfiguration::valueValid;
 using packageConfiguration::packageAccountReference;
+QJsonObject packageSchema(const InstalledPackage& package)
+{
+    if (package.manifest.settingsSchema.isEmpty()) return {{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}};
+    return readObject(QDir(package.directory).filePath(package.manifest.settingsSchema));
+}
 QString localPart(const QString& global) { return global.section('/', 1); }
 QString packagePart(const QString& global) { return global.section('/', 0, 0); }
 
@@ -59,6 +65,7 @@ AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAcc
 {
     initializePreparedMetadata();
     m_repositoryJobs=std::make_unique<AddonRepositoryJobs>(AddonStreamLifetime::applicationHandle());
+    m_writeJobs=std::make_unique<AddonRepositoryJobs>(AddonStreamLifetime::applicationHandle());
     connect(&m_hostServices, &AddonHostServices::availabilityChanged, this, &AddonManager::capabilitiesChanged);
     connect(this, &AddonManager::revisionChanged, this, &AddonManager::capabilitiesChanged);
     m_storage = std::make_unique<AddonStorage>(m_store, [this](const AddonHostServices::Context& host, PrivateStorageContext* output, QString* error) {
@@ -108,9 +115,79 @@ AddonManager::~AddonManager()
     disconnect(&m_hostServices, nullptr, this, nullptr);
     for (const auto& connection : m_mediaCapabilityConnections) disconnect(connection);
     m_repositoryJobs->close();
+    m_writes.clear(); m_runningWrite.reset(); m_writeSlot = {};
+    if (m_writeWake) m_writeWake->close();
+    m_writeJobs->close();
     const auto workers = m_workers; for (auto* worker : workers) worker->stop(); m_secrets.clearSession();
 }
 bool AddonManager::busy() const { return m_repositoryJobs->busy(); }
+bool AddonManager::writing() const { return !m_writes.isEmpty() || m_runningWrite.has_value(); }
+bool AddonManager::writeNow(StoreWrite write)
+{
+    if (!write.prepare()) return false;
+    write.work();
+    return write.finish();
+}
+QString AddonManager::queueWrite(StoreWrite write)
+{
+    if (m_retiring) return {};
+    const auto request = QString::number(++m_writeRequests);
+    m_writes.append({request, std::move(write)});
+    // Start on the next event, so the caller has the ID before any result.
+    if (m_writes.size() == 1 && !m_runningWrite) QTimer::singleShot(0, this, &AddonManager::pumpWrites);
+    changed(true);
+    return request;
+}
+void AddonManager::pumpWrites()
+{
+    const QPointer<AddonManager> alive(this);
+    while (alive && !m_retiring && !m_runningWrite && !m_writes.isEmpty()) {
+        auto next = m_writes.takeFirst();
+        if (!next.write.prepare()) {
+            if (alive) endWrite(next.request, false);
+            continue;
+        }
+        if (!alive || m_retiring) return;
+        m_runningWrite = std::move(next);
+        startWrite();
+    }
+}
+void AddonManager::startWrite()
+{
+    if (!m_runningWrite || m_writeJobs->busy()) return;
+    const auto request = m_runningWrite->request;
+    auto refusal = AddonRepositoryJobs::Refusal::None;
+    const bool started = m_writeJobs->submit(m_runningWrite->write.work, [this, request](AddonRepositoryJobs::Result result) {
+        if (!m_runningWrite || m_runningWrite->request != request) return;
+        auto write = std::move(m_runningWrite->write);
+        m_runningWrite.reset();
+        const QPointer<AddonManager> alive(this);
+        const bool success = result == AddonRepositoryJobs::Result::Finished ? write.finish()
+            : changed(false, tr("The add-on change did not finish."));
+        if (alive) endWrite(request, success);
+        if (alive) pumpWrites();
+    }, &refusal);
+    if (started) { m_writeSlot = {}; return; }
+    // Other add-on work holds every background slot. Start when one frees.
+    if (refusal == AddonRepositoryJobs::Refusal::ProcessQuota) {
+        if (!m_writeWake) m_writeWake = std::make_unique<AddonNativeWake>([this] { startWrite(); });
+        if (m_writeWake->valid() && (m_writeSlot || (m_writeSlot = AddonRepositoryJobs::onProcessAvailable(m_writeWake->nativeCallback())))) {
+            // A slot can free between the refusal and the subscription.
+            if (AddonRepositoryJobs::processCount() < AddonRepositoryJobs::ProcessLimit)
+                QTimer::singleShot(0, this, &AddonManager::startWrite);
+            return;
+        }
+    }
+    m_runningWrite.reset();
+    const QPointer<AddonManager> alive(this);
+    changed(false, tr("The app cannot start the add-on change."));
+    if (alive) endWrite(request, false);
+    if (alive) QTimer::singleShot(0, this, &AddonManager::pumpWrites);
+}
+void AddonManager::endWrite(const QString& request, bool success)
+{
+    if (!request.isEmpty()) emit writeFinished(request, success, success ? QString{} : m_error);
+}
 StoreAuthorityToken AddonManager::storeAuthorityToken() const noexcept
 {
     if(QThread::currentThread()!=thread() || m_retiring || m_distributionBootstrapInProgress)return {};
@@ -173,11 +250,8 @@ void AddonManager::setMediaCapabilitiesSource(QObject* source)
     }
     emit capabilitiesChanged();
 }
-QJsonObject AddonManager::schema(const InstalledPackage& package) const
-{
-    if (package.manifest.settingsSchema.isEmpty()) return {{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}};
-    return readObject(QDir(package.directory).filePath(package.manifest.settingsSchema));
-}
+QJsonObject AddonManager::schema(const InstalledPackage& package)
+{ return packageSchema(package); }
 QJsonObject AddonManager::savedSettings(const QString& id) const
 { QJsonObject values; m_store.settings(id, &values); return values; }
 QString AddonManager::accountReference(const InstalledPackage& package) const
@@ -270,106 +344,139 @@ bool AddonManager::configured(const InstalledPackage& package) const
 }
 
 bool AddonManager::saveAddonSettings(const QString& id,const QVariantMap& input,const QVariantMap& secretOperations)
-{ return saveSettingsImpl(id,input,secretOperations,{}); }
+{ return writeNow(settingsWrite(id,input,secretOperations,{},false)); }
 bool AddonManager::saveDisplaySettings(const QString& id,const QString& expectedStamp,const QVariantMap& input,const QVariantMap& secretOperations)
+{ return writeNow(settingsWrite(id,input,secretOperations,expectedStamp,true)); }
+QString AddonManager::requestSaveSettings(const QString& id,const QVariantMap& input,const QVariantMap& secretOperations)
+{ return queueWrite(settingsWrite(id,input,secretOperations,{},false)); }
+QString AddonManager::requestSaveDisplaySettings(const QString& id,const QString& expectedStamp,const QVariantMap& input,const QVariantMap& secretOperations)
+{ return queueWrite(settingsWrite(id,input,secretOperations,expectedStamp,true)); }
+AddonManager::StoreWrite AddonManager::settingsWrite(const QString& id,const QVariantMap& input,const QVariantMap& secretOperations,
+                                                      const QString& expectedStamp,bool display)
 {
-    const auto* display=displayCatalogue();
-    if(expectedStamp.isEmpty() || expectedStamp.size()>128 || !display || !display->isCurrent()
-        || !display->settingsReady(id) || display->settingsStamp(id)!=expectedStamp)
-        return changed(false,tr("The settings changed. Wait for the current settings before a save."));
-    return saveSettingsImpl(id,input,secretOperations,expectedStamp);
-}
-bool AddonManager::saveSettingsImpl(const QString& id,const QVariantMap& input,const QVariantMap& secretOperations,const QString& expectedStamp)
-{
-    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
-    InstalledPackage package; QString error;
-    if (!m_store.installed(id, &package, &error)) return changed(false, error);
-    const auto document = schema(package), properties = document.value("properties").toObject();
-    if (document.value("type").toString() != QLatin1String("object") || properties.size() > 64) return changed(false, tr("The app cannot use this settings schema."));
-    QJsonObject saved; quint64 expectedRevision = 0;
-    if (!m_store.settings(id, &saved, &expectedRevision, &error)) return changed(false, error);
-    const QString currentStamp=QString::fromLatin1(package.digest)+QLatin1Char(':')+QString::number(package.generation)
-        +QLatin1Char(':')+QString::number(expectedRevision);
-    if(!expectedStamp.isEmpty() && currentStamp!=expectedStamp)
-        return changed(false,tr("The settings changed. Read the current settings before a save."));
-    const auto originalReferences = saved.value("_credentials").toObject();
-    auto references = originalReferences; QJsonObject values;
-    QStringList created, deletedFields;
-    auto reject = [&](const QString& message) { for (const auto& ref : created) m_secrets.remove(id, ref); return changed(false, message); };
-    const auto incoming = QJsonObject::fromVariantMap(input);
-    const auto savedHandles = saved.value("_handles").toObject();
-    QJsonObject handles;
-    for (auto it = incoming.begin(); it != incoming.end(); ++it) {
-        const auto field = properties.value(it.key()).toObject();
-        const auto control = field.value("x-hakone-control").toString();
-        if (!it.key().startsWith('_') && !field.isEmpty() && !secretField(field)
-                && (control == QLatin1String("file") || control == QLatin1String("folder"))) {
-            // A picked path is kept by the host. The value is its handle:
-            // one saved for this field, or one picked in this session.
-            const auto handle = it.value().toString();
-            if (!it.value().isString()) return reject(tr("Make sure that the add-on settings are correct."));
-            if (!handle.isEmpty()) {
-                const auto savedHandle = savedHandles.value(handle).toObject();
-                const auto picked = m_pickedPaths.constFind(handle);
-                if (savedHandle.value("field").toString() == it.key()) handles.insert(handle, savedHandle);
-                else if (picked != m_pickedPaths.cend() && picked->packageId == id && picked->field == it.key())
-                    handles.insert(handle, QJsonObject{{"field", it.key()}, {"kind", picked->kind}, {"path", picked->path}, {"name", picked->name}});
-                else return reject(tr("Select the file or folder again."));
+    struct State {
+        std::shared_ptr<SecretsCopy> secrets;
+        QHash<QString, PickedPath> picked;
+        QStringList created, removed, deletedFields;
+        QString error;
+        bool success = false;
+    };
+    const auto state = std::make_shared<State>();
+    auto store = m_store;
+    StoreWrite write;
+    write.prepare = [this, state, id, expectedStamp, display] {
+        if (display) {
+            const auto* catalogue = displayCatalogue();
+            if (expectedStamp.isEmpty() || expectedStamp.size() > 128 || !catalogue || !catalogue->isCurrent()
+                || !catalogue->settingsReady(id) || catalogue->settingsStamp(id) != expectedStamp)
+                return changed(false, tr("The settings changed. Wait for the current settings before a save."));
+        }
+        if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
+        state->secrets = std::make_shared<SecretsCopy>(m_secrets);
+        for (auto it = m_pickedPaths.cbegin(); it != m_pickedPaths.cend(); ++it)
+            if (it->packageId == id) state->picked.insert(it.key(), *it);
+        return true;
+    };
+    write.work = [state, store, id, input, secretOperations, expectedStamp]() mutable {
+        auto& secrets = state->secrets->store;
+        auto& created = state->created;
+        auto& deletedFields = state->deletedFields;
+        const auto reject = [&](const QString& message) { for (const auto& ref : created) secrets.remove(id, ref); created.clear(); state->error = message; };
+        InstalledPackage package; QString error;
+        if (!store.installed(id, &package, &error)) return reject(error);
+        const auto document = packageSchema(package), properties = document.value("properties").toObject();
+        if (document.value("type").toString() != QLatin1String("object") || properties.size() > 64) return reject(tr("The app cannot use this settings schema."));
+        QJsonObject saved; quint64 expectedRevision = 0;
+        if (!store.settings(id, &saved, &expectedRevision, &error)) return reject(error);
+        const QString currentStamp=QString::fromLatin1(package.digest)+QLatin1Char(':')+QString::number(package.generation)
+            +QLatin1Char(':')+QString::number(expectedRevision);
+        if(!expectedStamp.isEmpty() && currentStamp!=expectedStamp)
+            return reject(tr("The settings changed. Read the current settings before a save."));
+        const auto originalReferences = saved.value("_credentials").toObject();
+        auto references = originalReferences; QJsonObject values;
+        const auto incoming = QJsonObject::fromVariantMap(input);
+        const auto savedHandles = saved.value("_handles").toObject();
+        QJsonObject handles;
+        for (auto it = incoming.begin(); it != incoming.end(); ++it) {
+            const auto field = properties.value(it.key()).toObject();
+            const auto control = field.value("x-hakone-control").toString();
+            if (!it.key().startsWith('_') && !field.isEmpty() && !secretField(field)
+                    && (control == QLatin1String("file") || control == QLatin1String("folder"))) {
+                // A picked path is kept by the host. The value is its handle:
+                // one saved for this field, or one picked in this session.
+                const auto handle = it.value().toString();
+                if (!it.value().isString()) return reject(tr("Make sure that the add-on settings are correct."));
+                if (!handle.isEmpty()) {
+                    const auto savedHandle = savedHandles.value(handle).toObject();
+                    const auto picked = state->picked.constFind(handle);
+                    if (savedHandle.value("field").toString() == it.key()) handles.insert(handle, savedHandle);
+                    else if (picked != state->picked.cend() && picked->field == it.key())
+                        handles.insert(handle, QJsonObject{{"field", it.key()}, {"kind", picked->kind}, {"path", picked->path}, {"name", picked->name}});
+                    else return reject(tr("Select the file or folder again."));
+                }
+                values.insert(it.key(), handle);
+                continue;
             }
-            values.insert(it.key(), handle);
-            continue;
+            if (it.key().startsWith('_') || field.isEmpty() || secretField(field) || !valueValid(it.value(), field))
+                return reject(tr("Make sure that the add-on settings are correct."));
+            values.insert(it.key(), it.value());
         }
-        if (it.key().startsWith('_') || field.isEmpty() || secretField(field) || !valueValid(it.value(), field))
-            return reject(tr("Make sure that the add-on settings are correct."));
-        values.insert(it.key(), it.value());
-    }
-    auto accounts = saved.value("_accounts").toArray();
-    for (auto it = secretOperations.begin(); it != secretOperations.end(); ++it) {
-        const auto field = properties.value(it.key()).toObject(); const auto operation = it.value().toMap();
-        const auto action = operation.value("operation").toString();
-        if (!secretField(field) || (action != QLatin1String("keep") && action != QLatin1String("replace") && action != QLatin1String("delete")))
-            return reject(tr("The app cannot use this credential operation."));
-        // An account token comes only from the app's sign-in.
-        if (action == QLatin1String("replace") && field.value("x-hakone-control").toString() == QLatin1String("account"))
-            return reject(tr("Connect the account to sign in."));
-        if (action == QLatin1String("delete")) {
-            // Disconnecting an account also removes its refresh token.
-            references.remove(it.key()); references.remove(it.key() + QStringLiteral(".refresh"));
-            for (qsizetype i = accounts.size() - 1; i >= 0; --i)
-                if (accounts.at(i).toObject().value("field").toString() == it.key()) accounts.removeAt(i);
-            deletedFields.append(it.key());
+        auto accounts = saved.value("_accounts").toArray();
+        for (auto it = secretOperations.begin(); it != secretOperations.end(); ++it) {
+            const auto field = properties.value(it.key()).toObject(); const auto operation = it.value().toMap();
+            const auto action = operation.value("operation").toString();
+            if (!secretField(field) || (action != QLatin1String("keep") && action != QLatin1String("replace") && action != QLatin1String("delete")))
+                return reject(tr("The app cannot use this credential operation."));
+            // An account token comes only from the app's sign-in.
+            if (action == QLatin1String("replace") && field.value("x-hakone-control").toString() == QLatin1String("account"))
+                return reject(tr("Connect the account to sign in."));
+            if (action == QLatin1String("delete")) {
+                // Disconnecting an account also removes its refresh token.
+                references.remove(it.key()); references.remove(it.key() + QStringLiteral(".refresh"));
+                for (qsizetype i = accounts.size() - 1; i >= 0; --i)
+                    if (accounts.at(i).toObject().value("field").toString() == it.key()) accounts.removeAt(i);
+                deletedFields.append(it.key());
+            }
+            if (action == QLatin1String("replace")) {
+                if (!valueValid(QJsonValue::fromVariant(operation.value("value")), field)) return reject(tr("Make sure that the credential is correct."));
+                const auto result = secrets.create(id, it.key(), operation.value("value").toString().toUtf8(), operation.value("sessionOnly").toBool());
+                if (result.reference.isEmpty()) return reject(tr("The secure credential store is not available. Select temporary storage to keep the credential until the app closes."));
+                references.insert(it.key(), result.reference); created.append(result.reference);
+            }
         }
-        if (action == QLatin1String("replace")) {
-            if (!valueValid(QJsonValue::fromVariant(operation.value("value")), field)) return reject(tr("Make sure that the credential is correct."));
-            const auto result = m_secrets.create(id, it.key(), operation.value("value").toString().toUtf8(), operation.value("sessionOnly").toBool());
-            if (result.reference.isEmpty()) return reject(tr("The secure credential store is not available. Select temporary storage to keep the credential until the app closes."));
-            references.insert(it.key(), result.reference); created.append(result.reference);
+        for (const auto& required : document.value("required").toArray()) {
+            const auto name = required.toString(); const auto field = properties.value(name).toObject();
+            if (secretField(field)) {
+                if (!deletedFields.contains(name) && !secrets.present(id, references.value(name).toString())) return reject(tr("Enter the account data or API key first."));
+            } else if (!values.contains(name)) {
+                if (field.contains("default") && valueValid(field.value("default"), field)) values.insert(name, field.value("default"));
+                else return reject(tr("Enter all necessary settings."));
+            }
         }
-    }
-    for (const auto& required : document.value("required").toArray()) {
-        const auto name = required.toString(); const auto field = properties.value(name).toObject();
-        if (secretField(field)) {
-            if (!deletedFields.contains(name) && !m_secrets.present(id, references.value(name).toString())) return reject(tr("Enter the account data or API key first."));
-        } else if (!values.contains(name)) {
-            if (field.contains("default") && valueValid(field.value("default"), field)) values.insert(name, field.value("default"));
-            else return reject(tr("Enter all necessary settings."));
-        }
-    }
-    values.insert("_credentials", references);
-    if (!accounts.isEmpty()) values.insert("_accounts", accounts);
-    if (!handles.isEmpty()) values.insert("_handles", handles);
-    if (!m_store.change([&](QString* e) { return m_store.saveSettings(id, values, expectedRevision, expectedStamp, e); },
-            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveSettings(c, id, values, expectedRevision, expectedStamp, e); },
-            &error)) return reject(error);
-    // Keep old credentials for rollback. Explicit account deletion revokes all generations.
-    if (!withdraw(id)) return false;
-    for (const auto& field : deletedFields)
-        for (const auto& name : QStringList{field, field + QStringLiteral(".refresh")})
-            for (const auto& reference : m_store.credentialReferences(id, name)) m_secrets.remove(id, reference);
-    for (auto it = m_pickedPaths.begin(); it != m_pickedPaths.end();)
-        it = it->packageId == id ? m_pickedPaths.erase(it) : std::next(it);
-    if (!deletedFields.isEmpty()) emit accountsChanged(id);
-    return changed(true);
+        values.insert("_credentials", references);
+        if (!accounts.isEmpty()) values.insert("_accounts", accounts);
+        if (!handles.isEmpty()) values.insert("_handles", handles);
+        if (!store.change([&](QString* e) { return store.saveSettings(id, values, expectedRevision, expectedStamp, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return store.saveSettings(c, id, values, expectedRevision, expectedStamp, e); },
+                &error)) return reject(error);
+        // Keep old credentials for rollback. Explicit account deletion revokes all generations.
+        for (const auto& field : deletedFields)
+            for (const auto& name : QStringList{field, field + QStringLiteral(".refresh")})
+                for (const auto& reference : store.credentialReferences(id, name)) { secrets.remove(id, reference); state->removed.append(reference); }
+        state->success = true;
+    };
+    write.finish = [this, state, id] {
+        if (!state->success) return changed(false, state->error);
+        // The saved settings name the new keys, so keep them before anything can refuse.
+        m_secrets.adopt(state->secrets->store, id, state->created);
+        for (const auto& reference : state->removed) m_secrets.forget(id, reference);
+        if (!withdraw(id)) return false;
+        for (auto it = m_pickedPaths.begin(); it != m_pickedPaths.end();)
+            it = it->packageId == id ? m_pickedPaths.erase(it) : std::next(it);
+        if (!state->deletedFields.isEmpty()) emit accountsChanged(id);
+        return changed(true);
+    };
+    return write;
 }
 
 QVariantList AddonManager::packages() const
@@ -429,7 +536,7 @@ PackageSummaryReader AddonManager::packageReader() const
     Q_ASSERT(QThread::currentThread() == thread());
     if(m_distributionBootstrapInProgress)return {};
     m_readerCaptureBegun=true;
-    const auto store = m_store;
+    auto store = m_store;
     const auto authority = store.authorityToken();
     const auto credentials = m_secrets.snapshotReader();
     const auto distributions = m_distributionPackages;
@@ -800,7 +907,7 @@ std::function<UiAssetCapture()> AddonManager::uiAssetReader(const QString& globa
     if (m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
         return [] { UiAssetCapture result; result.error = QStringLiteral("The add-on removal is in progress."); return result; };
     // This preparation reads memory only. The detached reader owns no QObject.
-    const auto store = m_store;
+    auto store = m_store;
     const auto presence = m_secrets.presenceSnapshot();
     const auto authority = m_store.authorityToken();
     return [store, presence, global, authority]() {
@@ -886,7 +993,7 @@ AddonNativeAuthorityReader AddonManager::nativeAuthorityReader(const QString& gl
     if (m_retiring) return []() -> std::optional<AddonNativeAuthority> { return std::nullopt; };
     if (m_withdrawingPackages.contains(packagePart(global)) || m_removingPackages.contains(packagePart(global)) || m_store.packageRetiring(packagePart(global)))
         return []() -> std::optional<AddonNativeAuthority> { return std::nullopt; };
-    const auto store = m_store;
+    auto store = m_store;
     const auto authority = store.authorityToken();
     const auto readSecret = m_secrets.snapshotReader();
     return [store, authority, readSecret, global]() -> std::optional<AddonNativeAuthority> {
@@ -983,13 +1090,26 @@ void AddonManager::registerBuiltinProvider(const QString& feature, const QVarian
 void AddonManager::unregisterBuiltinProvider(const QString& id)
 { if (m_builtinProviders.remove(id)) changed(true); }
 bool AddonManager::setProviderOrder(const QString& feature, const QStringList& ids)
+{ return writeNow(providerOrderWrite(feature, ids)); }
+QString AddonManager::requestProviderOrder(const QString& feature, const QStringList& ids)
+{ return queueWrite(providerOrderWrite(feature, ids)); }
+AddonManager::StoreWrite AddonManager::providerOrderWrite(const QString& feature, const QStringList& ids)
 {
-    if (feature.isEmpty() || feature.startsWith('_') || feature.size() > 128 || ids.size() > 128 || QSet<QString>(ids.begin(), ids.end()).size() != ids.size()) return changed(false, tr("The provider order is not correct."));
-    QJsonObject saved; QString error;
-    if (!m_store.change([&](QString* e) { return m_store.saveProviderOrder(feature, ids, &saved, e); },
-            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveProviderOrder(c, feature, ids, &saved, e); },
-            &error)) return changed(false, error);
-    m_providerOrder = saved; return changed(true);
+    struct State { QJsonObject saved; QString error; bool success = false; };
+    const auto state = std::make_shared<State>();
+    auto store = m_store;
+    return {[this, feature, ids] {
+        if (feature.isEmpty() || feature.startsWith('_') || feature.size() > 128 || ids.size() > 128 || QSet<QString>(ids.begin(), ids.end()).size() != ids.size())
+            return changed(false, tr("The provider order is not correct."));
+        return true;
+    }, [state, store, feature, ids]() mutable {
+        state->success = store.change([&](QString* e) { return store.saveProviderOrder(feature, ids, &state->saved, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return store.saveProviderOrder(c, feature, ids, &state->saved, e); },
+            &state->error);
+    }, [this, state] {
+        if (!state->success) return changed(false, state->error);
+        m_providerOrder = state->saved; return changed(true);
+    }};
 }
 
 QVariantMap AddonManager::inspectLocalPackage(const QString& directory) const
@@ -1011,14 +1131,24 @@ QVariantMap AddonManager::pendingPackage() const
 }
 bool AddonManager::stageLocalPackage(const QString& directory)
 {
-    if (busy()) return changed(false, tr("Wait for the repository request to end. You can cancel the request."));
-    Manifest manifest; QString error;
-    if (!Manifest::loadDirectory(directory, &manifest, nullptr, &error)) return changed(false, error);
-    ReleaseIdentity identity; identity.source = manifest.source.toString(); identity.tag = QStringLiteral("v") + manifest.version;
-    identity.developerSource = true;
+    if (busy() || writing()) return changed(false, tr("Wait for the repository request to end. You can cancel the request."));
+    m_pendingPackage.reset(); m_updateResult.clear();
     auto candidate = std::make_shared<PackageCandidate>();
-    if (!PackageStore::inspectDirectory(directory, identity, candidate.get(), &error)) return changed(false, error);
-    m_pendingPackage = std::move(candidate); m_updateResult.clear(); return changed(true);
+    auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
+    // The manifest read and the package hash run on background work.
+    const bool started = m_repositoryJobs->submit([directory, candidate, error, success] {
+        Manifest manifest;
+        if (!Manifest::loadDirectory(directory, &manifest, nullptr, error.get())) return;
+        ReleaseIdentity identity; identity.source = manifest.source.toString(); identity.tag = QStringLiteral("v") + manifest.version;
+        identity.developerSource = true;
+        *success = PackageStore::inspectDirectory(directory, identity, candidate.get(), error.get());
+    }, [this, candidate, error, success](AddonRepositoryJobs::Result result) {
+        const bool finished = result == AddonRepositoryJobs::Result::Finished;
+        if (*success && finished) m_pendingPackage = candidate;
+        changed(*success && finished, result == AddonRepositoryJobs::Result::Canceled ? tr("The app canceled the package request.")
+            : !finished ? tr("The package request did not finish.") : *error);
+    });
+    return changed(started, started ? QString{} : tr("The app cannot start the package request."));
 }
 bool AddonManager::ensureDistributionPackage(const QString& directory,const QString& expectedPackageId)
 {
@@ -1123,7 +1253,7 @@ bool AddonManager::stageDistributionPackage(const QString& id)
         return changed(false, tr("The app has no available distribution package for this ID."));
     const auto expected = m_distributionPackages.value(id);
     const auto directory = m_distributionDirectories.value(id);
-    const auto store = m_store;
+    auto store = m_store;
     auto candidate = std::make_shared<PackageCandidate>();
     auto error = std::make_shared<QString>(); auto success = std::make_shared<bool>(false);
     m_pendingPackage.reset(); m_updateResult.clear();
@@ -1210,40 +1340,64 @@ bool AddonManager::checkRepositoryUpdates(const QString& id, const QString& rang
 }
 
 bool AddonManager::approvePendingPackage(bool enable)
+{ return writeNow(approveWrite(enable)); }
+QString AddonManager::requestApprovePending(bool enable)
+{ return queueWrite(approveWrite(enable)); }
+AddonManager::StoreWrite AddonManager::approveWrite(bool enable)
 {
-    if (busy() || !m_pendingPackage) return changed(false, tr("Select an add-on package first."));
-    const auto candidate = m_pendingPackage; QString error;
-    const QPointer<AddonManager> alive(this);
-    if (!withdraw(candidate->manifest.id)) return false;
-    if (!alive) return false;
-    if (candidate->identity.distributionSource) {
-        const auto known = m_distributionPackages.value(candidate->manifest.id);
+    struct State {
+        std::shared_ptr<PackageCandidate> candidate;
+        QString knownSource, error;
+        bool distribution = false, installed = false, enabled = false;
+    };
+    const auto state = std::make_shared<State>();
+    auto store = m_store;
+    return {[this, state] {
+        if (busy() || !m_pendingPackage) return changed(false, tr("Select an add-on package first."));
+        state->candidate = m_pendingPackage;
+        const auto& candidate = *state->candidate;
+        const QPointer<AddonManager> alive(this);
+        if (!withdraw(candidate.manifest.id) || !alive) return false;
+        state->distribution = candidate.identity.distributionSource;
+        if (state->distribution) {
+            const auto known = m_distributionPackages.value(candidate.manifest.id);
+            if (!m_distributionDirectories.contains(candidate.manifest.id)
+                || known.value("source").toString() != candidate.identity.source
+                || known.value("version").toString() != candidate.manifest.version)
+                return changed(false, tr("The app distribution source changed. Do a new package review."));
+        }
+        return true;
+    }, [state, store, enable]() mutable {
+        const auto& candidate = *state->candidate;
+        const auto id = candidate.manifest.id;
         InstalledPackage active;
-        if (!m_distributionDirectories.contains(candidate->manifest.id)
-            || known.value("source").toString() != candidate->identity.source
-            || known.value("version").toString() != candidate->manifest.version
-            || (m_store.installed(candidate->manifest.id, &active) && (!active.identity.distributionSource
-                || active.identity.source != candidate->identity.source)))
-            return changed(false, tr("The app distribution source changed. Do a new package review."));
-    }
-    const auto grants = candidate->manifest.requiredPermissions;
-    const bool distribution = candidate->identity.distributionSource;
-    if (!m_store.change([&](QString* e) { return m_store.install(*candidate, grants, e, distribution); },
-            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.install(c, *candidate, grants, e, distribution); },
-            &error)) return changed(false, error);
-    m_pendingPackage.reset();
-    m_updateResult.clear();
-    const auto installedId = candidate->manifest.id;
-    observeUpdate(installedId);
-    // An approved app release is no longer an update to offer.
-    bool offered = false;
-    for (qsizetype i = 0; i < m_appUpdates.size(); ++i)
-        if (m_appUpdates.at(i).toMap().value(QStringLiteral("id")).toString() == installedId) { m_appUpdates.removeAt(i); offered = true; break; }
-    if (offered) { emit appUpdatesChanged(); if (!alive) return false; }
-    if (enable && !m_store.change([&](QString* e) { return m_store.setEnabled(installedId, true, e); },
-            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, installedId, true, e); },
-            &error)) return changed(false, error);
-    return changed(true);
+        if (state->distribution && store.installed(id, &active)
+            && (!active.identity.distributionSource || active.identity.source != candidate.identity.source)) {
+            state->error = tr("The app distribution source changed. Do a new package review."); return;
+        }
+        const auto grants = candidate.manifest.requiredPermissions;
+        const bool distribution = state->distribution;
+        state->installed = store.change([&](QString* e) { return store.install(candidate, grants, e, distribution); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return store.install(c, candidate, grants, e, distribution); },
+            &state->error);
+        if (state->installed && enable)
+            state->enabled = store.change([&](QString* e) { return store.setEnabled(id, true, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return store.setEnabled(c, id, true, e); }, &state->error);
+    }, [this, state, enable] {
+        if (!state->installed) return changed(false, state->error);
+        if (m_pendingPackage == state->candidate) { m_pendingPackage.reset(); m_updateResult.clear(); }
+        const auto installedId = state->candidate->manifest.id;
+        observeUpdate(installedId);
+        // An approved app release is no longer an update to offer.
+        const QPointer<AddonManager> alive(this);
+        for (qsizetype i = 0; i < m_appUpdates.size(); ++i)
+            if (m_appUpdates.at(i).toMap().value(QStringLiteral("id")).toString() == installedId) {
+                m_appUpdates.removeAt(i); emit appUpdatesChanged(); break;
+            }
+        if (!alive) return false;
+        if (enable && !state->enabled) return changed(false, state->error);
+        return changed(true);
+    }};
 }
 void AddonManager::discardPendingPackage()
 {
@@ -1268,50 +1422,92 @@ bool AddonManager::installLocalPackage(const QString& directory, bool approve)
     return changed(installed, error);
 }
 bool AddonManager::setEnabled(const QString& id, bool enabled)
+{ return writeNow(enabledWrite(id, enabled)); }
+QString AddonManager::requestEnabled(const QString& id, bool enabled)
+{ return queueWrite(enabledWrite(id, enabled)); }
+AddonManager::StoreWrite AddonManager::enabledWrite(const QString& id, bool enabled)
 {
-    if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
-    bool builtin = false;
-    for (const auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) builtin = true;
-    if (builtin) {
-        QJsonObject saved; QString error;
-        if (!m_store.change([&](QString* e) { return m_store.saveBuiltinProviderEnabled(id, enabled, &saved, e); },
-                [&](const StoreProfileWriteContext& c, QString* e) { return m_store.saveBuiltinProviderEnabled(c, id, enabled, &saved, e); },
-                &error)) return changed(false, error);
-        m_providerOrder = saved;
-        for (auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) descriptor.insert("enabled", enabled);
+    struct State { QJsonObject saved; QString error; bool builtin = false, success = false; };
+    const auto state = std::make_shared<State>();
+    auto store = m_store;
+    return {[this, state, id, enabled] {
+        if (m_removingPackages.contains(id) || m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
+        for (const auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) state->builtin = true;
+        if (state->builtin) return true;
+        if (!withdraw(id)) return false;
+        if (enabled) m_crashes.remove(id);
+        return true;
+    }, [state, store, id, enabled]() mutable {
+        state->success = state->builtin
+            ? store.change([&](QString* e) { return store.saveBuiltinProviderEnabled(id, enabled, &state->saved, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return store.saveBuiltinProviderEnabled(c, id, enabled, &state->saved, e); },
+                &state->error)
+            : store.change([&](QString* e) { return store.setEnabled(id, enabled, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return store.setEnabled(c, id, enabled, e); }, &state->error);
+    }, [this, state, id, enabled] {
+        if (!state->success) return changed(false, state->error);
+        if (state->builtin) {
+            m_providerOrder = state->saved;
+            for (auto& descriptor : m_builtinProviders) if (descriptor.value("packageId").toString() == id) descriptor.insert("enabled", enabled);
+        } else if (m_workers.contains(id) || !m_invocationPackages.keys(id).isEmpty()) {
+            // A queued write lets work start between the request and the write.
+            const QPointer<AddonManager> alive(this);
+            withdraw(id);
+            if (!alive) return false;
+        }
         return changed(true);
-    }
-    QString error; if (!withdraw(id)) return false;
-    if (enabled) m_crashes.remove(id);
-    return changed(m_store.change([&](QString* e) { return m_store.setEnabled(id, enabled, e); },
-        [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, id, enabled, e); }, &error), error);
+    }};
 }
 bool AddonManager::rollback(const QString& id)
-{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
-  QString error; if (!withdraw(id)) return false;
-  m_crashes.remove(id);
-  return changed(m_store.change([&](QString* e) { return m_store.rollback(id, e); },
-      [&](const StoreProfileWriteContext& c, QString* e) { return m_store.rollback(c, id, e); }, &error), error); }
-bool AddonManager::setSafeMode(bool enabled)
-{
-    QString error;
-    if (!m_store.change([&](QString* e) { return m_store.setSafeMode(enabled, e); },
-            [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setSafeMode(c, enabled, e); },
-            &error)) return changed(false, error);
-    if (enabled) for (const auto& id : m_store.installedIds()) if (!withdraw(id)) return false;
-    return changed(true);
-}
+{ return writeNow(packageWrite(id, false)); }
 bool AddonManager::recoverPackage(const QString& id)
-{ if (m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
-  QString error; if (!withdraw(id)) return false;
-  m_crashes.remove(id);
-  return changed(m_store.change([&](QString* e) { return m_store.recover(id, e); },
-      [&](const StoreProfileWriteContext& c, QString* e) { return m_store.recover(c, id, e); }, &error), error); }
+{ return writeNow(packageWrite(id, true)); }
+QString AddonManager::requestRollback(const QString& id)
+{ return queueWrite(packageWrite(id, false)); }
+QString AddonManager::requestRecoverPackage(const QString& id)
+{ return queueWrite(packageWrite(id, true)); }
+AddonManager::StoreWrite AddonManager::packageWrite(const QString& id, bool recover)
+{
+    struct State { QString error; bool success = false; };
+    const auto state = std::make_shared<State>();
+    auto store = m_store;
+    return {[this, id] {
+        if (m_store.packageRetiring(id)) return changed(false, tr("The add-on removal is in progress."));
+        if (!withdraw(id)) return false;
+        m_crashes.remove(id);
+        return true;
+    }, [state, store, id, recover]() mutable {
+        state->success = recover
+            ? store.change([&](QString* e) { return store.recover(id, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return store.recover(c, id, e); }, &state->error)
+            : store.change([&](QString* e) { return store.rollback(id, e); },
+                [&](const StoreProfileWriteContext& c, QString* e) { return store.rollback(c, id, e); }, &state->error);
+    }, [this, state] { return changed(state->success, state->error); }};
+}
+bool AddonManager::setSafeMode(bool enabled)
+{ return writeNow(safeModeWrite(enabled)); }
+QString AddonManager::requestSafeMode(bool enabled)
+{ return queueWrite(safeModeWrite(enabled)); }
+AddonManager::StoreWrite AddonManager::safeModeWrite(bool enabled)
+{
+    struct State { QStringList installed; QString error; bool success = false; };
+    const auto state = std::make_shared<State>();
+    auto store = m_store;
+    return {[] { return true; }, [state, store, enabled]() mutable {
+        state->success = store.change([&](QString* e) { return store.setSafeMode(enabled, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return store.setSafeMode(c, enabled, e); }, &state->error);
+        if (state->success && enabled) state->installed = store.installedIds();
+    }, [this, state] {
+        if (!state->success) return changed(false, state->error);
+        for (const auto& id : state->installed) if (!withdraw(id)) return false;
+        return changed(true);
+    }};
+}
 QVariantList AddonManager::retainedGenerations(const QString& id) const
 { return m_store.retainedGenerations(id).toVariantList(); }
 bool AddonManager::uninstall(const QString& id, bool removeData)
 {
-    if (busy() || m_removingPackages.contains(id) || m_withdrawingPackages.contains(id)) return changed(false, tr("Wait for the current add-on request to end."));
+    if (busy() || writing() || m_removingPackages.contains(id) || m_withdrawingPackages.contains(id)) return changed(false, tr("Wait for the current add-on request to end."));
     auto retirement = std::make_shared<StorePackageRetirement>(m_store.retirePackage(id));
     if (!*retirement) return changed(false, tr("The package ID is not correct."));
     auto store = m_store;
@@ -1371,17 +1567,25 @@ void AddonManager::observeUpdate(const QString& id)
 }
 void AddonManager::recordCrash(const QString& id, const QString& error)
 {
-    if (m_observing.remove(id)) {
+    if (!m_observing.remove(id)) { countCrash(id, error); return; }
+    // An update in its health period: restore the previous release.
+    struct State { QString name; bool restored = false; };
+    const auto state = std::make_shared<State>();
+    auto store = m_store;
+    queueWrite({[] { return true; }, [state, store, id]() mutable {
         InstalledPackage package; QString refused;
-        if (m_store.installed(id, &package) && !package.previousDigest.isEmpty()
-            && m_store.change([&](QString* e) { return m_store.rollback(id, e); },
-                [&](const StoreProfileWriteContext& c, QString* e) { return m_store.rollback(c, id, e); }, &refused)) {
-            m_crashes.remove(id);
-            const auto name = package.manifest.name.isEmpty() ? id : package.manifest.name;
-            changed(false, tr("The update of %1 did not start. The app restored the previous version.").arg(name));
-            return;
-        }
-    }
+        if (!store.installed(id, &package) || package.previousDigest.isEmpty()) return;
+        state->name = package.manifest.name.isEmpty() ? id : package.manifest.name;
+        state->restored = store.change([&](QString* e) { return store.rollback(id, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return store.rollback(c, id, e); }, &refused);
+    }, [this, state, id, error] {
+        if (!state->restored) { countCrash(id, error); return false; }
+        m_crashes.remove(id);
+        return changed(false, tr("The update of %1 did not start. The app restored the previous version.").arg(state->name));
+    }});
+}
+void AddonManager::countCrash(const QString& id, const QString& error)
+{
     if (!m_crashClock.isValid())
         m_crashClock.start();
     const auto now = m_crashClock.elapsed();
@@ -1396,14 +1600,18 @@ void AddonManager::recordCrash(const QString& id, const QString& error)
         return;
     }
     m_crashes.remove(id);
-    QString name = id, refused;
-    InstalledPackage package;
-    if (m_store.installed(id, &package) && !package.manifest.name.isEmpty())
-        name = package.manifest.name;
     // A quarantine is a saved decision, so every window applies it.
-    m_store.change([&](QString* e) { return m_store.setEnabled(id, false, e); },
-        [&](const StoreProfileWriteContext& c, QString* e) { return m_store.setEnabled(c, id, false, e); }, &refused);
-    changed(false, tr("%1 stopped after it failed three times in five minutes. It is now off. Turn it on again to retry.").arg(name));
+    const auto name = std::make_shared<QString>(id);
+    auto store = m_store;
+    queueWrite({[] { return true; }, [name, store, id]() mutable {
+        InstalledPackage package; QString refused;
+        if (store.installed(id, &package) && !package.manifest.name.isEmpty())
+            *name = package.manifest.name;
+        store.change([&](QString* e) { return store.setEnabled(id, false, e); },
+            [&](const StoreProfileWriteContext& c, QString* e) { return store.setEnabled(c, id, false, e); }, &refused);
+    }, [this, name] {
+        return changed(false, tr("%1 stopped after it failed three times in five minutes. It is now off. Turn it on again to retry.").arg(*name));
+    }});
 }
 QVariantMap AddonManager::health(const QString& id) const
 {

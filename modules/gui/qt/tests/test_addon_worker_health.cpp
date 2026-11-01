@@ -2,6 +2,7 @@
 #include "addons/addon_manager.hpp"
 #include "addons/addon_package_store.hpp"
 #include "addons/addon_process_launch.hpp"
+#include "addons/addon_stream_lifetime.hpp"
 #include <QTest>
 #include <QTemporaryDir>
 #include <QDir>
@@ -38,7 +39,18 @@ int crashes(const AddonManager& manager) { return manager.health(Package).value(
 class TestAddonWorkerHealth : public QObject
 {
     Q_OBJECT
+    // The app's lifetime: the manager writes a quarantine or a restore on its work.
+    std::unique_ptr<AddonStreamLifetime> m_lifetime;
 private slots:
+    void initTestCase() {
+        m_lifetime = std::make_unique<AddonStreamLifetime>();
+        QVERIFY(AddonStreamLifetime::registerApplication(m_lifetime->handle()));
+    }
+    void cleanupTestCase() {
+        const auto handle = m_lifetime->handle();
+        handle.close(); QVERIFY(handle.waitQt(std::chrono::seconds(5)));
+        QVERIFY(AddonStreamLifetime::unregisterApplication(handle));
+    }
     void aCrashingPackageWaitsThenIsQuarantined() {
         const auto worker = qEnvironmentVariable("VLC_ADDON_WORKER");
         if (worker.isEmpty()) QSKIP("VLC_ADDON_WORKER names no worker");

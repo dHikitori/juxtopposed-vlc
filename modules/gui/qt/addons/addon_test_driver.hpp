@@ -48,6 +48,7 @@ private:
 
     void extensions();
     void install(const QString& directory);
+    void approve(const QString& id, int tries);
     void discover(const QString& argument);
 
     QPointer<AddonManager> m_manager;

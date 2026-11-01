@@ -55,17 +55,25 @@ TestCase {
         function releaseDisplayRequest(ticket) { const copy = Object.assign({}, activeTickets); delete copy[ticket]; activeTickets = copy; released++ }
         function displayRequestCurrent(ticket) { return activeTickets[ticket] === true && catalogueReady }
         function refreshDisplayCatalogue() { retries++; catalogueLoading = true; catalogueReady = false; catalogueError = ""; catalogueFreshnessChanged() }
-        function saveDisplaySettings(id, expectedStamp, nextValues, operations) {
-            if (!catalogueReady || state !== "ready" || expectedStamp !== stamp) return false
+        // Store writes answer later, as the app's do.
+        signal writeFinished(string request, bool success, string error)
+        property int requests: 0
+        function finishLater(success) {
+            const request = String(++requests)
+            Qt.callLater(() => writeFinished(request, success, success ? "" : "The settings changed."))
+            return request
+        }
+        function requestSaveDisplaySettings(id, expectedStamp, nextValues, operations) {
+            if (!catalogueReady || state !== "ready" || expectedStamp !== stamp) return finishLater(false)
             saves++; lastOperations = operations
             catalogueReady = false; catalogueLoading = true; catalogueFreshnessChanged(); packageWithdrawn(id)
-            return true
+            return finishLater(true)
         }
         function settingsSchema(id) { legacyReads++; return schema }
         function settingsValues(id) { legacyReads++; return values }
         function settingsMessages(id) { legacyReads++; return {} }
         function settingsSecretStatus(id) { legacyReads++; return secrets }
-        function saveAddonSettings(id, values, operations) { legacyReads++; return false }
+        function requestSaveSettings(id, values, operations) { legacyReads++; return finishLater(false) }
         function complete() { state = "ready"; catalogueReady = true; catalogueLoading = false; catalogueRevision++; catalogueChanged(); catalogueFreshnessChanged() }
     }
     Component { id: formFactory; RedesignAddonSettings { width: 550; packageId: "org.example.settings" } }

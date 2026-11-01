@@ -76,7 +76,7 @@ ColumnLayout {
                 onEnabledRequested: (id, enabled) => {
                     if (root.managerRetired || !currentForAction()) return
                     const provider = providers.find(entry => entry.id === id)
-                    if (provider) root.addonManager.setEnabled(provider.packageId, enabled)
+                    if (provider) root.addonManager.requestEnabled(provider.packageId, enabled)
                 }
                 onMoveRequested: (id, direction) => {
                     if (root.managerRetired || !currentForAction()) return
@@ -84,7 +84,7 @@ ColumnLayout {
                     const from = ids.indexOf(id), to = from + direction
                     if (from < 0 || to < 0 || to >= ids.length) return
                     const swap = ids[to]; ids[to] = ids[from]; ids[from] = swap
-                    root.addonManager.setProviderOrder("subtitles", ids)
+                    root.addonManager.requestProviderOrder("subtitles", ids)
                 }
                 onConfigureRequested: packageId => {
                     if (root.managerRetired || !currentForAction()) return
