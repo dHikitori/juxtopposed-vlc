@@ -71,6 +71,4 @@ The host component can use the containing dialog's core actions instead of its o
 
 A correct result supplies a selection. It does not supply queue, playlist, or track mutation authority. The core dialog must retain its current-item, destination-revision, preparation, and final commit checks.
 
-The playlist picker uses a current model snapshot and the existing core save path. The separate database transaction adapter for discovery references remains unavailable. This picker does not add discovery references to the library.
-
-The implementation is in [AddonSelectionContracts.js](../../modules/gui/qt/player/qml/redesign/AddonSelectionContracts.js) and [RedesignAddonSelection.qml](../../modules/gui/qt/player/qml/redesign/RedesignAddonSelection.qml). The [value tests](../../modules/gui/qt/tests/tst_AddonSelections.qml) and [component tests](../../modules/gui/qt/tests/tst_AddonSelectionSurface.qml) cover forged references, stale generations, read-only targets, schema failure, one-use confirmation, cancellation, and recovery.
+The playlist picker saves through the app's own playlist path. It does not add discovery source items to the library.

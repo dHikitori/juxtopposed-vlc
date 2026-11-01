@@ -35,29 +35,14 @@ Each data snapshot has these additional limits:
 - 1,024 entries per array and 256 fields per object.
 - 65,536 value nodes across the complete data snapshot.
 
-The service accepts four private storage jobs at one time. A canceled job keeps
-its slot until its I/O task exits. Each package has at most 16 retained snapshot
-references. Each snapshot is at most 1 MiB plus 256 bytes. Each package has at
-most 17 physical snapshot files, inclusive of garbage and one staged file. Their
-total size cannot exceed 17 times the snapshot byte limit. Retained snapshots
-remain subject to the same JSON, key, and account limits.
+The host rejects path syntax, unknown request fields, and nonfinite numbers. A
+new account does not get more quota or keys.
 
-The host rejects path syntax, unknown request fields, and nonfinite numbers. It
-stores an account reference as a SHA-256 namespace key. It never stores the secret
-value in that key. Account rotation cannot increase the package quota or key cap.
+## Writes and cancellation
 
-## Commit and cancellation
-
-The service uses an I/O thread. Interface shutdown does not wait for that thread.
-The package-store lock serializes a data commit with settings, update, rollback,
-and removal operations. The host saves an immutable, content-addressed data file.
-It then saves the package state with the new data digest and revision.
-
-Commit admission is the cancellation boundary. A cancellation before admission
-leaves the previous state active. A cancellation after admission can suppress the
-result, but it cannot reverse an admitted commit. A failed state save leaves the
-previous data pointer active. The next operation removes unreferenced data files.
-The host never executes guest code in the package-store lock.
+Each `storage.set` and `storage.remove` is atomic: the host saves all of it or
+none of it. A cancellation can stop the result from arriving after the host has
+saved the write. Read the value again when you need to know.
 
 ## Update and recovery
 
@@ -83,13 +68,10 @@ The resource limit is 64 KiB and 128 operations. Each operation applies to every
 account partition. A rename fails if both keys exist. A default preserves an
 existing value. Migration has no script, path, network, or secret access.
 
-The host stages the migrated data and new settings before the release commit.
-A missing step, a key collision, or a quota failure keeps the old release active.
-Data migration increases the revision if it changes the snapshot bytes.
-Rollback selects the saved release, settings, and data pointer together. It does
-not run a reverse migration. Recovery verifies the data digest and schema before
-it selects a retained generation. The state backup and retained generations keep
-their referenced data files. Each new write removes old unreferenced files first.
+A missing step, a key collision, or a quota failure keeps the old release
+active. Data migration increases the revision if it changes the data. Rollback
+returns to the saved release, settings and data together. It does not run a
+reverse migration.
 
 Removal with retained data saves an archive outside the removable package state.
 Reinstallation can restore it only for the same package ID, source repository,

@@ -1,9 +1,5 @@
 # Static UI images
 
-Image delivery also checks a shared in-memory store token. The host captures it before background admission. A settings, release, grant, recovery, or removal write invalidates that token before file publication. Cold delivery, warm-cache delivery, provider reads, and trusted pixel snapshots refuse an old token. A short native scope sweep withdraws already mounted images. Publication reads no files on the UI thread.
-
-The token covers mutations by owners in the same process. External file edits remain subject to background state checks and the Manager's live session epoch; this is not an instantaneous cross-process revocation claim.
-
 A UI route, modal, section, or replacement can declare static package images. Include each image in the manifest file list.
 
 ```json
@@ -49,11 +45,7 @@ WebP support needs the Qt Image Formats WebP plugin at runtime. A missing codec 
 | Mounted image owners per session | 32 |
 | Mounted image owners across services | 64 |
 
-The host reserves pixel memory for active decode jobs. This reservation and the encoded-data and cache quotas do not include codec workspace or Qt render allocations. Do not interpret the cache quota as a limit on all process memory.
-
-Package reads and integrity checks run on a background thread. The existing package inventory limit is 64 MiB. The file reader can hold one additional file of at most 16 MiB before it rejects a package above that limit. These temporary inventory buffers are separate from the encoded-image queue. A decode checks the captured package state, settings, and permissions on its background thread. It does not read the full file inventory again. The UI publishes pixels only for the current session generation.
-
-Each mounted image needs a claim from its actual view session. An image-owner claim ends when its owner is destroyed. Session close, suspension, package withdrawal, safe mode, release changes, account changes, and permission changes revoke tickets and claims. Resume supplies fresh tickets. A late decode cannot publish an image into an old session. Service destruction does not wait for a decode; its job and byte reservations remain active until the work and result handover end.
+An update, a settings or permission change, or turning the add-on off removes the images from open views. The view loads them again when it resumes.
 
 An image that is missing, incorrect, or above a limit keeps its placeholder. Image failure does not give a package more access. The host does not use Qt image caching for these images.
 

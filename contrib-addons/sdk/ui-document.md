@@ -1,6 +1,6 @@
 # UI document contract
 
-This page describes the `ui@1` document that the current host can render. Use only the components on this page for the current host.
+This page describes the `ui@1` document. Use only the components on this page.
 
 The package supplies JSON data. The host supplies the controls, layout, theme, focus behavior, and text display. The host does not execute package QML or JavaScript. Text uses plain text. Text cannot load HTML content.
 
@@ -70,7 +70,7 @@ Each component accepts `type`, `id`, `visible`, `enabled`, and `grow`. The table
 
 The permitted icon names are `play`, `pause`, `stop`, `queue`, `music`, `video`, `network`, `folder`, `playlist`, `refresh`, `search`, `info`, `close`, `settings`, `subtitles`, `favorite`, `home`, `chevron-left`, `chevron-right`, `chevron-down`, `chevron-up`, `episodes`, `chapters`, `more`, `check`, `replay`, and `play-outline`.
 
-The current host does not implement `Table` or `FormField` in a UI document. Use the separate generated settings form for package configuration.
+A UI document cannot contain `Table` or `FormField`. Use the generated settings form for package configuration.
 
 ## Values and bindings
 
@@ -122,6 +122,4 @@ The `parameters`, `stateSchema`, and `resultSchema` fields use a fixed schema su
 
 A modal contribution can declare `resultSchema`. The host supplies Confirm and Cancel outside the package view. A package can put a draft result in `state.result`. Confirm returns this result only if it agrees with `resultSchema`. Cancel returns no result. A modal with no result schema can return only an empty object.
 
-A generic modal result does not change a queue, playlist, or track assignment. The working tree has separate [typed adapters](typed-ui-selections.md) for subtitle and playlist dialogs. They accept only current offered host references. The built-in bodies remain available through core recovery controls. A playlist recovery regression remains open.
-
-The implementation is in [AddonUi.js](../../modules/gui/qt/player/qml/redesign/AddonUi.js), [RedesignAddonView.qml](../../modules/gui/qt/player/qml/redesign/RedesignAddonView.qml), and [RedesignAddonNode.qml](../../modules/gui/qt/player/qml/redesign/RedesignAddonNode.qml). The [UI tests](../../modules/gui/qt/tests/tst_AddonUi.qml) cover the contract and the protected settings form.
+A generic modal result does not change a queue, playlist, or track assignment. For subtitle and playlist dialogs, use the [typed selections](typed-ui-selections.md). They accept only the host references that the dialog offers. The user can always go back to the built-in dialog.

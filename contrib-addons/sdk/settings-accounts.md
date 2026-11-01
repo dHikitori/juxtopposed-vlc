@@ -72,8 +72,7 @@ own file dialog. The setting's value is an opaque handle such as
 `handle:3f2a…`; the app keeps the path and shows the file or folder name. A
 pick is a draft until **Save**. Clearing the field removes the handle.
 
-The handle is not a path, and the add-on cannot read files with it yet. The
-app will publish a host operation for handles before it advertises one.
+The handle is not a path. No host operation reads a file through a handle.
 
 ## Temporary settings
 

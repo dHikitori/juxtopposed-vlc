@@ -23,24 +23,8 @@ Declare each contract and operation that the package uses. A declared permission
 
 Use the [bundled packages](../README.md#bundled-add-ons) to inspect complete package files. Keep credentials out of package files, ordinary settings values, worker state, and saved media references. Use the generated host settings form for secret replacement or deletion.
 
-## Host package names
+## Package names
 
-The host reserves `hakone.builtin`, `vlc.builtin`, and every package ID below
-either dotted prefix. An installable package cannot use these names. The old
-prefix remains reserved so that a package cannot replace a host provider.
-New project add-ons use `org.hakone`. Extracted add-ons keep their approved IDs.
-See [reserved provider names](provider-names.md) for the import checks.
-
-## Session schema checks
-
-Use Python 3.10 or later and `jsonschema==4.23.0` in a separate tool environment.
-From the repository root, run:
-
-```sh
-python3 contrib-addons/sdk/test-session-schema.py
-```
-
-The check validates the Draft 2020-12 schema and 58 request and continuation
-examples. It includes refused operations, extra fields, old session names,
-integer encoding, and parameter limits. The native host must also check current
-authority, exact invocation, native stamps, byte limits, and transport rules.
+An installable package cannot use `hakone.builtin`, `vlc.builtin`, or any
+package ID below either dotted prefix. See
+[reserved provider names](provider-names.md).

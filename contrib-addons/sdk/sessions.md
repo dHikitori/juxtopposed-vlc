@@ -1,9 +1,8 @@
 # Shared playback sessions
 
-MainUI connects this profile through the native session owner and the host
-review panel in Extensions settings. The complete app link, compiled UI run,
-two-player correction checks, and platform runs remain release gates. A
-controller add-on supplies its own room protocol and service.
+A session controller add-on keeps playback in step with other players
+through its own room protocol and relay service. The user approves each
+session in Extensions settings.
 
 Declare `session@1` and a `session.controller` contribution with the `run`
 operation. Use the normal message SDK. Each host call has a unique ID and its
@@ -59,7 +58,9 @@ store, redirect, or insecure fallback.
 ## Guest calls
 
 The request schema is [session-requests.schema.json](session-requests.schema.json).
-It supplements native checks. It does not grant permission.
+It does not grant permission; the host also checks each call.
+`test-session-schema.py` checks the schema against example requests. It needs
+Python 3.10 or later and `jsonschema` 4.23.0.
 
 The host supplies an opaque session reference after approval. Send it through
 the normal SDK host-call envelope:
@@ -166,8 +167,5 @@ per session, with a limit of 4,096 IDs. The host retires old receives and pendin
 callbacks before the next slice. An admitted native command that is still
 pending ends the session. A new slice does not resume control after local input.
 
-The 25-second monotonic deadline starts before invocation. The Qt controller
-refuses a late return or result when its event loop runs. This is not a
-real-time 25-second native revoke guarantee if that thread is blocked. Core
-independently enforces the native lease deadline and command authority. The
-worker keeps its existing 30-second invocation timer and instruction budget.
+The 25-second deadline starts before the invocation. The host refuses a late
+result.

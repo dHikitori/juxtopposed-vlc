@@ -4,8 +4,7 @@ This guide defines the complete `no_match` path for `metadata@1`. The provider
 keeps the normal message protocol. Only the host can create a completion receipt.
 The host supports strict `no_match` receipts and positive completion receipts
 for `match` and `partial`. A positive receipt binds the completed result object;
-the consumer still must accept its identities and fields. Native aggregate,
-image approval and final metadata writes have separate authority gates.
+the app still checks its identities and fields before it uses them.
 
 ## NoMatch result
 
@@ -50,11 +49,6 @@ acceptable. The shared consumer must check them before image resolution or a
 metadata write. A positive receipt cannot certify NoMatch. An image failure
 can permit a later provider but cannot become a negative lookup result.
 
-The current portable artwork aggregate keeps the slot reserved during consumer
-acceptance and image work. It can transfer native Store watches and admission
-into Core after the caller has an approved local image. No receipt grants that
-image approval.
-
 ## HTTP status policy
 
 An HTTP response must have a complete body. The host keeps the actual status and
@@ -82,7 +76,6 @@ operation. Use the optional `completionPolicy` on that contribution:
 See the [contribution example](examples/metadata-completion-contribution.json).
 This is a contribution fragment. A complete package must also declare its runtime,
 files, and required permissions. The example does not contact a real service.
-Existing reference package manifests remain unchanged.
 
 The policy must have version 1 and one to 16 rules. Each rule has exactly
 `feature`, `operation`, and `statuses`. The feature and operation must occur in
@@ -107,26 +100,15 @@ unique feature/operation pairs when the status arrays differ. Use the native
 package validator for those rules. A valid schema result does not authorize a
 provider operation.
 
-Use the existing SDK schema tool environment with Python 3.10 or later and
-`jsonschema==4.23.0`:
+`test-metadata-completion-schema.py` checks the schema against example
+policies. It needs Python 3.10 or later and `jsonschema` 4.23.0.
 
-```sh
-python3 contrib-addons/sdk/test-metadata-completion-schema.py
-```
+## Receipt scope
 
-## Host receipt scope
-
-The host binds a receipt to the exact private native subject, selected slot,
-contribution, feature, operation, release, settings revision, account, permissions,
-requested fields, and projected context. The host can consume it once while all
-captured authority remains current. Cancellation, configuration changes, and app
-retirement revoke that authority.
-
-A receipt certifies one executed slot. It does not prove that all providers ran.
-The native plan must retain all required authority and account for unavailable
-providers before it can use an aggregate result. The final native field and
-revision admission remains required. A NoMatch receipt alone cannot write the
-artwork status or metadata.
+A receipt applies to one invocation of one provider, for the same media,
+fields, release, settings, account and permissions. A cancellation or a
+configuration change makes it invalid. A NoMatch receipt from one provider does
+not mean that other providers have no result.
 
 ## Retention
 

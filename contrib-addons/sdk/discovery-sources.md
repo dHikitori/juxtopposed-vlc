@@ -1,6 +1,6 @@
 # Discovery source contract
 
-This page describes the current `discovery@1` host.
+This page describes the `discovery@1` contract for a media source.
 
 ## Contribution
 
@@ -32,7 +32,7 @@ The host invokes an operation through the common worker message protocol. The re
 
 A query has a maximum of 512 UTF-16 code units. Filters have a maximum of 32 scalar fields. Each filter value has a maximum string representation of 256 UTF-16 code units. A suggestion limit must be from 1 through 50. Identity uses the fixed host media identity fields.
 
-The current browser supplies roots, folder navigation, search, and more pages. The coordinator has the separate suggestion API.
+The source browser in Extensions uses `roots`, `browse`, `search`, and more pages. The queue uses `suggest` (see below).
 
 ## Change feed (`subscribe`)
 
@@ -83,46 +83,34 @@ A cursor can be JSON data with a maximum encoded size of 4 KiB. The host retains
 
 ## View lifetime
 
-The browser owner permits 16 concurrent views. Each view has a maximum of 1,000 displayed entries. The coordinator has limits of 64 requests, 4,096 item handles, and 512 cursors. A request has a time limit of 15 seconds.
+Each view shows at most 1,000 entries. A request has a time limit of 15 seconds.
 
 Each view has its own item and cursor references. A reference from one view cannot act on another view. A new search cancels the previous request in that view. The host closes the view when it becomes hidden, its source changes, or its settings change. Late results cannot change a closed view.
 
-## Saved source references
+## Saved items
 
-The host queue adapter accepts this internal format:
+When the user adds an item to the queue or a playlist, the host saves the
+source, the item ID, the account and the displayed title. It never saves a
+stream URL or a credential.
 
-```json
-{
-  "format": "hakone-addon-source-v1",
-  "source": "org.example.radio/stations",
-  "itemId": "station-42",
-  "accountReference": "<host account reference>",
-  "snapshot": {"title": "Station 42", "mediaKind": "audio"}
-}
-```
+Use the same item ID for the same source item. A title change must not change
+the ID. If a source has distinct versions of an item, the ID must identify the
+version.
 
-The host supplies `accountReference`. The package cannot select an account reference. A missing account reference does not permit a production source to start. Credential reference changes and declared `settings.accountFields` changes produce a new account reference. A code update, title change, or display-language change preserves the account reference.
+The account belongs to the host. A change to a credential or to a field in
+`settings.accountFields` makes a new account, and items saved under the old
+one no longer play. A code update, a title change or a new display language
+keeps the account.
 
-The locator consists of the source contribution ID, account reference, and stable item ID. Use the same item ID for the same source item. A title change must not change this ID. If a source has distinct item versions, its item ID must identify the required version.
+## Playback
 
-The native URI starts with `hakone-addon-source:v1:`. It contains a canonical locator and a random admission ID. The private host admission record binds the exact locator. The record keeps the display snapshot separately. Repeated selection and title updates reuse the same URI. No resolved stream URL or credential is stored in that URI or snapshot.
+Play and Add to queue need the `media.stream` permission. The user accepts it
+when they install the add-on, or the app accepts it for a bundled add-on.
+Turning the add-on off stops its items from playing. Browse and search do not
+need it.
 
-Decoding an imported URI gives no playback authority. An unknown admission ID or changed locator fails validation. A known record still needs the current installed source, account, grants, and user playback intent. A copied admission record does not enable its source.
-
-The real queue adapter takes a queue identity and revision before an action. It does the final comparison under the native queue lock. One append operation adds the full selection. A stale revision adds no items. Display refresh keeps the native queue item ID and any title that the user set. Queue export uses the admitted source URI.
-
-## Playback status
-
-The app supplies contained native preparation and a lazy resolver for admitted source references. Play and Enqueue need an active native route and the user's saved approval for the exact source and account. Browse and search do not grant that approval.
-
-Enqueue stores the stable locator without a stream lookup. Play uses that same locator after the final source, account, and queue checks. Only a native primary input open creates the one-use playback intent and asks the source to resolve it. Stop and replay use a fresh input generation and source result. The package cannot supply native input pointers, Hakone options, output configuration, or an access module name.
-
-The app also binds the native library adapter when the media library is available. The trusted picker supplies an opaque playlist choice. The adapter validates and appends the selection under one database transaction. Saving a reference does not resolve a stream or grant later playback approval.
-
-The native owner, queue route, and actual MainUI object have focused checks. The fresh full application link, compiled QML, and supported-platform app checks remain open.
-
-## Source and tests
-
-The [coordinator](../../modules/gui/qt/addons/addon_discovery_coordinator.cpp) validates pages and owns transient references. The [view owner](../../modules/gui/qt/addons/addon_discovery_service.cpp) handles browser lifetime. The [admission store](../../modules/gui/qt/addons/addon_source_admissions.cpp) binds saved locators. The [native queue adapter](../../modules/gui/qt/addons/addon_native_queue_store.cpp) uses the real Hakone queue.
-
-The [queue tests](../../modules/gui/qt/tests/test_addon_native_queue_store.cpp) use real queue objects and the public add-on settings service. They cover atomic append, stale snapshots, playlist export, title refresh, credential changes, account-field changes, and code updates.
+Add to queue saves the item without asking the source for a stream. When the
+player opens the item, the host calls `resolve` with `intent: "play"` and
+plays the stream it returns. Each open, including a replay, calls `resolve`
+again. A package cannot supply player options, output settings or an access
+module.

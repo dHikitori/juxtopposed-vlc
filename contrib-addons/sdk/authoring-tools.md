@@ -82,9 +82,3 @@ self-test, and validates the package.
 
 For a player panel, start from the bundled [Episodes](../episodes) package and the
 [player panel guide](player-panels.md).
-
-## Text check
-
-`contrib-addons/check-ste.py` reports app text that breaks the mechanical
-ASD-STE100 rules (sentence length, -ing nouns, passive verbs, contractions,
-unapproved words). A person decides each finding.

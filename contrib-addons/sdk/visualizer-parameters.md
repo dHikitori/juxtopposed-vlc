@@ -1,6 +1,6 @@
 # Visualizer parameters
 
-A scene can declare bounded numeric fields for later host-controlled updates. The validator is implemented. Worker scheduling and app rendering integration still need their own completed stages.
+A scene can declare bounded numeric fields that a worker can update. The [visualizer scene guide](visualizer-scene.md#parameter-updates) describes the worker side.
 
 Each target node needs a unique `id`. IDs and parameter names start with a letter or underscore and contain at most 64 letters, digits, underscores, or hyphens. Reserved object names are refused. The initial target value must be explicit and inside the declared range.
 
@@ -32,5 +32,3 @@ An update contains only declared parameter names and numeric values, for example
 A declaration can narrow its host range. It cannot widen it. Two names cannot target the same node/property pair. A scene has at most 64 declarations. An update has at most 64 entries and 16 KiB of encoded JSON.
 
 Updates are atomic. Unknown names, incorrect types, out-of-range values, or a combined particle count above 2,048 leave the output unchanged. The full scene validator must run before this numeric layer; parameter validation alone does not validate the complete graph.
-
-The parameter suite passes seven cases. The existing scene and controller suites also each pass seven cases. These tests do not establish worker timing, native playback, rendering performance, or device-loss behavior.

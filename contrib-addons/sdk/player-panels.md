@@ -191,5 +191,5 @@ property. New icon names: `episodes`, `chapters`, `more`, `check`,
   themes. Put a realistic state in a copy of the manifest to look at a full
   panel. The preview does not draw the frame or the header placement.
 - Run your module in the real worker with host replies, as
-  `examples/episodes/tests/test_worker.py` does, and include a test for your
+  [`episodes/tests/test_worker.py`](../episodes/tests/test_worker.py) does, and include a test for your
   largest page.
