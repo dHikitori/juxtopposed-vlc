@@ -363,6 +363,8 @@ private slots:
         const auto item=service->view(view).value("items").toList().first().toMap().value("ref").toString();
         QVERIFY(service->canEnqueue(view)); QVERIFY(!service->enqueue(view,{item}).isEmpty()); QCOMPARE(f.resolves(),0); QCOMPARE(tls.requests.load(),0u);
         quint64 itemId=0; QString uri;
+        // The queue saves the admission on a worker, then commits.
+        QTRY_COMPARE(([&] { PlaylistLock locked(playlist.get()); return vlc_playlist_Count(playlist.get()); })(),size_t(1));
         { PlaylistLock locked(playlist.get()); QCOMPARE(vlc_playlist_Count(playlist.get()),size_t(1));
         auto* entry=vlc_playlist_Get(playlist.get(),0); itemId=vlc_playlist_item_GetId(entry);
         char* raw=input_item_GetURI(vlc_playlist_item_GetMedia(entry)); uri=QString::fromUtf8(raw); free(raw); }

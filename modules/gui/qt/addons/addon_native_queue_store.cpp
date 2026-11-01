@@ -4,8 +4,10 @@
 #endif
 #include "addon_native_queue_store.hpp"
 #include "addon_player_discovery.hpp"
+#include <QCoreApplication>
 #include <QMetaObject>
 #include <QPointer>
+#include <QThreadPool>
 #include <QUuid>
 #include <vlc_common.h>
 #include <vlc_input_item.h>
@@ -49,6 +51,17 @@ QList<quint64> refreshItems(vlc_playlist_t* playlist, const QStringList& uris, c
     return changed;
 }
 }
+struct AddonNativeQueueStore::Pending {
+    enum Kind { Append, Play, Refresh } kind = Append;
+    // Set before the worker starts. The worker only reads them.
+    AddonQueueTransactions::Transaction transaction;
+    AddonQueueTransactions::Completion completion;
+    std::shared_ptr<std::atomic_bool> canceled = std::make_shared<std::atomic_bool>(false);
+    // The worker sets these. This thread reads them after the worker returns.
+    QStringList uris;
+    QString error;
+    bool recorded = false;
+};
 AddonNativeQueueNotifications* AddonNativeQueueStore::notifications()
 { static AddonNativeQueueNotifications bus; return &bus; }
 const vlc_playlist_callbacks* AddonNativeQueueStore::callbacks()
@@ -72,11 +85,16 @@ AddonNativeQueueStore::AddonNativeQueueStore(vlc_playlist_t* playlist, std::shar
 AddonNativeQueueStore::~AddonNativeQueueStore() { close(); }
 void AddonNativeQueueStore::close()
 {
-    if (!m_playlist) return;
-    vlc_playlist_Lock(m_playlist);
-    if (m_listener) vlc_playlist_RemoveListener(m_playlist, m_listener);
-    vlc_playlist_Unlock(m_playlist);
+    m_closed->store(true);
+    if (m_playlist) {
+        vlc_playlist_Lock(m_playlist);
+        if (m_listener) vlc_playlist_RemoveListener(m_playlist, m_listener);
+        vlc_playlist_Unlock(m_playlist);
+    }
     m_listener = nullptr; m_playlist = nullptr;
+    // A worker that is still saving finds no front action when it returns.
+    const auto pending = std::move(m_pending); m_pending.clear(); m_working = false;
+    for (const auto& job : pending) { job->canceled->store(true); if (job->completion) job->completion(false, tr("The queue is not available.")); }
 }
 void AddonNativeQueueStore::changed()
 {
@@ -96,17 +114,69 @@ AddonQueueTransactions::Cancel AddonNativeQueueStore::append(const AddonQueueTra
     if (!before.available || before.identity != transaction.targetIdentity || before.revision != transaction.expectedRevision) {
         completion(false, tr("The queue changed. Select the items again.")); return {};
     }
-    QStringList uris; QString error;
-    if (!m_admissions->admit(transaction.references, &uris, &error)) { completion(false, error); return {}; }
+    QString error; const QPointer<AddonNativeQueueStore> alive(this);
+    const bool admitted = m_admissions->check(transaction.references, &error);
+    if (!alive) { completion(false, tr("The queue is not available.")); return {}; }
+    if (!admitted) { completion(false, error); return {}; }
+    auto job = std::make_shared<Pending>(); job->kind = Pending::Append;
+    job->transaction = transaction; job->completion = std::move(completion);
+    return submit(job);
+}
+AddonQueueTransactions::Cancel AddonNativeQueueStore::submit(const std::shared_ptr<Pending>& job)
+{
+    if (!m_playlist) { job->completion(false, tr("The queue is not available.")); return {}; }
+    m_pending.push_back(job); schedule();
+    return [canceled = job->canceled] { canceled->store(true); };
+}
+void AddonNativeQueueStore::schedule()
+{
+    if (m_working || m_pending.empty()) return;
+    m_working = true;
+    // The profile can be on a slow share: the admission file is read and
+    // written on the worker, never on this thread.
+    const auto job = m_pending.front(); const auto admissions = m_admissions; const auto closed = m_closed;
+    const QPointer<AddonNativeQueueStore> owner(this);
+    QThreadPool::globalInstance()->start([job, admissions, closed, owner]() mutable {
+        if (!job->canceled->load() && !closed->load()) {
+            const auto& references = job->transaction.references;
+            if (job->kind == Pending::Refresh && admissions->uriForReference(references.first().toMap()).isEmpty()) job->recorded = false;
+            else job->recorded = admissions->record(references, &job->uris, &job->error);
+        }
+        // Move the job, so its callbacks are released on this thread, not the worker.
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [job = std::move(job), owner] { if (owner) owner->recorded(job); }, Qt::QueuedConnection);
+    });
+}
+void AddonNativeQueueStore::recorded(const std::shared_ptr<Pending>& job)
+{
+    if (m_pending.empty() || m_pending.front() != job) return;
+    m_pending.pop_front(); m_working = false;
+    const QPointer<AddonNativeQueueStore> alive(this);
+    QString error;
+    if (!m_playlist) job->completion(false, tr("The queue is not available."));
+    else if (job->canceled->load()) job->completion(false, tr("The discovery action was canceled."));
+    else if (!job->recorded || job->uris.size() != job->transaction.references.size())
+        job->completion(false, !job->error.isEmpty() ? job->error : tr("The app cannot save the discovery references."));
+    // The source or account can change while the worker saves. Check it
+    // again here; authorityCurrent is still the last check, under the lock.
+    else if (!m_admissions->check(job->transaction.references, &error)) job->completion(false, error);
+    else if (!alive || !m_playlist) job->completion(false, tr("The queue is not available."));
+    else if (job->kind == Pending::Append) commitAppend(*job);
+    else if (job->kind == Pending::Play) commitPlay(*job);
+    else commitRefresh(*job);
+    if (alive) schedule();
+}
+void AddonNativeQueueStore::commitAppend(const Pending& job)
+{
+    const auto& transaction = job.transaction; const auto& uris = job.uris; const auto& completion = job.completion;
     std::vector<std::shared_ptr<input_item_t>> held;
     std::vector<input_item_t*> items;
     for (int index = 0; index < uris.size(); ++index) {
         const auto uri = uris[index].toUtf8();
         const auto title = displayTitle(transaction.references[index].toMap()).toUtf8();
         auto* item = input_item_NewExt(uri.constData(), title.constData(), INPUT_DURATION_UNSET, ITEM_TYPE_STREAM, ITEM_NET);
-        if (!item) { completion(false, tr("The app cannot create the queue items.")); return {}; }
+        if (!item) { completion(false, tr("The app cannot create the queue items.")); return; }
         auto* policy=vlc_input_policy_HoldSourceItem(item,uri.constData());
-        if(!policy) { input_item_Release(item); completion(false,tr("The source item cannot use its native policy.")); return {}; }
+        if(!policy) { input_item_Release(item); completion(false,tr("The source item cannot use its native policy.")); return; }
         vlc_input_policy_Release(policy);
         input_item_SetTitle(item, title.constData()); input_item_SetMetaExtra(item, "vlc:addon-source-title", title.constData());
         if (!transaction.fillTag.isEmpty()) {
@@ -123,7 +193,6 @@ AddonQueueTransactions::Cancel AddonNativeQueueStore::append(const AddonQueueTra
     vlc_playlist_Unlock(m_playlist);
     if (!metadata.isEmpty()) emit notifications()->metadataChanged(reinterpret_cast<quintptr>(m_playlist), metadata);
     completion(success, success ? QString() : current ? tr("The app cannot add the selection to the queue.") : tr("The queue changed. Select the items again."));
-    return {};
 }
 AddonQueueTransactions::Cancel AddonNativeQueueStore::playReference(const AddonQueueTransactions::Transaction& transaction, AddonQueueTransactions::Completion completion)
 {
@@ -133,15 +202,22 @@ AddonQueueTransactions::Cancel AddonNativeQueueStore::playReference(const AddonQ
         || transaction.references.size()!=1 || !transaction.playbackHandle.isEmpty()) {
         completion(false,tr("The queue changed. Select the item again.")); return {};
     }
-    QStringList uris; QString error;
-    if(!m_admissions->admit(transaction.references,&uris,&error) || uris.size()!=1) {
-        completion(false,error); return {};
-    }
+    QString error; const QPointer<AddonNativeQueueStore> alive(this);
+    const bool admitted=m_admissions->check(transaction.references,&error);
+    if(!alive) { completion(false,tr("The queue is not available.")); return {}; }
+    if(!admitted) { completion(false,error); return {}; }
+    auto job=std::make_shared<Pending>(); job->kind=Pending::Play;
+    job->transaction=transaction; job->completion=std::move(completion);
+    return submit(job);
+}
+void AddonNativeQueueStore::commitPlay(const Pending& job)
+{
+    const auto& transaction=job.transaction; const auto& uris=job.uris; const auto& completion=job.completion;
     const auto uri=uris.first().toUtf8(); const auto title=displayTitle(transaction.references.first().toMap()).toUtf8();
     const auto item=std::shared_ptr<input_item_t>(input_item_NewExt(uri.constData(),title.constData(),INPUT_DURATION_UNSET,ITEM_TYPE_STREAM,ITEM_NET),input_item_Release);
-    if(!item) { completion(false,tr("The app cannot create the queue item.")); return {}; }
+    if(!item) { completion(false,tr("The app cannot create the queue item.")); return; }
     auto* policy=vlc_input_policy_HoldSourceItem(item.get(),uri.constData());
-    if(!policy) { completion(false,tr("The source item cannot use its native policy.")); return {}; }
+    if(!policy) { completion(false,tr("The source item cannot use its native policy.")); return; }
     vlc_input_policy_Release(policy); input_item_SetTitle(item.get(),title.constData());
     input_item_SetMetaExtra(item.get(),"vlc:addon-source-title",title.constData());
     vlc_playlist_Lock(m_playlist);
@@ -168,7 +244,6 @@ AddonQueueTransactions::Cancel AddonNativeQueueStore::playReference(const AddonQ
     vlc_playlist_Unlock(m_playlist);
     if(!metadata.isEmpty()) emit notifications()->metadataChanged(reinterpret_cast<quintptr>(m_playlist),metadata);
     completion(success,success?QString():current?tr("The app cannot start this queue item."):tr("The queue changed. Select the item again."));
-    return {};
 }
 AddonDiscoveryNativeBackend AddonNativeQueueStore::backend()
 {
@@ -220,15 +295,19 @@ QVariantMap AddonNativeQueueStore::queuedReference(quint64 itemId) const
 }
 QVariantMap AddonNativeQueueStore::admittedReference(const QString& uri) const
 { return m_admissions ? m_admissions->currentReference(uri) : QVariantMap{}; }
-bool AddonNativeQueueStore::refreshDisplay(const QVariantMap& reference)
+void AddonNativeQueueStore::refreshDisplay(const QVariantMap& reference, std::function<void(bool)> done)
 {
-    if (!m_playlist || !m_admissions) return false;
-    const auto uri = m_admissions->uriForReference(reference);
-    if (uri.isEmpty() || m_admissions->currentReference(uri).isEmpty()) return false;
-    QStringList uris;
-    if (!m_admissions->admit({reference}, &uris)) return false;
-    vlc_playlist_Lock(m_playlist); const auto metadata = refreshItems(m_playlist, uris, {reference}); vlc_playlist_Unlock(m_playlist);
+    // The worker refreshes only a reference that the file already admits.
+    auto job = std::make_shared<Pending>(); job->kind = Pending::Refresh; job->transaction.references = {reference};
+    job->completion = [done = std::move(done)](bool success, const QString&) { if (done) done(success); };
+    const QPointer<AddonNativeQueueStore> alive(this);
+    if (!m_playlist || !m_admissions || !m_admissions->check(job->transaction.references) || !alive) { job->completion(false, {}); return; }
+    submit(job);
+}
+void AddonNativeQueueStore::commitRefresh(const Pending& job)
+{
+    vlc_playlist_Lock(m_playlist); const auto metadata = refreshItems(m_playlist, job.uris, job.transaction.references); vlc_playlist_Unlock(m_playlist);
     if (!metadata.isEmpty()) emit notifications()->metadataChanged(reinterpret_cast<quintptr>(m_playlist), metadata);
-    return true;
+    job.completion(true, {});
 }
 }
