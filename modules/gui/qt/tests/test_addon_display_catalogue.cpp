@@ -7,12 +7,14 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLockFile>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QScopeGuard>
 #include <QThread>
 #include <atomic>
 #include <condition_variable>
+#include <cstdio>
 #include <mutex>
 #include <string>
 #ifdef HAKONE_DISPLAY_READER_LOCK_WRAP
@@ -300,6 +302,25 @@ private slots:
         QLockFile lock(root.filePath(QStringLiteral("store.lock")));QVERIFY(lock.tryLock(0));QVERIFY(!reader({},&out,nullptr));QVERIFY(out.packages.isEmpty());lock.unlock();QVERIFY(reader({},&out,nullptr));
         QVERIFY(document(root.filePath(QStringLiteral("recovery.json")),{{"safeMode","false"}}));store.invalidateAuthority();QVERIFY(!store.displayCatalogueReader(QStringLiteral("en"))({},&out,nullptr));QVERIFY(out.packages.isEmpty());QVERIFY(!out.current());
     }
+    void anotherProcessHoldingTheStoreLockIsWaitedForUntilItUnlocks(){
+        // Another app window on the same profile holds store.lock. Its unlock
+        // sends this process no display notice, so the read waits for it.
+        Scope scope;QTemporaryDir root;PackageStore store(root.path());QVERIFY(install(store,QStringLiteral("org.example.display")));
+        const auto holder=std::make_unique<QProcess>();
+        const auto hold=[&]{
+            holder->start(QCoreApplication::applicationFilePath(),{QStringLiteral("--hold-store-lock"),root.filePath(QStringLiteral("store.lock"))});
+            return holder->waitForStarted(5000) && holder->waitForReadyRead(5000) && holder->readLine().trimmed()=="locked";
+        };
+        const auto unlock=[&]{holder->closeWriteChannel();return holder->waitForFinished(5000) && holder->exitCode()==0;};
+        const auto stopHolder=qScopeGuard([&]{if(holder->state()!=QProcess::NotRunning){holder->kill();holder->waitForFinished(5000);}});
+        QVERIFY(hold());
+        AddonCatalogueView view({[&]()->std::optional<DisplayCatalogueSource>{DisplayCatalogueSource source;source.queuedAuthority=store.authorityToken();source.reader=store.displayCatalogueReader(QStringLiteral("en"));return source;},[&](auto wake){return store.onDisplayChanged(std::move(wake));}},scope.owner.handle());
+        QTest::qWait(300);QVERIFY(!view.isCurrent());QVERIFY(view.loading());QVERIFY(view.error().isEmpty());QCOMPARE(AddonRepositoryJobs::processCount(),1u);
+        QVERIFY(unlock());QTRY_VERIFY_WITH_TIMEOUT(view.isCurrent(),3000);QCOMPARE(view.rows().size(),1);
+        // A waiting read ends when the view closes, without the unlock.
+        QVERIFY(hold());view.refresh();QTest::qWait(100);QCOMPARE(AddonRepositoryJobs::processCount(),1u);
+        view.close();QTRY_COMPARE_WITH_TIMEOUT(AddonRepositoryJobs::processCount(),0u,2000);QVERIFY(unlock());
+    }
     void safeModePreservesRawDisabledAndUnconfiguredDisplayRows(){
         QTemporaryDir root;PackageStore store(root.path());const QString id=QStringLiteral("org.example.display");QVERIFY(install(store,id));QVERIFY(store.setEnabled(id,true));QVERIFY(store.setSafeMode(true));DisplayCatalogueSnapshot out;QVERIFY(store.displayCatalogueReader(QStringLiteral("en"))({},&out,nullptr));
         QVERIFY(out.safeMode);QVERIFY(out.packages.first().savedEnabled);QVERIFY(!out.packages.first().package.enabled);QCOMPARE(out.packages.first().package.manifest.contributions.size(),3);
@@ -336,5 +357,16 @@ private slots:
         QCOMPARE(out.digest,QCryptographicHash::hash(bytes,QCryptographicHash::Sha256));QCOMPARE(out.retainedBytes,bytes.size());QCOMPARE(out.rawContributionCount,3);QCOMPARE(out.candidateCount,1);
     }
 };
-QTEST_GUILESS_MAIN(DisplayCatalogueTest)
+int main(int argc,char** argv)
+{
+    QCoreApplication application(argc,argv);const auto arguments=application.arguments();
+    if(arguments.size()==3 && arguments.at(1)==QLatin1String("--hold-store-lock")) {
+        // Another app process: hold store.lock until stdin closes.
+        QLockFile lock(arguments.at(2));if(!lock.tryLock(0))return 1;
+        std::puts("locked");std::fflush(stdout);
+        while(std::getchar()!=EOF) {}
+        return 0;
+    }
+    DisplayCatalogueTest test;return QTest::qExec(&test,argc,argv);
+}
 #include "test_addon_display_catalogue.moc"

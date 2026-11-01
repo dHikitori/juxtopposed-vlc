@@ -2097,10 +2097,19 @@ bool PackageStore::readDisplayCatalogue(const StoreAuthorityToken& queued,const 
     if(!queued.current()) return fail(error,QStringLiteral("The add-on catalogue changed."));
     if(!QDir().mkpath(m_root)) return fail(error,QStringLiteral("The add-on store is not available."));
     CatalogueStoreLock lock(QDir(m_root).filePath(QStringLiteral("store.lock")),m_authority);
-    if(!lock.tryLock(0)) {
-        if(lock.error()==QLockFile::LockFailedError)
+    // A holder in this process wakes the display when it unlocks. Another app
+    // process on the same profile sends no such notice, so wait for its unlock
+    // here, on background work, until cancellation or an authority change.
+    for(unsigned long delay=25;!lock.tryLock(0);delay=std::min(delay*2,250ul)) {
+        qint64 holder=0;
+        if(lock.error()!=QLockFile::LockFailedError)
+            return fail(error,QStringLiteral("The add-on store is busy."));
+        if((lock.getLockInfo(&holder,nullptr,nullptr) && holder==qint64(::getpid()))
+            || RepositoryCancellation::requested() || !queued.current()) {
             output->refusal=DisplayCatalogueSnapshot::Refusal::StoreBusy;
-        return fail(error,QStringLiteral("The add-on store is busy."));
+            return fail(error,QStringLiteral("The add-on store is busy."));
+        }
+        QThread::msleep(delay);
     }
     MetadataCatalogueSnapshot policy;
     policy.queuedAuthority=queued;policy.authority=m_authority.capture();
