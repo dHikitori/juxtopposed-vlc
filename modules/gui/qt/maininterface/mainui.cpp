@@ -105,7 +105,6 @@
 #include "addons/addon_native_library_targets.hpp"
 #include "addons/addon_player_discovery.hpp"
 #include "addons/addon_discovery_source_owner.hpp"
-#include "addons/addon_source_consent_ui.hpp"
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -189,7 +188,6 @@ MainUI::~MainUI()
     vlc::addons::setHelperLaunchObserver({});
     for (auto* manager:findChildren<vlc::addons::AddonManager*>(QString(),Qt::FindDirectChildrenOnly)) manager->setNativeStreamAvailable(false);
     for (auto* source:findChildren<vlc::addons::AddonDiscoverySourceOwner*>(QString(),Qt::FindDirectChildrenOnly)) source->close();
-    for (auto* review:findChildren<vlc::addons::AddonSourceConsentUi*>(QString(),Qt::FindDirectChildrenOnly)) review->close();
     for (auto* sessions:findChildren<vlc::addons::AddonPlayerSessions*>(QString(),Qt::FindDirectChildrenOnly)) sessions->close();
     for (auto* service:findChildren<AddonMetadataService*>(QString(),Qt::FindDirectChildrenOnly)) service->shutdown();
     for (auto* queue:findChildren<vlc::addons::AddonNativeQueueStore*>(QString(),Qt::FindDirectChildrenOnly)) queue->close();
@@ -558,10 +556,8 @@ void MainUI::registerQMLTypes()
             nativeQueue->setObjectName(QStringLiteral("addonNativeQueueStore"));
             auto* sourceOwner = new vlc::addons::AddonDiscoverySourceOwner(addonManager,
                 VLC_OBJECT(m_intf), admissions, m_mainCtx->addonStreamLifetime(), this);
-            auto* sourceReview = new vlc::addons::AddonSourceConsentUi(sourceOwner, this);
             const QPointer<vlc::addons::AddonDiscoverySourceOwner> sourceAccess(sourceOwner);
             const QPointer<vlc::addons::AddonManager> sourceManager(addonManager);
-            const QPointer<vlc::addons::AddonSourceConsentUi> sourcePanel(sourceReview);
             connect(sourceOwner, &vlc::addons::AddonDiscoverySourceOwner::changed, addonManager,
                 [sourceAccess, sourceManager] {
                     if (sourceManager) sourceManager->setNativeStreamAvailable(sourceAccess && sourceAccess->active());
@@ -570,21 +566,18 @@ void MainUI::registerQMLTypes()
                         sourceAccess && sourceAccess->transportAvailable());
                 });
             connect(m_mainCtx, &MainCtx::addonWorkRetiring, sourceOwner,
-                [sourceAccess, sourceManager, sourcePanel] {
+                [sourceAccess, sourceManager] {
                     if (sourceManager) sourceManager->setNativeStreamAvailable(false);
                     if (sourceManager) sourceManager->setNativeStreamTransportHint(false, false);
                     if (sourceAccess) sourceAccess->close();
-                    if (sourcePanel) sourcePanel->close();
                 }, Qt::DirectConnection);
             connect(m_intf->p_mainPlayerController, &QObject::destroyed, sourceOwner,
-                [sourceAccess, sourceManager, sourcePanel] {
+                [sourceAccess, sourceManager] {
                     if (sourceManager) sourceManager->setNativeStreamAvailable(false);
                     if (sourceManager) sourceManager->setNativeStreamTransportHint(false, false);
                     if (sourceAccess) sourceAccess->close();
-                    if (sourcePanel) sourcePanel->close();
                 });
             sourceOwner->activate();
-            qmlRegisterSingletonInstance<vlc::addons::AddonSourceConsentUi>(uri, versionMajor, versionMinor, "AddonSourcePlayback", sourceReview);
             auto nativeBackend=nativeQueue->backend();
             vlc::addons::AddonNativeLibraryTargets* libraryTargets=nullptr;
             if (auto* mediaLibrary=m_mainCtx->getMediaLibrary()) {

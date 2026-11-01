@@ -4,13 +4,16 @@ The native host owns source activation and playback approval. A package cannot c
 
 ## App construction and retirement
 
-Create one `AddonDiscoverySourceOwner` on the Manager thread. Give it the current Manager, the native instance, the shared `AddonSourceAdmissions`, and the app work handle. Call `activate()` explicitly. Activation does not approve a source.
+Create one `AddonDiscoverySourceOwner` on the Manager thread. Give it the current Manager, the native instance, the shared `AddonSourceAdmissions`, and the app work handle. Call `activate()` explicitly. Activation does not approve a source by itself. A refresh capture or a primary playback open saves the approval for an enabled source whose `media.stream` grant the user accepted (see [source consent](native-source-consent-contract.md)).
 
 Use `createPlayerDiscoveryWithSources()` with the same owner and native queue backend. The older playable-handle factory remains available for its existing callers. The new factory does not call the provider's `resolve` operation from a browser action.
 
 Connect app retirement to `close()` before native Core or the app is destroyed. The owner closes native authority first. Its counted app work releases file readers and Qt data before app drain ends. Keep the native instance and the Qt app valid through that drain. A publication gate alone does not meet this requirement.
 
 ## Core approval UI
+
+The app no longer shows this review. The API remains for host tests and a
+possible future revoke control.
 
 `requestApproval(source)` returns a private request ID. A successful capture emits `approvalReady(id)`. It does not emit a successful `actionFinished` signal. A failed capture emits `actionFinished(id, false, error)`.
 
@@ -30,7 +33,7 @@ No key, credential reference, provider API address, or resolved stream address e
 
 The review expires after 30 seconds of steady time. The UI must reread and compare the exact displayed map before it calls `approve(id)` or `revoke(id)`. Each accepted action consumes the review. A successful saved action emits `actionFinished(id, true, {})`; a failed action supplies a host error. `discardApproval(id)` closes the review and preserves saved approval. An immediate false action result means no save task was admitted.
 
-`refreshSource(source)` reads current saved approval on joined work. `canUseSource(source)` reads memory only and remains false until that capture succeeds. It is false while the owner is inactive or closing. `canUseReference(reference)` also compares the exact account. `changed()` updates readiness in open browser views.
+`refreshSource(source)` reads current saved approval on joined work, and saves it first from the accepted permission. `canUseSource(source)` reads memory only and remains false until that capture succeeds. It is false while the owner is inactive or closing. `canUseReference(reference)` also compares the exact account. `changed()` updates readiness in open browser views.
 
 ## Saved reference and native open
 

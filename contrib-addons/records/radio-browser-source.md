@@ -7,8 +7,9 @@ This change does not create or publish that repository.
 
 The app distribution includes the package and its compiled Wasm entry.
 MainUI registers it through the existing distribution package path. A saved
-package removal still takes effect. Source playback needs the separate
-trusted user approval. Package installation does not grant that approval.
+package removal still takes effect. Enabling the add-on accepts its
+`media.stream` permission, which approves source playback; there is no
+separate approval step.
 
 ## Source behavior
 

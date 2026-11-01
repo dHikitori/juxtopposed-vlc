@@ -26,7 +26,7 @@ QtObject {
                 break
             }
             case "media.fingerprint": summaries.push(qsTr("Calculate a fingerprint for selected media.")); break
-            case "media.stream": summaries.push(qsTr("Play selected media from public online services. Each source also needs your playback approval.")); break
+            case "media.stream": summaries.push(qsTr("Play selected media from public online services.")); break
             case "network.http": {
                 summaries.push(qsTr("Connect to these services: %1").arg(destinations(scope.origins)))
                 if (Array.isArray(scope.assetRedirectProfiles) && scope.assetRedirectProfiles.includes("internet-archive-images@1"))

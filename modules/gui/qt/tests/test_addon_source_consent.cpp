@@ -218,6 +218,19 @@ private slots:
         QVERIFY(store.grant(ticket->id)); QVERIFY(store.approved(f.binding)); QVERIFY(!store.grant(ticket->id));
         AddonSourceConsent restored(f.profile.path(),f.checks(),f.options()); QVERIFY(restored.approved(f.binding));
     }
+    void acceptedPermissionApprovesOnlyACurrentSource() {
+        Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
+        f.enabled=false; QVERIFY(!store.approveAccepted(f.binding)); QVERIFY(!QFile::exists(f.file())); f.enabled=true;
+        f.granted=false; QVERIFY(!store.approveAccepted(f.binding)); QVERIFY(!store.approved(f.binding)); f.granted=true;
+        QVERIFY(store.approveAccepted(f.binding)); QVERIFY(store.approved(f.binding));
+        const auto revision=read(f.file()).value("revision").toInt();
+        QVERIFY(store.approveAccepted(f.binding)); QCOMPARE(read(f.file()).value("revision").toInt(),revision);
+        const auto uri=f.uri(); QVERIFY(!store.mintIntent(f.binding,uri,1,Reason::PrimaryPlayback).isEmpty());
+        // A new account is a new binding; accepting it again approves it.
+        f.binding.accountReference="account-2"; QVERIFY(!store.approved(f.binding));
+        QVERIFY(store.approveAccepted(f.binding)); QVERIFY(store.approved(f.binding));
+        AddonSourceConsent restored(f.profile.path(),f.checks(),f.options()); QVERIFY(restored.approved(f.binding));
+    }
     void canonicalRepositoryAndSourceKindsHaveSeparateAuthority() {
         Fixture f; AddonSourceConsent store(f.profile.path(),f.checks(),f.options());
         auto alias=f.binding; alias.identity="https://EXAMPLE.ORG:443/addons/../addons/radio.git";

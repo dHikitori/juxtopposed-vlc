@@ -100,6 +100,9 @@ public:
     std::optional<Ticket> capture(const Binding&,QString* error=nullptr);
     bool grant(const QString& ticket,QString* error=nullptr);
     bool revoke(const Binding&,QString* error=nullptr);
+    // Saves the approval that accepting the package's media.stream permission
+    // gave, at install, enable, or update. The source must be current.
+    bool approveAccepted(const Binding&,QString* error=nullptr);
     bool approved(const Binding&) const;
     // Create these on joined background work. An approval token cannot mint an
     // input intent. Its current() method and the returned revokers use memory only.

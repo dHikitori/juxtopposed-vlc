@@ -347,7 +347,7 @@ TestCase {
         const summary = item("addonInstallPermissionSummary")
         compare(summary.textFormat, Text.PlainText)
         verify(summary.text.includes("public online services"))
-        verify(summary.text.includes("Each source also needs your playback approval"))
+        verify(!summary.text.includes("playback approval"))
         verify(!summary.text.includes("public-https-media@1"))
         verify(page.capabilityLimits({}, permissions, false).includes("cannot play media"))
         compare(page.capabilityLimits({mediaStreamAvailable: true}, permissions, false), "")

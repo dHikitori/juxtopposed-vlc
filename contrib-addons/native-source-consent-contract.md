@@ -1,7 +1,14 @@
 # Native source consent
 
 `AddonSourceConsent` is a host service. It has no worker operation or QML write API.
-Package installation and enablement do not give source playback approval.
+The user approves source playback when they accept a package's `media.stream`
+permission: in the install review, at Enable, or in an update prompt that adds
+it. Bundled packages carry that grant. The host then saves the approval with
+`approveAccepted()` the first time it captures the enabled source, or at its
+first native playback open. There is no separate approval step in the app.
+Turning the add-on off withdraws playback at once. A changed repository or
+account is a new binding; the host saves it only while the package is enabled
+with the grant.
 
 ## Saved approval
 
@@ -12,7 +19,8 @@ The host captures a ticket before it shows an approval dialog. The ticket binds:
 - The `public-https-media@1` transport profile.
 - The saved approval epoch and revision.
 
-Only host C++ code can grant the captured ticket. Each ticket has one use and an
+`approveAccepted()` captures and grants a ticket in one call. Only host C++
+code can grant the captured ticket. Each ticket has one use and an
 expiry time. A changed source, account, saved revision, or local reset rejects it.
 The host must show the captured source, account, and profile in the dialog.
 

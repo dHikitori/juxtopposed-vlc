@@ -24,7 +24,6 @@ FocusScope {
     property string displayRequest: ""
     property int displayGeneration: 0
     property bool pendingOpen: false
-    property bool playbackReviewAvailable: false
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme }
     readonly property var sources: { if (!backend) return []; backend.revision; return backend.sources || [] }
     readonly property var source: sources.find(entry => entry.id === sourceId) || ({})
@@ -34,14 +33,10 @@ FocusScope {
     readonly property bool displayLoading: !!backend && backend.loading === true
     readonly property bool sourceChecking: sourceId.length > 0 && source.configurationKnown === false
     readonly property bool actionable: displayAvailable && !sourceChecking
-    // Play and Add to queue open the approval review instead of staying
-    // disabled with no reason given.
-    readonly property bool approvalFirst: playbackReviewAvailable && viewState.needsApproval === true
     // The app's queue-fill session; its source can differ from the open one.
     readonly property var queueFill: backend && backend.queueFill ? backend.queueFill : ({})
     signal configureRequested(string packageId)
     signal playlistRequested(var itemReferences)
-    signal playbackReviewRequested(string source)
     function closeView() {
         const owner = viewOwner, id = viewId
         viewId = ""; viewOwner = null; pendingOpen = false; viewState = ({}); rows.clear(); selected = []; playlistPickerOpen = false; playlistChoice = ""
@@ -163,14 +158,6 @@ FocusScope {
                 caption: qsTr("Settings"); text: caption; enabled: root.sourceId.length > 0 && root.displayAvailable
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
                 onClicked: root.configureRequested(root.sourceId.split("/")[0])
-            }
-            RedesignButton {
-                objectName: "addonDiscoveryPlaybackReview"
-                visible: root.playbackReviewAvailable
-                enabled: root.actionable && root.sourceId.length > 0 && (root.source.operations || []).includes("resolve")
-                caption: qsTr("Playback access"); text: caption; tooltipTextFormat: Text.PlainText
-                scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                onClicked: root.playbackReviewRequested(root.sourceId)
             }
         }
         RowLayout {
@@ -315,19 +302,15 @@ FocusScope {
             Layout.fillWidth: true
             RedesignButton {
                 objectName: "addonDiscoveryPlay"
-                caption: qsTr("Play"); tooltipTextFormat: Text.PlainText
-                text: root.approvalFirst ? qsTr("Play: approve playback access for this source first.") : caption
-                enabled: root.actionable && root.selected.length === 1 && (root.viewState.canPlay === true || root.approvalFirst)
+                caption: qsTr("Play"); text: caption; enabled: root.actionable && root.selected.length === 1 && root.viewState.canPlay === true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                onClicked: root.approvalFirst ? root.playbackReviewRequested(root.sourceId) : root.play()
+                onClicked: root.play()
             }
             RedesignButton {
                 objectName: "addonDiscoveryEnqueue"
-                caption: qsTr("Add to queue"); tooltipTextFormat: Text.PlainText
-                text: root.approvalFirst ? qsTr("Add to queue: approve playback access for this source first.") : caption
-                enabled: root.actionable && root.selected.length > 0 && (root.viewState.canEnqueue === true || root.approvalFirst)
+                caption: qsTr("Add to queue"); text: caption; enabled: root.actionable && root.selected.length > 0 && root.viewState.canEnqueue === true
                 scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
-                onClicked: root.approvalFirst ? root.playbackReviewRequested(root.sourceId) : root.enqueue()
+                onClicked: root.enqueue()
             }
             RedesignButton {
                 objectName: "addonDiscoveryPlaylist"

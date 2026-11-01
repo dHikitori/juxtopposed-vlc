@@ -2,7 +2,7 @@
 
 This add-on lets the user browse radio stations and search by station name. It uses the `discovery@1` SDK and the [Radio Browser API](https://docs.radio-browser.info/).
 
-Enable the add-on in Add-on settings. Open Media sources and select Radio Browser. Open a folder or enter a station name. Review Source playback access before Play or Enqueue. The saved source approval is separate from package permissions.
+Enable the add-on in Add-on settings. Open Media sources and select Radio Browser. Open a folder or enter a station name. Play or Enqueue a station. Accepting the add-on's permissions approves its playback; there is no separate step.
 
 The add-on reads at most 10 API records per page and 1,000 records per query. It uses one declared HTTPS origin with one retry. Each API response has a 24 KiB limit. There are at most 16 active requests. The host limits request time and spaces API requests by at least one second per origin.
 

@@ -321,6 +321,9 @@ QString AddonDiscoverySourceOwner::captureSource(const QString& contribution,boo
                 // and stable-reference capture remain possible if TLS fails.
                 if(authority && consent && key && current(authority->current) && shared->stop->open.load(std::memory_order_acquire)
                     && shared->put(*key,*authority)) {
+                    // binding() admits only an enabled package whose media.stream
+                    // permission the user accepted. That acceptance approves it.
+                    if(!review) consent->approveAccepted(*key,&error);
                     capture=std::make_shared<SourceCapture>(); capture->authority=*authority; capture->binding=*key;
                     capture->revoke=consent->nativeBindingRevoker(*key); capture->approved=consent->approvalToken(*key);
                     if(review) capture->ticket=consent->capture(*key,&error);
@@ -493,6 +496,8 @@ AddonNativeSourceResolver::AdmissionReader AddonDiscoverySourceOwner::captureAdm
         if(!authority || !key || !consent || !current(authority->current) || !admitted(shared->records,*key,uri)
             || !shared->put(*key,*authority)) return {};
         if(!shared->probeTransport() || !current(authority->current) || !shared->stop->transportReady()) return {};
+        // A playlist entry can play before its source was opened in this profile.
+        if(!consent->approveAccepted(*key)) return {};
         const auto intent=consent->mintIntent(*key,uri,generation,AddonSourceConsent::IntentReason::PrimaryPlayback);
         if(intent.isEmpty()) return {};
         const auto authorization=consent->consumeIntent(intent,*key,uri,generation,AddonSourceConsent::IntentReason::PrimaryPlayback);

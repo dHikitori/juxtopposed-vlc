@@ -249,6 +249,20 @@ private slots:
         QVERIFY(f.lifetime.handle().waitQt(std::chrono::seconds(3))); QCOMPARE(f.resolves(),0);
     }
 #endif
+    void refreshApprovesASourceWhosePermissionWasAccepted() {
+        Fixture f; QVERIFY(f.valid);
+        QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
+        QVERIFY(!f.owner->refreshSource(source).isEmpty()); QTRY_VERIFY(f.owner->canUseSource(source));
+        QCOMPARE(f.resolves(),0); QCOMPARE(f.starts->load(),0u);
+    }
+    void primaryOpenApprovesWithoutAReview() {
+        Fixture f; QVERIFY(f.valid);
+        QVERIFY(f.owner->activate()); QTRY_VERIFY(f.owner->active()); QVERIFY(!f.owner->canUseSource(source));
+        const auto uri=f.uri(); QVERIFY(!uri.isEmpty());
+        { NativeJob open(VLC_OBJECT(f.instance),uri,1); QCOMPARE(open.start(),VLC_SUCCESS); QTRY_COMPARE(open.ended.load(),1);
+          QCOMPARE(open.status.load(),VLC_SUCCESS); }
+        QCOMPARE(f.resolves(),1); QCOMPARE(f.starts->load(),1u);
+    }
     void subscriptionFailureEndsActivationAndCannotRetryAClosedInitializer() {
         Fixture f; QVERIFY(f.valid); StoreAuthority authority(f.profile.path());
         std::vector<StoreAuthorityChanges> occupied;

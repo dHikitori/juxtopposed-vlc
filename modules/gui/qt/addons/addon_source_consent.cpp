@@ -408,6 +408,13 @@ bool AddonSourceConsent::grant(const QString& token,QString* error)
     if (!save(state,error)) return false;
     entry->allowed.store(true,std::memory_order_release); m_withdrawn.remove(id); return true;
 }
+bool AddonSourceConsent::approveAccepted(const Binding& value,QString* error)
+{
+    if (approved(value)) return true;
+    const auto ticket=capture(value,error);
+    // A concurrent save of the same approval also counts.
+    return ticket && (grant(ticket->id,error) || approved(value));
+}
 bool AddonSourceConsent::approved(const Binding& value) const
 {
     const auto binding=canonical(value); if (!binding || !sourceCurrent(*binding)) return false;
