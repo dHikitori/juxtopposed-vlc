@@ -89,8 +89,11 @@ private slots:
         const auto row = items.first().toObject();
         QCOMPARE(row.value("title").toString(), QStringLiteral("Song 0"));
         QCOMPARE(row.value("durationMs").toInt(), 1000);
-        QVERIFY(row.value("id").toString().startsWith("queue:"));
-        QVERIFY(!row.value("id").toString().contains("10"));
+        const auto id = row.value("id").toString();
+        QVERIFY(id.startsWith("queue:"));
+        // Neither the playlist item's own ID (10) nor its index (0), nor any raw number.
+        bool numeric = false; id.mid(6).toLongLong(&numeric);
+        QVERIFY(id != "queue:10"); QVERIFY(id != "queue:0"); QVERIFY(!numeric);
         QVERIFY(!QJsonDocument(response).toJson().contains("file:"));
         // The same item has another ID for another add-on, and the same ID again for this one.
         const auto other = run(services, "queue.snapshot", {{"limit", 1}}, "org.example.two");
