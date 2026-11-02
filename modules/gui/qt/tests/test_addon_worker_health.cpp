@@ -4,6 +4,7 @@
 #include "addons/addon_process_launch.hpp"
 #include "addons/addon_stream_lifetime.hpp"
 #include <QTest>
+#include <algorithm>
 #include <QTemporaryDir>
 #include <QDir>
 #include <QFile>
@@ -64,9 +65,13 @@ private slots:
         QVERIFY(!manager.invoke(FixtureContribution, QStringLiteral("roots"), {}).isEmpty());
         QTRY_COMPARE_WITH_TIMEOUT(crashes(manager), 1, 15000);
         QVERIFY(manager.health(Package).value("retryInMs").toLongLong() > 1000);
-        // No worker starts during the wait.
+        // No worker starts during the wait; the call ends with an error.
         const auto launches = helperLaunchCount();
-        QVERIFY(manager.invoke(FixtureContribution, QStringLiteral("roots"), {}).isEmpty());
+        QSignalSpy finished(&manager, &AddonManager::operationFinished);
+        const auto waiting = manager.invoke(FixtureContribution, QStringLiteral("roots"), {});
+        QVERIFY(!waiting.isEmpty());
+        QTRY_VERIFY(std::any_of(finished.cbegin(), finished.cend(), [&](const QList<QVariant>& row) {
+            return row.at(0).toString() == waiting && row.at(2).toString() == QLatin1String("error"); }));
         QCOMPARE(helperLaunchCount(), launches);
         // Second crash after the wait; the next wait is about 4 s.
         QTRY_COMPARE_WITH_TIMEOUT(manager.health(Package).value("retryInMs").toLongLong(), 0, 5000);

@@ -404,6 +404,8 @@ void MainUI::registerQMLTypes()
         vlc::addons::AddonManager* addonManager = nullptr;
         AddonMetadataService* metadataService = nullptr;
         if (!dataDirectory.isEmpty()) {
+            // Package and profile reads for the GUI run on background work.
+            vlc::addons::AddonManager::setBackgroundReads(true);
             addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
             msg_Dbg(m_intf, "Add-on store directory: %s", qtu(addonManager->storageDirectory()));
             // Several app windows share this profile. Attach the profile peer

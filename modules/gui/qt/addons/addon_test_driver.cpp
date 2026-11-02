@@ -16,10 +16,24 @@
 #include <QTimer>
 
 #include <memory>
+#ifdef __linux__
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
 #include <optional>
 #include <utility>
 
 namespace vlc::addons {
+namespace {
+qint64 guiThread()
+{
+#ifdef __linux__
+    return qint64(syscall(SYS_gettid));
+#else
+    return 0;
+#endif
+}
+}
 
 AddonTestDriver* AddonTestDriver::create(AddonManager* manager, AddonPackageSummaries* summaries,
                                          AddonDiscoveryService* discovery, QObject* parent)
@@ -112,7 +126,8 @@ void AddonTestDriver::run(const QString& command, const QString& argument)
     if (command == QLatin1String("ping"))
         reply({{"ok", true}});
     else if (command == QLatin1String("stats"))
-        reply({{"ok", true}, {"launches", qint64(helperLaunchCount())}});
+        // thread: the GUI thread's id, for the smoke test's file audit.
+        reply({{"ok", true}, {"launches", qint64(helperLaunchCount())}, {"thread", guiThread()}});
     else if (command == QLatin1String("extensions"))
         extensions();
     else if (command == QLatin1String("install"))

@@ -20,6 +20,10 @@ the add-on worker. The fixture has no network, credential or file access.
 It then plays a short video in a series folder and waits for the bundled
 Episodes panel's button (player.panels@1 and media.siblings).
 
+With --gui-file-audit and the audit library that the build makes, each
+window records the add-on store files it opens. The run fails when the GUI
+thread opened one: store reads and writes run on background work.
+
 Exit status 0 means every check passed, 77 means the build has no app.
 """
 
@@ -121,6 +125,11 @@ class App:
         env = dict(args.env)
         if self.driver_path:
             env['VLC_ADDON_TEST_DRIVER_SOCKET'] = str(self.driver_path)
+        self.audit_path = home / f'{name}-gui-files.log' if args.gui_file_audit and driver else None
+        if self.audit_path:
+            env['LD_PRELOAD'] = ' '.join(filter(None, [str(args.gui_file_audit), env.get('LD_PRELOAD', '')]))
+            env['VLC_ADDON_GUI_FILE_AUDIT_ROOT'] = str(home / 'data' / 'vlc' / 'addons') + '/'
+            env['VLC_ADDON_GUI_FILE_AUDIT_LOG'] = str(self.audit_path)
         self.process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                         start_new_session=True)
@@ -208,6 +217,17 @@ class App:
         if not line:
             raise Failure(f'the add-on test driver closed during "{command}"')
         return json.loads(line)
+
+    def gui_store_opens(self, timeout):
+        """Add-on store files that the GUI thread opened, from the audit log."""
+        if not self.audit_path:
+            return []
+        thread = str(self.drive('stats', timeout).get('thread', 0))
+        try:
+            lines = self.audit_path.read_text(errors='replace').splitlines()
+        except OSError:
+            return []
+        return sorted({line.split('\t', 1)[1] for line in lines if '\t' in line and line.split('\t', 1)[0] == thread})
 
     def quit(self, timeout):
         started = time.monotonic()
@@ -421,6 +441,14 @@ def run(args):
             results['second_idle_cpu_seconds'] = round(cpu_seconds(trees[1]) - before[1], 3)
             results['second_resident_bytes'] = resident_bytes(trees[1])
 
+        if args.gui_file_audit and args.driver:
+            for app in windows:
+                opened = app.gui_store_opens(args.timeout)
+                results.setdefault('gui_store_opens', {})[app.name] = len(opened)
+                if opened:
+                    root = str(home / 'data' / 'vlc' / 'addons') + '/'
+                    raise Failure(f'{app.name}: the GUI thread opened add-on store files: '
+                                  + ', '.join(path.replace(root, '') for path in opened[:12]))
         if second:
             order = [second, first] if args.quit_second_first else [first, second]
             results['quit_order'] = [app.name for app in order]
@@ -486,6 +514,8 @@ def main():
                         help='do not wait for bundled add-ons, for a build without them')
     parser.add_argument('--no-display', action='store_true',
                         help='kept for older scripts; the app never gets DISPLAY or WAYLAND_DISPLAY')
+    parser.add_argument('--gui-file-audit', type=Path, default=None,
+                        help='the audit library: fail when the GUI thread opens an add-on store file (needs --driver)')
     parser.add_argument('--idle', type=float, default=30.0, help='idle measurement in seconds')
     parser.add_argument('--timeout', type=float, default=60.0)
     parser.add_argument('--work', type=Path, default=None, help='parent of the temporary home')
@@ -496,6 +526,8 @@ def main():
     args.episode = args.episode.resolve()
     args.picture = args.picture.resolve()
     args.fixture = args.fixture.resolve()
+    if args.gui_file_audit:
+        args.gui_file_audit = args.gui_file_audit.resolve()
     return run(args)
 
 

@@ -140,21 +140,27 @@ if host_system == 'linux' and get_option('qt').allowed()
         suite: ['addons', addon_test_labels['addon_app_smoke_two_windows']],
         depends: addon_app_depends, is_parallel: false, timeout: 300)
     if get_option('addon-test-driver')
+        # The driver runs also fail when the GUI thread opens an add-on store
+        # file (see addon_gui_file_audit.c).
+        addon_gui_file_audit = shared_module('addon_gui_file_audit', 'addon_gui_file_audit.c',
+            dependencies: [dependency('dl', required: false)], build_by_default: false, install: false)
+        addon_app_audit = ['--gui-file-audit', addon_gui_file_audit.full_path()]
+        addon_app_depends += [addon_gui_file_audit]
         test('addon_app_smoke_driver', find_program('python3'),
-            args: ['-B', addon_app_smoke, '--driver'],
+            args: ['-B', addon_app_smoke, '--driver'] + addon_app_audit,
             suite: ['addons', addon_test_labels['addon_app_smoke_driver']],
             depends: addon_app_depends, is_parallel: false, timeout: 300)
         # Step 2's exit check: an install in one window shows in the other.
         test('addon_app_smoke_shared_profile', find_program('python3'),
-            args: ['-B', addon_app_smoke, '--driver', '--windows', '2'],
+            args: ['-B', addon_app_smoke, '--driver', '--windows', '2'] + addon_app_audit,
             suite: ['addons', addon_test_labels['addon_app_smoke_shared_profile']],
             depends: addon_app_depends, is_parallel: false, timeout: 300)
         test('addon_app_smoke_owner', find_program('python3'),
-            args: ['-B', addon_app_smoke, '--driver', '--owner'],
+            args: ['-B', addon_app_smoke, '--driver', '--owner'] + addon_app_audit,
             suite: ['addons', addon_test_labels['addon_app_smoke_owner']],
             depends: addon_app_depends, is_parallel: false, timeout: 300)
         test('addon_app_smoke_owner_two_windows', find_program('python3'),
-            args: ['-B', addon_app_smoke, '--driver', '--owner', '--windows', '2'],
+            args: ['-B', addon_app_smoke, '--driver', '--owner', '--windows', '2'] + addon_app_audit,
             suite: ['addons', addon_test_labels['addon_app_smoke_owner_two_windows']],
             depends: addon_app_depends, is_parallel: false, timeout: 300)
     endif

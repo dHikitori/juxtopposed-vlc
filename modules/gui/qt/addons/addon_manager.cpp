@@ -49,6 +49,7 @@ QJsonObject packageSchema(const InstalledPackage& package)
     if (package.manifest.settingsSchema.isEmpty()) return {{"type", "object"}, {"properties", QJsonObject{}}, {"additionalProperties", false}};
     return readObject(QDir(package.directory).filePath(package.manifest.settingsSchema));
 }
+std::atomic_bool& backgroundReads() { static std::atomic_bool value{false}; return value; }
 QString localPart(const QString& global) { return global.section('/', 1); }
 QString packagePart(const QString& global) { return global.section('/', 0, 0); }
 
@@ -67,8 +68,9 @@ AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAcc
     initializePreparedMetadata();
     m_repositoryJobs=std::make_unique<AddonRepositoryJobs>(AddonStreamLifetime::applicationHandle());
     m_writeJobs=std::make_unique<AddonRepositoryJobs>(AddonStreamLifetime::applicationHandle());
-    // Tools and tests that run no app lifetime do store work inline.
-    m_inlineStore=!AddonStreamLifetime::applicationHandle().current();
+    // Without the app lifetime, store work runs on the calling thread.
+    m_inlineWrites=!AddonStreamLifetime::applicationHandle().current();
+    m_inlineStore=m_inlineWrites || !backgroundReads().load(std::memory_order_acquire);
     connect(&m_hostServices, &AddonHostServices::availabilityChanged, this, &AddonManager::capabilitiesChanged);
     connect(this, &AddonManager::revisionChanged, this, &AddonManager::capabilitiesChanged);
     m_storage = std::make_unique<AddonStorage>(m_store, [this](const AddonHostServices::Context& host, PrivateStorageContext* output, QString* error) {
@@ -131,6 +133,7 @@ AddonManager::~AddonManager()
     m_writeJobs->close();
     const auto workers = m_workers; for (auto* worker : workers) worker->stop(); m_secrets.clearSession();
 }
+void AddonManager::setBackgroundReads(bool enabled) { backgroundReads().store(enabled, std::memory_order_release); }
 bool AddonManager::busy() const { return m_repositoryJobs->busy(); }
 bool AddonManager::writing() const
 {
@@ -195,7 +198,7 @@ void AddonManager::startWrite()
         if (alive) endWrite(request, success, revision);
         if (alive) pumpWrites();
     };
-    if (m_inlineStore) {
+    if (m_inlineWrites) {
         m_runningWrite->write.work();
         complete(AddonRepositoryJobs::Result::Finished);
         return;

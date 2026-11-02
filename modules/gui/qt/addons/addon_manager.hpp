@@ -59,6 +59,10 @@ public:
     static std::unique_ptr<AddonManager> withNetworkTransport(const QString& storageDirectory,
         std::unique_ptr<QNetworkAccessManager>&, QObject* parent = nullptr);
     ~AddonManager() override;
+    // The app turns this on before it makes its manager: package and profile
+    // reads for the GUI then run on background work. Tools and tests read on
+    // the calling thread unless they turn it on. It needs the app lifetime.
+    static void setBackgroundReads(bool);
     int revision() const { return m_revision; }
     QString errorMessage() const { return m_error; }
     QVariantList packages() const;
@@ -315,7 +319,7 @@ private:
     std::unique_ptr<AddonNativeWake> m_writeWake;
     NativeNotification m_writeSlot;
     quint64 m_writeRequests = 0, m_writeTickets = 0, m_runningTicket = 0;
-    bool m_inlineStore = false;
+    bool m_inlineStore = false, m_inlineWrites = false;
     QString prepareDisplayRequest(const QString&,bool settings);
     struct DisplayRequest {
         QPointer<AddonCatalogueView> view;
