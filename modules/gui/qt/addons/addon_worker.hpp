@@ -20,6 +20,10 @@ public:
     void setExecutable(const QString&);
     // The profile's precompiled module cache. Empty disables it.
     void setPrecompiledCache(const QString& directory) { m_precompiled = directory; }
+    // Arguments that background work already computed, so a start reads no
+    // file. Without them, a start computes the arguments itself.
+    void setLaunchArguments(const QStringList& arguments, bool precompileMissing)
+    { m_launchArguments = arguments; m_precompileMissing = precompileMissing; }
     void setHostServices(AddonHostServices* services) { m_services = services; }
     void setHostCapabilities(const QJsonObject& capabilities) { m_hostCapabilities = capabilities; }
     void setConfiguration(const QJsonObject& nonsecretSettings, const QJsonObject& credentialStatus,
@@ -31,8 +35,9 @@ public:
     // C++ only. The guard must own plain native state and must not read files.
     QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
                    NetworkBroker::RequestGuard);
+    // requestId: an ID the caller already gave out, or empty for a new one.
     QString invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
-                   NetworkBroker::RequestGuard, std::shared_ptr<AddonMetadataAttemptAdmission>);
+                   NetworkBroker::RequestGuard, std::shared_ptr<AddonMetadataAttemptAdmission>, const QString& requestId = {});
     void cancel(const QString& invocation);
     void stop();
 signals:
@@ -90,6 +95,8 @@ private:
     NetworkBroker::RequestGuard m_requestGuard;
     QString m_executable;
     QString m_precompiled;
+    QStringList m_launchArguments;
+    bool m_precompileMissing = false;
     bool m_ready = false, m_stopping = false, m_failed = false;
     bool m_prepared = false, m_preparedRetiring = false, m_preparedAbort = false;
     bool m_preparedCleanExit = false, m_preparedNotified = false;

@@ -25,7 +25,7 @@ void AddonAccountSetup::setManager(QObject* manager)
 QString AddonAccountSetup::state() const
 {
     if (m_saved) return QStringLiteral("connected");
-    if (!m_saveRequest.isEmpty()) return QStringLiteral("requesting");
+    if (!m_saveRequest.isEmpty() || m_preparing) return QStringLiteral("requesting");
     if (!m_flow) return m_message.isEmpty() ? QStringLiteral("idle") : QStringLiteral("failed");
     switch (m_flow->state()) {
     case DeviceAuthorization::State::Requesting: return QStringLiteral("requesting");
@@ -60,11 +60,29 @@ bool AddonAccountSetup::start()
 {
     cancel();
     m_message.clear(); m_saved = false; m_saveRequest.clear();
-    const auto recipe = m_manager ? m_manager->accountRecipe(m_packageId, m_field) : std::nullopt;
-    if (!recipe) {
+    if (!m_manager) {
         m_message = tr("This add-on does not have an account sign-in that the app can use.");
         emit changed();
         return false;
+    }
+    // The manager reads the recipe on background work.
+    m_preparing = true;
+    const auto generation = ++m_generation;
+    emit changed();
+    const QPointer<AddonAccountSetup> owner(this);
+    m_manager->requestAccountRecipe(m_packageId, m_field, [owner, generation](std::optional<DeviceRecipe> recipe) {
+        if (!owner || owner->m_generation != generation) return;
+        owner->m_preparing = false;
+        owner->begin(std::move(recipe));
+    });
+    return true;
+}
+void AddonAccountSetup::begin(std::optional<DeviceRecipe> recipe)
+{
+    if (!recipe || !m_manager) {
+        m_message = tr("This add-on does not have an account sign-in that the app can use.");
+        emit changed();
+        return;
     }
     m_flow = std::make_unique<DeviceAuthorization>(*recipe, m_manager->accountTransport());
     connect(m_flow.get(), &DeviceAuthorization::changed, this, &AddonAccountSetup::changed);
@@ -74,11 +92,11 @@ bool AddonAccountSetup::start()
         emit changed();
     });
     m_flow->start();
-    return true;
 }
 
 void AddonAccountSetup::cancel()
 {
+    if (m_preparing) { m_preparing = false; ++m_generation; }
     if (m_flow) m_flow->cancel();
 }
 

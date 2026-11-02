@@ -122,7 +122,8 @@ ColumnLayout {
             id: row
             required property var modelData
             readonly property var retained: {
-                root.backend.revision
+                // The manager reads the package on background work and then signals readsChanged.
+                root.backend.revision; root.backend.readRevision
                 return typeof root.backend.retainedGenerations === "function" ? root.backend.retainedGenerations(modelData.id) : []
             }
             Layout.fillWidth: true

@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QPointer>
 #include <memory>
+#include <optional>
+#include "addon_device_authorization.hpp"
 
 namespace vlc::addons {
 class AddonManager;
@@ -44,11 +46,14 @@ signals:
     void connected();
 private:
     void saveFinished(const QString& request, bool success, const QString& error);
+    void begin(std::optional<DeviceRecipe> recipe);
     QPointer<AddonManager> m_manager;
     // The manager saves the account on background work.
     QString m_packageId, m_field, m_message, m_saveRequest;
     bool m_sessionOnly = false;
     bool m_saved = false;
+    bool m_preparing = false;
+    quint64 m_generation = 0;
     std::unique_ptr<DeviceAuthorization> m_flow;
 };
 }

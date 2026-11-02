@@ -43,6 +43,8 @@ class AddonManager : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY revisionChanged FINAL)
     // Store writes are queued or running (see the request calls).
     Q_PROPERTY(bool writing READ writing NOTIFY revisionChanged FINAL)
+    // A package read for a GUI query ended (see retainedGenerations).
+    Q_PROPERTY(quint64 readRevision READ readRevision NOTIFY readsChanged FINAL)
     Q_PROPERTY(QVariantMap pendingPackage READ pendingPackage NOTIFY revisionChanged FINAL)
     Q_PROPERTY(bool safeMode READ safeMode NOTIFY revisionChanged FINAL)
     Q_PROPERTY(QVariantMap capabilities READ capabilities NOTIFY capabilitiesChanged FINAL)
@@ -102,6 +104,7 @@ public:
     // GUI thread. Another app process changed the shared profile. Reload the
     // cached provider order and the display catalogue.
     void profileChanged();
+    void loadProviderOrder(bool profile);
     // Read these memory snapshots on the manager thread. They contain no key bytes.
     QString workerExecutable() const { return m_workerExecutable; }
     QHash<QString, QHash<QString, bool>> credentialPresenceSnapshot() const { return m_secrets.presenceSnapshot(); }
@@ -116,7 +119,9 @@ public:
     bool credentialPersistenceAvailable() const { return CredentialStore::persistentAvailable(); }
     bool busy() const;
     bool writing() const;
-    bool safeMode() const { return m_store.safeMode(); }
+    quint64 readRevision() const noexcept { return m_readRevision; }
+    // The app keeps the value read on background work; tools read the file.
+    bool safeMode() const { return m_inlineStore ? m_store.safeMode() : m_safeMode; }
     QVariantMap pendingPackage() const;
     QVariantMap capabilities() const;
     QVariantMap updateResult() const { return m_updateResult; }
@@ -183,7 +188,9 @@ public:
     bool rollback(const QString& packageId);
     bool setSafeMode(bool enabled);
     bool recoverPackage(const QString& packageId);
-    Q_INVOKABLE QVariantList retainedGenerations(const QString& packageId) const;
+    // From the last package read; a stale one starts a new read and
+    // readsChanged follows.
+    Q_INVOKABLE QVariantList retainedGenerations(const QString& packageId);
     Q_INVOKABLE bool uninstall(const QString& packageId, bool removeData);
     QString invoke(const QString& contributionId, const QString& operation, const QVariantMap& context);
     // C++ only. Native owners supply a memory-only request guard.
@@ -195,7 +202,7 @@ public:
     quint64 fetchAsset(const QString& contributionId, const QJsonObject& descriptor, NetworkBroker::Callback);
     QString prepareArtworkAsset(const QString& contribution, ArtworkPreparationComplete);
     quint64 fetchPreparedArtwork(const PreparedArtwork&, const QJsonObject&, NetworkBroker::Callback);
-    void cancelAsset(quint64 job) { m_network.cancel(job); }
+    void cancelAsset(quint64 job);
     NetworkBroker* networkBroker() { return &m_network; }
     // C++ only. The resolver keeps the release, permission, and account scope.
     NetworkBroker::CredentialResolver credentialResolver(const InstalledPackage&, NetworkBroker::RequestGuard* current = nullptr) const;
@@ -213,6 +220,8 @@ public:
     // A provider asked for sign-in: exchange each saved refresh token once a
     // minute at most. This runs on demand only.
     void refreshAccounts(const QString& packageId, bool expiredOnly = false);
+    // The recipe for the sign-in view, read on background work.
+    void requestAccountRecipe(const QString& packageId, const QString& field, std::function<void(std::optional<DeviceRecipe>)> done);
 
     // File and folder settings. The app's picker registers the chosen path
     // and gets an opaque handle; the add-on sees only the handle. A pick is
@@ -225,7 +234,7 @@ public:
     // Opens the picker for a file or folder field; the result arrives as
     // settingsPathPicked.
     Q_INVOKABLE bool pickSettingsPath(const QString& packageId, const QString& field);
-    Q_INVOKABLE QVariantMap settingsHandleNames(const QString& packageId) const;
+    Q_INVOKABLE QVariantMap settingsHandleNames(const QString& packageId);
 
     // Temporary settings for this session, over the saved ones. They are
     // not saved and end when the app closes. An empty map clears them.
@@ -247,6 +256,7 @@ signals:
                            const QVariantMap& data, const QString& error);
     // A request call's write ended. errorMessage holds the same error.
     void writeFinished(const QString& request, bool success, const QString& error);
+    void readsChanged();
     void accountsChanged(const QString& packageId);
     void settingsPathPicked(const QString& packageId, const QString& field, const QString& handle, const QString& name);
 private:
@@ -259,7 +269,9 @@ private:
     QString accountReference(const InstalledPackage&) const;
     bool configured(const InstalledPackage&) const;
     QByteArray credential(const QString& package, const QString& field) const;
-    AddonWorker* worker(const InstalledPackage&);
+    struct PackageSnapshot;
+    // Null when the package cannot run now. retry: read the package again.
+    AddonWorker* worker(const std::shared_ptr<const PackageSnapshot>&, bool* retry);
     bool withdraw(const QString& packageId);
     bool changed(bool success, const QString& error = {});
     // One store write in three parts. prepare runs on this thread when the
@@ -274,6 +286,9 @@ private:
     };
     bool writeNow(StoreWrite);
     QString queueWrite(StoreWrite);
+    // A read on the same queue, after the writes requested before it. It
+    // does not report: its finish part delivers the result.
+    void queueRead(StoreWrite);
     void pumpWrites();
     void startWrite();
     void endWrite(const QString& request, bool success, int revision);
@@ -285,6 +300,7 @@ private:
     StoreWrite safeModeWrite(bool);
     StoreWrite accountWrite(const QString&, const QString&, const DeviceTokens&, bool sessionOnly, QString* error, bool report);
     void countCrash(const QString& packageId, const QString& error);
+    void replaceAccountTokens(const QString& id, const QString& field, const QJsonObject& references, const DeviceTokens&);
     // Background copy of the owner's credential store. Its session values are
     // wiped when the last write part that holds it ends.
     struct SecretsCopy {
@@ -292,13 +308,14 @@ private:
         ~SecretsCopy() { store.clearSession(); }
         CredentialStore store;
     };
-    struct QueuedWrite { QString request; StoreWrite write; };
+    struct QueuedWrite { QString request; StoreWrite write; bool report = true; };
     QList<QueuedWrite> m_writes;
     std::optional<QueuedWrite> m_runningWrite;
     std::unique_ptr<AddonRepositoryJobs> m_writeJobs;
     std::unique_ptr<AddonNativeWake> m_writeWake;
     NativeNotification m_writeSlot;
-    quint64 m_writeRequests = 0;
+    quint64 m_writeRequests = 0, m_writeTickets = 0, m_runningTicket = 0;
+    bool m_inlineStore = false;
     QString prepareDisplayRequest(const QString&,bool settings);
     struct DisplayRequest {
         QPointer<AddonCatalogueView> view;
@@ -326,9 +343,65 @@ private:
     // A package verified for invoke, with the store token from before the
     // read. While no store change has happened the token stays current, so
     // later invocations skip reading and hashing the package again.
-    struct VerifiedPackage { StoreAuthorityToken token; InstalledPackage package; bool usable = false; };
-    QHash<QString, VerifiedPackage> m_verified;
-    bool verifiedPackage(const QString& id, InstalledPackage* package);
+    // One package as an invocation and its worker use it, read on background
+    // work: the verified release, settings, schema, key presence and network
+    // configuration. It is current while the store token taken before the
+    // read is current. A stale snapshot still answers, and a new read starts.
+    struct PackageSnapshot {
+        StoreAuthorityToken token;
+        bool installed = false, network = false, configured = false;
+        // A new worker process loads the module from disk, so each worker
+        // start uses a fresh read.
+        mutable bool startedWorker = false;
+        InstalledPackage package;
+        QJsonObject settings, schema, networkSettings;
+        quint64 settingsRevision = 0, networkRevision = 0;
+        QVariantMap values, secretStatus;
+        QVariantList retained;
+        QString accountReference, error;
+        CredentialStore::Reader secrets;
+        // The worker start: its executable and cache in, its arguments out.
+        QString workerExecutable, precompiled;
+        QStringList launchArguments;
+        bool precompileMissing = false;
+        bool current() const noexcept { return token.current(); }
+        bool usable() const noexcept { return installed && package.enabled && configured; }
+    };
+    static void readSnapshot(const PackageStore&, const QString& id, PackageSnapshot*);
+    QHash<QString, std::shared_ptr<const PackageSnapshot>> m_snapshots;
+    QSet<QString> m_snapshotLoads;
+    // The snapshot, current or not. A stale one starts a new read.
+    std::shared_ptr<const PackageSnapshot> snapshot(const QString& id);
+    void loadSnapshot(const QString& id);
+    // The settings schema for a GUI query: the display catalogue's while a
+    // settings form holds it, or the last package read.
+    QJsonObject querySchema(const QString& id);
+    quint64 m_readRevision = 0;
+    bool m_safeMode = false;
+    bool m_workerAvailable = false;
+    // The attached display catalogue when this manager answers GUI queries
+    // from memory, or null for tools and before attachment.
+    const AddonCatalogueView* queryCatalogue() const;
+    struct PendingInvoke {
+        QString request, contribution, operation;
+        QVariantMap context;
+        NetworkBroker::RequestGuard current;
+        std::shared_ptr<AddonMetadataAttemptAdmission> attempt;
+        int reads = 0;
+    };
+    QHash<QString, QList<PendingInvoke>> m_pendingInvokes;
+    void admit(PendingInvoke);
+    NetworkBroker::CredentialResolver credentialResolver(const PackageSnapshot&, NetworkBroker::RequestGuard* current) const;
+    NetworkBroker::CredentialResolver credentialResolver(const InstalledPackage&, const QJsonObject& settings, quint64 revision,
+        bool captured, const StoreAuthorityToken&, CredentialStore::Reader secrets, NetworkBroker::RequestGuard* current) const;
+    // An asset request waits for its package read under an ID from this range.
+    struct PendingAsset { QString contribution; QJsonObject descriptor; NetworkBroker::Callback callback; };
+    QHash<quint64, PendingAsset> m_pendingAssets;
+    QHash<QString, QList<quint64>> m_assetWaits;
+    QHash<quint64, quint64> m_startedAssets;
+    quint64 m_deferredAssets = quint64(1) << 62;
+    quint64 startAsset(const PackageSnapshot&, const QString& contribution, const QJsonObject& descriptor, NetworkBroker::Callback);
+    void refuseInvoke(const PendingInvoke&, const QString& status, const QString& error);
     // The same idea for packages(), which lists every package and runs on
     // the GUI thread: one verified read per package until the store changes.
     // The stamp (size and time of state.json and its backup) also catches a
@@ -347,7 +420,7 @@ private:
     // Updated packages in their health period (install step 8): the first
     // worker crash restores the previous release; the first answer ends it.
     QSet<QString> m_observing;
-    void observeUpdate(const QString& id);
+    void observeUpdate(const QString& id, bool update);
     QElapsedTimer m_crashClock;
     bool crashBackoff(const QString& packageId) const;
     void recordCrash(const QString& packageId, const QString& error);

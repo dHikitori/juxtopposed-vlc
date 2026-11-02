@@ -261,6 +261,8 @@ ColumnLayout {
         ignoreUnknownSignals: true
         function onRevisionChanged() { root.observeBackend() }
         function onWriteFinished(request, success, error) { root.saveFinished(request, success) }
+        // Handle names come from the manager's background package read.
+        function onReadsChanged() { if (root.ready && !root.saving) root.readHandles() }
         function onChanged() { root.observeBackend() }
         function onCatalogueChanged() { root.observeBackend() }
         function onCatalogueFreshnessChanged() { root.observeBackend() }

@@ -25,17 +25,14 @@ AddonDiscoveryNativeBackend combineDiscoveryBackends(AddonDiscoveryNativeBackend
 bool discoveryReferenceAvailable(AddonManager* manager, const QVariantMap& reference)
 {
     if (!manager || manager->safeMode() || !AddonQueueTransactions::validReference(reference)) return false;
-    const auto source = reference.value("source").toString(); const auto package = source.section('/', 0, 0);
-    bool configured = false;
-    for (const auto& value : manager->packages()) {
-        const auto row = value.toMap(); if (row.value("id").toString() == package)
-            configured = row.value("enabled").toBool() && row.value("configured").toBool() && !row.value("recoveryRequired").toBool();
-    }
-    if (!configured) return false;
+    // The rows come from memory in the app. A package that needs recovery
+    // has no contributions.
+    const auto source = reference.value("source").toString();
     for (const auto& value : manager->contributionsOfType(QStringLiteral("discovery.source"))) {
         const auto row = value.toMap();
         const auto account = row.value("accountReference").toString();
-        if (row.value("id").toString() == source && !account.isEmpty() && account == reference.value("accountReference").toString()) return true;
+        if (row.value("id").toString() == source && row.value("enabled").toBool() && row.value("configured").toBool()
+            && !account.isEmpty() && account == reference.value("accountReference").toString()) return true;
     }
     return false;
 }

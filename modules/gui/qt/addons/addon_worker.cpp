@@ -116,8 +116,11 @@ void AddonWorker::start()
     m_process.setProcessEnvironment(environment);
     m_process.setWorkingDirectory(m_package.directory);
     m_process.setProgram(executable);
-    bool missing = false;
-    m_process.setArguments(AddonPrecompiledModules::arguments(m_precompiled, executable, m_package, &missing));
+    bool missing = m_precompileMissing;
+    if (m_launchArguments.isEmpty() || executable != m_executable)
+        m_process.setArguments(AddonPrecompiledModules::arguments(m_precompiled, executable, m_package, &missing));
+    else m_process.setArguments(m_launchArguments);
+    m_precompileMissing = false;
     // Compile once for the next start (finding F1).
     if (missing)
         AddonPrecompiledModules::schedule(m_precompiled, executable, m_package);
@@ -141,10 +144,11 @@ QString AddonWorker::invoke(const QString& contribution, const QString& operatio
     return invoke(contribution, operation, context, std::move(nativeCurrent), {});
 }
 QString AddonWorker::invoke(const QString& contribution, const QString& operation, const QJsonObject& context,
-                           NetworkBroker::RequestGuard nativeCurrent, std::shared_ptr<AddonMetadataAttemptAdmission> attempt)
+                           NetworkBroker::RequestGuard nativeCurrent, std::shared_ptr<AddonMetadataAttemptAdmission> attempt,
+                           const QString& requestId)
 {
     const QPointer<AddonWorker> alive(this);
-    const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto id = requestId.isEmpty() || m_invocations.contains(requestId) ? QUuid::createUuid().toString(QUuid::WithoutBraces) : requestId;
     if (m_failed) {
         QTimer::singleShot(0, this, [this, id] { emit completed(id, QStringLiteral("error"), {}, tr("The add-on worker is not available.")); });
         return id;

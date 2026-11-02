@@ -133,59 +133,110 @@ DevicePost AddonManager::accountTransport()
 
 void AddonManager::setAccountTransport(DevicePost post) { m_accountPost = std::move(post); }
 
+void AddonManager::requestAccountRecipe(const QString& id, const QString& field, std::function<void(std::optional<DeviceRecipe>)> done)
+{
+    // The package and its schema are read on background work.
+    auto recipe = std::make_shared<std::optional<DeviceRecipe>>();
+    auto store = m_store;
+    StoreWrite read{[] { return true; }, [recipe, store, id, field] {
+        InstalledPackage package;
+        if (!store.installed(id, &package)) return;
+        const auto property = schema(package).value("properties").toObject().value(field).toObject();
+        if (accountField(property)) *recipe = DeviceRecipe::from(property.value("x-hakone-account").toObject(), origins(package));
+    }, [recipe, done = std::move(done)] { done(*recipe); return true; }};
+    if (m_inlineStore) writeNow(std::move(read));
+    else queueRead(std::move(read));
+}
+
 void AddonManager::refreshAccounts(const QString& id, bool expiredOnly)
 {
     if (m_retiring) return;
-    InstalledPackage package;
-    if (!m_store.installed(id, &package)) return;
-    const auto properties = schema(package).value("properties").toObject();
-    const auto saved = savedSettings(id);
-    const auto references = saved.value("_credentials").toObject();
-    QHash<QString, double> expiry;
-    for (const auto& value : saved.value("_accounts").toArray())
-        expiry.insert(value.toObject().value("field").toString(), value.toObject().value("expiresAt").toDouble());
-    if (!m_accountClock.isValid()) m_accountClock.start();
-    for (auto it = properties.begin(); it != properties.end(); ++it) {
-        if (!accountField(it.value().toObject())) continue;
-        const auto field = it.key(), entry = key(id, field);
-        const auto reference = references.value(refreshField(field)).toString();
-        if (reference.isEmpty() || m_accountRefreshes.contains(entry)) continue;
-        const double expiresAt = m_accountExpiry.contains(entry) ? double(m_accountExpiry.value(entry))
-            : expiry.value(field);
-        if (expiredOnly && (expiresAt <= 0 || expiresAt > QDateTime::currentMSecsSinceEpoch())) continue;
-        const auto tried = m_accountRefreshTried.constFind(entry);
-        if (tried != m_accountRefreshTried.cend() && m_accountClock.elapsed() - *tried < 60000) continue;
-        const auto recipe = accountRecipe(id, field);
-        const auto token = m_secrets.read(id, reference);
-        if (!recipe || token.isEmpty()) continue;
-        m_accountRefreshTried.insert(entry, m_accountClock.elapsed());
-        const QPointer<AddonManager> owner(this);
-        // The callback can run inside post() for a synchronous transport.
-        auto done = std::make_shared<bool>(false);
-        auto cancel = DeviceAuthorization::refresh(*recipe, token, accountTransport(),
-            [owner, id, field, entry, references, done](std::optional<DeviceTokens> tokens) {
-                *done = true;
-                if (!owner) return;
-                owner->m_accountRefreshes.remove(entry);
-                if (!tokens || owner->m_retiring) return;
-                // The same references keep the account identity, so cached
-                // answers and queued items of this account stay valid.
-                const auto access = references.value(field).toString(), refresh = references.value(refreshField(field)).toString();
-                if (!owner->m_secrets.replace(id, access, tokens->accessToken)) return;
-                if (!tokens->refreshToken.isEmpty()) owner->m_secrets.replace(id, refresh, tokens->refreshToken);
-                owner->m_accountExpiry.insert(entry, tokens->expiresIn > 0
-                    ? QDateTime::currentMSecsSinceEpoch() + tokens->expiresIn * 1000 : 0);
-                emit owner->accountsChanged(id);
-            });
-        if (!*done) m_accountRefreshes.insert(entry, std::move(cancel));
-    }
+    // The package, its settings and the refresh tokens are read on
+    // background work; the exchange starts here.
+    struct Account { QString field; QJsonObject references; QByteArray token; std::optional<DeviceRecipe> recipe; double expiresAt = 0; };
+    struct Read { CredentialStore::Reader secrets; QList<Account> accounts; ~Read() { for (auto& account : accounts) account.token.fill('\0'); } };
+    auto found = std::make_shared<Read>();
+    auto store = m_store;
+    StoreWrite read{[this, found] { found->secrets = m_secrets.snapshotReader(); return true; }, [found, store, id] {
+        InstalledPackage package;
+        if (!store.installed(id, &package)) return;
+        const auto properties = schema(package).value("properties").toObject();
+        QJsonObject saved; store.settings(id, &saved);
+        const auto references = saved.value("_credentials").toObject();
+        QHash<QString, double> expiry;
+        for (const auto& value : saved.value("_accounts").toArray())
+            expiry.insert(value.toObject().value("field").toString(), value.toObject().value("expiresAt").toDouble());
+        for (auto it = properties.begin(); it != properties.end(); ++it) {
+            if (!accountField(it.value().toObject())) continue;
+            const auto reference = references.value(refreshField(it.key())).toString();
+            if (reference.isEmpty()) continue;
+            auto recipe = DeviceRecipe::from(it.value().toObject().value("x-hakone-account").toObject(), origins(package));
+            auto token = found->secrets(id, reference);
+            if (!recipe || token.isEmpty()) continue;
+            found->accounts.append({it.key(), references, std::move(token), std::move(recipe), expiry.value(it.key())});
+        }
+        found->secrets = {};
+    }, [this, found, id, expiredOnly] {
+        if (m_retiring) return true;
+        if (!m_accountClock.isValid()) m_accountClock.start();
+        for (const auto& account : std::as_const(found->accounts)) {
+            const auto field = account.field, entry = key(id, field);
+            if (m_accountRefreshes.contains(entry)) continue;
+            const double expiresAt = m_accountExpiry.contains(entry) ? double(m_accountExpiry.value(entry)) : account.expiresAt;
+            if (expiredOnly && (expiresAt <= 0 || expiresAt > QDateTime::currentMSecsSinceEpoch())) continue;
+            const auto tried = m_accountRefreshTried.constFind(entry);
+            if (tried != m_accountRefreshTried.cend() && m_accountClock.elapsed() - *tried < 60000) continue;
+            m_accountRefreshTried.insert(entry, m_accountClock.elapsed());
+            const QPointer<AddonManager> owner(this);
+            const auto references = account.references;
+            // The callback can run inside post() for a synchronous transport.
+            auto done = std::make_shared<bool>(false);
+            auto cancel = DeviceAuthorization::refresh(*account.recipe, account.token, accountTransport(),
+                [owner, id, field, entry, references, done](std::optional<DeviceTokens> tokens) {
+                    *done = true;
+                    if (!owner) return;
+                    owner->m_accountRefreshes.remove(entry);
+                    if (!tokens || owner->m_retiring) return;
+                    owner->replaceAccountTokens(id, field, references, *tokens);
+                });
+            if (!*done) m_accountRefreshes.insert(entry, std::move(cancel));
+        }
+        return true;
+    }};
+    if (m_inlineStore) writeNow(std::move(read));
+    else queueRead(std::move(read));
+}
+void AddonManager::replaceAccountTokens(const QString& id, const QString& field, const QJsonObject& references, const DeviceTokens& tokens)
+{
+    // The same references keep the account identity, so cached answers and
+    // queued items of this account stay valid. The platform store is written
+    // on background work.
+    const auto access = references.value(field).toString(), refresh = references.value(refreshField(field)).toString();
+    struct Change { std::shared_ptr<SecretsCopy> secrets; DeviceTokens tokens; bool replaced = false;
+        ~Change() { tokens.accessToken.fill('\0'); tokens.refreshToken.fill('\0'); } };
+    auto change = std::make_shared<Change>();
+    change->tokens = tokens;
+    StoreWrite write{[this, change] { change->secrets = std::make_shared<SecretsCopy>(m_secrets); return true; },
+        [change, id, access, refresh] {
+            auto& secrets = change->secrets->store;
+            change->replaced = secrets.replace(id, access, change->tokens.accessToken);
+            if (change->replaced && !change->tokens.refreshToken.isEmpty()) secrets.replace(id, refresh, change->tokens.refreshToken);
+        }, [this, change, id, field, access, refresh] {
+            if (m_retiring || !change->replaced || !change->secrets) return true;
+            m_secrets.adopt(change->secrets->store, id, {access, refresh});
+            m_accountExpiry.insert(key(id, field), change->tokens.expiresIn > 0
+                ? QDateTime::currentMSecsSinceEpoch() + change->tokens.expiresIn * 1000 : 0);
+            emit accountsChanged(id);
+            return true;
+        }};
+    if (m_inlineStore) writeNow(std::move(write));
+    else queueRead(std::move(write));
 }
 
 QVariantMap AddonManager::registerPickedPath(const QString& id, const QString& field, const QString& localPath)
 {
-    InstalledPackage package;
-    if (localPath.isEmpty() || !m_store.installed(id, &package)) return {};
-    const auto property = schema(package).value("properties").toObject().value(field).toObject();
+    if (localPath.isEmpty()) return {};
+    const auto property = querySchema(id).value("properties").toObject().value(field).toObject();
     const auto kind = property.value("x-hakone-control").toString();
     if ((kind != QLatin1String("file") && kind != QLatin1String("folder")) || property.value("type") != QStringLiteral("string"))
         return {};
@@ -199,9 +250,8 @@ QVariantMap AddonManager::registerPickedPath(const QString& id, const QString& f
 
 bool AddonManager::pickSettingsPath(const QString& id, const QString& field)
 {
-    InstalledPackage package;
-    if (!m_pathPicker || !m_store.installed(id, &package)) return false;
-    const auto kind = schema(package).value("properties").toObject().value(field).toObject().value("x-hakone-control").toString();
+    if (!m_pathPicker) return false;
+    const auto kind = querySchema(id).value("properties").toObject().value(field).toObject().value("x-hakone-control").toString();
     if (kind != QLatin1String("file") && kind != QLatin1String("folder")) return false;
     const QPointer<AddonManager> owner(this);
     m_pathPicker(kind, [owner, id, field](const QString& path) {
@@ -213,10 +263,11 @@ bool AddonManager::pickSettingsPath(const QString& id, const QString& field)
     return true;
 }
 
-QVariantMap AddonManager::settingsHandleNames(const QString& id) const
+QVariantMap AddonManager::settingsHandleNames(const QString& id)
 {
     QVariantMap names;
-    const auto handles = savedSettings(id).value("_handles").toObject();
+    const auto found = snapshot(id);
+    const auto handles = found ? found->settings.value("_handles").toObject() : QJsonObject{};
     for (auto it = handles.begin(); it != handles.end(); ++it) names.insert(it.key(), it.value().toObject().value("name").toString());
     for (auto it = m_pickedPaths.cbegin(); it != m_pickedPaths.cend(); ++it)
         if (it->packageId == id) names.insert(it.key(), it->name);
@@ -225,9 +276,9 @@ QVariantMap AddonManager::settingsHandleNames(const QString& id) const
 
 bool AddonManager::setSessionSettings(const QString& id, const QVariantMap& input)
 {
-    InstalledPackage package;
-    if (m_retiring || m_removingPackages.contains(id) || !m_store.installed(id, &package)) return false;
-    const auto properties = schema(package).value("properties").toObject();
+    if (m_retiring || m_removingPackages.contains(id)) return false;
+    const auto properties = querySchema(id).value("properties").toObject();
+    if (properties.isEmpty() && !input.isEmpty()) return false;
     const auto values = QJsonObject::fromVariantMap(input);
     for (auto it = values.begin(); it != values.end(); ++it) {
         const auto field = properties.value(it.key()).toObject();
