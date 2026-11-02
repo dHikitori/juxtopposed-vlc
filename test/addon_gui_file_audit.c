@@ -3,6 +3,8 @@
 // open of a path under VLC_ADDON_GUI_FILE_AUDIT_ROOT, with the thread that
 // opened it, in VLC_ADDON_GUI_FILE_AUDIT_LOG. The smoke test then fails when
 // the GUI thread opened an add-on store file.
+// Both open and open64 are wrapped, so glibc must not rename one to the other.
+#undef _FILE_OFFSET_BITS
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <fcntl.h>
