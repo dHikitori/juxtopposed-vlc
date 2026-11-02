@@ -2,6 +2,7 @@
 #include "addons/addon_account_setup.hpp"
 #include "addons/addon_device_authorization.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_stream_lifetime.hpp"
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -56,6 +57,8 @@ class TestAddonAccounts : public QObject
 {
     Q_OBJECT
     QTemporaryDir m_profile, m_package;
+    // The app's lifetime: the sign-in saves the account on the manager's work.
+    std::unique_ptr<AddonStreamLifetime> m_lifetime;
     const QString m_id = QStringLiteral("org.example.account");
     bool writePackage(const QJsonObject& accountRecipe)
     {
@@ -82,6 +85,17 @@ class TestAddonAccounts : public QObject
     { return {{"recipe", "oauth-device"}, {"deviceAuthorizationUrl", Device}, {"tokenUrl", Token}, {"clientId", "vlc-test"}}; }
 
 private slots:
+    void initTestCase()
+    {
+        m_lifetime = std::make_unique<AddonStreamLifetime>();
+        QVERIFY(AddonStreamLifetime::registerApplication(m_lifetime->handle()));
+    }
+    void cleanupTestCase()
+    {
+        const auto handle = m_lifetime->handle();
+        handle.close(); QVERIFY(handle.waitQt(std::chrono::seconds(5)));
+        QVERIFY(AddonStreamLifetime::unregisterApplication(handle));
+    }
     void aRecipeNeedsDeclaredHttpsEndpoints_data()
     {
         QTest::addColumn<QJsonObject>("recipe"); QTest::addColumn<bool>("valid");

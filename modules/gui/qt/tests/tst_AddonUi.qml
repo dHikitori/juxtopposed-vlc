@@ -100,6 +100,8 @@ TestCase {
     SignalSpy { id: moveSpy; target: providers; signalName: "moveRequested" }
     SignalSpy { id: configureSpy; target: providers; signalName: "configureRequested" }
     function field(name) { return findChild(settings, name) }
+    // The backend answers a save after it returns, as the app's store write does.
+    function saveAndWait() { verify(settings.save()); tryVerify(() => !settings.saving) }
     function displayRows() {
         return [{id:"org.example.provider/search",packageId:"org.example.provider",name:"Provider",enabled:true,configured:false,configurationKnown:false}]
     }
@@ -231,7 +233,7 @@ TestCase {
         settings.editSecret("account", "delete", "")
         compare(field("addonAccountStatus_account").text, "When you select Save, the app disconnects this account.")
         verify(field("addonAccountKeep_account").visible)
-        verify(settings.save()); compare(backend.lastOperations.account.operation, "delete")
+        saveAndWait(); compare(backend.lastOperations.account.operation, "delete")
         compare(field("addonAccountStatus_account").text, "The account is not connected.")
         settings.setValue("count", 4)
         verify(!settings.save()); compare(settings.fieldErrors.account, "Connect the account.")
@@ -277,7 +279,7 @@ TestCase {
     }
     function test_requiredExistingSecretIsKeptWithoutReentry() {
         settings.setValue("count", 4)
-        verify(settings.save())
+        saveAndWait()
         compare(backend.lastValues.count, 4)
         verify(!Contract.own(backend.lastValues, "apiKey"))
         compare(Object.keys(backend.lastOperations).length, 0)
@@ -285,7 +287,7 @@ TestCase {
     }
     function test_requiredSecretDeletionRevokesAndRefreshesStatus() {
         settings.editSecret("apiKey", "delete", "")
-        verify(settings.save()); compare(backend.saveCount, 1)
+        saveAndWait(); compare(backend.saveCount, 1)
         compare(backend.lastOperations.apiKey.operation, "delete")
         verify(!backend.secrets.apiKey.present)
         compare(field("addonSecretStatus_apiKey").text, "The app does not have a saved credential.")
@@ -316,7 +318,7 @@ TestCase {
         verify(input.visible); compare(input.echoMode, TextInput.Password)
         input.forceActiveFocus(); keyClick(Qt.Key_X); keyClick(Qt.Key_Y)
         compare(settings.secretOperations.apiKey.value, "xy")
-        verify(settings.save())
+        saveAndWait()
         compare(backend.lastOperations.apiKey.operation, "replace")
         compare(backend.lastOperations.apiKey.value, "xy")
         verify(!Contract.own(backend.lastValues, "apiKey"))
@@ -359,7 +361,7 @@ TestCase {
     function test_saveFailureKeepsDraftAndCoreState() {
         backend.acceptSave = false
         settings.setValue("count", 5)
-        verify(!settings.save()); compare(backend.values.count, 3)
+        saveAndWait(); compare(backend.values.count, 3)
         compare(settings.draftValues.count, 5); verify(settings.dirty)
         verify(settings.errorMessage.length > 0)
     }

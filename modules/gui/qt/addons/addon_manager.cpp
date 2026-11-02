@@ -143,8 +143,9 @@ void AddonManager::pumpWrites()
     const QPointer<AddonManager> alive(this);
     while (alive && !m_retiring && !m_runningWrite && !m_writes.isEmpty()) {
         auto next = m_writes.takeFirst();
+        const auto revision = m_revision;
         if (!next.write.prepare()) {
-            if (alive) endWrite(next.request, false);
+            if (alive) endWrite(next.request, false, revision);
             continue;
         }
         if (!alive || m_retiring) return;
@@ -162,9 +163,10 @@ void AddonManager::startWrite()
         auto write = std::move(m_runningWrite->write);
         m_runningWrite.reset();
         const QPointer<AddonManager> alive(this);
+        const auto revision = m_revision;
         const bool success = result == AddonRepositoryJobs::Result::Finished ? write.finish()
             : changed(false, tr("The add-on change did not finish."));
-        if (alive) endWrite(request, success);
+        if (alive) endWrite(request, success, revision);
         if (alive) pumpWrites();
     }, &refusal);
     if (started) { m_writeSlot = {}; return; }
@@ -180,12 +182,20 @@ void AddonManager::startWrite()
     }
     m_runningWrite.reset();
     const QPointer<AddonManager> alive(this);
+    const auto revision = m_revision;
     changed(false, tr("The app cannot start the add-on change."));
-    if (alive) endWrite(request, false);
+    if (alive) endWrite(request, false, revision);
     if (alive) QTimer::singleShot(0, this, &AddonManager::pumpWrites);
 }
-void AddonManager::endWrite(const QString& request, bool success)
+void AddonManager::endWrite(const QString& request, bool success, int revision)
 {
+    // A part that refused without a report (a withdrawal already running)
+    // still publishes the end, so writing and the error stay current.
+    if (m_revision == revision) {
+        const QPointer<AddonManager> alive(this);
+        success = changed(false, tr("The add-on change did not finish."));
+        if (!alive) return;
+    }
     if (!request.isEmpty()) emit writeFinished(request, success, success ? QString{} : m_error);
 }
 StoreAuthorityToken AddonManager::storeAuthorityToken() const noexcept

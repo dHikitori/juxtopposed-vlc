@@ -276,7 +276,7 @@ private:
     QString queueWrite(StoreWrite);
     void pumpWrites();
     void startWrite();
-    void endWrite(const QString& request, bool success);
+    void endWrite(const QString& request, bool success, int revision);
     StoreWrite enabledWrite(const QString&, bool);
     StoreWrite providerOrderWrite(const QString&, const QStringList&);
     StoreWrite settingsWrite(const QString&, const QVariantMap&, const QVariantMap&, const QString& expectedStamp, bool display);

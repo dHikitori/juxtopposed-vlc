@@ -90,7 +90,8 @@ private slots:
             QCOMPARE(manager.pendingPackage().value("id").toString(), Package);
         } else QVERIFY2(manager.installLocalPackage(Fixture, true), qPrintable(manager.errorMessage()));
         QSignalSpy finished(&manager, &AddonManager::writeFinished);
-        gate.close();
+        // The setup above wrote on this thread on purpose.
+        gate.onGui = false; gate.close();
         QString request;
         switch (operation) {
         case Enable: request = manager.requestEnabled(Package, true); break;

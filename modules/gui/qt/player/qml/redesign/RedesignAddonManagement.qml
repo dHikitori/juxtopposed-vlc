@@ -86,6 +86,9 @@ ColumnLayout {
         // The attached form owns its exact package/settings stamp. A global
         // refresh must not discard a draft for an unrelated package change.
         if (displayBacked || listReady || !configurationLoader.item) return
+        // The form's own save changed the list. Its result closes the form,
+        // or the form shows why the save failed.
+        if (configurationLoader.item.form && configurationLoader.item.form.saving) return
         actionError = qsTr("The extension list changed. Open settings again.")
         configurationLoader.item.close()
     }

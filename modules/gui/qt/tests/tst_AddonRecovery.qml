@@ -130,7 +130,8 @@ TestCase {
             verify(view.request(data.operation === "restore" ? "org.example.app" : "org.example.failed", data.operation))
             if (data.operation !== "restore") findChild(view, "addonRecoveryConfirmation").accept()
         }
+        // A store write reports when it ends.
         const error = findChild(view, "addonRecoveryError")
-        verify(error.visible); compare(error.text, "<b>Operation failed</b>"); compare(error.textFormat, Text.PlainText)
+        tryVerify(() => error.visible); compare(error.text, "<b>Operation failed</b>"); compare(error.textFormat, Text.PlainText)
     }
 }
