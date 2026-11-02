@@ -104,6 +104,28 @@ private slots:
         auto fresh = owner.capture().onInvalidated([calls] { ++*calls; }); QVERIFY(bool(fresh));
         owner.invalidate(); QCOMPARE(calls->load(), 3u); QVERIFY(!bool(fresh));
     }
+    void aPackageStampEndsOnlyWithAWriteOfItsPackage()
+    {
+        QTemporaryDir directory; StoreAuthority owner(directory.path());
+        const auto stamp = owner.packageStamp(QStringLiteral("org.example.one"));
+        const auto token = owner.capture();
+        QVERIFY(stamp.current()); QVERIFY(stamp.peerCurrent());
+        // A withdrawal and another package's write end the token, not the stamp.
+        owner.invalidate(); owner.packageChanged(QStringLiteral("org.example.two"));
+        { const auto mutation = owner.mutation(); }
+        QVERIFY(!token.current()); QVERIFY(stamp.current()); QVERIFY(stamp.peerCurrent());
+        // Another store object for the same directory shares the revisions.
+        StoreAuthority other(directory.path());
+        other.packageChanged(QStringLiteral("org.example.one"));
+        QVERIFY(!stamp.current());
+        // A store-wide change, such as safe mode, ends every stamp.
+        const auto later = owner.packageStamp(QStringLiteral("org.example.two"));
+        QVERIFY(later.current()); owner.packageChanged({}); QVERIFY(!later.current());
+        // A profile peer cycle shows as a changed peer stamp only.
+        const auto shared = owner.packageStamp(QStringLiteral("org.example.three"));
+        const auto peer = owner.attachPeer(); QVERIFY(peer);
+        QVERIFY(shared.current()); QVERIFY(!shared.peerCurrent());
+    }
     void aNativeWatchRetainsTheSharedStoreEpoch()
     {
         QTemporaryDir directory; std::atomic_uint calls{0}; StoreAuthorityWatch watch;

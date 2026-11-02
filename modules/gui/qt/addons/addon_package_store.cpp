@@ -1036,6 +1036,8 @@ ProfileChange PackageStore::saveStateLocked(const QString& id, const QJsonObject
     auto mutation = authority ? std::optional<StoreAuthorityMutation>(m_authority.mutation()) : std::nullopt;
     if (context && !context->current())
         return refuseProfile(error, QStringLiteral("The add-on profile request is no longer current."));
+    // Before the files change: a credential guard of this package ends now.
+    m_authority.packageChanged(id);
     QJsonObject previous;
     const bool primary = QFileInfo::exists(path)
         && (context ? catalogueObject(path, 4 * 1024 * 1024, &previous, nullptr) : readJson(path, &previous, nullptr));
@@ -1671,6 +1673,7 @@ ProfileChange PackageStore::uninstallLocked(const QString& id, bool removeData, 
     if (!profileCurrent(context, error)) return ProfileChange::RolledBack;
     const auto mutation = m_authority.mutation();
     if (!profileCurrent(context, error)) return ProfileChange::RolledBack;
+    m_authority.packageChanged(id);
     const auto retirement = m_authority.retirePackage(id);
     if (!profileCurrent(context, error)) return ProfileChange::RolledBack;
     QJsonObject state; InstalledPackage verified; bool valid = false;
@@ -2356,6 +2359,8 @@ ProfileChange PackageStore::setSafeModeLocked(bool enabled, QString* error, cons
     QString root;
     if (!profileWriteRoot(m_root, context, &root, error)) return ProfileChange::RolledBack;
     const auto authority = m_authority;
+    // Safe mode turns every package on or off.
+    authority.packageChanged({});
     return commitProfileJson(root, authority, QStringLiteral("recovery.json"), QJsonObject{{"safeMode", enabled}}, error, context);
 }
 

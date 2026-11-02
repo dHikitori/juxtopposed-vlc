@@ -29,8 +29,12 @@ struct StoreAuthorityState {
         using is_transparent = void;
         bool operator()(std::string_view a, std::string_view b) const noexcept { return a < b; }
     };
-    std::mutex packageMutex;
+    mutable std::mutex packageMutex;
     std::map<std::string, unsigned, PackageOrder> packages;
+    // Per package write revisions of this process; allPackages counts
+    // store-wide changes. Both only grow.
+    std::map<std::string, quint64, PackageOrder> packageRevisions;
+    std::atomic<quint64> allPackages{0};
     mutable std::mutex callbackMutex;
     mutable std::condition_variable callbacksEnded;
     mutable std::array<std::weak_ptr<StoreAuthorityCallback>, StoreAuthorityToken::WatchLimit> callbacks;
@@ -293,6 +297,38 @@ void StoreAuthority::invalidate() const noexcept
     advance(m_state);
 }
 void StoreAuthority::displayUnlocked() const noexcept { notifyChanged(m_state); }
+StorePackageStamp StoreAuthority::packageStamp(const QString& packageId) const
+{
+    StorePackageStamp stamp;
+    stamp.m_state = m_state; stamp.m_package = packageId.toStdString();
+    stamp.m_peerStamp = m_state->peerStamp.load(std::memory_order_acquire);
+    stamp.m_all = m_state->allPackages.load(std::memory_order_acquire);
+    std::lock_guard<std::mutex> lock(m_state->packageMutex);
+    const auto found = m_state->packageRevisions.find(stamp.m_package);
+    stamp.m_revision = found == m_state->packageRevisions.end() ? 0 : found->second;
+    return stamp;
+}
+void StoreAuthority::packageChanged(const QString& packageId) const noexcept
+{
+    if (packageId.isEmpty()) { m_state->allPackages.fetch_add(1, std::memory_order_acq_rel); return; }
+    try {
+        std::lock_guard<std::mutex> lock(m_state->packageMutex);
+        ++m_state->packageRevisions[packageId.toStdString()];
+    } catch (...) {
+        // Without a package entry, end every stamp instead.
+        m_state->allPackages.fetch_add(1, std::memory_order_acq_rel);
+    }
+}
+bool StorePackageStamp::current() const noexcept
+{
+    if (!m_state || m_state->retired.load(std::memory_order_acquire)
+        || m_state->allPackages.load(std::memory_order_acquire) != m_all) return false;
+    std::lock_guard<std::mutex> lock(m_state->packageMutex);
+    const auto found = m_state->packageRevisions.find(m_package);
+    return (found == m_state->packageRevisions.end() ? 0 : found->second) == m_revision;
+}
+bool StorePackageStamp::peerCurrent() const noexcept
+{ return m_state && m_state->peerStamp.load(std::memory_order_acquire) == m_peerStamp; }
 StoreAuthorityChanges::operator bool() const noexcept
 { return m_callback && !m_callback->owner->retired.load(std::memory_order_acquire); }
 StoreAuthorityChanges StoreAuthority::onChanged(std::function<void()> nativeWake) const noexcept

@@ -129,6 +129,7 @@ public:
     // reads. The snapshot retains both queued and locked authority tokens.
     MetadataCatalogueReader metadataCatalogueReader() const;
     std::function<bool(const DisplayCatalogueRequest&,DisplayCatalogueSnapshot*,QString*)> displayCatalogueReader(QString locale) const;
+    StorePackageStamp packageStamp(const QString& id) const { return m_authority.packageStamp(id); }
     StoreAuthorityChanges onDisplayChanged(std::function<void()> nativeWake) const noexcept
     { return m_authority.onChanged(std::move(nativeWake)); }
     bool saveProviderOrder(const QString& feature, const QStringList& ids,

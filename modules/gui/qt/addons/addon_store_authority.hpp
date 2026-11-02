@@ -97,11 +97,33 @@ private:
     quint64 m_revision = 0;
     quint64 m_peerStamp = 0;
 };
+// One package's saved state as this process last changed it. A write in
+// this process to the package (or a store-wide one, such as safe mode) ends
+// it. A withdrawal or another package's write does not. Another app process's
+// write shows only as a changed peer stamp: the holder checks the files on
+// background work. Memory only.
+class StorePackageStamp final
+{
+public:
+    StorePackageStamp() = default;
+    bool current() const noexcept;
+    // No other app process joined, left or wrote since the capture.
+    bool peerCurrent() const noexcept;
+private:
+    friend class StoreAuthority;
+    std::shared_ptr<const StoreAuthorityState> m_state;
+    std::string m_package;
+    quint64 m_revision = 0, m_all = 0, m_peerStamp = 0;
+};
 class StoreAuthority final
 {
 public:
     explicit StoreAuthority(const QString& directory);
     StoreAuthorityToken capture() const noexcept;
+    StorePackageStamp packageStamp(const QString& packageId) const;
+    // Call in each write of a package's saved state, before the files change.
+    // An empty ID is a store-wide change.
+    void packageChanged(const QString& packageId) const noexcept;
     // Install once per canonical profile on joined startup work, before any
     // native consumer starts. Admission then remains closed until an admitted
     // peer owns its fence. Owner loss never restores the legacy ungated mode.

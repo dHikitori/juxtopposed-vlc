@@ -357,9 +357,10 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Install
     // Taken before the read: a store change after it makes the guard read
     // the configuration from disk again.
     const auto token = m_store.authorityToken();
+    const auto stamp = m_store.packageStamp(package.manifest.id);
     QJsonObject settings; quint64 revision = 0;
     const bool captured = m_store.networkConfiguration(package, &settings, &revision);
-    return credentialResolver(package, settings, revision, captured, token, {}, current);
+    return credentialResolver(package, settings, revision, captured, token, stamp, {}, current);
 }
 NetworkBroker::CredentialResolver AddonManager::credentialResolver(const PackageSnapshot& snapshot, NetworkBroker::RequestGuard* current) const
 {
@@ -371,10 +372,11 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Package
     // The read already took each key from the platform store on background
     // work; its reader answers from that copy.
     return credentialResolver(snapshot.package, snapshot.networkSettings, snapshot.networkRevision, snapshot.network, snapshot.token,
-        snapshot.secrets, current);
+        snapshot.stamp, snapshot.secrets, current);
 }
 NetworkBroker::CredentialResolver AddonManager::credentialResolver(const InstalledPackage& package, const QJsonObject& settings,
-    quint64 revision, bool captured, const StoreAuthorityToken& token, CredentialStore::Reader secrets, NetworkBroker::RequestGuard* current) const
+    quint64 revision, bool captured, const StoreAuthorityToken& token, const StorePackageStamp& stamp, CredentialStore::Reader secrets,
+    NetworkBroker::RequestGuard* current) const
 {
     const auto references = settings.value("_credentials").toObject();
     const auto bindings = package.manifest.permissionScope(QStringLiteral("credentials.use")).value("bindings").toArray();
@@ -382,12 +384,18 @@ NetworkBroker::CredentialResolver AddonManager::credentialResolver(const Install
     const auto approved = package.grants.value(QStringLiteral("credentials.use")).toObject().value("bindings").toArray();
     for (const auto& value : bindings) if (approved.contains(value)) fields.insert(value.toObject().value("field").toString());
     const QPointer<AddonManager> owner(const_cast<AddonManager*>(this));
-    // The guard runs for every worker message and network chunk. While no
-    // store change has happened, the captured configuration is still the
-    // saved one, so it needs no file read.
-    NetworkBroker::RequestGuard guard = [owner, package, settings, revision, captured, token] {
-        return captured && owner && !owner->m_retiring && !owner->m_withdrawingPackages.contains(package.manifest.id)
-            && (token.current() || owner->m_store.networkConfigurationMatches(package, settings, revision));
+    // The guard runs for every worker message and network chunk, on this
+    // thread, and reads no file. While no store change has happened, the
+    // captured configuration is still the saved one.
+    NetworkBroker::RequestGuard guard = [owner, package, settings, revision, captured, token, stamp] {
+        if (!captured || !owner || owner->m_retiring || owner->m_withdrawingPackages.contains(package.manifest.id)) return false;
+        if (token.current()) return true;
+        // A write of this process to the package, or a store-wide one, ends it.
+        if (!stamp.current()) return false;
+        // A withdrawal or another package's write left this package as it was.
+        if (stamp.peerCurrent()) return true;
+        // Another app process may have changed it: checked on background work.
+        return owner->remoteConfigurationMatches(package, settings, revision);
     };
     if (current) *current = guard;
     return [owner, guard, references, fields, secrets, id = package.manifest.id](const QString& field) {
@@ -1005,6 +1013,32 @@ QJsonObject AddonManager::grantedScope(const QString& id, const QString& capabil
         return display->grantedScope(id, capability);
     }
     InstalledPackage package; return m_store.installed(id, &package) && package.enabled ? package.grants.value(capability).toObject() : QJsonObject{};
+}
+bool AddonManager::remoteConfigurationMatches(const InstalledPackage& package, const QJsonObject& settings, quint64 revision)
+{
+    if (m_inlineStore) return m_store.networkConfigurationMatches(package, settings, revision);
+    const auto id = package.manifest.id;
+    const QString key = id + QLatin1Char('\n') + QString::fromLatin1(package.digest) + QLatin1Char('\n')
+        + QString::number(package.generation) + QLatin1Char('\n') + QString::number(revision);
+    if (!m_remoteChecks.contains(key) && m_remoteChecks.size() >= 256) m_remoteChecks.clear();
+    auto& check = m_remoteChecks[key];
+    if (check.checked && check.stamp.current() && check.stamp.peerCurrent()) return check.matches;
+    if (!check.running && !m_retiring) {
+        // Until the files are read, the last answer stands, as it does until
+        // another process's change reaches this one.
+        check.running = true;
+        auto result = std::make_shared<std::pair<StorePackageStamp, bool>>();
+        auto store = m_store;
+        StoreWrite read{[this, result, id] { result->first = m_store.packageStamp(id); return true; },
+            [result, store, package, settings, revision] { result->second = store.networkConfigurationMatches(package, settings, revision); },
+            [this, result, key] {
+                auto& done = m_remoteChecks[key];
+                done.running = false; done.checked = true; done.stamp = result->first; done.matches = result->second;
+                return true;
+            }};
+        queueRead(std::move(read));
+    }
+    return check.matches;
 }
 const AddonCatalogueView* AddonManager::queryCatalogue() const
 {
@@ -1834,9 +1868,10 @@ void AddonManager::loadSnapshot(const QString& id)
     m_snapshotLoads.insert(id);
     auto loaded = std::make_shared<PackageSnapshot>();
     auto store = m_store;
-    StoreWrite read{[this, loaded] {
+    StoreWrite read{[this, loaded, id] {
         // Taken before the read: a store change during it makes it stale.
         loaded->token = m_store.authorityToken();
+        loaded->stamp = m_store.packageStamp(id);
         loaded->secrets = m_secrets.snapshotReader();
         loaded->workerExecutable = m_workerExecutable;
         loaded->precompiled = QDir(m_store.storageDirectory()).filePath(QStringLiteral("compiled"));

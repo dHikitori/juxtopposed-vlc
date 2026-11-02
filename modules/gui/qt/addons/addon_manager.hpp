@@ -353,6 +353,7 @@ private:
     // read is current. A stale snapshot still answers, and a new read starts.
     struct PackageSnapshot {
         StoreAuthorityToken token;
+        StorePackageStamp stamp;
         bool installed = false, network = false, configured = false;
         // A new worker process loads the module from disk, so each worker
         // start uses a fresh read.
@@ -397,7 +398,13 @@ private:
     void admit(PendingInvoke);
     NetworkBroker::CredentialResolver credentialResolver(const PackageSnapshot&, NetworkBroker::RequestGuard* current) const;
     NetworkBroker::CredentialResolver credentialResolver(const InstalledPackage&, const QJsonObject& settings, quint64 revision,
-        bool captured, const StoreAuthorityToken&, CredentialStore::Reader secrets, NetworkBroker::RequestGuard* current) const;
+        bool captured, const StoreAuthorityToken&, const StorePackageStamp&, CredentialStore::Reader secrets,
+        NetworkBroker::RequestGuard* current) const;
+    // Another app process may have changed a package's saved configuration.
+    // The answer comes from a background read; the last one stands meanwhile.
+    bool remoteConfigurationMatches(const InstalledPackage&, const QJsonObject& settings, quint64 revision);
+    struct RemoteCheck { StorePackageStamp stamp; bool checked = false, running = false, matches = true; };
+    QHash<QString, RemoteCheck> m_remoteChecks;
     // An asset request waits for its package read under an ID from this range.
     struct PendingAsset { QString contribution; QJsonObject descriptor; NetworkBroker::Callback callback; };
     QHash<quint64, PendingAsset> m_pendingAssets;
