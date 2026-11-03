@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Regenerate the raster app icons from share/icons/hakone.svg.
+"""Regenerate the raster app icons and installer art from share/icons/hakone.svg.
 
 share/icons/hakone.svg is the full-colour logo and the source of truth.
-share/icons/hakone-macos.svg is the macOS tile built around it.
+share/icons/hakone-macos.svg is the macOS tile built around it. The Windows
+installer bitmaps use the bundled Inter font for the product name.
 
 Requires: pip install resvg-py pillow; macOS iconutil for hakone.icns.
 """
@@ -21,6 +22,8 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS = os.path.join(ROOT, 'share', 'icons')
+FONTS = os.path.join(ROOT, 'modules', 'gui', 'qt', 'fonts')
+INTER = [os.path.join(FONTS, f'Inter-{style}.otf') for style in ('Regular', 'SemiBold')]
 
 
 def square_svg(svg, margin=0.03):
@@ -34,14 +37,59 @@ def square_svg(svg, margin=0.03):
             f'<g transform="translate({x} {y})">{body}</g></svg>')
 
 
-def render(svg, size):
-    data = bytes(resvg_py.svg_to_bytes(svg_string=svg, width=size, height=size))
+def render(svg, size, height=None):
+    data = bytes(resvg_py.svg_to_bytes(svg_string=svg, width=size, height=height or size,
+                                       font_files=INTER, skip_system_fonts=True))
     return Image.open(io.BytesIO(data)).convert('RGBA')
+
+
+def placed_logo(svg, x, y, width):
+    """The logo's paths scaled to width, with the top-left corner at x, y."""
+    view = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    body = re.sub(r'<title>.*?</title>', '', svg[svg.index('>', svg.index('<svg')) + 1:svg.rindex('</svg>')])
+    return f'<g transform="translate({x} {y}) scale({width / float(view.group(1))})">{body}</g>'
+
+
+def installer_sidebar(logo, width, height):
+    """The welcome and finish page art: the logo and name on the app's dark colour."""
+    return (f'<rect width="{width}" height="{height}" fill="#1b1b1b"/>'
+            + placed_logo(logo, (width - 96) / 2, 92, 96)
+            + f'<text x="{width / 2}" y="204" text-anchor="middle" font-family="Inter" '
+              'font-weight="600" font-size="22" fill="#ffffff">Hakone</text>'
+            + f'<text x="{width / 2}" y="224" text-anchor="middle" font-family="Inter" '
+              'font-size="12" fill="#9a9a9a">Media Player</text>')
+
+
+def save_bmp(svg, width, height, path):
+    image = render(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+                   f'viewBox="0 0 {width} {height}">{svg}</svg>', width, height)
+    # Installers read plain 24-bit bitmaps; flatten onto white.
+    flat = Image.new('RGB', image.size, '#ffffff')
+    flat.paste(image, mask=image.getchannel('A'))
+    flat.save(path, format='BMP')
+
+
+def installer_art(logo):
+    win32 = os.path.join(ROOT, 'extras', 'package', 'win32')
+    # NSIS welcome and finish pages.
+    save_bmp(installer_sidebar(logo, 164, 314), 164, 314,
+             os.path.join(win32, 'NSIS', 'hakone_branding.bmp'))
+    # WiX welcome and finish dialogs: art on the left, the dialog text on white.
+    save_bmp('<rect width="493" height="312" fill="#ffffff"/>' + installer_sidebar(logo, 164, 312),
+             493, 312, os.path.join(win32, 'msi', 'dlgbmp.bmp'))
+    # WiX top banner: the dialog title is drawn over the white left side.
+    # The pale snowcap needs the dark tile to stand out on white.
+    save_bmp('<rect width="494" height="58" fill="#ffffff"/>'
+             '<rect x="440" y="7" width="44" height="44" rx="10" fill="#1b1b1b"/>'
+             + placed_logo(logo, 446, 16, 32),
+             494, 58, os.path.join(win32, 'msi', 'bannrbmp.bmp'))
 
 
 def main():
     with open(os.path.join(ICONS, 'hakone.svg'), encoding='utf-8') as f:
-        logo = square_svg(f.read())
+        source = f.read()
+    logo = square_svg(source)
+    installer_art(source)
     with open(os.path.join(ICONS, 'hakone-macos.svg'), encoding='utf-8') as f:
         tile = f.read()
 

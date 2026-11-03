@@ -73,7 +73,7 @@ spad_nsi = configure_file(
 )
 
 install_data('nsProcess.nsh',    install_dir : 'NSIS')
-install_data('vlc_branding.bmp', install_dir : 'NSIS')
+install_data('hakone_branding.bmp', install_dir : 'NSIS')
 install_subdir('languages',      install_dir : '.')
 install_subdir('helpers',        install_dir : '.')
 
