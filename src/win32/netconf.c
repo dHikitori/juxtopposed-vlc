@@ -112,7 +112,7 @@ static bool proxy_auto(const wchar_t *url,
         return false;
 
     bool resolved = false;
-    HINTERNET session = WinHttpOpen(L"VLC", WINHTTP_ACCESS_TYPE_NO_PROXY,
+    HINTERNET session = WinHttpOpen(L"Hakone", WINHTTP_ACCESS_TYPE_NO_PROXY,
                                     WINHTTP_NO_PROXY_NAME,
                                     WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
     if (!session)

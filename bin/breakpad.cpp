@@ -58,7 +58,7 @@ void CheckCrashDump( const wchar_t* path )
         "Would you like to send a bug report to the developers team?",
         L"Hakone crash reporting", MB_YESNO);
     std::map<std::wstring, std::wstring> params;
-    params[L"prod"] = L"VLC";
+    params[L"prod"] = L"Hakone";
     params[L"ver"] = WIDEN(PACKAGE_VERSION);
     do
     {

@@ -70,7 +70,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#define DBUS_MPRIS_BUS_NAME "org.mpris.MediaPlayer2.vlc"
+#define DBUS_MPRIS_BUS_NAME "org.mpris.MediaPlayer2.hakone"
 #define DBUS_INSTANCE_ID_PREFIX "instance"
 
 #define SEEK_THRESHOLD 1000 /* µsec */
@@ -226,14 +226,14 @@ static int Open( vlc_object_t *p_this )
     dbus_connection_register_object_path( p_conn, DBUS_MPRIS_OBJECT_PATH,
             &dbus_mpris_vtable, p_this );
 
-    /* Try to register org.mpris.MediaPlayer2.vlc */
+    /* Try to register org.mpris.MediaPlayer2.hakone */
     const unsigned bus_flags = DBUS_NAME_FLAG_DO_NOT_QUEUE;
     var_Create(vlc, "dbus-mpris-name", VLC_VAR_STRING);
     if( dbus_bus_request_name( p_conn, DBUS_MPRIS_BUS_NAME, bus_flags, NULL )
                                      != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER )
     {
         /* Register an instance-specific well known name of the form
-         * org.mpris.MediaPlayer2.vlc.instanceXXXX where XXXX is the
+         * org.mpris.MediaPlayer2.hakone.instanceXXXX where XXXX is the
          * current Process ID */
         char unique_service[sizeof( DBUS_MPRIS_BUS_NAME ) +
                             sizeof( DBUS_INSTANCE_ID_PREFIX ) + 10];
