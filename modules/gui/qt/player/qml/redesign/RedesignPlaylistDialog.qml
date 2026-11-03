@@ -65,7 +65,7 @@ C.Dialog {
     function finish(success, message) {
         busy = false
         if (success) accept()
-        else { errorMessage = message || qsTr("VLC cannot save this playlist. Try again."); nameField.forceActiveFocus() }
+        else { errorMessage = message || qsTr("Hakone cannot save this playlist. Try again."); nameField.forceActiveFocus() }
     }
     function revealOnFocus(item) {
         scrollFocusItem = item

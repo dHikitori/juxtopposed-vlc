@@ -95,7 +95,7 @@ FocusScope {
     property real volume: 1
     property real maxVolume: 1.25
     property real buffering: 1
-    property string mediaTitle: qsTr("VLC Media Player")
+    property string mediaTitle: qsTr("Hakone Media Player")
     property string locationTitle: qsTr("Home")
     property string timeText: "00:00:00"
     property real timeLabelFontSize: 15

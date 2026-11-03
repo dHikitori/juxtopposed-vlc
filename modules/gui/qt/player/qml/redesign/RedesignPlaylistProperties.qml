@@ -39,7 +39,7 @@ C.Dialog {
     function load(request, result) {
         if (!visible || request !== requestId) return
         loading = false
-        if (!result.success) { errorMessage = result.error || qsTr("VLC cannot read this playlist. Try again."); return }
+        if (!result.success) { errorMessage = result.error || qsTr("Hakone cannot read this playlist. Try again."); return }
         details = result; playlistName = result.name || ""; cover = result.cover || ""
         if (!readOnly) nameField.forceActiveFocus()
     }
@@ -52,7 +52,7 @@ C.Dialog {
         if (!visible || request !== requestId) return
         saving = false
         if (result.success) accept()
-        else errorMessage = result.error || qsTr("VLC cannot save this playlist. Try again.")
+        else errorMessage = result.error || qsTr("Hakone cannot save this playlist. Try again.")
     }
     function duration(milliseconds) {
         const seconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000))
@@ -170,7 +170,7 @@ C.Dialog {
                 TextEdit {
                     objectName: "playlistPropertiesSource"
                     Layout.fillWidth: true; Layout.preferredHeight: contentHeight
-                    text: root.details.source || qsTr("Saved in the VLC library"); textFormat: TextEdit.PlainText
+                    text: root.details.source || qsTr("Saved in the Hakone library"); textFormat: TextEdit.PlainText
                     readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere
                     color: root.theme.bright; font.pixelSize: root.theme.dp(14)
                     selectionColor: root.theme.accent; selectedTextColor: root.theme.field

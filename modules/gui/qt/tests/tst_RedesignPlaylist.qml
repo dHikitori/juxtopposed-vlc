@@ -169,7 +169,7 @@ TestCase {
     function test_errorStaysVisibleAboveButtonsInSmallWindow() {
         width = 500; height = 400
         dialog.playlistName = "Retry"; dialog.submit()
-        dialog.finish(false, "VLC cannot read this image. Select another image.")
+        dialog.finish(false, "Hakone cannot read this image. Select another image.")
         wait(50)
         const error = findChild(dialog, "playlistErrorMessage"), save = findChild(dialog, "playlistSaveButton")
         const errorPoint = error.mapToItem(testCase, 0, 0), savePoint = save.mapToItem(testCase, 0, 0)

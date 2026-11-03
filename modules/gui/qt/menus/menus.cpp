@@ -944,7 +944,7 @@ QMenu* VLCMenuBar::RedesignPopupMenu(qt_intf_t* p_intf, bool show)
     addDPStaticEntry(playlist, qtr("Save Playlist"), ":/menu/file.svg", &DialogsProvider::savePlayingToPlaylist, "Ctrl+Y");
     auto* open = submenu(qtr("Open Media"), "open");
     FileMenu(p_intf, open);
-    auto* quit = menu->addAction(redesignMenuIcon(ctx, "quit"), qtr("Quit VLC"), THEDP, &DialogsProvider::quit);
+    auto* quit = menu->addAction(redesignMenuIcon(ctx, "quit"), qtr("Quit Hakone"), THEDP, &DialogsProvider::quit);
     quit->setShortcut(QKeySequence(QStringLiteral("Ctrl+Q")));
     hotkeys->add(quit, QStringLiteral("Ctrl+Q"));
     styleRedesignMenus(menu, ctx);

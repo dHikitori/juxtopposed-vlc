@@ -1329,7 +1329,7 @@ void CaptureOpenPanel::initialize()
     /* Jack Props panel */
 
     /* Pace */
-    jackPace = captureText<QCheckBox>(N_("Use VLC pace"), this);
+    jackPace = captureText<QCheckBox>(N_("Use Hakone pace"), this);
     jackPropLayout->addRow(jackPace);
 
     /* Auto Connect */

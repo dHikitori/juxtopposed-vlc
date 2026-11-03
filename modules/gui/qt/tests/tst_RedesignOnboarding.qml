@@ -34,7 +34,7 @@ TestCase {
         function validateFolder(folder) { errorMessage = folder === "missing" ? "Select an existing folder." : ""; return !errorMessage.length }
         function browseFolder(folder) { return "/media/Movies" }
         function finish(folder, scheme, accent, network) {
-            if (saveFails) { errorMessage = "VLC cannot save these settings."; return false }
+            if (saveFails) { errorMessage = "Hakone cannot save these settings."; return false }
             saved = {folder: folder, scheme: scheme, accent: accent, network: network}; return true
         }
         function skip() { skipCount++; return !saveFails }

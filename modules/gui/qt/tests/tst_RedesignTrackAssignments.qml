@@ -339,7 +339,7 @@ TestCase {
         tryVerify(() => !!choices.itemAtIndex(0))
         literal(findChild(choices.itemAtIndex(0),"trackAssignmentPickerName"),trackName)
         picker.close(); tryCompare(picker,"visible",false)
-        dialog.errorMessage="VLC cannot read " + trackName
+        dialog.errorMessage="Hakone cannot read " + trackName
         literal(findChild(dialog,"trackAssignmentError"),dialog.errorMessage)
     }
     function openPicker() {

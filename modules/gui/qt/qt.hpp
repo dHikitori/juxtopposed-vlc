@@ -46,6 +46,7 @@
 static_assert(QT_VERSION >= QT_VERSION_CHECK(6, 8, 3), "With static Qt, the Qt version must be greater than or equal to what we provide in the contribs.");
 #endif
 
+#include <QIcon>
 #include <QString>
 
 enum {
@@ -158,10 +159,18 @@ static inline QString QVLCUserDir( vlc_userdir_t type )
     return res;
 }
 
-/* After this day of the year, the usual VLC cone is replaced by another cone
- * wearing a Father Xmas hat.
- * Note this icon doesn't represent an endorsment of Coca-Cola company.
- */
+/* Application icon: the platform theme's "hakone" icon when one is
+ * installed, otherwise the bundled renders. */
+static inline QIcon QVLCAppIcon()
+{
+    QIcon fallback;
+    for( int size : { 16, 32, 48, 128, 256 } )
+        fallback.addFile( QStringLiteral( ":/logo/hakone%1.png" ).arg( size ),
+                          QSize( size, size ) );
+    return QIcon::fromTheme( QStringLiteral( "hakone" ), fallback );
+}
+
+/* After this day of the year, the winter snow easter egg is available. */
 #define QT_XMAS_JOKE_DAY 354
 
 #endif

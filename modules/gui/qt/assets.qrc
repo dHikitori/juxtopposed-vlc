@@ -16,15 +16,11 @@
         <file alias="Inter-LICENSE.txt">fonts/LICENSE.txt</file>
     </qresource>
     <qresource prefix="/logo">
-        <file alias="vlc256.png">../../../share/icons/256x256/vlc.png</file>
-        <file alias="vlc128.png">../../../share/icons/128x128/vlc.png</file>
-        <file alias="vlc16.png">../../../share/icons/16x16/vlc.png</file>
-        <file alias="vlc48.png">../../../share/icons/48x48/vlc.png</file>
-        <file alias="vlc128-xmas.png">../../../share/icons/128x128/vlc-xmas.png</file>
-        <file alias="vlc48-xmas.png">../../../share/icons/48x48/vlc-xmas.png</file>
-        <file alias="vlc128-aprilfools.png">../../../share/icons/128x128/vlc-aprilfools.png</file>
-        <file alias="vlc48-aprilfools.png">../../../share/icons/48x48/vlc-aprilfools.png</file>
-        <file alias="vlc128-kb.png">../../../share/icons/128x128/vlc-kb.png</file>
+        <file alias="hakone256.png">../../../share/icons/256x256/hakone.png</file>
+        <file alias="hakone128.png">../../../share/icons/128x128/hakone.png</file>
+        <file alias="hakone48.png">../../../share/icons/48x48/hakone.png</file>
+        <file alias="hakone32.png">../../../share/icons/32x32/hakone.png</file>
+        <file alias="hakone16.png">../../../share/icons/16x16/hakone.png</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="copy.svg">pixmaps/icons/copy.svg</file>
@@ -102,7 +98,7 @@
         <file alias="volume-muted.svg">pixmaps/menu/volume-muted.svg</file>
     </qresource>
     <qresource prefix="/misc">
-        <file alias="cone.svg">pixmaps/misc/cone.svg</file>
+        <file alias="hakone.svg">pixmaps/misc/hakone.svg</file>
         <file alias="new_indicator.svg">pixmaps/misc/new_indicator.svg</file>
         <file alias="theme_dark.svg">pixmaps/misc/theme_dark.svg</file>
         <file alias="theme_daynight.svg">pixmaps/misc/theme_daynight.svg</file>

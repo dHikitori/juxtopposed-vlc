@@ -51,9 +51,9 @@ VLCSystray::VLCSystray(MainCtx* ctx, QObject* parent)
         iconVLC = QIcon::fromTheme( "vlc", QIcon( ":/logo/vlc256.png" ) );
 
     setIcon(iconVLC);
-    setToolTip( qtr( "VLC media player" ));
+    setToolTip( qtr( "Hakone Media Player" ));
 
-    m_menu = std::make_unique<VLCMenu>( qtr( "VLC media player"), m_intf );
+    m_menu = std::make_unique<VLCMenu>( qtr( "Hakone Media Player"), m_intf );
     m_menu->setIcon( iconVLC );
     m_menu->setObjectName(QStringLiteral("redesignTrayMenu"));
     styleRedesignMenus(m_menu.get(), m_ctx);
@@ -148,7 +148,7 @@ void VLCSystray::updateTooltipName( const QString& name )
 {
     if( name.isEmpty() )
     {
-        setToolTip( qtr( "VLC media player" ) );
+        setToolTip( qtr( "Hakone Media Player" ) );
     }
     else
     {
@@ -158,7 +158,7 @@ void VLCSystray::updateTooltipName( const QString& name )
         if (vlc::systray::shouldNotify(notificationSetting, visibility))
         {
             const auto showMessageTemplate = [this, &name](const auto &icon) {
-                showMessage(qtr("VLC media player"), name, icon, var_InheritInteger(m_intf, "qt-notification-timeout"));
+                showMessage(qtr("Hakone Media Player"), name, icon, var_InheritInteger(m_intf, "qt-notification-timeout"));
             };
 
             assert(m_intf);

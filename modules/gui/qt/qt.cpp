@@ -159,11 +159,11 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
 
 #define SYSTRAY_TEXT N_( "Systray icon" )
 #define SYSTRAY_LONGTEXT N_( "Show an icon in the systray " \
-                             "allowing you to control VLC media player " \
+                             "allowing you to control Hakone Media Player " \
                              "for basic actions." )
 
-#define MINIMIZED_TEXT N_( "Start VLC with only a systray icon" )
-#define MINIMIZED_LONGTEXT N_( "VLC will start with just an icon in " \
+#define MINIMIZED_TEXT N_( "Start Hakone with only a systray icon" )
+#define MINIMIZED_LONGTEXT N_( "Hakone will start with just an icon in " \
                                "your taskbar." )
 
 #define KEEPSIZE_TEXT N_( "Resize interface to the native video size" )
@@ -177,7 +177,7 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
 #define NOTIFICATION_TEXT N_( "Show notification popup on track change" )
 #define NOTIFICATION_LONGTEXT N_( \
     "Show a notification popup with the artist and track name when " \
-    "the current play queue item changes, when VLC is minimized or hidden." )
+    "the current play queue item changes, when Hakone is minimized or hidden." )
 
 #define OPACITY_TEXT N_( "Windows opacity between 0.1 and 1" )
 #define OPACITY_LONGTEXT N_( "Sets the windows opacity between 0.1 and 1 " \
@@ -214,7 +214,7 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
         "the recent items played in the player." )
 
 #define QT_MODE_TEXT N_( "Selection of the starting mode and look" )
-#define QT_MODE_LONGTEXT N_( "Start VLC with:\n" \
+#define QT_MODE_LONGTEXT N_( "Start Hakone with:\n" \
                              " - normal mode\n"  \
                              " - a zone always present to show information " \
                                   "as lyrics, album arts...\n" \
@@ -244,8 +244,8 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
 #define QT_DISABLE_VOLUME_KEYS_LONGTEXT N_(                                             \
     "With this option checked, the volume up, volume down and mute buttons on your "    \
     "keyboard will always change your system volume. With this option unchecked, the "  \
-    "volume buttons will change VLC's volume when VLC is selected and change the "      \
-    "system volume when VLC is not selected." )
+    "volume buttons will change Hakone's volume when Hakone is selected and change the "      \
+    "system volume when Hakone is not selected." )
 
 #define QT_PAUSE_MINIMIZED_TEXT N_( "Pause the video playback when minimized" )
 #define QT_PAUSE_MINIMIZED_LONGTEXT N_( \
@@ -463,7 +463,7 @@ vlc_module_begin ()
     add_bool( "qt-error-dialogs", true, ERROR_TEXT,
               nullptr )
     add_bool( "qt-minor-warnings", false, N_("Show minor warnings"),
-              N_("Show short notices for warnings in VLC's log. Warnings that arrive together share a notice.") )
+              N_("Show short notices for warnings in Hakone's log. Warnings that arrive together share a notice.") )
 
     add_obsolete_string( "qt-slider-colours")
 
@@ -854,7 +854,7 @@ static void *Thread( void *obj )
 
     auto vlcQtMessageHandler = VlcQtMessageHandlerRegisterer{VLC_OBJECT(p_intf)};
 
-    char vlc_name[] = "vlc"; /* for WM_CLASS */
+    char vlc_name[] = "hakone"; /* for WM_CLASS */
     char *argv[5] = { nullptr };
     int argc = 0;
 
@@ -1452,15 +1452,12 @@ static void *Thread( void *obj )
     }
 #endif
 
-    app.setApplicationDisplayName( qtr("VLC media player") );
+    app.setApplicationDisplayName( qtr("Hakone Media Player") );
     app.setApplicationVersion( QString::fromUtf8(VERSION_MESSAGE) );
 
-    if( QDate::currentDate().dayOfYear() >= QT_XMAS_JOKE_DAY && var_InheritBool( p_intf, "qt-icon-change" ) )
-        app.setWindowIcon( QIcon::fromTheme( "vlc-xmas", QIcon( ":/logo/vlc128-xmas.png" ) ) );
-    else
-        app.setWindowIcon( QIcon::fromTheme( "vlc", QIcon( ":/logo/vlc256.png" ) ) );
+    app.setWindowIcon( QVLCAppIcon() );
 
-    app.setDesktopFileName( PACKAGE );
+    app.setDesktopFileName( QStringLiteral( "hakone" ) );
 
     DialogErrorModel::getInstance( p_intf );
     VLCDialogModel::getInstance( p_intf );

@@ -342,7 +342,7 @@ QVariant AddonsModel::data( const QModelIndex& index, int role ) const
             vlc_mutex_locker locker{&item->entry->lock};
             if ( !( item->entry->e_flags & ADDON_MANAGEABLE ) )
             {
-                return qtr("This addon has been installed manually. VLC can't manage it by itself.");
+                return qtr("This addon has been installed manually. Hakone can't manage it by itself.");
             }
             return QVariant{};
         }
@@ -751,7 +751,7 @@ void AddonsModelPrivate::addonChanged( AddonPtr addon, addon_state_t state )
         // An older queued completion must not clear a newer request.
         const bool install = m_pending[sdItem->uuid].install;
         if (state != (install ? ADDON_INSTALLED : ADDON_NOTINSTALLED))
-            m_error = (install ? qtr("VLC cannot add %1.") : qtr("VLC cannot remove %1.")).arg(sdItem->name);
+            m_error = (install ? qtr("Hakone cannot add %1.") : qtr("Hakone cannot remove %1.")).arg(sdItem->name);
         m_pending.remove(sdItem->uuid);
     }
     if (m_cache) m_cache->updateItem(std::move(sdItem));

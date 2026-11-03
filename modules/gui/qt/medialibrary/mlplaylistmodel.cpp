@@ -73,7 +73,7 @@ void MLPlaylistModel::appendFiles(const QStringList& urls)
         [this, playlistId](quint64, Result& result) {
             endTransaction();
             if (parentId() == playlistId) emit resetRequested();
-            if (!result.success && result.error.isEmpty()) result.error = qtr("VLC cannot add these files. Try again.");
+            if (!result.success && result.error.isEmpty()) result.error = qtr("Hakone cannot add these files. Try again.");
             emit itemsEdited(playlistId, result.success, result.error);
         });
 }
@@ -111,7 +111,7 @@ void MLPlaylistModel::editItem(int row, int destination, bool remove, const MLIt
         [this, playlistId](quint64, Result& result) {
             endTransaction();
             if (parentId() == playlistId) emit resetRequested();
-            if (!result.success && result.error.isEmpty()) result.error = qtr("VLC cannot change this playlist. Try again.");
+            if (!result.success && result.error.isEmpty()) result.error = qtr("Hakone cannot change this playlist. Try again.");
             emit itemsEdited(playlistId, result.success, result.error);
         });
 }

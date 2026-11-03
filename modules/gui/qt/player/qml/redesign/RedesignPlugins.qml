@@ -45,7 +45,7 @@ ColumnLayout {
                 Header {
                     objectName: "pluginsPriorityHeader"
                     Layout.preferredWidth: root.priorityWidth; Layout.minimumWidth: 0; column: "priority"; caption: qsTr("Priority")
-                    text: qsTr("Sort by priority. VLC uses priority to select a plugin when more than one plugin can do the same task.")
+                    text: qsTr("Sort by priority. Hakone uses priority to select a plugin when more than one plugin can do the same task.")
                 }
             }
             Rectangle { Layout.fillWidth: true; height: theme.dp(1); color: root.lightTheme ? theme.border : "#191919" }

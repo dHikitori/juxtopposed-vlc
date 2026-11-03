@@ -815,7 +815,7 @@ TestCase {
         RedesignPreferenceRow {
             width: 344; y: 100; z: 40
             backend: store; optionName: "resize"
-            label: "Only allow one VLC window"
+            label: "Only allow one Hakone window"
         }
     }
     function test_narrowHelpClickDoesNotResetTheSetting() {
@@ -1007,7 +1007,7 @@ TestCase {
             const p=field.mapToItem(body,0,0)
             return p.y>=-.5 && p.y+field.height<=body.height+.5
         })
-        if(data.error)setup.errorMessage=Array(12).fill("VLC cannot save this change. Try again.").join(" ")
+        if(data.error)setup.errorMessage=Array(12).fill("Hakone cannot save this change. Try again.").join(" ")
         verify(waitForPolish(testCase.Window.window))
         tryVerify(()=>body.height>0 && body.contentHeight>0)
         for(const name of ["subtitleProviderCancel","subtitleProviderSaveKey"]) {

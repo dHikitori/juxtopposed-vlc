@@ -717,7 +717,7 @@ QVariant ExtensionListModel::ExtensionCopy::data( int role ) const
     case Qt::DisplayRole:
         return title;
     case Qt::DecorationRole:
-        if ( !icon ) return QPixmap( ":/logo/vlc48.png" );
+        if ( !icon ) return QPixmap( ":/logo/hakone48.png" );
         return *icon;
     case SummaryRole:
         return shortdesc;

@@ -137,5 +137,5 @@ RedesignTrackAssignmentDialog {
         root.pendingPreparation = preparation.prepare(rows, subtitles, request)
     }
     onSaved: (rows, subtitles) => restartNeeded = DialogsProvider.applySavedTrackAssignments(rows, subtitles) || restartNeeded
-    onAccepted: if (restartNeeded) DialogsProvider.messageDialog(qsTr("Tracks saved. Stop and play this file to use all changes."), qsTr("VLC Media Player"))
+    onAccepted: if (restartNeeded) DialogsProvider.messageDialog(qsTr("Tracks saved. Stop and play this file to use all changes."), qsTr("Hakone Media Player"))
 }

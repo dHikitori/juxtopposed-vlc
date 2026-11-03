@@ -37,11 +37,11 @@ C.Dialog {
     function load(request, result) {
         if (!visible || request !== requestId) return
         loading = false
-        if (!result.success) { errorMessage = result.error || qsTr("VLC cannot read this playlist. Select it again."); return }
+        if (!result.success) { errorMessage = result.error || qsTr("Hakone cannot read this playlist. Select it again."); return }
         playlistName = result.name || ""
         items = (result.items || []).map(item => Object.assign({}, item, {label: qsTr("%1 — %2").arg(item.name).arg(item.location)}))
         selectedIndex = items.findIndex(item => item.enabled !== false)
-        if (!items.length) errorMessage = qsTr("This playlist has no files that VLC can use.")
+        if (!items.length) errorMessage = qsTr("This playlist has no files that Hakone can use.")
         else if (selectedIndex < 0) errorMessage = qsTr("The files in this playlist are not available.")
         else fileChoice.forceActiveFocus()
     }

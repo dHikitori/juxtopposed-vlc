@@ -169,14 +169,14 @@ void MLPlaylistListModel::createWithFiles(const QString& name, const QStringList
     struct Result { MLItemId id; QString error; };
     m_mediaLib->runOnMLThread<Result>(this,
         [name = name.trimmed(), urls, cover](vlc_medialibrary_t* ml, Result& result) {
-            result.error = qtr("VLC cannot save this playlist. Try again.");
+            result.error = qtr("Hakone cannot save this playlist. Try again.");
             QString coverPath;
             bool saved = false;
             const auto cleanup = qScopeGuard([&] { if (!saved && !coverPath.isEmpty()) QFile::remove(coverPath); });
             if (!cover.isEmpty()) {
                 coverPath = PlaylistCoverStore::prepareImage(cover);
                 if (coverPath.isEmpty()) {
-                    result.error = qtr("VLC cannot read or save this image. Select another image.");
+                    result.error = qtr("Hakone cannot read or save this image. Select another image.");
                     return;
                 }
             }
@@ -228,14 +228,14 @@ void MLPlaylistListModel::saveSelection(const MLItemId& playlistId, const QStrin
         else {
             const auto media = vlc::playlist::toMediaList({item});
             if (media.size() != 1 || !media.front().raw()->psz_uri) {
-                emit selectionSaved(false, {}, qtr("VLC cannot read this selection. Select the files again."));
+                emit selectionSaved(false, {}, qtr("Hakone cannot read this selection. Select the files again."));
                 return;
             }
             sources.push_back(qfu(media.front().raw()->psz_uri));
         }
     }
     setTransactionPending(true);
-    struct Result { MLItemId id; QString error = qtr("VLC cannot save this selection. Try again."); };
+    struct Result { MLItemId id; QString error = qtr("Hakone cannot save this selection. Try again."); };
     m_mediaLib->runOnMLThread<Result>(this,
         [playlistId, name, sources](vlc_medialibrary_t* ml, Result& result) {
             ml_unique_ptr<vlc_ml_playlist_t> playlist;

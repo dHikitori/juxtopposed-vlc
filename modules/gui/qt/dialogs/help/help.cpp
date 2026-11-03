@@ -318,7 +318,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
     const auto updateText = [this, copyTimer] {
         ui.retranslateUi(this);
         setWindowTitle(qtr("About"));
-        ui.title->setText(qtr("VLC media player"));
+        ui.title->setText(qtr("Hakone Media Player"));
         ui.closeButton->setText(qtr("&Close"));
         ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.authorsPage), qtr("Authors"));
         ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.creditPage), qtr("Credits"));
@@ -339,7 +339,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         copyTimer->stop();
         ui.copyFeedback->clear();
         ui.MainBlabla->setHtml("<html><head/><body>" +
-        qtr( "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
+        qtr( "<p>Hakone Media Player is a free and open source media player, encoder, and streamer. Hakone is a fork of VLC media player, made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>Hakone uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://hakone.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
         "</p>" + AboutModel::getDesignAttribution() + "</body> </html>");
         colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link));
         updateUpdateButton();

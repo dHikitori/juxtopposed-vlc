@@ -158,7 +158,7 @@ QtObject {
                 ["video-title-show", qsTr("Show filename when a video starts")],
                 ["video-title-timeout", qsTr("Show filename for"), subtitleSlider({from: 1, to: 10, factor: 0.001, step: 0.1, suffix: " s", ticks: [1, 10], trackTicks: [2, 3, 4, 5, 6, 7, 8, 9]})] ] } ],
         library: [
-            { title: qsTr("Opening Files"), rows: [ ["one-instance", qsTr("Only allow one VLC window")],
+            { title: qsTr("Opening Files"), rows: [ ["one-instance", qsTr("Only allow one Hakone window")],
                 ["one-instance-when-started-from-file", qsTr("Apply to files opened from the file manager"), {enabledWhen: "one-instance", hideDisabledValue: true, disabledOpacity: 0.3}],
                 ["playlist-enqueue", qsTr("Add to the playlist instead of replacing it"), {enabledWhen: "one-instance", hideDisabledValue: true, disabledOpacity: 0.3}],
                 ["recursive", qsTr("When opening a folder"), {dynamicChoices: true}], ["show-hiddenfiles", qsTr("Show hidden files")] ] },
@@ -174,7 +174,7 @@ QtObject {
         performance: [
             { title: qsTr("Decoding"), rows: [ ["redesign-hardware-decoding", qsTr("Hardware-accelerated decoding"), {dynamicChoices: true}], ["redesign-postprocessing", qsTr("Video post-processing"), {dynamicChoices: true}],
                 ["avcodec-skiploopfilter", qsTr("Skip the H.264 loop filter"), {choiceLabels: {0: qsTr("Never")}}], ["avcodec-threads", qsTr("Decoding threads")] ] },
-            { title: qsTr("Smooth Playback"), rows: [ ["drop-late-frames", qsTr("Skip late video frames"), {hideHelp: true}], ["high-priority", qsTr("Give VLC higher priority")],
+            { title: qsTr("Smooth Playback"), rows: [ ["drop-late-frames", qsTr("Skip late video frames"), {hideHelp: true}], ["high-priority", qsTr("Give Hakone higher priority")],
                 ["redesign-rescan-plugins", qsTr("Rescan plugins"), {fullWidthAction: true, rowHeight: 42, hideHelp: true}] ] } ],
         recording: [
             { title: qsTranslate("Settings", "Recording"), rows: [ ["input-record-path", qsTr("Save recordings to")], ["input-record-native", qsTr("Record without re-encoding when possible"), {hideHelp: true}] ] },
@@ -202,7 +202,7 @@ QtObject {
             {title: qsTr("Developer Options"), rows: [ ["syslog", qsTr("Write to the system log")], ["syslog-debug", qsTr("Include debug messages in the system log")],
                 ["syslog-ident", qsTr("System log identity"), {rowHeight: 42}], ["syslog-facility", qsTr("System log facility"), {choiceLabels: {user: qsTr("User")}}] ] } ],
         interface: [ {title: "", rows: [ ["qt-opacity", qsTr("Window opacity"), interfaceSlider({from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],
-            ["qt-pause-minimized", qsTr("Pause video when window is minimized"), {hideHelp: true}], ["qt-auto-raise", qsTr("Bring VLC to the front when playback starts")],
+            ["qt-pause-minimized", qsTr("Pause video when window is minimized"), {hideHelp: true}], ["qt-auto-raise", qsTr("Bring Hakone to the front when playback starts")],
             ["qt-bgcone", qsTr("Show cover art in the window when playing audio"), {hideHelp: true}], ["qt-embedded-open", qsTr("Show the file browser inside the open dialog"), {hideHelp: true}],
             ["qt-icon-change", qsTr("Allow the app icon to change"), {hideHelp: true}],
             ["qt-fs-opacity", qsTr("Fullscreen controls opacity"), interfaceSlider({rowHeight: 52, from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],

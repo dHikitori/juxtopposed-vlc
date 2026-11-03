@@ -151,7 +151,7 @@ RedesignSettingsDialog {
         if (action !== "redesign-config-folder") return
         actionMessageIsError = true
         const folder = preferenceStore.configurationFolder()
-        actionMessage = folder.toString().length && Qt.openUrlExternally(folder) ? "" : qsTr("VLC cannot open the settings folder.")
+        actionMessage = folder.toString().length && Qt.openUrlExternally(folder) ? "" : qsTr("Hakone cannot open the settings folder.")
     }
     function resetSettings() {
         resetFailed = !preferenceStore.resetAll()
@@ -490,7 +490,7 @@ RedesignSettingsDialog {
                     visible: root.advanced && !root.search.length
                     width: parent.width
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                    caption: root.expert ? qsTr("Hide all VLC options") : qsTr("All VLC options")
+                    caption: root.expert ? qsTr("Hide all Hakone options") : qsTr("All Hakone options")
                     text: caption; selected: root.expert
                     onClicked: root.expert = !root.expert
                 }

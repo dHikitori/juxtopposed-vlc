@@ -50,7 +50,7 @@ ColumnLayout {
         text: root.subtitleTimelineState === "loading" ? qsTr("Reading subtitle times…")
             : root.subtitleTimelineState === "no-track" ? qsTr("Select a subtitle track to show its times.")
             : root.subtitleTimelineState === "empty" ? qsTr("This subtitle track has no cue times.")
-            : qsTr("VLC cannot read the times for this subtitle track.")
+            : qsTr("Hakone cannot read the times for this subtitle track.")
         color: theme.foreground; font.pixelSize: theme.dp(12); wrapMode: Text.WordWrap
     }
     RedesignSwitchRow {

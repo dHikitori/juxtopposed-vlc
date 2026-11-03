@@ -819,7 +819,7 @@ bool RedesignPreferences::startStereoTest()
     }
     auto *output = vlc_player_aout_Hold(m_ctx->getIntf()->p_player);
     if (!output) {
-        finishStereoTest(qtr("VLC cannot start the audio test."));
+        finishStereoTest(qtr("Hakone cannot start the audio test."));
         return false;
     }
     const bool muted = aout_MuteGet(output) > 0;
@@ -837,7 +837,7 @@ bool RedesignPreferences::startStereoTest()
     aout_Release(output);
     if (!started) {
         test.reset();
-        finishStereoTest(qtr("VLC cannot start the audio test."));
+        finishStereoTest(qtr("Hakone cannot start the audio test."));
         return false;
     }
     m_stereoTest = std::move(test);
@@ -866,7 +866,7 @@ void RedesignPreferences::updateStereoTest()
     if (!m_stereoTest) return;
     const auto state = m_stereoTest->state();
     if (state == StereoTestPlayer::State::Failed || m_stereoTestElapsed.elapsed() > 8000) {
-        finishStereoTest(qtr("VLC cannot start the audio test."));
+        finishStereoTest(qtr("Hakone cannot start the audio test."));
         return;
     }
     if (state == StereoTestPlayer::State::Complete) { finishStereoTest(); return; }
@@ -1282,7 +1282,7 @@ bool RedesignPreferences::createPlayerPreset(const QString& proposed)
 {
     auto state = playerPresetState();
     if (m_applicationProfile) state = captureApplicationProfile(state);
-    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("VLC cannot read the saved presets."));
+    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("Hakone cannot read the saved presets."));
     auto presets = state.value(QStringLiteral("presets")).toList();
     const auto name = proposed.trimmed();
     if (!validPresetName(name, presets, {}, m_applicationProfile)) return playerPresetError(m_applicationProfile ? qtr("Enter a profile name with 1 to 80 characters. Use a different name for each profile.") : qtr("Enter a unique preset name with 1 to 80 characters."));
@@ -1302,7 +1302,7 @@ bool RedesignPreferences::selectPlayerPreset(const QString& id)
     if (dirty() && !save()) return false;
     auto state = playerPresetState();
     if (m_applicationProfile) state = captureApplicationProfile(state);
-    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("VLC cannot read the saved presets."));
+    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("Hakone cannot read the saved presets."));
     QVariantMap options = state.value(QStringLiteral("default")).toMap();
     QVariant interface = state.value(QStringLiteral("defaultInterface"));
     if (!id.isEmpty()) {
@@ -1375,7 +1375,7 @@ bool RedesignPreferences::renamePlayerPreset(const QString& id, const QString& p
 {
     auto state = playerPresetState();
     if (m_applicationProfile) state = captureApplicationProfile(state);
-    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("VLC cannot read the saved presets."));
+    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("Hakone cannot read the saved presets."));
     auto presets = state.value(QStringLiteral("presets")).toList();
     const auto name = proposed.trimmed();
     if (!validPresetName(name, presets, id, m_applicationProfile)) return playerPresetError(m_applicationProfile ? qtr("Enter a profile name with 1 to 80 characters. Use a different name for each profile.") : qtr("Enter a unique preset name with 1 to 80 characters."));
@@ -1393,7 +1393,7 @@ bool RedesignPreferences::duplicatePlayerPreset(const QString& id, const QString
 {
     auto state = playerPresetState();
     if (m_applicationProfile) state = captureApplicationProfile(state);
-    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("VLC cannot read the saved presets."));
+    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("Hakone cannot read the saved presets."));
     auto presets = state.value(QStringLiteral("presets")).toList();
     const auto name = proposed.trimmed();
     if (!validPresetName(name, presets, {}, m_applicationProfile)) return playerPresetError(m_applicationProfile ? qtr("Enter a profile name with 1 to 80 characters. Use a different name for each profile.") : qtr("Enter a unique preset name with 1 to 80 characters."));
@@ -1414,7 +1414,7 @@ bool RedesignPreferences::deletePlayerPreset(const QString& id)
 {
     auto state = playerPresetState();
     if (m_applicationProfile) state = captureApplicationProfile(state);
-    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("VLC cannot read the saved presets."));
+    if (state.isEmpty()) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("Hakone cannot read the saved presets."));
     auto presets = state.value(QStringLiteral("presets")).toList();
     const auto it = std::find_if(presets.begin(), presets.end(), [&](const QVariant& row) { return row.toMap().value(QStringLiteral("id")).toString() == id; });
     if (it == presets.end()) return playerPresetError(m_applicationProfile ? qtr("This profile is no longer available.") : qtr("This preset is no longer available."));
@@ -1951,11 +1951,11 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     if (name == QLatin1String("redesign-reset-all"))
         return {{QStringLiteral("kind"), QStringLiteral("action")}, {QStringLiteral("editor"), QStringLiteral("action")},
             {QStringLiteral("buttonLabel"), qtr("Reset")}, {QStringLiteral("destructive"), true},
-            {QStringLiteral("help"), qtr("Replace all VLC settings with the default settings.")}};
+            {QStringLiteral("help"), qtr("Replace all Hakone settings with the default settings.")}};
     if (name == QLatin1String("redesign-config-folder"))
         return {{QStringLiteral("kind"), QStringLiteral("action")}, {QStringLiteral("editor"), QStringLiteral("action")},
             {QStringLiteral("buttonLabel"), qtr("Open")},
-            {QStringLiteral("help"), qtr("Open the folder that contains the VLC settings.")}};
+            {QStringLiteral("help"), qtr("Open the folder that contains the Hakone settings.")}};
     if (name == QLatin1String("redesign-audio-device")) {
         auto choices = audioDeviceChoices();
         const QString configured = value(name).toString();
@@ -1976,12 +1976,12 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
             {QStringLiteral("defaultValue"), false}, {QStringLiteral("value"), value(name)},
             {QStringLiteral("supported"), supportsWebRemote()},
             {QStringLiteral("help"), supportsWebRemote() ? qtr("Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again.")
-                : qtr("Web remote control is unavailable in this VLC build.")}};
+                : qtr("Web remote control is unavailable in this Hakone build.")}};
 
     if (name == QLatin1String("redesign-repeat") || name == QLatin1String("redesign-after-playback")) {
         const bool repeat = name == QLatin1String("redesign-repeat");
         const QStringList labels = repeat ? QStringList{qtr("Off"), qtr("Current item"), qtr("All items")}
-            : QStringList{qtr("Stop"), qtr("Quit VLC"), qtr("Pause on the last frame")};
+            : QStringList{qtr("Stop"), qtr("Quit Hakone"), qtr("Pause on the last frame")};
         QVariantList choices;
         for (int i = 0; i < labels.size(); ++i) choices.append(QVariantMap{{QStringLiteral("label"), labels[i]}, {QStringLiteral("value"), i}});
         return {{QStringLiteral("kind"), QStringLiteral("integer")}, {QStringLiteral("title"), repeat ? qtr("Repeat") : qtr("When playback finishes")},
@@ -2038,7 +2038,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     if (name == QLatin1String("audio-spatial") || name == QLatin1String("audio-spatial-mode")) {
         const bool supported = module_exists("spatialaudio");
         result.insert(QStringLiteral("supported"), supported);
-        if (!supported) result.insert(QStringLiteral("help"), qtr("VLC cannot use spatial audio in this version."));
+        if (!supported) result.insert(QStringLiteral("help"), qtr("Hakone cannot use spatial audio in this version."));
     }
     QVariantList choices;
     QString kind;
@@ -2164,15 +2164,15 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     if (name == QLatin1String("verbose"))
         result.insert(QStringLiteral("help"), qtr("Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("qt-system-tray"))
-        result.insert(QStringLiteral("help"), qtr("Show the VLC icon in the system tray."));
+        result.insert(QStringLiteral("help"), qtr("Show the Hakone icon in the system tray."));
     if (name == QLatin1String("qt-start-minimized"))
         result.insert(QStringLiteral("help"), qtr("Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("qt-notification"))
-        result.insert(QStringLiteral("help"), qtr("Show a track message always, only when VLC is hidden or minimized, or never."));
+        result.insert(QStringLiteral("help"), qtr("Show a track message always, only when Hakone is hidden or minimized, or never."));
     if (name == QLatin1String("qt-notification-timeout"))
         result.insert(QStringLiteral("help"), qtr("Select how long VLC shows the track popup. The system can change this time."));
     if (name == QLatin1String("qt-opacity"))
-        result.insert(QStringLiteral("help"), qtr("Change the opacity of the main VLC window. The change applies at once."));
+        result.insert(QStringLiteral("help"), qtr("Change the opacity of the main Hakone window. The change applies at once."));
     if (name == QLatin1String("qt-fs-opacity"))
         result.insert(QStringLiteral("help"), qtr("Change the opacity of the control backgrounds in fullscreen. The text and icons stay clear."));
     if (name == QLatin1String("qt-fs-sensitivity"))
@@ -2186,7 +2186,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     if (name == QLatin1String("qt-verbose"))
         result.insert(QStringLiteral("help"), qtr("Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."));
     if (name == QLatin1String("qt-error-dialogs"))
-        result.insert(QStringLiteral("help"), qtr("Show error messages and confirmation questions. When this is off, VLC cancels normal and warning questions. Errors stay in the error history. Login, progress and critical questions stay on."));
+        result.insert(QStringLiteral("help"), qtr("Show error messages and confirmation questions. When this is off, Hakone cancels normal and warning questions. Errors stay in the error history. Login, progress and critical questions stay on."));
     if (name == QLatin1String("language")) {
         choices = installedInterfaceLanguages();
         choices.prepend(QVariantMap{{QStringLiteral("label"), qtr("System language")}, {QStringLiteral("value"), QStringLiteral("auto")}});
@@ -2213,15 +2213,15 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         })) choices.append(QVariantMap{{QStringLiteral("label"), decoder ? qtr("Saved list (%1)").arg(current)
             : qtr("Saved encoder (%1)").arg(current)}, {QStringLiteral("value"), current}});
         result.insert(QStringLiteral("help"), decoder
-            ? qtr("Select the decoder to try first. Automatic lets VLC select it. Open the file again after a change.")
-            : qtr("VLC uses this encoder for conversion and streaming. It must support the output format. An output profile can override this choice."));
+            ? qtr("Select the decoder to try first. Automatic lets Hakone select it. Open the file again after a change.")
+            : qtr("Hakone uses this encoder for conversion and streaming. It must support the output format. An output profile can override this choice."));
     }
     if (name == QLatin1String("startup-options"))
         result.insert(QStringLiteral("help"), qtr("Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."));
     if (name == QLatin1String("clock-synchro"))
         result.insert(QStringLiteral("help"), qtr("Control input clock synchronization for live streams. Default uses the source settings. Open the stream again after a change."));
     if (name == QLatin1String("clock-jitter"))
-        result.insert(QStringLiteral("help"), qtr("Set the maximum variation in input delay that VLC can correct, in milliseconds. Open the file or stream again after a change."));
+        result.insert(QStringLiteral("help"), qtr("Set the maximum variation in input delay that Hakone can correct, in milliseconds. Open the file or stream again after a change."));
     if (name == QLatin1String("cr-average"))
         result.insert(QStringLiteral("help"), qtr("Set the number of clock samples used to smooth timing changes. Higher values give a slower response. The input buffer also affects this value. Open the file or stream again after a change."));
     if (name == QLatin1String("media-library-startup")) {
@@ -2255,7 +2255,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         result.insert(QStringLiteral("help"), qtr("Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."));
     }
     if (name == QLatin1String("one-instance-when-started-from-file"))
-        result.insert(QStringLiteral("help"), qtr("Use the same VLC window for files opened from the file manager."));
+        result.insert(QStringLiteral("help"), qtr("Use the same Hakone window for files opened from the file manager."));
     if (name == QLatin1String("playlist-enqueue"))
         result.insert(QStringLiteral("help"), qtr("Keep the current item playing and add new files to the queue. Otherwise, start the new files."));
     if (name == QLatin1String("dvd")) {
@@ -2791,7 +2791,7 @@ bool RedesignPreferences::save()
     });
     if (!m_applicationProfile && presentationChanged && (!value(presetOption).toString().isEmpty() || m_editPlayerPreset)) {
         auto state = playerPresetState();
-        if (state.isEmpty() && m_editPlayerPreset) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("VLC cannot read the saved presets."));
+        if (state.isEmpty() && m_editPlayerPreset) return playerPresetError(m_applicationProfile ? qtr("VLC cannot read the saved profiles.") : qtr("Hakone cannot read the saved presets."));
         if (!state.isEmpty()) {
             const auto selected = state.value(QStringLiteral("selected")).toString();
             if (m_editPlayerPreset && !selected.isEmpty()) {
@@ -2818,7 +2818,7 @@ bool RedesignPreferences::save()
     auto* translator = InterfaceTranslator::instance();
     const bool changeLanguage = translator && m_edits.contains(QStringLiteral("language"));
     if (changeLanguage && !translator->prepareLanguage(value(QStringLiteral("language")).toString())) {
-        m_error = qtr("VLC cannot load this language.");
+        m_error = qtr("Hakone cannot load this language.");
         ++m_revision; emit changed(); return false;
     }
     QSettings uiSettings(m_ctx->getIntf()->mainSettings->fileName(), m_ctx->getIntf()->mainSettings->format());
@@ -3121,7 +3121,7 @@ bool RedesignPreferences::resetAll()
     if (!m_ctx) return false;
     auto* translator = InterfaceTranslator::instance();
     if (translator && !translator->prepareLanguage(QStringLiteral("auto"))) {
-        m_error = qtr("VLC cannot load this language.");
+        m_error = qtr("Hakone cannot load this language.");
         ++m_revision; emit changed(); return false;
     }
     m_saveTimer.stop();
@@ -3149,7 +3149,7 @@ bool RedesignPreferences::resetAll()
         for (auto it = previous.cbegin(); it != previous.cend(); ++it) write(it.key().toUtf8(), it.value());
     };
     const auto failed = [&]() {
-        m_error = qtr("VLC cannot save the default settings. Your settings did not change.");
+        m_error = qtr("Hakone cannot save the default settings. Your settings did not change.");
         ++m_revision; emit changed(); return false;
     };
 #ifdef _WIN32
