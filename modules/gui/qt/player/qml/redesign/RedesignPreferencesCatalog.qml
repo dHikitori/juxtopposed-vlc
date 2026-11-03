@@ -192,7 +192,11 @@ QtObject {
         extensions: []
     })
     readonly property var advancedSections: ({
-        extensions: [{title: qsTr("Legacy extensions"), rows: [["qt-autoload-extensions", qsTr("Load legacy Lua extensions on startup"),
+        extensions: [{title: qsTr("Add-on registry"), rows: [["qt-addon-registry", qsTr("Use the Hakone add-on registry"),
+                {help: qsTr("Browse add-ons and find their updates in the registry. Add-ons always install from their own Git repositories.")}],
+                ["qt-addon-registry-url", qsTr("Registry address"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8, placeholder: "https://api.hakone.org/v1",
+                    help: qsTr("Use http://api.localhost:3000/v1 for a development registry on this computer.")}]]},
+            {title: qsTr("Legacy extensions"), rows: [["qt-autoload-extensions", qsTr("Load legacy Lua extensions on startup"),
             {help: qsTr("This setting controls legacy Lua extensions. It does not change enabled add-ons.")}]]}],
         general: [ {title: "", rows: [ ["qt-minor-warnings", qsTr("Show minor warnings")], ["startup-options", qsTr("Additional command line options"), {rowHeight: 46}], ["logmode", qsTr("Log format"), {choiceLabels: {text: qsTr("Plain text"), html: "HTML"}}], ["stats", qsTr("Collect playback statistics")], ["redesign-config-folder", qsTr("Open configurations folder"), {rowHeight: 42}], ["redesign-reset-all", qsTr("Reset all settings"), {rowHeight: 42}] ] },
             {title: qsTr("Developer Options"), rows: [ ["syslog", qsTr("Write to the system log")], ["syslog-debug", qsTr("Include debug messages in the system log")],

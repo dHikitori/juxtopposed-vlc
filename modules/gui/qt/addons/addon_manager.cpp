@@ -11,6 +11,7 @@
 #include "addon_store_authority.hpp"
 #include "addon_repository_jobs.hpp"
 #include "addon_repository_cancellation.hpp"
+#include "addon_registry_install.hpp"
 #include "addon_native_wake.hpp"
 #include "addon_precompiled_modules.hpp"
 #include <QCoreApplication>
@@ -1287,6 +1288,7 @@ QVariantMap AddonManager::pendingPackage() const
         {"source", candidate.identity.source}, {"tag", candidate.identity.tag}, {"digest", QString::fromLatin1(candidate.digest)},
         {"permissions", candidate.manifest.requiredPermissions.toVariantMap()},
         {"developerSource", candidate.identity.developerSource}, {"distributionSource", candidate.identity.distributionSource}, {"publisherVerified", false},
+        {"registry", m_pendingPackage == m_registryCandidate},
         {"hostCapabilities", capabilities()}, {"workerRequired", !candidate.manifest.runtimeEntry.isEmpty()}};
 }
 bool AddonManager::stageLocalPackage(const QString& directory)
@@ -1470,6 +1472,34 @@ bool AddonManager::stageRepository(const QString& source, const QString& tag)
             : !finished ? tr("The repository request did not finish.") : *error);
     });
     return changed(started,started ? QString{} : tr("The app cannot start the repository request."));
+}
+bool AddonManager::stageRegistryRelease(const RegistryRelease& release, bool update)
+{
+    if (busy()) return changed(false, tr("A repository request is already active."));
+    if (release.yanked()) return changed(false, tr("This version was withdrawn from the add-on registry."));
+    m_pendingPackage.reset();
+    m_updateResult = update ? QVariantMap{{"packageId", release.addonId}, {"checking", true}} : QVariantMap{};
+    auto candidate = std::make_shared<PackageCandidate>();
+    auto error = std::make_shared<QString>();
+    auto success = std::make_shared<bool>(false);
+    const auto worker = m_workerExecutable;
+    const bool started = m_repositoryJobs->submit([candidate, error, success, release, worker] {
+        *success = PackageStore::fetchGitTag(release.install.source, release.install.tag, candidate.get(), error.get())
+            && verifyRegistryIdentity(*candidate, release, error.get())
+            && AddonCandidateCheck::run(worker, *candidate, error.get(), [] { return RepositoryCancellation::requested(); });
+    }, [this, candidate, error, success, release, update](AddonRepositoryJobs::Result result) {
+        const bool canceled = result == AddonRepositoryJobs::Result::Canceled;
+        const bool finished = result == AddonRepositoryJobs::Result::Finished;
+        const bool available = *success && finished;
+        if (available) { m_pendingPackage = candidate; m_registryCandidate = candidate; }
+        if (update)
+            m_updateResult = {{"packageId", release.addonId}, {"checking", false}, {"available", available}, {"canceled", canceled},
+                {"tag", available ? release.install.tag : QString{}}, {"publisherVerified", false}};
+        changed(available, canceled ? tr("The app canceled the repository request.")
+            : !finished ? tr("The repository request did not finish.") : *error);
+    });
+    if (!started && update) m_updateResult = {{"packageId", release.addonId}, {"checking", false}, {"available", false}, {"canceled", false}};
+    return changed(started, started ? QString{} : tr("The app cannot start the repository request."));
 }
 bool AddonManager::checkRepositoryUpdates(const QString& id, const QString& range, bool allowPrerelease)
 {

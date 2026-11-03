@@ -214,6 +214,14 @@ addon_host_sources = files(
     'addons/addon_host_services.hpp',
     'addons/addon_repository_updates.cpp',
     'addons/addon_repository_updates.hpp',
+    'addons/addon_registry_types.cpp',
+    'addons/addon_registry_types.hpp',
+    'addons/addon_registry_client.cpp',
+    'addons/addon_registry_client.hpp',
+    'addons/addon_registry_install.cpp',
+    'addons/addon_registry_install.hpp',
+    'addons/addon_registry.cpp',
+    'addons/addon_registry.hpp',
     'addons/addon_repository_jobs.cpp',
     'addons/addon_repository_jobs.hpp',
     'addons/addon_repository_cancellation.hpp',
@@ -229,6 +237,8 @@ addon_host_sources = files(
 )
 addon_host_moc_headers = files(
     'addons/addon_guest_projections.hpp',
+    'addons/addon_registry_client.hpp',
+    'addons/addon_registry.hpp',
     'addons/addon_media_siblings.hpp',
     'addons/addon_account_setup.hpp',
     'addons/addon_device_authorization.hpp',
@@ -294,6 +304,8 @@ qt6_dep = dependency('qt6',
     private_headers: true,
     required: get_option('qt'))
 
+# The add-on tests take only this part of qt_extra_flags.
+qt_yield_flags = []
 # Qt module doesn't provide the framework path to moc executable, so we
 # need to help moc find them. It's needed for QtQml/ module registration.
 if host_machine.system() == 'darwin' and qt6_dep.found()
@@ -302,7 +314,8 @@ if host_machine.system() == 'darwin' and qt6_dep.found()
     if host_machine.cpu_family() == 'aarch64' and qt6_dep.version().version_compare('<6.9')
         # Qt 6.8's qyieldcpu.h calls __yield without its ARM ACLE declaration
         # when newer Apple Clang recognizes it as a builtin.
-        qt_extra_flags += ['-include', 'arm_acle.h']
+        qt_yield_flags = ['-include', 'arm_acle.h']
+        qt_extra_flags += qt_yield_flags
     endif
     # The platform compositor messages the native video view directly.
     qt_link_args += '-lobjc'
@@ -1180,6 +1193,7 @@ qml_modules += {
        'player/qml/redesign/RedesignAddonPanel.qml',
        'player/qml/redesign/RedesignAddonPermissions.qml',
        'player/qml/redesign/RedesignAddonUpdates.qml',
+       'player/qml/redesign/RedesignAddonBrowse.qml',
        'player/qml/redesign/RedesignAddonSections.qml',
        'player/qml/redesign/RedesignAddonSurface.qml',
        'player/qml/redesign/RedesignAddonReplacements.qml',
@@ -1478,6 +1492,7 @@ qml_tests = {
     'tst_AddonDiscovery': files('tests/tst_AddonDiscovery.qml'),
     'tst_AddonSessions': files('tests/tst_AddonSessions.qml'),
     'tst_AddonInstaller': files('tests/tst_AddonInstaller.qml'),
+    'tst_AddonBrowse': files('tests/tst_AddonBrowse.qml'),
     'tst_AddonUpdates': files('tests/tst_AddonUpdates.qml'),
     'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),
     'tst_AddonUi': files('tests/tst_AddonUi.qml'),
@@ -2044,7 +2059,7 @@ if qt6_dep.found()
         addon_visualizer_process = executable('addon_visualizer_process', files('tests/fixtures/addon_visualizer_process.c'), install: false, build_by_default: false)
         addon_discovery_source_process = executable('addon_discovery_source_process', files('tests/fixtures/addon_discovery_source_process.c'), install: false, build_by_default: false)
         addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
-        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'store_profile_writes', 'profile_host', 'worker_health', 'candidate_check', 'accounts', 'guest_projections', 'media_siblings', 'schema_corpus', 'identity_choice', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'manager_writes']
+        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'registry', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'store_profile_writes', 'profile_host', 'worker_health', 'candidate_check', 'accounts', 'guest_projections', 'media_siblings', 'schema_corpus', 'identity_choice', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'manager_writes']
             native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
             addon_timeout = addon_test in ['catalogue_view', 'display_catalogue', 'package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'playable_gate', 'runtime', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'profile_host', 'worker_health', 'candidate_check', 'ui_registry'] ? 90 : 30
             if addon_test in ['display_integration', 'distribution_bootstrap']
@@ -2090,7 +2105,7 @@ if qt6_dep.found()
                 'suite': ['qt', 'addons'],
                 'include_directories': addon_test in ['native_artwork_assets', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_proxy'] ? [qt_include_dir, include_directories('../../..')] : qt_include_dir,
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines,
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines + qt_yield_flags,
                 'link_args': qt_link_args + display_links,
                 'depends': [addon_worker_dependencies, addon_visualizer_process, bundled_addon_targets],
                 'env': addon_worker_environment,
@@ -2876,7 +2891,7 @@ if qt6_dep.found()
           dependencies: [quicktest_qt6_dep, qt6_dep, qtest_qt6_dep],
           # qml_test.hpp keeps joined add-on work alive through shutdown.
           link_with: [qmllibs, addon_host_library],
-          cpp_args: ['-DQUICK_TEST_SOURCE_DIR="' + meson.current_source_dir() + '/tests"']
+          cpp_args: ['-DQUICK_TEST_SOURCE_DIR="' + meson.current_source_dir() + '/tests"'] + qt_yield_flags
         )
         foreach test_name, test_file : qml_tests
               test(test_name, qml_test, args: ['-input', test_file], suite:'qt')

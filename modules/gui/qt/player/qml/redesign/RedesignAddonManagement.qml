@@ -8,6 +8,10 @@ ColumnLayout {
     id: root
     required property var backend
     property var summaryBackend: null
+    // The hosted add-on registry (AddonRegistry), for Browse and updates.
+    property var registry: null
+    // "installed" or "browse".
+    property string view: "installed"
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
@@ -73,7 +77,7 @@ ColumnLayout {
     }
     onActiveChanged: {
         if (!active) closeDialogs()
-        else if (ready) refreshSummary()
+        else if (ready) { refreshSummary(); refreshRegistry() }
     }
     onDisplayBackedChanged: if (displayBacked) displayMode = true
     onSummaryBackendChanged: {
@@ -94,10 +98,24 @@ ColumnLayout {
     }
     Component.onCompleted: {
         if (summaryBackend && summaryBackend.displayBacked === true) displayMode = true
-        ready = true; if (active) refreshSummary(); if (active && pendingPackage.id) openInstaller()
+        ready = true; if (active) { refreshSummary(); refreshRegistry() } if (active && pendingPackage.id) openInstaller()
     }
     function refreshSummary() {
         if (summaryBackend && typeof summaryBackend.refresh === "function") summaryBackend.refresh()
+    }
+    // The registry index gives update badges; it is cached and refreshed at
+    // most every few minutes.
+    function refreshRegistry() { if (registry) registry.refresh(false) }
+    // The registry's update for an installed row, {version, tag} or {}.
+    function registryUpdate(row) {
+        if (!registry || !row || row.developerSource === true || row.distributionSource === true) return ({})
+        registry.indexRevision
+        return registry.updateFor(row.id, row.version || "", row.source || "")
+    }
+    function registryWithdrawn(row) {
+        if (!registry || !row) return false
+        registry.indexRevision
+        return registry.withdrawn(row.id, row.version || "")
     }
     function currentList() {
         if (!summaryBackend && !displayBacked) return true
@@ -117,6 +135,9 @@ ColumnLayout {
         const row = packages.find(entry => entry.id === id)
         if (busy || pendingPackage.id || !row || row.developerSource === true || row.distributionSource === true
             || !/^https:\/\//i.test(row.source || "") || typeof backend.checkRepositoryUpdates !== "function") return false
+        // The registry's index names the update and its identity; Git still
+        // supplies it. Without a listed update, ask the repository itself.
+        if (registryUpdate(row).version) return registry.installUpdate(row.id, row.version || "", row.source || "")
         return backend.checkRepositoryUpdates(id, "^" + row.version, false)
     }
     function reviewAppUpdate(id) {
@@ -146,8 +167,12 @@ ColumnLayout {
         if (packageList.currentIndex >= 0) packageList.positionViewAtIndex(packageList.currentIndex, ListView.Contain)
     }
     // The list row: version and state. A bundled update has its own badge.
-    function rowText(row) { return [row.version || "", stateText(row)].filter(value => value.length > 0).join(" · ") }
-    function updateText(row) { return row.appUpdateAvailable === true && row.appUpdateVersion ? qsTr("Update to %1").arg(row.appUpdateVersion) : "" }
+    function rowText(row) { return [row.version || "", stateText(row), registryWithdrawn(row) ? qsTr("Withdrawn from the registry") : ""].filter(value => value.length > 0).join(" · ") }
+    function updateText(row) {
+        if (row.appUpdateAvailable === true && row.appUpdateVersion) return qsTr("Update to %1").arg(row.appUpdateVersion)
+        const update = registryUpdate(row)
+        return update.version ? qsTr("Update to %1").arg(update.version) : ""
+    }
     function stateText(row) {
         return row.removing === true ? qsTr("Removal in progress") : safeMode ? qsTr("Temporarily disabled")
             : row.configured === false && row.configurationKnown !== false ? row.enabled === true ? qsTr("Set up first") : qsTr("Disabled · Set up first")
@@ -225,13 +250,41 @@ ColumnLayout {
         return limits.join("\n")
     }
 
-    Text {
+    RowLayout {
+        Layout.fillWidth: true; spacing: root.theme.dp(6)
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Add-ons"); textFormat: Text.PlainText
+            color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(14)
+        }
+        ActionButton {
+            objectName: "addonViewInstalled"
+            caption: qsTr("Installed"); selected: root.view === "installed"
+            onClicked: root.view = "installed"
+        }
+        ActionButton {
+            objectName: "addonViewBrowse"
+            caption: qsTr("Browse"); selected: root.view === "browse"; visible: !!root.registry
+            onClicked: root.view = "browse"
+        }
+    }
+    Loader {
+        objectName: "addonBrowseLoader"
         Layout.fillWidth: true
-        text: qsTr("Add-ons"); textFormat: Text.PlainText
-        color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(14)
+        active: root.view === "browse" && !!root.registry
+        visible: active
+        sourceComponent: RedesignAddonBrowse {
+            registry: root.registry
+            installedPackages: root.managedPackages
+            busy: root.busy || root.writing
+            pendingReview: !!root.pendingPackage.id
+            active: root.active && root.view === "browse"
+            scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+        }
     }
     Rectangle {
         objectName: "addonInstalledList"
+        visible: root.view === "installed"
         Layout.fillWidth: true; Layout.preferredHeight: root.theme.dp(252)
         color: root.theme.field; radius: root.theme.dp(6)
         border.width: 1; border.color: root.theme.border
@@ -330,7 +383,7 @@ ColumnLayout {
         }
     }
     GridLayout {
-        Layout.fillWidth: true
+        Layout.fillWidth: true; visible: root.view === "installed"
         columns: root.width < root.theme.dp(510) ? 1 : 2
         columnSpacing: root.theme.dp(12); rowSpacing: root.theme.dp(8)
         PackageInput {
@@ -367,13 +420,13 @@ ColumnLayout {
         }
     }
     Text {
-        Layout.fillWidth: true; visible: !root.selectedPackage.id && !!root.managedPackages.length
+        Layout.fillWidth: true; visible: root.view === "installed" && !root.selectedPackage.id && !!root.managedPackages.length
         text: qsTr("Select an extension for settings and version details."); textFormat: Text.PlainText
         color: root.theme.playerLabel; font.pixelSize: root.theme.dp(12); wrapMode: Text.Wrap
     }
     Rectangle {
         objectName: "addonSelectedDetails"
-        Layout.fillWidth: true; visible: root.listReady && !!root.selectedPackage.id
+        Layout.fillWidth: true; visible: root.view === "installed" && root.listReady && !!root.selectedPackage.id
         implicitHeight: details.implicitHeight + root.theme.dp(24)
         color: root.theme.panel; radius: root.theme.dp(6); border.width: 1; border.color: root.theme.border
         ColumnLayout {
@@ -617,6 +670,7 @@ ColumnLayout {
                                             qsTr("Repository: %1").arg(root.pendingPackage.source || ""), qsTr("Release tag: %1").arg(root.pendingPackage.tag || ""),
                                             root.pendingPackage.developerSource ? qsTr("Local development package") : "",
                                             root.pendingPackage.distributionSource ? qsTr("Package from the app distribution") : "",
+                                            root.pendingPackage.registry === true ? qsTr("Listed in the Hakone add-on registry. The app checked the release against it.") : "",
                                             root.pendingPackage.publisherVerified === true ? qsTr("Publisher verified") : qsTr("Publisher not verified")].filter(value => value.length > 0).join("\n")
                                         textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; color: root.theme.foreground; font.pixelSize: root.theme.dp(13)
                                     }

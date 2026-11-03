@@ -323,6 +323,14 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_host_services.hpp \
 	addons/addon_repository_updates.cpp \
 	addons/addon_repository_updates.hpp \
+	addons/addon_registry_types.cpp \
+	addons/addon_registry_types.hpp \
+	addons/addon_registry_client.cpp \
+	addons/addon_registry_client.hpp \
+	addons/addon_registry_install.cpp \
+	addons/addon_registry_install.hpp \
+	addons/addon_registry.cpp \
+	addons/addon_registry.hpp \
 	addons/addon_repository_jobs.cpp \
 	addons/addon_repository_jobs.hpp \
 	addons/addon_repository_cancellation.hpp \
@@ -337,6 +345,8 @@ QT_ADDON_HOST_SOURCES = \
 	addons/addon_native_artwork_assets.hpp
 QT_ADDON_HOST_MOC = \
 	addons/addon_manager.moc.cpp \
+	addons/addon_registry_client.moc.cpp \
+	addons/addon_registry.moc.cpp \
 	addons/addon_identity_choice.moc.cpp \
 	addons/addon_package_summaries.moc.cpp \
 	addons/addon_catalogue_view.moc.cpp \
@@ -1668,6 +1678,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignAddonPanel.qml \
 	player/qml/redesign/RedesignAddonPermissions.qml \
 	player/qml/redesign/RedesignAddonUpdates.qml \
+	player/qml/redesign/RedesignAddonBrowse.qml \
 	player/qml/redesign/RedesignAddonSections.qml \
 	player/qml/redesign/RedesignAddonSurface.qml \
 	player/qml/redesign/RedesignAddonReplacements.qml \
@@ -3203,6 +3214,16 @@ test_qt_addon_repository_updates_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_l
 test_qt_addon_repository_updates_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
 check_PROGRAMS += test_qt_addon_repository_updates
 TESTS += test_qt_addon_repository_updates
+test_qt_addon_registry_SOURCES = tests/test_addon_registry.cpp
+nodist_test_qt_addon_registry_SOURCES = tests/test_addon_registry.moc
+BUILT_SOURCES += tests/test_addon_registry.moc
+CLEANFILES += tests/test_addon_registry.moc
+test_qt_addon_registry_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_addon_registry_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_addon_registry_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
+test_qt_addon_registry_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
+check_PROGRAMS += test_qt_addon_registry
+TESTS += test_qt_addon_registry
 
 test_qt_addon_playable_gate_SOURCES = tests/test_addon_playable_gate.cpp
 nodist_test_qt_addon_playable_gate_SOURCES = tests/test_addon_playable_gate.moc
@@ -4033,6 +4054,8 @@ if HAVE_QT_QUICK_TEST
 TESTS += tests/tst_AddonSessions.qml
 EXTRA_DIST += tests/tst_AddonInstaller.qml
 TESTS += tests/tst_AddonInstaller.qml
+EXTRA_DIST += tests/tst_AddonBrowse.qml
+TESTS += tests/tst_AddonBrowse.qml
 EXTRA_DIST += tests/tst_AddonUpdates.qml
 TESTS += tests/tst_AddonUpdates.qml
 EXTRA_DIST += tests/tst_AddonDiscovery.qml

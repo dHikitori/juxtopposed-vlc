@@ -22,6 +22,14 @@ struct SemanticVersion
 
 bool versionSatisfies(const QString& version, const QString& range);
 bool versionSatisfies(const QString& version, const QString& range, bool allowPrerelease);
+// The add-on API version this host implements. Manifests name it in
+// api.addon, and each required contract range in api.contracts.
+inline constexpr char HostAddonApiVersion[] = "1.0.0";
+const QSet<QString>& hostContracts();
+// True when this host can run a release with these api values.
+bool hostAcceptsApi(const QString& addonRange, const QJsonObject& contracts);
+// An HTTPS repository URL without user data, query or fragment.
+bool httpsSource(const QString& url);
 bool portablePackagePath(const QString& path);
 bool validateUiSchema(const QJsonObject& schema);
 bool validateUiValue(const QJsonObject& schema, const QJsonValue& value);

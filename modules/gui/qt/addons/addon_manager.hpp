@@ -14,6 +14,7 @@
 #include "addon_prepared_artwork_asset.hpp"
 #include "addon_metadata_coordinator.hpp"
 #include "addon_native_notifications.hpp"
+#include "addon_registry_types.hpp"
 #include <QObject>
 #include <QSet>
 #include <QElapsedTimer>
@@ -181,6 +182,12 @@ public:
     Q_INVOKABLE bool stageDistributionPackage(const QString& packageId);
     Q_INVOKABLE bool stageLocalPackage(const QString& directory);
     Q_INVOKABLE bool stageRepository(const QString& source, const QString& tag);
+    // A release the add-on registry named. Git supplies the package as for
+    // stageRepository; the fetched tag, commit and digest must then match the
+    // registry's. update: the result reports in updateResult like an update
+    // check. C++ only: QML passes an ID and version to AddonRegistry, never
+    // an identity.
+    bool stageRegistryRelease(const RegistryRelease&, bool update);
     Q_INVOKABLE bool checkRepositoryUpdates(const QString& packageId, const QString& versionRange, bool allowPrerelease = false);
     Q_INVOKABLE void discardPendingPackage();
     // Worker health (finding F3): recent crashes and the restart wait. Memory
@@ -447,6 +454,8 @@ private:
     QSet<QString> m_removingPackages;
     QSet<QString> m_withdrawingPackages;
     std::shared_ptr<PackageCandidate> m_pendingPackage;
+    // The pending package came from the registry when it is this one.
+    std::shared_ptr<PackageCandidate> m_registryCandidate;
     std::unique_ptr<AddonRepositoryJobs> m_repositoryJobs;
     QString m_workerExecutable, m_error;
     int m_revision = 0;

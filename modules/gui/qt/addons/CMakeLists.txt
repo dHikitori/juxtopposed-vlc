@@ -60,7 +60,7 @@ add_library(vlc_addon_host STATIC
     addon_visual_scene.cpp addon_visualizer_parameters.cpp addon_visualizers.cpp addon_settings_migrations.cpp addon_storage.cpp addon_storage_data.cpp addon_host_services.cpp
     addon_visualizer_catalog.cpp addon_visualizer_resources.cpp addon_visualizer_worker.cpp
     addon_visualizer_worker_runtime.cpp addon_visualizer_render_queue.cpp
-    addon_repository_updates.cpp addon_repository_jobs.cpp addon_playable_gate.cpp addon_artwork_assets.cpp addon_artwork_image.cpp addon_native_image_formats.hpp
+    addon_repository_updates.cpp addon_registry_types.cpp addon_registry_client.cpp addon_registry_install.cpp addon_registry.cpp addon_repository_jobs.cpp addon_playable_gate.cpp addon_artwork_assets.cpp addon_artwork_image.cpp addon_native_image_formats.hpp
     addon_queue_transactions.cpp addon_discovery_service.cpp addon_player_discovery.cpp addon_source_admissions.cpp addon_source_consent.cpp addon_stream_manifest.cpp addon_websocket_codec.cpp
     addon_stream_http.cpp addon_stream_policy.cpp addon_stream_sockets.cpp addon_stream_lifetime.cpp addon_stream_shutdown.cpp addon_stream_dns.cpp addon_stream_proxy.cpp addon_app_shutdown.cpp)
 target_link_libraries(vlc_addon_host PUBLIC Qt6::Core Qt6::Gui Qt6::Network Threads::Threads ZLIB::ZLIB)

@@ -229,6 +229,21 @@ int SemanticVersion::compare(const SemanticVersion& other) const
 }
 bool versionSatisfies(const QString& value, const QString& range)
 { return versionSatisfies(value, range, false); }
+const QSet<QString>& hostContracts()
+{
+    static const QSet<QString> contracts{"metadata", "settings", "ui", "theme", "discovery", "visualizer", "session", "storage"};
+    return contracts;
+}
+bool hostAcceptsApi(const QString& addonRange, const QJsonObject& contracts)
+{
+    const QString host = QLatin1String(HostAddonApiVersion);
+    if (!versionSatisfies(host, addonRange)) return false;
+    for (auto it = contracts.begin(); it != contracts.end(); ++it)
+        if (!hostContracts().contains(it.key()) || !it.value().isString() || !versionSatisfies(host, it.value().toString()))
+            return false;
+    return true;
+}
+bool httpsSource(const QString& url) { return url.size() <= 8192 && safeSource(QUrl(url, QUrl::StrictMode)); }
 bool versionSatisfies(const QString& value, const QString& range, bool allowPrerelease)
 {
     SemanticVersion version;
@@ -319,12 +334,11 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
     if (!root.value("api").isObject()) return fail(error, QStringLiteral("The API requirements are missing."));
     const auto api = root.value("api").toObject();
     if (!keys(api, {"addon", "contracts", "optionalContracts"}, error, "api") || !api.value("addon").isString()
-        || !versionSatisfies(QStringLiteral("1.0.0"), api.value("addon").toString()) || !api.value("contracts").isObject())
+        || !versionSatisfies(QLatin1String(HostAddonApiVersion), api.value("addon").toString()) || !api.value("contracts").isObject())
         return fail(error, QStringLiteral("The add-on API version is not supported."));
-    const auto supported = QSet<QString>{"metadata", "settings", "ui", "theme", "discovery", "visualizer", "session", "storage"};
     const auto contracts = api.value("contracts").toObject();
     for (auto it = contracts.begin(); it != contracts.end(); ++it)
-        if (!supported.contains(it.key()) || !it.value().isString() || !versionSatisfies("1.0.0", it.value().toString()))
+        if (!hostContracts().contains(it.key()) || !it.value().isString() || !versionSatisfies(QLatin1String(HostAddonApiVersion), it.value().toString()))
             return fail(error, QStringLiteral("The required contract is not supported: ") + it.key());
     if (api.contains("optionalContracts") && !api.value("optionalContracts").isObject()) return fail(error, QStringLiteral("The optional contracts are not correct."));
     if (!strings(root.value("files"), &result.files, error, "files", true) || result.files.isEmpty() || result.files.size() > MaximumFiles
@@ -369,7 +383,7 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
             || !types.contains(contribution.type)) return fail(error, QStringLiteral("A contribution ID or type is not correct or occurs more than once."));
         identifiers.insert(contribution.id);
         const auto parts = contribution.contract.split(QLatin1Char('@'));
-        if (parts.size() != 2 || parts[1] != QStringLiteral("1") || !supported.contains(parts[0]) || !contracts.contains(parts[0]))
+        if (parts.size() != 2 || parts[1] != QStringLiteral("1") || !hostContracts().contains(parts[0]) || !contracts.contains(parts[0]))
             return fail(error, QStringLiteral("The contribution needs a declared contract."));
         if (!strings(item.value("features"), &contribution.features,error,"features") || !strings(item.value("mediaKinds"),&contribution.mediaKinds,error,"mediaKinds")
             || !strings(item.value("operations"),&contribution.operations,error,"operations") || !strings(item.value("requires"),&contribution.requires,error,"requires")) return false;

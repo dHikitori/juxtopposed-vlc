@@ -476,6 +476,13 @@ vlc_module_begin ()
     add_bool( "qt-autoload-extensions", true,
               QT_AUTOLOAD_EXTENSIONS_TEXT, QT_AUTOLOAD_EXTENSIONS_LONGTEXT )
 
+    add_bool( "qt-addon-registry", true, N_("Use the Hakone add-on registry"),
+              N_("Browse and update add-ons from the Hakone add-on registry. Turn this off to stop all requests to the registry. "
+                 "Add-ons are still installed and updated from their Git repositories.") )
+    add_string( "qt-addon-registry-url", "https://api.hakone.org/v1", N_("Add-on registry address"),
+                N_("The address of the add-on registry API. It must use HTTPS; a registry on this computer, such as "
+                   "http://api.localhost:3000/v1 for development, may use HTTP.") )
+
     add_bool( "qt-discover-cast-devices", true, N_("Discover cast devices"),
               N_("Search for cast devices when you open the device list. Turn this off to stop the search. This does not stop a cast that is in use.") )
 

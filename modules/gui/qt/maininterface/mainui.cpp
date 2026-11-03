@@ -82,6 +82,7 @@
 #include "util/redesign_folder_model.hpp"
 #include "util/subtitle_source_service.hpp"
 #include "addons/addon_manager.hpp"
+#include "addons/addon_registry.hpp"
 #include "addons/addon_catalogue_view.hpp"
 #include "addons/addon_package_summaries.hpp"
 #include "addons/addon_metadata_service.hpp"
@@ -417,6 +418,21 @@ void MainUI::registerQMLTypes()
             if (!profileHost->start())
                 msg_Warn(m_intf, "Cannot share the add-on profile with other app windows");
             qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
+            // Browse and update lookups from the hosted registry. Its index
+            // is cached per registry address in the user cache folder.
+            char* cacheDirectory = config_GetUserDir(VLC_CACHE_DIR);
+            auto* addonRegistry = new vlc::addons::AddonRegistry(addonManager,
+                cacheDirectory ? qfu(cacheDirectory) : QStandardPaths::writableLocation(QStandardPaths::CacheLocation), this);
+            free(cacheDirectory);
+            addonRegistry->setSettingsSource([] {
+                vlc::addons::AddonRegistryClient::Settings settings;
+                settings.enabled = config_GetInt("qt-addon-registry") != 0;
+                char* address = config_GetPsz("qt-addon-registry-url");
+                if (address) settings.address = qfu(address);
+                free(address);
+                return settings;
+            });
+            qmlRegisterSingletonInstance<vlc::addons::AddonRegistry>(uri, versionMajor, versionMinor, "AddonRegistry", addonRegistry);
             addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
             // File and folder settings use the app's own dialog; the add-on
             // gets a handle, not the path.
