@@ -8,7 +8,7 @@
 > performed. For portable release packaging with the media library, see
 > [RELEASING.md](RELEASING.md). The source build below disables the media library,
 > so expect that feature difference from release packages. Check the
-> [Releases page](https://github.com/dsojevic/juxtopposed-vlc/releases) for available builds.
+> [Releases page](https://github.com/hakone-org/hakone/releases) for available builds.
 
 This guide uses **Meson** and the current build definitions
 (root `meson.build` requires Meson `>= 1.10.0`). Note that
@@ -166,8 +166,8 @@ From the parent of your checkout, so the build directory
 ends up beside (not inside) the source tree:
 
 ```sh
-git clone https://github.com/dsojevic/juxtopposed-vlc.git
-meson setup build-linux juxtopposed-vlc \
+git clone https://github.com/hakone-org/hakone.git
+meson setup build-linux hakone \
     --buildtype=debugoptimized --wrap-mode=nofallback \
     --prefix="$HOME/.local/vlc-dev" \
     -Dqt=enabled \
@@ -235,7 +235,7 @@ instances before testing.
 
 ## Wayland: audio plays but video is black
 
-[Issue #30](https://github.com/dsojevic/juxtopposed-vlc/issues/30)
+[Issue #30](https://github.com/hakone-org/hakone/issues/30)
 reports black video with Intel `iris` on Mesa 26.2.5 / Hyprland,
 including with software decoding. The reported working workaround is
 `--vout=placebo`; it requires the Vulkan/libplacebo modules. On the

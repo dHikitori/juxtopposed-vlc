@@ -18,7 +18,7 @@ static Version version(const char* value)
 static QJsonObject release(const QString& tag, const QString& suffix = QStringLiteral("win64.zip"))
 {
     const QString name = QStringLiteral("vlc-juxtopposed-") + tag + QLatin1Char('-') + suffix;
-    const auto base = QStringLiteral("https://github.com/dsojevic/juxtopposed-vlc/releases/");
+    const auto base = QStringLiteral("https://github.com/hakone-org/hakone/releases/");
     return {{QStringLiteral("tag_name"), tag}, {QStringLiteral("draft"), false},
             {QStringLiteral("prerelease"), Version::parse(tag)->isPrerelease()},
             {QStringLiteral("html_url"), QString(base + QStringLiteral("tag/") + tag)},

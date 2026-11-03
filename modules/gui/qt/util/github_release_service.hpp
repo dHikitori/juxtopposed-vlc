@@ -12,7 +12,7 @@ class GithubReleaseService : public QObject
 public:
     struct Options
     {
-        QUrl endpoint = QUrl(QStringLiteral("https://api.github.com/repos/dsojevic/juxtopposed-vlc/releases"));
+        QUrl endpoint = QUrl(QStringLiteral("https://api.github.com/repos/hakone-org/hakone/releases"));
         int timeoutMs = 20000;
         qint64 maxJsonBytes = 4 * 1024 * 1024;
         int maxPages = 100;

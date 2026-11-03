@@ -36,7 +36,7 @@ requirements. `AppDir/AppRun` sets VLC's relocated resource/helper paths and run
 the Qt redesign. The archive requires no FUSE installation.
 The bundle includes the Wayland EGL client buffer integrations as well as the
 QPA platform, shell and decoration plugins. The platform plugins alone are not
-sufficient for Qt Quick/OpenGL (see [issue 26](https://github.com/dsojevic/juxtopposed-vlc/issues/26)).
+sufficient for Qt Quick/OpenGL (see [issue 26](https://github.com/hakone-org/hakone/issues/26)).
 Every ELF has a relative runtime search path. Each Qt executable has a relative
 `qt.conf`; AppRun clears inherited library/Qt search overrides so these paths do
 not affect browsers, file managers or other launched applications. The packager

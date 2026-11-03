@@ -65,8 +65,8 @@ guide do not cover the new worker. Do the macOS release checks for this worker.
 export PATH="$(brew --prefix bison)/bin:$(brew --prefix flex)/bin:$(brew --prefix qt)/bin:$(brew --prefix qt)/share/qt/libexec:$PATH"
 export PKG_CONFIG_PATH="$(brew --prefix qt)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig"
 
-git clone https://github.com/dsojevic/juxtopposed-vlc.git
-cd juxtopposed-vlc
+git clone https://github.com/hakone-org/hakone.git
+cd hakone
 meson setup build --prefix="$HOME/.local/vlc-dev" \
     -Dqt=enabled -Dtests=disabled -Dbuildtype=release
 ninja -C build
