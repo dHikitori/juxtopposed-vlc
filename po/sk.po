@@ -875,8 +875,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "Verzia VLC %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Verzia Hakone %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5481,10 +5481,10 @@ msgstr "Stiahnutý súbor \"%s\" bol poškodený. Z toho dôvodu bol vymazaný."
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
-"Nová verzia bola úspešne stiahnutá. Chcete ukončiť program VLC a "
+"Nová verzia bola úspešne stiahnutá. Chcete ukončiť program Hakone a "
 "nainštalovať novú verziu?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
@@ -5492,8 +5492,8 @@ msgid "Install"
 msgstr "Nainštalovať"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "Aktualizovať VLC media player"
+msgid "Update Hakone Media Player"
+msgstr "Aktualizovať Hakone Media Player"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -11530,7 +11530,7 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 "Zdá sa, že vaša inštalácia Libav/FFmpeg (libavcodec) neobsahuje nasledujúci "
@@ -11539,7 +11539,7 @@ msgstr ""
 "Ak neviete, ako túto chybu napraviť, vyhľadajte podporu poskytovateľa vašej "
 "distribúcie.\n"
 "\n"
-"Táto chyba nenastala v prehrávači VLC media player.\n"
+"Táto chyba nenastala v prehrávači Hakone Media Player.\n"
 "Preto nie je potrebné, aby ste o tejto chybe informovali tím vývojárov "
 "projektu VideoLAN.\n"
 
@@ -14708,6 +14708,26 @@ msgstr "Ovládacie rozhranie D-Bus"
 msgid "VLC media player"
 msgstr "VLC media player"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Hakone Media Player"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr "Neotvárať rozhranie s príkazovým oknom systému DOS"
@@ -14925,12 +14945,12 @@ msgstr "Rýchlosť: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
 "Upozornenie: Ak sa nemozete dostat k uzivatelskemu rozhraniu programu, "
 "otvorte okno s prikazovym riadokom, prejdite do priecinka kde je "
-"nainstalovany program VLC a zadajte prikaz \"vlc -I qt\"\n"
+"nainstalovany program Hakone a zadajte prikaz \"vlc -I qt\"\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -17271,6 +17291,15 @@ msgstr ""
 "Stačí zadať jeden z týchto troch parametrov. Program VLC zistí ostatné "
 "parametre automaticky, podľa pôvodného stranového pomeru"
 
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+"Stačí zadať jeden z týchto troch parametrov. Program Hakone zistí ostatné "
+"parametre automaticky, podľa pôvodného stranového pomeru"
+
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -17859,6 +17888,10 @@ msgstr "Zobraziť všetko"
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "Ukončiť program VLC"
+
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Ukončiť program Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -20011,13 +20044,13 @@ msgstr "Maska obrázka"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
 "Nenašla sa inštancia v4l2.\n"
-"Skontrolujte prosím, že zariadenie bolo otvorené programom VLC a prehráva "
-"sa.\n"
+"Skontrolujte prosím, že zariadenie bolo otvorené programom Hakone a "
+"prehráva sa.\n"
 "\n"
 "Ovládače sa zobrazia automaticky."
 
@@ -20359,8 +20392,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "Použiť VLC pace"
+msgid "Use Hakone pace"
+msgstr "Použiť Hakone pace"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -20655,10 +20688,10 @@ msgid "Higher latency"
 msgstr "Najvyššia latencia"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
 msgstr ""
-"Toto je rozhranie programu VLC, ktoré umožňuje zmenu vzhľadu. Súbory s novým "
-"vzhľadom si môžete stiahnuť na adrese"
+"Toto je rozhranie programu Hakone, ktoré umožňuje zmenu vzhľadu. Súbory s "
+"novým vzhľadom si môžete stiahnuť na adrese"
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
 msgid "VLC skins website"
@@ -20723,9 +20756,9 @@ msgid "Create"
 msgstr "Vytvoriť"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
 msgstr ""
-"Tento multiplexor nie je poskytovaný v rámci VLC: možno nie je prítomný."
+"Tento multiplexor nie je poskytovaný v rámci Hakone: možno nie je prítomný."
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
 msgid "This muxer is missing. Using this profile will fail"
@@ -21040,16 +21073,16 @@ msgid "&No"
 msgstr "&Nie"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "Aktualizácie programu VLC media player"
+msgid "Hakone Media Player updates"
+msgstr "Aktualizácie programu Hakone Media Player"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "Nová verzia VLC (%1.%2.%3%4) je dostupná."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "Nová verzia Hakone (%1.%2.%3%4) je dostupná."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "Máte najnovšiu verziu programu VLC."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "Máte najnovšiu verziu programu Hakone."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -21268,10 +21301,10 @@ msgid "No addons found"
 msgstr "Nenašli sa žiadne doplnky"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
 msgstr ""
-"Tento doplnok bol nainštalovaný manuálne. Program VLC ho nemôže samočinne "
-"spravovať."
+"Tento doplnok bol nainštalovaný manuálne. Program Hakone ho nemôže "
+"samočinne spravovať."
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
 msgid "Version %1"
@@ -21356,8 +21389,8 @@ msgid "Preferences file could not be saved"
 msgstr "Súbor s nastaveniami nemožno uložiť"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
-msgstr "Naozaj chcete obnoviť pôvodné nastavenia programu VLC media player?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
+msgstr "Naozaj chcete obnoviť pôvodné nastavenia programu Hakone Media Player?"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
 msgid "Stream Output"
@@ -21947,12 +21980,12 @@ msgid "&Playback"
 msgstr "&Prehrávanie"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "Skryť VLC media player do panela úlo&h"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "Skryť Hakone media player do panela úlo&h"
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "Zob&raziť VLC media player"
+msgid "Sho&w Hakone Media Player"
+msgstr "Zob&raziť Hakone media player"
 
 #: modules/gui/qt/menus.cpp:1188
 msgid "&Open Media"
@@ -21994,20 +22027,20 @@ msgstr "Zobraziť ikonu v oznamovacej oblasti"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
 msgstr ""
-"V paneli úloh alebo v informačnej lište zobraziť ikonu programu VLC so "
+"V paneli úloh alebo v informačnej lište zobraziť ikonu programu Hakone so "
 "základnými ovládacími prvkami."
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "Spustiť VLC len s ikonou v systémovej oblasti"
+msgid "Start Hakone with only a systray icon"
+msgstr "Spustiť Hakone len s ikonou v systémovej oblasti"
 
 #: modules/gui/qt/qt.cpp:92
 #, fuzzy
-msgid "VLC will start with just an icon in your taskbar."
-msgstr "Program VLC sa bude spúšťať len s ikonou v paneli úloh"
+msgid "Hakone will start with just an icon in your taskbar."
+msgstr "Program Hakone sa bude spúšťať len s ikonou v paneli úloh"
 
 #: modules/gui/qt/qt.cpp:101
 msgid "Show playing item name in window title"
@@ -22121,12 +22154,12 @@ msgstr "Výber režimu spustenia a vzhľadu "
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"Spustiť VLC v:\n"
+"Spustiť Hakone v:\n"
 " - normálnom režime\n"
 " - so zónou pre zobrazenie informácií ako sú texty, druhy albumu...\n"
 " - minimálnom režime s obmedzenými ovládacími prvkami"
@@ -22193,13 +22226,13 @@ msgstr "Ignorovať tlačidlá hlasitosti na klávesnici."
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
 "Ak je vybraná táto voľba, tlačidlá na zvýšenie alebo zníženie hlasitosti a "
 "tlačidlo na umlčanie na vašej klávesnici vždy zmenia hlasitosť v celom "
 "systéme. Ak táto voľba nie je vybraná, bude sa hlasitosť meniť v programe "
-"VLC, ak je program VLC vybraný. Ak program nie je vybraný, zmení sa "
+"Hakone, ak je program Hakone vybraný. Ak program nie je vybraný, zmení sa "
 "hlasitosť v celom systéme."
 
 #: modules/gui/qt/qt.cpp:188
@@ -28694,8 +28727,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -29491,8 +29524,8 @@ msgstr "Čas:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "VLC media player - Webové rozhranie"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Hakone Media Player - Webové rozhranie"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -29671,8 +29704,8 @@ msgid "Extra media"
 msgstr "Extra médium"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
-msgstr "Skompletizovať MRL adresu pre interné potreby programu VLC"
+msgid "Complete MRL for Hakone internal"
+msgstr "Skompletizovať MRL adresu pre interné potreby programu Hakone"
 
 #: modules/gui/qt/ui/open.h:280
 msgid "Select the file"
@@ -30309,8 +30342,8 @@ msgid "Clear List"
 msgstr "Vyčistiť zoznam"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "Kontrolovať aktualizácie VLC"
+msgid "Check for Hakone updates"
+msgstr "Kontrolovať aktualizácie Hakone"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."
@@ -38328,5 +38361,5 @@ msgid "Choose a language for the interface. Changes apply at once. Text without 
 msgstr "Vyberte jazyk rozhrania. Zmeny sa použijú ihneď. Nepreložený text sa zobrazí v angličtine."
 
 #. Redesign translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
-msgstr "VLC nemôže načítať tento jazyk."
+msgid "Hakone cannot load this language."
+msgstr "Hakone nemôže načítať tento jazyk."

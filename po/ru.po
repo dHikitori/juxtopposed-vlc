@@ -875,8 +875,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "Версия VLC %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Версия Hakone %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5424,18 +5424,19 @@ msgstr "Загруженный файл «%s» был повреждён, поэ
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
-"Новая версия загружена успешно. Хотите закрыть VLC и установить её сейчас?"
+"Новая версия загружена успешно. Хотите закрыть Hakone и установить её "
+"сейчас?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
 msgid "Install"
 msgstr "Установить"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "Обновление медиапроигрывателя VLC"
+msgid "Update Hakone Media Player"
+msgstr "Обновление медиапроигрывателя Hakone"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -11420,7 +11421,7 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 "Скорее всего, в установленном Libav/FFMPEG (libavcodec) не хватает "
@@ -11428,7 +11429,7 @@ msgstr ""
 "%s.\n"
 "Обратитесь за помощью в службу поддержки вашего дистрибутива.\n"
 "\n"
-"Это не ошибка VLC.\n"
+"Это не ошибка Hakone.\n"
 "Не обращайтесь к участникам проекта VideoLAN с этим вопросом.\n"
 
 #: modules/codec/avcodec/encoder.c:872
@@ -14570,6 +14571,26 @@ msgstr "Интерфейс управления D-Bus"
 msgid "VLC media player"
 msgstr "Медиапроигрыватель VLC"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Медиапроигрыватель Hakone"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr "Не открывать интерфейс ввода команд DOS"
@@ -14784,11 +14805,11 @@ msgstr "Скорость: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
-"Внимание! Если вы не видите графического интерфейса VLC, запустите командную "
-"строку, перейдите в каталог с VLC и выполните «vlc -I qt»\n"
+"Внимание! Если вы не видите графического интерфейса Hakone, запустите "
+"командную строку, перейдите в каталог с Hakone и выполните «vlc -I qt»\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -17121,6 +17142,15 @@ msgstr ""
 "Вам нужно заполнить только один из трёх следующих параметров, VLC сам "
 "определит другие, исходя из соотношения сторон"
 
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+"Вам нужно заполнить только один из трёх следующих параметров, Hakone сам "
+"определит другие, исходя из соотношения сторон"
+
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -17703,6 +17733,10 @@ msgstr "Показать всё"
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "Выйти из VLC"
+
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Выйти из Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -19848,12 +19882,12 @@ msgstr "Изображение-маска"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
 "Модуль-обработчик v4l2 не найден.\n"
-"Убедитесь в том, что устройство может быть открыто в VLC и показывает "
+"Убедитесь в том, что устройство может быть открыто в Hakone и показывает "
 "видео.\n"
 "\n"
 "При этом здесь автоматически появятся элементы управления."
@@ -20196,8 +20230,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "Скорость VLC"
+msgid "Use Hakone pace"
+msgstr "Скорость Hakone"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -20494,8 +20528,8 @@ msgid "Higher latency"
 msgstr "увеличенная задержка"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
-msgstr "Интерфейс VLC для оболочек. Скачать другие оболочки можно с"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
+msgstr "Интерфейс Hakone для оболочек. Скачать другие оболочки можно с"
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
 msgid "VLC skins website"
@@ -20560,8 +20594,8 @@ msgid "Create"
 msgstr "Создать"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
-msgstr "Этот миксер не входит в состав VLC: он может отсутствовать."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
+msgstr "Этот миксер не входит в состав Hakone: он может отсутствовать."
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
 msgid "This muxer is missing. Using this profile will fail"
@@ -20871,16 +20905,16 @@ msgid "&No"
 msgstr "&Нет"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "Обновления медиапроигрывателя VLC"
+msgid "Hakone Media Player updates"
+msgstr "Обновления медиапроигрывателя Hakone"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "Вышла новая версия VLC (%1.%2.%3%4)."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "Вышла новая версия Hakone (%1.%2.%3%4)."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "Вы используете самую последнюю версию медиаплеера VLC."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "Вы используете самую последнюю версию медиаплеера Hakone."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -21098,8 +21132,8 @@ msgid "No addons found"
 msgstr "Дополнения не найдены"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
-msgstr "Это дополнение было установлено вручную. VLC не может управлять им."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
+msgstr "Это дополнение было установлено вручную. Hakone не может управлять им."
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
 msgid "Version %1"
@@ -21184,8 +21218,8 @@ msgid "Preferences file could not be saved"
 msgstr "Файл настроек не удалось сохранить"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
-msgstr "Вы действительно хотите сбросить настройки медиаплеера VLC?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
+msgstr "Вы действительно хотите сбросить настройки медиаплеера Hakone?"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
 msgid "Stream Output"
@@ -21775,12 +21809,12 @@ msgid "&Playback"
 msgstr "&Воспроизведение"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "&Свернуть VLC в панель задач"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "&Свернуть Hakone в панель задач"
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "&Развернуть VLC"
+msgid "Sho&w Hakone Media Player"
+msgstr "&Развернуть Hakone"
 
 #: modules/gui/qt/menus.cpp:1188
 msgid "&Open Media"
@@ -21821,20 +21855,20 @@ msgstr "Значок в системном лотке"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
 msgstr ""
 "Показывать значок в области уведомлений, позволяющий осуществлять основное "
-"управление медиапроигрывателем VLC."
+"управление медиапроигрывателем Hakone."
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "Запуск VLC в виде значка в области уведомлений"
+msgid "Start Hakone with only a systray icon"
+msgstr "Запуск Hakone в виде значка в области уведомлений"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/qt.cpp:92
-msgid "VLC will start with just an icon in your taskbar."
-msgstr "VLC будет запускаться только со значком на панели задач."
+msgid "Hakone will start with just an icon in your taskbar."
+msgstr "Hakone будет запускаться только со значком на панели задач."
 
 #: modules/gui/qt/qt.cpp:101
 msgid "Show playing item name in window title"
@@ -21947,14 +21981,14 @@ msgstr "Выбор начального режима и внешнего вид�
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"Запускать VLC либо в обычном режиме, либо с постоянной информационной "
-"панелью для текста песни, обложки альбома и т.д., либо в упрощённом режиме с "
-"ограниченным управлением"
+"Запускать Hakone либо в обычном режиме, либо с постоянной информационной "
+"панелью для текста песни, обложки альбома и т.д., либо в упрощённом режиме "
+"с ограниченным управлением"
 
 #: modules/gui/qt/qt.cpp:151
 msgid "Show a controller in fullscreen mode"
@@ -22016,12 +22050,13 @@ msgstr "Игнорировать управление громкостью с к
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
 "Когда этот флажок установлен, кнопки увеличения, уменьшения и отключения "
 "громкости на клавиатуре будут изменять громкость в системе. Если он снят, "
-"они будут управлять громкостью в VLC (если приложение VLC на переднем плане)."
+"они будут управлять громкостью в Hakone (если приложение Hakone на переднем "
+"плане)."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/qt.cpp:188
@@ -28422,8 +28457,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -29178,8 +29213,8 @@ msgstr "Время:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "Веб-интерфейс VLC"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Веб-интерфейс Hakone"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -29360,7 +29395,7 @@ msgid "Extra media"
 msgstr "Другой файл"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
+msgid "Complete MRL for Hakone internal"
 msgstr "Полный MRL"
 
 #: modules/gui/qt/ui/open.h:280
@@ -29996,8 +30031,8 @@ msgid "Clear List"
 msgstr "Очистить список"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "Проверить обновления VLC"
+msgid "Check for Hakone updates"
+msgstr "Проверить обновления Hakone"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."
@@ -37910,8 +37945,8 @@ msgid "Choose a language for the interface. Changes apply at once. Text without 
 msgstr "Выберите язык интерфейса. Изменения применяются сразу. Текст без перевода отображается на английском языке."
 
 #. Redesign translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
-msgstr "VLC не может загрузить этот язык."
+msgid "Hakone cannot load this language."
+msgstr "Hakone не может загрузить этот язык."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/dialogs/dialogmodel.cpp:198
@@ -38181,8 +38216,8 @@ msgstr "Выберите тему и цвет."
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/firstrun/firstrunwizard.cpp:121
 #, qt-format
-msgid "VLC cannot save the theme. Check the settings folder and try again."
-msgstr "VLC не удаётся сохранить тему. Проверьте папку настроек и повторите попытку."
+msgid "Hakone cannot save the theme. Check the settings folder and try again."
+msgstr "Hakone не удаётся сохранить тему. Проверьте папку настроек и повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/help/aboutmodel.hpp:72
@@ -38202,16 +38237,16 @@ msgstr "<p>Дизайн интерфейса основан на <a href=\"https
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/macosx/windows/VLCAboutWindowController.m:130
 #: modules/gui/qt/dialogs/help/help.cpp:115
-#, qt-format
+#, fuzzy, qt-format
 msgid ""
-"<p>VLC media player is a free and open source media player, encoder, and "
-"streamer made by the volunteers of the <a href=\"https://www.videolan.org/"
-"\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</"
-"span></a> community.</p><p>VLC uses its internal codecs, works on "
-"essentially every popular platform, and can read almost all files, CDs, "
-"DVDs, network streams, capture cards and other media formats!</p><p><a "
-"href=\"https://www.videolan.org/contribute/\"><span style=\" text-"
-"decoration: underline; color:#0057ae;\">Help and join us!</span></a>"
+"<p>Hakone Media Player is a free and open source media player, encoder, and "
+"streamer. Hakone is a fork of VLC media player, made by the volunteers of "
+"the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: "
+"underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>Hakone "
+"uses its internal codecs, works on essentially every popular platform, and "
+"can read almost all files, CDs, DVDs, network streams, capture cards and "
+"other media formats!</p><p><a href=\"https://hakone.org/\"><span style=\" "
+"text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>"
 msgstr "<p>VLC media player — свободный медиапроигрыватель, кодировщик и средство потокового вещания с открытым исходным кодом, созданный добровольцами сообщества <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a>.</p><p>VLC использует встроенные кодеки, работает практически на всех популярных платформах и читает почти все файлы, CD, DVD, сетевые потоки, карты захвата и другие форматы медиаданных!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Помогите нам и присоединяйтесь!</span></a>"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
@@ -38522,10 +38557,10 @@ msgstr "Требуется перезапуск"
 #: modules/gui/qt/dialogs/preferences/preferences.cpp:384
 #, qt-format
 msgid ""
-"VLC needs to be restarted for the reset to take full effect.\n"
+"Hakone needs to be restarted for the reset to take full effect.\n"
 "\n"
 "Restart now?"
-msgstr "Для полного применения сброса необходимо перезапустить VLC.\n\nПерезапустить сейчас?"
+msgstr "Для полного применения сброса необходимо перезапустить Hakone.\n\nПерезапустить сейчас?"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/preferences_widgets.cpp:1291
@@ -38670,9 +38705,9 @@ msgstr "Другое…"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:613
 #, qt-format
 msgid ""
-"VLC cannot start the plugin scan. Check that the cache generator is "
+"Hakone cannot start the plugin scan. Check that the cache generator is "
 "installed."
-msgstr "VLC не удаётся запустить проверку плагинов. Убедитесь, что установлен генератор кэша."
+msgstr "Hakone не удаётся запустить проверку плагинов. Убедитесь, что установлен генератор кэша."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:618
@@ -38683,14 +38718,14 @@ msgstr "Время проверки плагинов истекло. Повто�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:620
 #, qt-format
-msgid "VLC cannot update the plugin cache. Check folder access and try again."
-msgstr "VLC не удаётся обновить кэш плагинов. Проверьте доступ к папке и повторите попытку."
+msgid "Hakone cannot update the plugin cache. Check folder access and try again."
+msgstr "Hakone не удаётся обновить кэш плагинов. Проверьте доступ к папке и повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:622
 #, qt-format
-msgid "VLC updated the plugin cache. Restart VLC to use plugin changes."
-msgstr "VLC обновил кэш плагинов. Перезапустите VLC, чтобы применить изменения плагинов."
+msgid "Hakone updated the plugin cache. Restart Hakone to use plugin changes."
+msgstr "Hakone обновил кэш плагинов. Перезапустите Hakone, чтобы применить изменения плагинов."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:700
@@ -38703,8 +38738,8 @@ msgstr "Включите звук для запуска проверки."
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:723
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:752
 #, qt-format
-msgid "VLC cannot start the audio test."
-msgstr "VLC не удаётся запустить проверку звука."
+msgid "Hakone cannot start the audio test."
+msgstr "Hakone не удаётся запустить проверку звука."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:712
@@ -38745,8 +38780,8 @@ msgstr "Правый канал"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1124
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2395
 #, qt-format
-msgid "VLC cannot read the saved presets."
-msgstr "VLC не удаётся прочитать сохранённые предустановки."
+msgid "Hakone cannot read the saved presets."
+msgstr "Hakone не удаётся прочитать сохранённые предустановки."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1018
@@ -38775,8 +38810,8 @@ msgstr "Эта предустановка больше недоступна."
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1065
 #, qt-format
-msgid "VLC cannot apply this preset. Check its saved settings."
-msgstr "VLC не удаётся применить эту предустановку. Проверьте сохранённые в ней настройки."
+msgid "Hakone cannot apply this preset. Check its saved settings."
+msgstr "Hakone не удаётся применить эту предустановку. Проверьте сохранённые в ней настройки."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1369
@@ -38816,8 +38851,8 @@ msgstr "Подробность журнала"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1393
 #, qt-format
 msgid ""
-"Choose the messages to save in the log file. Restart VLC after a change."
-msgstr "Выберите сообщения для сохранения в файле журнала. После изменения перезапустите VLC."
+"Choose the messages to save in the log file. Restart Hakone after a change."
+msgstr "Выберите сообщения для сохранения в файле журнала. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1401
@@ -38835,9 +38870,9 @@ msgstr "Повторить проверку"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1403
 #, qt-format
 msgid ""
-"Check plugin files and update the plugin cache. Restart VLC after the scan "
-"to use plugin changes."
-msgstr "Проверяет файлы плагинов и обновляет кэш. После проверки перезапустите VLC для применения изменений плагинов."
+"Check plugin files and update the plugin cache. Restart Hakone after the "
+"scan to use plugin changes."
+msgstr "Проверяет файлы плагинов и обновляет кэш. После проверки перезапустите Hakone для применения изменений плагинов."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1412
@@ -38874,9 +38909,9 @@ msgstr "Сохранённое устройство (%1)"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1452
 #, qt-format
 msgid ""
-"Automatic lets VLC select a decoder device. Off uses software decoding and "
-"keeps your saved device choice. Reopen the video after a change."
-msgstr "Режим «Автоматически» позволяет VLC выбрать устройство декодирования. Значение «Выключено» включает программное декодирование и сохраняет выбор устройства. После изменения откройте видео заново."
+"Automatic lets Hakone select a decoder device. Off uses software decoding "
+"and keeps your saved device choice. Reopen the video after a change."
+msgstr "Режим «Автоматически» позволяет Hakone выбрать устройство декодирования. Значение «Выключено» включает программное декодирование и сохраняет выбор устройства. После изменения откройте видео заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1472
@@ -38903,10 +38938,10 @@ msgstr "Кодировка текста"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1480
 #, qt-format
 msgid ""
-"Automatic detects UTF-8 text first. If detection fails, VLC uses the default "
-"text encoding. Select a specific encoding to turn off this detection. Reopen "
-"the subtitle file after a change."
-msgstr "Режим «Автоматически» сначала определяет текст UTF-8. Если определить кодировку не удалось, VLC использует кодировку по умолчанию. Выберите конкретную кодировку, чтобы отключить автоопределение. После изменения откройте файл субтитров заново."
+"Automatic detects UTF-8 text first. If detection fails, Hakone uses the "
+"default text encoding. Select a specific encoding to turn off this "
+"detection. Reopen the subtitle file after a change."
+msgstr "Режим «Автоматически» сначала определяет текст UTF-8. Если определить кодировку не удалось, Hakone использует кодировку по умолчанию. Выберите конкретную кодировку, чтобы отключить автоопределение. После изменения откройте файл субтитров заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1483
@@ -39087,14 +39122,14 @@ msgstr "Выберите язык. «Системный язык» исполь�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1637
 #, qt-format
-msgid "Replace all VLC settings with the default settings."
-msgstr "Заменяет все настройки VLC значениями по умолчанию."
+msgid "Replace all Hakone settings with the default settings."
+msgstr "Заменяет все настройки Hakone значениями по умолчанию."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1641
 #, qt-format
-msgid "Open the folder that contains the VLC settings."
-msgstr "Открывает папку с настройками VLC."
+msgid "Open the folder that contains the Hakone settings."
+msgstr "Открывает папку с настройками Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1647
@@ -39128,15 +39163,15 @@ msgstr "Удалённое управление через веб"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1661
 #, qt-format
 msgid ""
-"Control VLC from a web browser. Restart VLC after changing the web remote, "
-"port or password."
-msgstr "Управляйте VLC из веб-браузера. После изменения веб-управления, порта или пароля перезапустите VLC."
+"Control Hakone from a web browser. Restart Hakone after changing the web "
+"remote, port or password."
+msgstr "Управляйте Hakone из веб-браузера. После изменения веб-управления, порта или пароля перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1662
 #, qt-format
-msgid "Web remote control is unavailable in this VLC build."
-msgstr "В этой сборке VLC недоступно удалённое управление через веб."
+msgid "Web remote control is unavailable in this Hakone build."
+msgstr "В этой сборке Hakone недоступно удалённое управление через веб."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1666
@@ -39167,9 +39202,9 @@ msgstr "При завершении воспроизведения"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1689
 #, qt-format
 msgid ""
-"Request a higher process priority from the system. Restart VLC after a "
+"Request a higher process priority from the system. Restart Hakone after a "
 "change."
-msgstr "Запрашивает у системы более высокий приоритет процесса. После изменения перезапустите VLC."
+msgstr "Запрашивает у системы более высокий приоритет процесса. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1694
@@ -39234,8 +39269,8 @@ msgstr "Системный прокси"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1712
 #, qt-format
-msgid "Select an audio output driver. Restart VLC to use a new driver."
-msgstr "Выберите драйвер аудиовыхода. Перезапустите VLC, чтобы использовать новый драйвер."
+msgid "Select an audio output driver. Restart Hakone to use a new driver."
+msgstr "Выберите драйвер аудиовыхода. Перезапустите Hakone, чтобы использовать новый драйвер."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1714
@@ -39248,8 +39283,8 @@ msgstr "Задаёт высоту звука в полутонах. Значен
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1718
 #, qt-format
-msgid "VLC cannot use spatial audio in this version."
-msgstr "В этой версии VLC недоступен пространственный звук."
+msgid "Hakone cannot use spatial audio in this version."
+msgstr "В этой версии Hakone недоступен пространственный звук."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1762
@@ -39324,51 +39359,52 @@ msgstr "Выберите скорость кодирования. Медленн
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1836
 #, qt-format
-msgid "Save messages to a file. Restart VLC after a change."
-msgstr "Сохраняет сообщения в файл. После изменения перезапустите VLC."
+msgid "Save messages to a file. Restart Hakone after a change."
+msgstr "Сохраняет сообщения в файл. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1838
 #, qt-format
 msgid ""
-"Choose the log file. VLC adds new messages to the end of this file. Restart "
-"VLC after a change."
-msgstr "Выберите файл журнала. VLC добавляет новые сообщения в его конец. После изменения перезапустите VLC."
+"Choose the log file. Hakone adds new messages to the end of this file. "
+"Restart Hakone after a change."
+msgstr "Выберите файл журнала. Hakone добавляет новые сообщения в его конец. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1840
 #, qt-format
-msgid "Choose plain text or HTML for the log file. Restart VLC after a change."
-msgstr "Выберите простой текст или HTML для файла журнала. После изменения перезапустите VLC."
+msgid "Choose plain text or HTML for the log file. Restart Hakone after a change."
+msgstr "Выберите простой текст или HTML для файла журнала. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1842
 #, qt-format
 msgid ""
-"Choose the VLC log level. File logs can use this level or a separate file "
-"log level. Restart VLC after a change."
-msgstr "Выберите уровень журнала VLC. Файловый журнал может использовать этот или отдельный уровень. После изменения перезапустите VLC."
+"Choose the Hakone log level. File logs can use this level or a separate "
+"file log level. Restart Hakone after a change."
+msgstr "Выберите уровень журнала Hakone. Файловый журнал может использовать этот или отдельный уровень. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1844
 #, qt-format
-msgid "Show the VLC icon in the system tray."
-msgstr "Показывает значок VLC в системном трее."
+msgid "Show the Hakone icon in the system tray."
+msgstr "Показывает значок Hakone в системном трее."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1846
 #, qt-format
 msgid ""
-"Start VLC in the system tray. This turns on the tray icon. Restart VLC after "
-"a change."
-msgstr "Запускает VLC в системном трее и включает значок в трее. После изменения перезапустите VLC."
+"Start Hakone in the system tray. This turns on the tray icon. Restart "
+"Hakone after a change."
+msgstr "Запускает Hakone в системном трее и включает значок в трее. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1848
 #, qt-format
 msgid ""
-"Show a track message always, only when VLC is hidden or minimized, or never."
-msgstr "Выберите, показывать ли уведомление о дорожке всегда, только при скрытом или свёрнутом VLC, или никогда."
+"Show a track message always, only when Hakone is hidden or minimized, or "
+"never."
+msgstr "Выберите, показывать ли уведомление о дорожке всегда, только при скрытом или свёрнутом Hakone, или никогда."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1850
@@ -39380,8 +39416,8 @@ msgstr "Выберите длительность уведомления о до
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1852
 #, qt-format
-msgid "Change the opacity of the main VLC window. The change applies at once."
-msgstr "Меняет непрозрачность главного окна VLC. Изменение применяется сразу."
+msgid "Change the opacity of the main Hakone window. The change applies at once."
+msgstr "Меняет непрозрачность главного окна Hakone. Изменение применяется сразу."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1854
@@ -39420,26 +39456,26 @@ msgstr "Выберите «Никогда», чтобы сохранять ра�
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1862
 #, qt-format
 msgid ""
-"Start VLC in compact mode. Restart VLC after a change. Launch options can "
-"override this setting."
-msgstr "Запускает VLC в компактном режиме. После изменения перезапустите VLC. Параметры запуска могут переопределить эту настройку."
+"Start Hakone in compact mode. Restart Hakone after a change. Launch options "
+"can override this setting."
+msgstr "Запускает Hakone в компактном режиме. После изменения перезапустите Hakone. Параметры запуска могут переопределить эту настройку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1864
 #, qt-format
 msgid ""
-"Add internal interface information, warnings and errors to the VLC log. Use "
-"Log details to choose which messages to save."
-msgstr "Добавляет внутренние сведения интерфейса, предупреждения и ошибки в журнал VLC. Используйте «Подробность журнала» для выбора сохраняемых сообщений."
+"Add internal interface information, warnings and errors to the Hakone log. "
+"Use Log details to choose which messages to save."
+msgstr "Добавляет внутренние сведения интерфейса, предупреждения и ошибки в журнал Hakone. Используйте «Подробность журнала» для выбора сохраняемых сообщений."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1866
 #, qt-format
 msgid ""
-"Show error messages and confirmation questions. When this is off, VLC "
+"Show error messages and confirmation questions. When this is off, Hakone "
 "cancels normal and warning questions. Errors stay in the error history. "
 "Login, progress and critical questions stay on."
-msgstr "Показывает ошибки и вопросы подтверждения. Если отключено, VLC отменяет обычные вопросы и предупреждения. Ошибки остаются в истории. Вход, ход выполнения и критические вопросы остаются включены."
+msgstr "Показывает ошибки и вопросы подтверждения. Если отключено, Hakone отменяет обычные вопросы и предупреждения. Ошибки остаются в истории. Вход, ход выполнения и критические вопросы остаются включены."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1872
@@ -39463,26 +39499,26 @@ msgstr "Сохранённый кодировщик (%1)"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1893
 #, qt-format
 msgid ""
-"Select the decoder to try first. Automatic lets VLC select it. Open the file "
-"again after a change."
-msgstr "Выберите декодер для первой попытки. Режим «Автоматически» позволяет VLC сделать выбор. После изменения откройте файл заново."
+"Select the decoder to try first. Automatic lets Hakone select it. Open the "
+"file again after a change."
+msgstr "Выберите декодер для первой попытки. Режим «Автоматически» позволяет Hakone сделать выбор. После изменения откройте файл заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1894
 #, qt-format
 msgid ""
-"VLC uses this encoder for conversion and streaming. It must support the "
+"Hakone uses this encoder for conversion and streaming. It must support the "
 "output format. An output profile can override this choice."
-msgstr "VLC использует этот кодировщик для преобразования и потокового вещания. Он должен поддерживать выходной формат. Выходной профиль может переопределить выбор."
+msgstr "Hakone использует этот кодировщик для преобразования и потокового вещания. Он должен поддерживать выходной формат. Выходной профиль может переопределить выбор."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1897
 #, qt-format
 msgid ""
-"Enter VLC options only. Use quotes for text with spaces. The launch command "
-"takes priority. Restart VLC after a change. Use --ignore-config to start "
-"without saved options."
-msgstr "Введите только параметры VLC. Текст с пробелами заключайте в кавычки. Команда запуска имеет приоритет. После изменения перезапустите VLC. Параметр --ignore-config позволяет запуститься без сохранённых параметров."
+"Enter Hakone options only. Use quotes for text with spaces. The launch "
+"command takes priority. Restart Hakone after a change. Use --ignore-config "
+"to start without saved options."
+msgstr "Введите только параметры Hakone. Текст с пробелами заключайте в кавычки. Команда запуска имеет приоритет. После изменения перезапустите Hakone. Параметр --ignore-config позволяет запуститься без сохранённых параметров."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1899
@@ -39496,9 +39532,9 @@ msgstr "Управляет синхронизацией входных часо�
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1901
 #, qt-format
 msgid ""
-"Set the maximum variation in input delay that VLC can correct, in "
+"Set the maximum variation in input delay that Hakone can correct, in "
 "milliseconds. Open the file or stream again after a change."
-msgstr "Задаёт максимальное изменение задержки ввода, которое VLC может исправить, в миллисекундах. После изменения откройте файл или поток заново."
+msgstr "Задаёт максимальное изменение задержки ввода, которое Hakone может исправить, в миллисекундах. После изменения откройте файл или поток заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1903
@@ -39529,41 +39565,41 @@ msgstr "«Включать подпапки» добавляет файлы из
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1918
 #, qt-format
 msgid ""
-"Restart VLC to use this option. A command-line option can stop VLC from "
-"reading file information."
-msgstr "Перезапустите VLC для применения этой настройки. Параметр командной строки может запретить чтение сведений о файлах."
+"Restart Hakone to use this option. A command-line option can stop Hakone "
+"from reading file information."
+msgstr "Перезапустите Hakone для применения этой настройки. Параметр командной строки может запретить чтение сведений о файлах."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1919
 #, qt-format
 msgid ""
 "Turn on \"Read file metadata automatically\" in Advanced Options, then "
-"restart VLC to use this option."
-msgstr "Включите «Автоматически читать метаданные файлов» в дополнительных параметрах и перезапустите VLC для применения этой настройки."
+"restart Hakone to use this option."
+msgstr "Включите «Автоматически читать метаданные файлов» в дополнительных параметрах и перезапустите Hakone для применения этой настройки."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1924
 #, qt-format
 msgid ""
-"Read file information for items added to the queue. Restart VLC after a "
+"Read file information for items added to the queue. Restart Hakone after a "
 "change."
-msgstr "Читает сведения о файлах для элементов, добавленных в очередь. После изменения перезапустите VLC."
+msgstr "Читает сведения о файлах для элементов, добавленных в очередь. После изменения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1932
 #, qt-format
 msgid ""
-"Use one VLC window for app launches. The file manager option also includes "
-"files opened from the file manager. Close all VLC windows and start VLC "
-"again after you turn this on. Command-line options can override these "
-"settings."
-msgstr "Использует одно окно VLC при запуске приложения. Настройка файлового менеджера также охватывает открытые из него файлы. После включения закройте все окна VLC и запустите его заново. Параметры командной строки могут переопределить эти настройки."
+"Use one Hakone window for app launches. The file manager option also "
+"includes files opened from the file manager. Close all Hakone windows and "
+"start Hakone again after you turn this on. Command-line options can "
+"override these settings."
+msgstr "Использует одно окно Hakone при запуске приложения. Настройка файлового менеджера также охватывает открытые из него файлы. После включения закройте все окна Hakone и запустите его заново. Параметры командной строки могут переопределить эти настройки."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1935
 #, qt-format
-msgid "Use the same VLC window for files opened from the file manager."
-msgstr "Открывает файлы из файлового менеджера в том же окне VLC."
+msgid "Use the same Hakone window for files opened from the file manager."
+msgstr "Открывает файлы из файлового менеджера в том же окне Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1937
@@ -39582,8 +39618,8 @@ msgstr "Введите название языка или двух- либо т�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2262
 #, qt-format
-msgid "Enter VLC options only. Check the option names and quotation marks."
-msgstr "Введите только параметры VLC. Проверьте названия параметров и кавычки."
+msgid "Enter Hakone options only. Check the option names and quotation marks."
+msgstr "Введите только параметры Hakone. Проверьте названия параметров и кавычки."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2269
@@ -39600,21 +39636,22 @@ msgstr "Введите значение в допустимом диапазон
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2431
 #, qt-format
-msgid "VLC cannot save the preferences file. Your changes are still open."
+msgid "Hakone cannot save the preferences file. Your changes are still open."
 msgstr "Не удалось сохранить файл настроек. Ваши изменения остаются открыты."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2705
 #, qt-format
-msgid "VLC cannot save the default settings. Your settings did not change."
-msgstr "VLC не удаётся сохранить настройки по умолчанию. Ваши настройки не изменились."
+msgid "Hakone cannot save the default settings. Your settings did not change."
+msgstr "Hakone не удаётся сохранить настройки по умолчанию. Ваши настройки не изменились."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2723
 #, qt-format
 msgid ""
-"VLC cannot restore the settings file. Restart VLC and check your settings."
-msgstr "VLC не удаётся восстановить файл настроек. Перезапустите VLC и проверьте настройки."
+"Hakone cannot restore the settings file. Restart Hakone and check your "
+"settings."
+msgstr "Hakone не удаётся восстановить файл настроек. Перезапустите Hakone и проверьте настройки."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2828
@@ -39951,16 +39988,16 @@ msgstr "Боковая панель"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/maininterface/qml/UpdatePane.qml:85
 #, qt-format
-msgid "A new version of VLC is available: <font color=\"%1\">%2.%3.%4%5</font>"
-msgstr "Доступна новая версия VLC: <font color=\"%1\">%2.%3.%4%5</font>"
+msgid "A new version of Hakone is available: <font color=\"%1\">%2.%3.%4%5</font>"
+msgstr "Доступна новая версия Hakone: <font color=\"%1\">%2.%3.%4%5</font>"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/maininterface/qml/UpdatePane.qml:91
 #, qt-format
 msgid ""
-"You have the latest version of VLC media player: <font color=\"%1\">%2</"
-"font>."
-msgstr "Установлена последняя версия VLC media player: <font color=\"%1\">%2</font>."
+"You have the latest version of Hakone Media Player: <font "
+"color=\"%1\">%2</font>."
+msgstr "Установлена последняя версия Hakone Media Player: <font color=\"%1\">%2</font>."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/maininterface/qml/UpdatePane.qml:94
@@ -39991,34 +40028,34 @@ msgstr "Загрузить"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:296
 #, qt-format
-msgid "VLC cannot rescan this folder. Check the folder and try again."
-msgstr "VLC не удаётся повторно проверить эту папку. Проверьте папку и повторите попытку."
+msgid "Hakone cannot rescan this folder. Check the folder and try again."
+msgstr "Hakone не удаётся повторно проверить эту папку. Проверьте папку и повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:322
 #: modules/gui/qt/medialibrary/medialib.cpp:804
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistTrackTarget.qml:40
 #, qt-format
-msgid "VLC cannot read this playlist. Select it again."
-msgstr "VLC не удаётся прочитать этот плейлист. Выберите его заново."
+msgid "Hakone cannot read this playlist. Select it again."
+msgstr "Hakone не удаётся прочитать этот плейлист. Выберите его заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:456
 #, qt-format
-msgid "VLC cannot read these files. Select them again."
-msgstr "VLC не удаётся прочитать эти файлы. Выберите их заново."
+msgid "Hakone cannot read these files. Select them again."
+msgstr "Hakone не удаётся прочитать эти файлы. Выберите их заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:498
 #, qt-format
-msgid "VLC cannot read the saved folder matches. Save again to replace them."
-msgstr "VLC не удалось прочитать сохранённые соответствия папок. Сохраните заново, чтобы заменить их."
+msgid "Hakone cannot read the saved folder matches. Save again to replace them."
+msgstr "Hakone не удалось прочитать сохранённые соответствия папок. Сохраните заново, чтобы заменить их."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:556
 #, qt-format
-msgid "VLC cannot read this folder. Select it again."
-msgstr "VLC не удаётся прочитать эту папку. Выберите её заново."
+msgid "Hakone cannot read this folder. Select it again."
+msgstr "Hakone не удаётся прочитать эту папку. Выберите её заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:588
@@ -40041,14 +40078,14 @@ msgstr "Некоторые файлы нельзя использовать. В�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:712
 #, qt-format
-msgid "VLC cannot save these folder matches. Select the folder again."
-msgstr "VLC не удаётся сохранить эти соответствия папок. Выберите папку заново."
+msgid "Hakone cannot save these folder matches. Select the folder again."
+msgstr "Hakone не удаётся сохранить эти соответствия папок. Выберите папку заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:728
 #, qt-format
-msgid "VLC cannot save this selection. Select the files again."
-msgstr "VLC не удаётся сохранить этот выбор. Выберите файлы заново."
+msgid "Hakone cannot save this selection. Select the files again."
+msgstr "Hakone не удаётся сохранить этот выбор. Выберите файлы заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:734
@@ -40060,54 +40097,54 @@ msgstr "Сохранённые дорожки изменились. Закрой
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:737
 #, qt-format
-msgid "VLC cannot read this media: %1"
-msgstr "VLC не удаётся прочитать этот медиафайл: %1"
+msgid "Hakone cannot read this media: %1"
+msgstr "Hakone не удаётся прочитать этот медиафайл: %1"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:742
 #, qt-format
-msgid "VLC cannot use this track: %1"
-msgstr "VLC не удаётся использовать эту дорожку: %1"
+msgid "Hakone cannot use this track: %1"
+msgstr "Hakone не удаётся использовать эту дорожку: %1"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:747
 #: modules/gui/qt/medialibrary/medialib.cpp:980
 #, qt-format
-msgid "VLC already uses this file for another track: %1"
-msgstr "VLC уже использует этот файл для другой дорожки: %1"
+msgid "Hakone already uses this file for another track: %1"
+msgstr "Hakone уже использует этот файл для другой дорожки: %1"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:755
 #: modules/gui/qt/medialibrary/medialib.cpp:960
 #, qt-format
-msgid "VLC cannot read this track: %1"
-msgstr "VLC не удаётся прочитать эту дорожку: %1"
+msgid "Hakone cannot read this track: %1"
+msgstr "Hakone не удаётся прочитать эту дорожку: %1"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:776
 #, qt-format
-msgid "This VLC build cannot replace saved tracks."
-msgstr "Эта сборка VLC не поддерживает замену сохранённых дорожек."
+msgid "This Hakone build cannot replace saved tracks."
+msgstr "Эта сборка Hakone не поддерживает замену сохранённых дорожек."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:777
 #, qt-format
-msgid "VLC cannot save the tracks for %1. Try again."
-msgstr "VLC не удалось сохранить дорожки для %1. Повторите попытку."
+msgid "Hakone cannot save the tracks for %1. Try again."
+msgstr "Hakone не удалось сохранить дорожки для %1. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:788
 #, qt-format
-msgid "VLC cannot save the folder matches. Try Save again."
-msgstr "VLC не удалось сохранить соответствия папок. Нажмите «Сохранить» ещё раз."
+msgid "Hakone cannot save the folder matches. Try Save again."
+msgstr "Hakone не удалось сохранить соответствия папок. Нажмите «Сохранить» ещё раз."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:809
 #: modules/gui/qt/medialibrary/medialib.cpp:970
 #: modules/gui/qt/medialibrary/medialib.cpp:1020
 #, qt-format
-msgid "VLC cannot save this change. Try again."
-msgstr "VLC не удаётся сохранить это изменение. Повторите попытку."
+msgid "Hakone cannot save this change. Try again."
+msgstr "Hakone не удаётся сохранить это изменение. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:831
@@ -40115,8 +40152,8 @@ msgstr "VLC не удаётся сохранить это изменение. П
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistProperties.qml:55
 #: modules/gui/qt/medialibrary/mlplaylistlistmodel.cpp:166
 #, qt-format
-msgid "VLC cannot save this playlist. Try again."
-msgstr "VLC не удаётся сохранить этот плейлист. Повторите попытку."
+msgid "Hakone cannot save this playlist. Try again."
+msgstr "Hakone не удаётся сохранить этот плейлист. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:836
@@ -40131,54 +40168,54 @@ msgstr "Нельзя изменить этот плейлист."
 #: modules/gui/qt/medialibrary/medialib.cpp:852
 #: modules/gui/qt/medialibrary/mlplaylistlistmodel.cpp:173
 #, qt-format
-msgid "VLC cannot read or save this image. Select another image."
-msgstr "VLC не удаётся прочитать или сохранить это изображение. Выберите другое."
+msgid "Hakone cannot read or save this image. Select another image."
+msgstr "Hakone не удаётся прочитать или сохранить это изображение. Выберите другое."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:863
 #, qt-format
 msgid ""
-"VLC saved the name but cannot save the thumbnail. Open the properties again "
-"to see the saved values."
-msgstr "VLC сохранил имя, но не смог сохранить миниатюру. Откройте свойства заново, чтобы увидеть сохранённые значения."
+"Hakone saved the name but cannot save the thumbnail. Open the properties "
+"again to see the saved values."
+msgstr "Hakone сохранил имя, но не смог сохранить миниатюру. Откройте свойства заново, чтобы увидеть сохранённые значения."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:897
 #, qt-format
-msgid "VLC cannot export this playlist. Select it again."
-msgstr "VLC не удаётся экспортировать этот плейлист. Выберите его заново."
+msgid "Hakone cannot export this playlist. Select it again."
+msgstr "Hakone не удаётся экспортировать этот плейлист. Выберите его заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:918
 #, qt-format
-msgid "VLC cannot save this file. Select another location."
-msgstr "VLC не удаётся сохранить этот файл. Выберите другое место."
+msgid "Hakone cannot save this file. Select another location."
+msgstr "Hakone не удаётся сохранить этот файл. Выберите другое место."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:951
 #: modules/gui/qt/medialibrary/medialib.cpp:1014
 #, qt-format
-msgid "VLC cannot read this media. Select the file again."
-msgstr "VLC не удаётся прочитать этот медиафайл. Выберите файл заново."
+msgid "Hakone cannot read this media. Select the file again."
+msgstr "Hakone не удаётся прочитать этот медиафайл. Выберите файл заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:990
 #, qt-format
-msgid "VLC cannot save this track: %1"
-msgstr "VLC не удалось сохранить эту дорожку: %1"
+msgid "Hakone cannot save this track: %1"
+msgstr "Hakone не удалось сохранить эту дорожку: %1"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:1052
 #, qt-format
-msgid "VLC cannot read this file: %1"
-msgstr "VLC не удаётся прочитать этот файл: %1"
+msgid "Hakone cannot read this file: %1"
+msgstr "Hakone не удаётся прочитать этот файл: %1"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/medialib.cpp:1066
 #: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:546
 #, qt-format
-msgid "VLC cannot add this folder: %1"
-msgstr "VLC не удалось добавить эту папку: %1"
+msgid "Hakone cannot add this folder: %1"
+msgstr "Hakone не удалось добавить эту папку: %1"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/mlbookmarkmodel.cpp:289
@@ -40201,15 +40238,15 @@ msgstr "Выберите плейлист или введите новое им�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/mlplaylistlistmodel.cpp:225
 #, qt-format
-msgid "VLC cannot read this selection. Select the files again."
-msgstr "VLC не удаётся прочитать выбранное. Выберите файлы заново."
+msgid "Hakone cannot read this selection. Select the files again."
+msgstr "Hakone не удаётся прочитать выбранное. Выберите файлы заново."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:47
 #: modules/gui/qt/medialibrary/mlplaylistlistmodel.cpp:232
 #, qt-format
-msgid "VLC cannot save this selection. Try again."
-msgstr "VLC не удаётся сохранить выбранное. Повторите попытку."
+msgid "Hakone cannot save this selection. Try again."
+msgstr "Hakone не удаётся сохранить выбранное. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/mlplaylistlistmodel.cpp:267
@@ -40235,8 +40272,8 @@ msgstr "Введите новое имя плейлиста:"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/mlplaylistmodel.cpp:76
 #, qt-format
-msgid "VLC cannot add these files. Try again."
-msgstr "VLC не удаётся добавить эти файлы. Повторите попытку."
+msgid "Hakone cannot add these files. Try again."
+msgstr "Hakone не удаётся добавить эти файлы. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/mlplaylistmodel.cpp:85
@@ -40247,8 +40284,8 @@ msgstr "Плейлист изменился. Выберите порядок п�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/mlplaylistmodel.cpp:114
 #, qt-format
-msgid "VLC cannot change this playlist. Try again."
-msgstr "VLC не удаётся изменить этот плейлист. Повторите попытку."
+msgid "Hakone cannot change this playlist. Try again."
+msgstr "Hakone не удаётся изменить этот плейлист. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/medialibrary/qml/ArtistTopBanner.qml:40
@@ -41073,14 +41110,14 @@ msgstr "Удалить отфильтрованные элементы"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/network/addonsmodel.cpp:750
 #, qt-format
-msgid "VLC cannot add %1."
-msgstr "VLC не удаётся добавить %1."
+msgid "Hakone cannot add %1."
+msgstr "Hakone не удаётся добавить %1."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/network/addonsmodel.cpp:750
 #, qt-format
-msgid "VLC cannot remove %1."
-msgstr "VLC не удаётся удалить %1."
+msgid "Hakone cannot remove %1."
+msgstr "Hakone не удаётся удалить %1."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/network/qml/BrowseDisplay.qml:57
@@ -41716,8 +41753,8 @@ msgstr "Нет плейлистов, соответствующих запрос
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:216
 #, qt-format
-msgid "VLC has no saved playlists."
-msgstr "В VLC нет сохранённых плейлистов."
+msgid "Hakone has no saved playlists."
+msgstr "В Hakone нет сохранённых плейлистов."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:232
@@ -41748,14 +41785,14 @@ msgstr "Сохранение…"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddons.qml:24
 #, qt-format
-msgid "VLC cannot add this add-on."
-msgstr "VLC не удаётся добавить это дополнение."
+msgid "Hakone cannot add this add-on."
+msgstr "Hakone не удаётся добавить это дополнение."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddons.qml:27
 #, qt-format
-msgid "VLC cannot remove this add-on."
-msgstr "VLC не удаётся удалить это дополнение."
+msgid "Hakone cannot remove this add-on."
+msgstr "Hakone не удаётся удалить это дополнение."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddons.qml:29
@@ -41820,8 +41857,8 @@ msgstr "Закрыть сведения о дополнении"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddons.qml:176
 #, qt-format
-msgid "VLC cannot change this add-on because it was added manually."
-msgstr "VLC не может изменить это дополнение, так как оно добавлено вручную."
+msgid "Hakone cannot change this add-on because it was added manually."
+msgstr "Hakone не может изменить это дополнение, так как оно добавлено вручную."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignAddons.qml:186
@@ -41936,8 +41973,8 @@ msgstr "Правая боковая панель"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignCustomizationCatalog.qml:23
 #, qt-format
-msgid "VLC Settings"
-msgstr "Настройки VLC"
+msgid "Hakone Settings"
+msgstr "Настройки Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignCustomizationCatalog.qml:24
@@ -42098,8 +42135,8 @@ msgstr "Имя\nплейлиста"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignCustomizationEditor.qml:64
 #, qt-format
-msgid "VLC cannot save this layout. Try again."
-msgstr "VLC не удаётся сохранить этот макет. Повторите попытку."
+msgid "Hakone cannot save this layout. Try again."
+msgstr "Hakone не удаётся сохранить этот макет. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignCustomizationEditor.qml:129
@@ -42211,8 +42248,8 @@ msgstr "Сведения о папке"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignFolderInfo.qml:28
 #, qt-format
-msgid "VLC cannot read this folder. Check the folder and try again."
-msgstr "VLC не удаётся прочитать эту папку. Проверьте папку и повторите попытку."
+msgid "Hakone cannot read this folder. Check the folder and try again."
+msgstr "Hakone не удаётся прочитать эту папку. Проверьте папку и повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignFolderInfo.qml:42
@@ -42370,21 +42407,6 @@ msgstr "Переместить ниже"
 #, qt-format
 msgid "Remove from playlist"
 msgstr "Удалить из плейлиста"
-
-#. First-pass Russian translation; fluent-speaker review is welcome.
-#: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:92
-#: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:97
-#: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:109
-#: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:128
-#: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:371
-#: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:546
-#: modules/gui/qt/player/qml/redesign/RedesignPlayer.qml:134
-#: modules/gui/qt/player/qml/redesign/RedesignPlayer.qml:264
-#: modules/gui/qt/player/qml/redesign/RedesignPlayerView.qml:77
-#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignments.qml:111
-#, qt-format
-msgid "VLC Media Player"
-msgstr "Медиапроигрыватель VLC"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignLibrary.qml:161
@@ -42825,8 +42847,8 @@ msgstr "Комбинации клавиш"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignMenu.qml:182
 #, qt-format
-msgid "About VLC"
-msgstr "О VLC"
+msgid "About Hakone"
+msgstr "О Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignMiniPlayer.qml:105
@@ -42858,8 +42880,8 @@ msgstr "Очередь воспроизведения"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:45
 #, qt-format
-msgid "VLC cannot open these streams. Check the links and try again."
-msgstr "VLC не удаётся открыть эти потоки. Проверьте ссылки и повторите попытку."
+msgid "Hakone cannot open these streams. Check the links and try again."
+msgstr "Hakone не удаётся открыть эти потоки. Проверьте ссылки и повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:96
@@ -42901,8 +42923,9 @@ msgstr "Сохраните эти ссылки в плейлисте с указ
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:151
 #, qt-format
 msgid ""
-"To save a playlist, turn on the media library in Settings. Then restart VLC."
-msgstr "Чтобы сохранить плейлист, включите медиатеку в настройках и перезапустите VLC."
+"To save a playlist, turn on the media library in Settings. Then restart "
+"Hakone."
+msgstr "Чтобы сохранить плейлист, включите медиатеку в настройках и перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:160
@@ -42943,17 +42966,17 @@ msgstr "Закрыть начальную настройку"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:64
 #, qt-format
-msgid "Welcome to VLC!"
-msgstr "Добро пожаловать в VLC!"
+msgid "Welcome to Hakone!"
+msgstr "Добро пожаловать в Hakone!"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:67
 #, qt-format
 msgid ""
-"VLC is a free and open source media player.\n"
+"Hakone is a free and open source media player.\n"
 "Play videos and music from files, discs, and network streams.\n"
 "You can change all settings later."
-msgstr "VLC — свободный медиапроигрыватель с открытым исходным кодом.\nВоспроизводите видео и музыку из файлов, с дисков и из сетевых потоков.\nВсе настройки можно изменить позже."
+msgstr "Hakone — свободный медиапроигрыватель с открытым исходным кодом.\nВоспроизводите видео и музыку из файлов, с дисков и из сетевых потоков.\nВсе настройки можно изменить позже."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:69
@@ -42989,11 +43012,11 @@ msgstr "Сведения о медиафайлах из интернета"
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:123
 #, qt-format
 msgid ""
-"VLC does not collect personal data. If you allow online media information, "
-"VLC can request cover art and track details from online services. These "
-"requests can identify your media to those services. Clear the option to keep "
-"these requests off."
-msgstr "VLC не собирает личные данные. Если разрешить получение сведений из интернета, VLC сможет запрашивать обложки и сведения о дорожках у сетевых служб. Эти запросы могут раскрыть этим службам, какие медиафайлы вы используете. Снимите флажок, чтобы отключить такие запросы."
+"Hakone does not collect personal data. If you allow online media "
+"information, Hakone can request cover art and track details from online "
+"services. These requests can identify your media to those services. Clear "
+"the option to keep these requests off."
+msgstr "Hakone не собирает личные данные. Если разрешить получение сведений из интернета, Hakone сможет запрашивать обложки и сведения о дорожках у сетевых служб. Эти запросы могут раскрыть этим службам, какие медиафайлы вы используете. Снимите флажок, чтобы отключить такие запросы."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:141
@@ -43032,8 +43055,8 @@ msgstr "Полный список находится в меню."
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingWindow.qml:10
 #, qt-format
-msgid "Welcome — VLC Media Player"
-msgstr "Добро пожаловать — Медиапроигрыватель VLC"
+msgid "Welcome — Hakone Media Player"
+msgstr "Добро пожаловать — Медиапроигрыватель Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaybackSettings.qml:20
@@ -43087,8 +43110,8 @@ msgstr "В этой дорожке нет времени показа субти
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaybackSettings.qml:47
 #, qt-format
-msgid "VLC cannot read the times for this subtitle track."
-msgstr "VLC не удаётся прочитать время показа этой дорожки субтитров."
+msgid "Hakone cannot read the times for this subtitle track."
+msgstr "Hakone не удаётся прочитать время показа этой дорожки субтитров."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaybackSettings.qml:54
@@ -43382,8 +43405,8 @@ msgstr "Удалить %1"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistProperties.qml:42
 #, qt-format
-msgid "VLC cannot read this playlist. Try again."
-msgstr "VLC не удаётся прочитать этот плейлист. Повторите попытку."
+msgid "Hakone cannot read this playlist. Try again."
+msgstr "Hakone не удаётся прочитать этот плейлист. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistProperties.qml:89
@@ -43431,8 +43454,8 @@ msgstr "Неизвестная длительность"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistProperties.qml:173
 #, qt-format
-msgid "Saved in the VLC library"
-msgstr "Сохранено в медиатеке VLC"
+msgid "Saved in the Hakone library"
+msgstr "Сохранено в медиатеке Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistTrackTarget.qml:42
@@ -43443,8 +43466,8 @@ msgstr "%1 — %2"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistTrackTarget.qml:44
 #, qt-format
-msgid "This playlist has no files that VLC can use."
-msgstr "В этом плейлисте нет файлов, которые VLC может использовать."
+msgid "This playlist has no files that Hakone can use."
+msgstr "В этом плейлисте нет файлов, которые Hakone может использовать."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlaylistTrackTarget.qml:45
@@ -43493,9 +43516,9 @@ msgstr "Приоритет"
 #: modules/gui/qt/player/qml/redesign/RedesignPlugins.qml:48
 #, qt-format
 msgid ""
-"Sort by priority. VLC uses priority to select a plugin when more than one "
-"plugin can do the same task."
-msgstr "Сортирует по приоритету. Если несколько плагинов могут выполнить одну задачу, VLC выбирает плагин по приоритету."
+"Sort by priority. Hakone uses priority to select a plugin when more than "
+"one plugin can do the same task."
+msgstr "Сортирует по приоритету. Если несколько плагинов могут выполнить одну задачу, Hakone выбирает плагин по приоритету."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPlugins.qml:74
@@ -43544,8 +43567,8 @@ msgstr "Восстановить по умолчанию"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferenceRow.qml:151
 #, qt-format
-msgid "Restart VLC to use this change."
-msgstr "Перезапустите VLC, чтобы применить это изменение."
+msgid "Restart Hakone to use this change."
+msgstr "Перезапустите Hakone, чтобы применить это изменение."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferenceRow.qml:248
@@ -43786,9 +43809,9 @@ msgstr "Показывать оформление окна"
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:33
 #, qt-format
 msgid ""
-"Show a border and title bar on a separate video window. Restart VLC to use "
-"this setting."
-msgstr "Показывает рамку и заголовок отдельного видеоокна. Перезапустите VLC для применения этой настройки."
+"Show a border and title bar on a separate video window. Restart Hakone to "
+"use this setting."
+msgstr "Показывает рамку и заголовок отдельного видеоокна. Перезапустите Hakone для применения этой настройки."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:34
@@ -44397,8 +44420,8 @@ msgstr "Открытие файлов"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:140
 #, qt-format
-msgid "Only allow one VLC window"
-msgstr "Разрешить только одно окно VLC"
+msgid "Only allow one Hakone window"
+msgstr "Разрешить только одно окно Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:141
@@ -44511,8 +44534,8 @@ msgstr "Пропускать кадры при нехватке производ
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:156
 #, qt-format
-msgid "Give VLC higher priority"
-msgstr "Повысить приоритет VLC"
+msgid "Give Hakone higher priority"
+msgstr "Повысить приоритет Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:157
@@ -44723,8 +44746,8 @@ msgstr "Приостанавливать видео при сворачиван�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178
 #, qt-format
-msgid "Bring VLC to the front when playback starts"
-msgstr "Выводить VLC на передний план при начале воспроизведения"
+msgid "Bring Hakone to the front when playback starts"
+msgstr "Выводить Hakone на передний план при начале воспроизведения"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:179
@@ -44878,21 +44901,21 @@ msgstr "Время ожидания подключения (мс)"
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:40
 #, qt-format
 msgid ""
-"This action replaces all VLC settings with the default settings. Restart VLC "
-"after this action."
-msgstr "Это действие заменяет все настройки VLC значениями по умолчанию. После выполнения перезапустите VLC."
+"This action replaces all Hakone settings with the default settings. Restart "
+"Hakone after this action."
+msgstr "Это действие заменяет все настройки Hakone значениями по умолчанию. После выполнения перезапустите Hakone."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:92
 #, qt-format
-msgid "VLC cannot open the settings folder."
-msgstr "VLC не удаётся открыть папку настроек."
+msgid "Hakone cannot open the settings folder."
+msgstr "Hakone не удаётся открыть папку настроек."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:98
 #, qt-format
-msgid "VLC saved the default settings. Restart VLC to use all settings."
-msgstr "VLC сохранил настройки по умолчанию. Перезапустите VLC для применения всех настроек."
+msgid "Hakone saved the default settings. Restart Hakone to use all settings."
+msgstr "Hakone сохранил настройки по умолчанию. Перезапустите Hakone для применения всех настроек."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:160
@@ -44999,14 +45022,14 @@ msgstr "Скрыть дополнительные параметры"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:426
 #, qt-format
-msgid "Hide all VLC options"
-msgstr "Скрыть все параметры VLC"
+msgid "Hide all Hakone options"
+msgstr "Скрыть все параметры Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:426
 #, qt-format
-msgid "All VLC options"
-msgstr "Все параметры VLC"
+msgid "All Hakone options"
+msgstr "Все параметры Hakone"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignQueue.qml:92
@@ -45238,8 +45261,8 @@ msgstr "Громкость при запуске в процентах"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignStartupVolume.qml:64
 #, qt-format
-msgid "Volume on the next VLC startup (0–300%)."
-msgstr "Громкость при следующем запуске VLC (0–300%)."
+msgid "Volume on the next Hakone startup (0–300%)."
+msgstr "Громкость при следующем запуске Hakone (0–300%)."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignStatistics.qml:28
@@ -45313,15 +45336,16 @@ msgstr "Настройка OpenSubtitles"
 #, qt-format
 msgid ""
 "This app can use OpenSubtitles without a personal key. You can add your own "
-"application API key here. VLC stores it in your profile."
-msgstr "Это приложение может использовать OpenSubtitles без личного ключа. Здесь можно добавить собственный ключ API приложения. VLC сохраняет его в вашем профиле."
+"application API key here. Hakone stores it in your profile."
+msgstr "Это приложение может использовать OpenSubtitles без личного ключа. Здесь можно добавить собственный ключ API приложения. Hakone сохраняет его в вашем профиле."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignSubtitleProviderSetup.qml:36
 #, qt-format
 msgid ""
-"Add your OpenSubtitles application API key. VLC stores it in your profile."
-msgstr "Добавьте свой ключ API приложения OpenSubtitles. VLC сохраняет его в вашем профиле."
+"Add your OpenSubtitles application API key. Hakone stores it in your "
+"profile."
+msgstr "Добавьте свой ключ API приложения OpenSubtitles. Hakone сохраняет его в вашем профиле."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignSubtitleProviderSetup.qml:51
@@ -45483,20 +45507,20 @@ msgstr "Добавить субтитры"
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:177
 #, qt-format
-msgid "VLC cannot read these files. Try again."
-msgstr "VLC не удаётся прочитать эти файлы. Повторите попытку."
+msgid "Hakone cannot read these files. Try again."
+msgstr "Hakone не удаётся прочитать эти файлы. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:214
 #, qt-format
-msgid "VLC cannot read this folder. Try again."
-msgstr "VLC не удаётся прочитать эту папку. Повторите попытку."
+msgid "Hakone cannot read this folder. Try again."
+msgstr "Hakone не удаётся прочитать эту папку. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:259
 #, qt-format
-msgid "VLC cannot search for subtitles. Try again."
-msgstr "VLC не удалось найти субтитры. Повторите попытку."
+msgid "Hakone cannot search for subtitles. Try again."
+msgstr "Hakone не удалось найти субтитры. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:282
@@ -45507,14 +45531,14 @@ msgstr "VLC не удалось сохранить ключ API. Проверь�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:366
 #, qt-format
-msgid "VLC cannot save these tracks. Try again."
-msgstr "VLC не удаётся сохранить эти дорожки. Повторите попытку."
+msgid "Hakone cannot save these tracks. Try again."
+msgstr "Hakone не удаётся сохранить эти дорожки. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:367
 #, qt-format
-msgid "VLC kept the changes that it saved. Try Save again for the other files."
-msgstr "VLC сохранил успешно применённые изменения. Нажмите «Сохранить» ещё раз для остальных файлов."
+msgid "Hakone kept the changes that it saved. Try Save again for the other files."
+msgstr "Hakone сохранил успешно применённые изменения. Нажмите «Сохранить» ещё раз для остальных файлов."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:445
@@ -45606,8 +45630,8 @@ msgstr "OpenSubtitles не настроен. Добавьте ключ API дл�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:639
 #, qt-format
-msgid "VLC will remove the saved folder matches."
-msgstr "VLC удалит сохранённые соответствия папок."
+msgid "Hakone will remove the saved folder matches."
+msgstr "Hakone удалит сохранённые соответствия папок."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:640
@@ -45620,20 +45644,20 @@ msgstr "Автосопоставление отключено в настрой�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:641
 #, qt-format
-msgid "VLC will use these matches for new files in this folder."
-msgstr "VLC будет использовать эти соответствия для новых файлов в этой папке."
+msgid "Hakone will use these matches for new files in this folder."
+msgstr "Hakone будет использовать эти соответствия для новых файлов в этой папке."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:642
 #, qt-format
-msgid "VLC will save these choices for the current files."
-msgstr "VLC сохранит этот выбор для текущих файлов."
+msgid "Hakone will save these choices for the current files."
+msgstr "Hakone сохранит этот выбор для текущих файлов."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:643
 #, qt-format
-msgid "VLC will also save the folder matches."
-msgstr "VLC также сохранит соответствия папок."
+msgid "Hakone will also save the folder matches."
+msgstr "Hakone также сохранит соответствия папок."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:668
@@ -45749,8 +45773,8 @@ msgstr "Для этой настройки используйте вывод Dir
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignVideoSettings.qml:269
 #, qt-format
-msgid "This VLC build does not include Direct3D11 HDR output."
-msgstr "В этой сборке VLC нет вывода HDR через Direct3D11."
+msgid "This Hakone build does not include Direct3D11 HDR output."
+msgstr "В этой сборке Hakone нет вывода HDR через Direct3D11."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/player/qml/redesign/RedesignVideoSettings.qml:270
@@ -46106,8 +46130,8 @@ msgstr "Сохраняет размер окна или меняет его по
 #: modules/gui/qt/qt.cpp:171
 msgid ""
 "Show a notification popup with the artist and track name when the current "
-"play queue item changes, when VLC is minimized or hidden."
-msgstr "Показывает всплывающее уведомление с именем исполнителя и дорожки при смене текущего элемента очереди, если VLC свёрнут или скрыт."
+"play queue item changes, when Hakone is minimized or hidden."
+msgstr "Показывает всплывающее уведомление с именем исполнителя и дорожки при смене текущего элемента очереди, если Hakone свёрнут или скрыт."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/qt.cpp:175
@@ -46315,9 +46339,9 @@ msgstr "Длительность уведомления о дорожке (мс)
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/qt.cpp:453
 msgid ""
-"Show short notices for warnings in VLC's log. Warnings that arrive together "
-"share a notice."
-msgstr "Показывает краткие уведомления о предупреждениях в журнале VLC. Предупреждения, поступившие одновременно, объединяются в одно уведомление."
+"Show short notices for warnings in Hakone's log. Warnings that arrive "
+"together share a notice."
+msgstr "Показывает краткие уведомления о предупреждениях в журнале Hakone. Предупреждения, поступившие одновременно, объединяются в одно уведомление."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/qt.cpp:467
@@ -46365,9 +46389,9 @@ msgstr "очередь воспроизведения"
 #: modules/gui/qt/util/model_recovery_agent.hpp:74
 #, qt-format
 msgid ""
-"VLC did not close normally.\n"
+"Hakone did not close normally.\n"
 "Restore the %1 saved on %2?"
-msgstr "VLC не завершился нормально.\nВосстановить %1, сохранённую %2?"
+msgstr "Hakone не завершился нормально.\nВосстановить %1, сохранённую %2?"
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/util/model_recovery_agent.hpp:76
@@ -46417,8 +46441,8 @@ msgstr "Сервер субтитров не смог выполнить зап�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/util/subtitle_source_service.cpp:156
 #, qt-format
-msgid "VLC cannot connect to the subtitle server. Try again."
-msgstr "VLC не удалось подключиться к серверу субтитров. Повторите попытку."
+msgid "Hakone cannot connect to the subtitle server. Try again."
+msgstr "Hakone не удалось подключиться к серверу субтитров. Повторите попытку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/util/subtitle_source_service.cpp:157
@@ -46472,8 +46496,8 @@ msgstr "Загруженные данные не содержат коррект
 #: modules/gui/qt/util/subtitle_source_service.cpp:374
 #: modules/gui/qt/util/subtitle_source_service.cpp:490
 #, qt-format
-msgid "VLC cannot save these subtitles."
-msgstr "VLC не удалось сохранить эти субтитры."
+msgid "Hakone cannot save these subtitles."
+msgstr "Hakone не удалось сохранить эти субтитры."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/util/subtitle_source_service.cpp:419
@@ -46484,8 +46508,8 @@ msgstr "Используйте прямые ссылки на файлы суб�
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/util/subtitle_source_service.cpp:471
 #, qt-format
-msgid "VLC cannot create the subtitle folder."
-msgstr "VLC не удалось создать папку субтитров."
+msgid "Hakone cannot create the subtitle folder."
+msgstr "Hakone не удалось создать папку субтитров."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/util/subtitle_source_service.cpp:486
@@ -46691,18 +46715,18 @@ msgstr "Сквозная передача аудио HDMI/SPDIF"
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:75
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:98
 #, qt-format
-msgid "VLC will use custom skin."
-msgstr "VLC будет использовать собственную оболочку."
+msgid "Hakone will use custom skin."
+msgstr "Hakone будет использовать собственную оболочку."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:112
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:137
 #, qt-format
 msgid ""
-"VLC will use a modern layout with\n"
+"Hakone will use a modern layout with\n"
 "no menubar or pinned controls but\n"
 "with client-side decoration."
-msgstr "VLC будет использовать современный макет\nбез строки меню и закреплённых элементов,\nс клиентским оформлением окна."
+msgstr "Hakone будет использовать современный макет\nбез строки меню и закреплённых элементов,\nс клиентским оформлением окна."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:142
@@ -46715,10 +46739,10 @@ msgstr "Современный"
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:181
 #, qt-format
 msgid ""
-"VLC will use a classic layout with\n"
+"Hakone will use a classic layout with\n"
 "a menubar and pinned controls but\n"
 "with no client-side decoration."
-msgstr "VLC будет использовать классический макет\nсо строкой меню и закреплёнными элементами,\nбез клиентского оформления окна."
+msgstr "Hakone будет использовать классический макет\nсо строкой меню и закреплёнными элементами,\nбез клиентского оформления окна."
 
 #. First-pass Russian translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:186
@@ -46885,8 +46909,8 @@ msgstr "Сообщения журнала, которые не показаны:
 #. First-pass interface translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/messages/messages.cpp:259
 #, qt-format
-msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. Restart VLC after this change."
-msgstr "В этом окне может отображаться только часть длинного сообщения журнала. Чтобы сохранить полный журнал, включите параметр «Сохранить журнал» в настройках. После этого перезапустите VLC."
+msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. Restart Hakone after this change."
+msgstr "В этом окне может отображаться только часть длинного сообщения журнала. Чтобы сохранить полный журнал, включите параметр «Сохранить журнал» в настройках. После этого перезапустите Hakone."
 
 #. First-pass interface translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/messages/messages.cpp:416
@@ -46927,12 +46951,12 @@ msgid "Enter a valid regular expression."
 msgstr "Введите допустимое регулярное выражение."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:49
-msgid "VLC cleared the playback history."
-msgstr "VLC очистил историю воспроизведения."
+msgid "Hakone cleared the playback history."
+msgstr "Hakone очистил историю воспроизведения."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:49 modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:89
-msgid "VLC cannot clear the playback history. Try again."
-msgstr "VLC не может очистить историю воспроизведения. Повторите попытку."
+msgid "Hakone cannot clear the playback history. Try again."
+msgstr "Hakone не может очистить историю воспроизведения. Повторите попытку."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1415
 msgid "Remove the playback history for local files and network streams. Keep media files and playlists."
@@ -46955,8 +46979,8 @@ msgid "Read audio levels from a local file. Show them on the seekbar."
 msgstr "Считывайте уровни звука из локального файла. Показывайте их на шкале времени."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPlaybackSettings.qml:155
-msgid "VLC cannot read audio levels for this file."
-msgstr "VLC не может прочитать уровни звука этого файла."
+msgid "Hakone cannot read audio levels for this file."
+msgstr "Hakone не может прочитать уровни звука этого файла."
 
 #: modules/gui/qt/player/qml/redesign/RedesignMenu.qml:179
 msgid "New"
@@ -47011,16 +47035,16 @@ msgid "VLC cannot apply this profile. Check its saved settings."
 msgstr "VLC не может применить этот профиль. Проверьте сохранённые настройки."
 
 #. Application profiles in the redesigned interface
-msgid "VLC cannot read the saved profiles."
-msgstr "VLC не может прочитать сохранённые профили."
+msgid "Hakone cannot read the saved profiles."
+msgstr "Hakone не может прочитать сохранённые профили."
 
 #. Application profiles in the redesigned interface
-msgid "VLC cannot save the interface settings. Try again."
-msgstr "VLC не может сохранить настройки интерфейса. Повторите попытку."
+msgid "Hakone cannot save the interface settings. Try again."
+msgstr "Hakone не может сохранить настройки интерфейса. Повторите попытку."
 
 #. Application profiles in the redesigned interface
-msgid "VLC cannot save these profiles. Remove unused profiles."
-msgstr "VLC не может сохранить эти профили. Удалите неиспользуемые профили."
+msgid "Hakone cannot save these profiles. Remove unused profiles."
+msgstr "Hakone не может сохранить эти профили. Удалите неиспользуемые профили."
 
 #. The first argument is the action feedback; the second is the actual key.
 #: src/video_output/video_text.c:174
@@ -47030,52 +47054,52 @@ msgstr "%s\nКомбинация клавиш: %s"
 
 #. Add-on discovery failed; the user can retry with Find more extensions.
 #: modules/gui/qt/network/addonsmodel.cpp:770
-msgid "VLC cannot load the add-on list. Try again."
-msgstr "VLC не может загрузить список дополнений. Повторите попытку."
+msgid "Hakone cannot load the add-on list. Try again."
+msgstr "Hakone не может загрузить список дополнений. Повторите попытку."
 
 #: modules/gui/qt/dialogs/firstrun/firstrunwizard.cpp:121
-msgid "VLC cannot save the theme. Make sure that you have access to the settings folder. Try again."
-msgstr "VLC не удаётся сохранить тему. Проверьте папку настроек и повторите попытку."
+msgid "Hakone cannot save the theme. Make sure that you have access to the settings folder. Try again."
+msgstr "Hakone не удаётся сохранить тему. Проверьте папку настроек и повторите попытку."
 
 #: modules/gui/qt/dialogs/messages/messages.cpp:264
-msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again."
-msgstr "В этом окне может отображаться только часть длинного сообщения журнала. Чтобы сохранить полный журнал, включите параметр «Сохранить журнал» в настройках. После этого перезапустите VLC."
+msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close Hakone. Start Hakone again."
+msgstr "В этом окне может отображаться только часть длинного сообщения журнала. Чтобы сохранить полный журнал, включите параметр «Сохранить журнал» в настройках. После этого перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:728
-msgid "VLC cannot start the plugin scan. Make sure that the cache generator is installed."
-msgstr "VLC не удаётся запустить проверку плагинов. Убедитесь, что установлен генератор кэша."
+msgid "Hakone cannot start the plugin scan. Make sure that the cache generator is installed."
+msgstr "Hakone не удаётся запустить проверку плагинов. Убедитесь, что установлен генератор кэша."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:735
-msgid "VLC cannot update the plugin cache. Make sure that you have access to the folder. Try again."
-msgstr "VLC не удаётся обновить кэш плагинов. Проверьте доступ к папке и повторите попытку."
+msgid "Hakone cannot update the plugin cache. Make sure that you have access to the folder. Try again."
+msgstr "Hakone не удаётся обновить кэш плагинов. Проверьте доступ к папке и повторите попытку."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:737
-msgid "VLC updated the plugin cache. Close VLC. Start VLC again to use plugin changes."
-msgstr "VLC обновил кэш плагинов. Перезапустите VLC, чтобы применить изменения плагинов."
+msgid "Hakone updated the plugin cache. Close Hakone. Start Hakone again to use plugin changes."
+msgstr "Hakone обновил кэш плагинов. Перезапустите Hakone, чтобы применить изменения плагинов."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
-msgid "VLC cannot apply this profile. Make sure that its saved settings are correct."
-msgstr "VLC не может применить этот профиль. Проверьте сохранённые настройки."
+msgid "Hakone cannot apply this profile. Make sure that its saved settings are correct."
+msgstr "Hakone не может применить этот профиль. Проверьте сохранённые настройки."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
-msgid "VLC cannot apply this preset. Make sure that its saved settings are correct."
-msgstr "VLC не удаётся применить эту предустановку. Проверьте сохранённые в ней настройки."
+msgid "Hakone cannot apply this preset. Make sure that its saved settings are correct."
+msgstr "Hakone не удаётся применить эту предустановку. Проверьте сохранённые в ней настройки."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1699
-msgid "Select the messages to save in the log file. After a change, close VLC. Start VLC again."
-msgstr "Выберите сообщения для сохранения в файле журнала. После изменения перезапустите VLC."
+msgid "Select the messages to save in the log file. After a change, close Hakone. Start Hakone again."
+msgstr "Выберите сообщения для сохранения в файле журнала. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1714
-msgid "VLC examines plugin files and updates the plugin cache. After the scan, close VLC. Start VLC again to use plugin changes."
-msgstr "Проверяет файлы плагинов и обновляет кэш. После проверки перезапустите VLC для применения изменений плагинов."
+msgid "Hakone examines plugin files and updates the plugin cache. After the scan, close Hakone. Start Hakone again to use plugin changes."
+msgstr "Проверяет файлы плагинов и обновляет кэш. После проверки перезапустите Hakone для применения изменений плагинов."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1763
-msgid "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
-msgstr "Режим «Автоматически» позволяет VLC выбрать устройство декодирования. Значение «Выключено» включает программное декодирование и сохраняет выбор устройства. После изменения откройте видео заново."
+msgid "Automatic lets Hakone select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
+msgstr "Режим «Автоматически» позволяет Hakone выбрать устройство декодирования. Значение «Выключено» включает программное декодирование и сохраняет выбор устройства. После изменения откройте видео заново."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1791
-msgid "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
-msgstr "Режим «Автоматически» сначала определяет текст UTF-8. Если определить кодировку не удалось, VLC использует кодировку по умолчанию. Выберите конкретную кодировку, чтобы отключить автоопределение. После изменения откройте файл субтитров заново."
+msgid "Automatic detects UTF-8 text first. If detection fails, Hakone uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
+msgstr "Режим «Автоматически» сначала определяет текст UTF-8. Если определить кодировку не удалось, Hakone использует кодировку по умолчанию. Выберите конкретную кодировку, чтобы отключить автоопределение. После изменения откройте файл субтитров заново."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1938
 msgid "Select a track for the next video. Track numbers start at 1. Automatic uses the language setting."
@@ -47086,144 +47110,144 @@ msgid "Select a language. System language uses your system's language. Select Cu
 msgstr "Выберите язык. «Системный язык» использует язык системы. Выберите «Другое», чтобы указать порядок языков. Разделяйте названия или коды запятыми. Для следующего файла выбор дорожки будет установлен в режим «Автоматически»."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1965
-msgid "Select the device to use for audio. If the device is not connected, VLC uses the audio driver's default device."
+msgid "Select the device to use for audio. If the device is not connected, Hakone uses the audio driver's default device."
 msgstr "Выберите устройство для вывода звука. Если устройство отключено, используется устройство по умолчанию аудиодрайвера."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1976
-msgid "Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again."
-msgstr "Управляйте VLC из веб-браузера. После изменения веб-управления, порта или пароля перезапустите VLC."
+msgid "Control Hakone from a web browser. After you change the web remote, port or password, close Hakone. Start Hakone again."
+msgstr "Управляйте Hakone из веб-браузера. После изменения веб-управления, порта или пароля перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2004
-msgid "Request a higher process priority from the system. After a change, close VLC. Start VLC again."
-msgstr "Запрашивает у системы более высокий приоритет процесса. После изменения перезапустите VLC."
+msgid "Request a higher process priority from the system. After a change, close Hakone. Start Hakone again."
+msgstr "Запрашивает у системы более высокий приоритет процесса. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2033
-msgid "Select an audio output driver. Close VLC. Start VLC again to use a new driver."
-msgstr "Выберите драйвер аудиовыхода. Перезапустите VLC, чтобы использовать новый драйвер."
+msgid "Select an audio output driver. Close Hakone. Start Hakone again to use a new driver."
+msgstr "Выберите драйвер аудиовыхода. Перезапустите Hakone, чтобы использовать новый драйвер."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2110
 msgid "Select how closely subtitle file names must match the video title."
 msgstr "Выберите, насколько точно имя файла субтитров должно совпадать с названием видео."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2157
-msgid "Save messages to a file. After a change, close VLC. Start VLC again."
-msgstr "Сохраняет сообщения в файл. После изменения перезапустите VLC."
+msgid "Save messages to a file. After a change, close Hakone. Start Hakone again."
+msgstr "Сохраняет сообщения в файл. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2159
-msgid "Select the log file. VLC adds new messages to the end of this file. After a change, close VLC. Start VLC again."
-msgstr "Выберите файл журнала. VLC добавляет новые сообщения в его конец. После изменения перезапустите VLC."
+msgid "Select the log file. Hakone adds new messages to the end of this file. After a change, close Hakone. Start Hakone again."
+msgstr "Выберите файл журнала. Hakone добавляет новые сообщения в его конец. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2161
-msgid "Select plain text or HTML for the log file. After a change, close VLC. Start VLC again."
-msgstr "Выберите простой текст или HTML для файла журнала. После изменения перезапустите VLC."
+msgid "Select plain text or HTML for the log file. After a change, close Hakone. Start Hakone again."
+msgstr "Выберите простой текст или HTML для файла журнала. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2163
-msgid "Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."
-msgstr "Выберите уровень журнала VLC. Файловый журнал может использовать этот или отдельный уровень. После изменения перезапустите VLC."
+msgid "Select the Hakone log level. File logs can use this level or a separate file log level. After a change, close Hakone. Start Hakone again."
+msgstr "Выберите уровень журнала Hakone. Файловый журнал может использовать этот или отдельный уровень. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2167
-msgid "Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."
-msgstr "Запускает VLC в системном трее и включает значок в трее. После изменения перезапустите VLC."
+msgid "Start Hakone in the system tray. This turns on the tray icon. After a change, close Hakone. Start Hakone again."
+msgstr "Запускает Hakone в системном трее и включает значок в трее. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2171
-msgid "Select how long VLC shows the track popup. The system can change this time."
+msgid "Select how long Hakone shows the track popup. The system can change this time."
 msgstr "Выберите длительность уведомления о дорожке. Система может изменить это время."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2183
-msgid "Start VLC in compact mode. After a change, close VLC. Start VLC again. Launch options can override this setting."
-msgstr "Запускает VLC в компактном режиме. После изменения перезапустите VLC. Параметры запуска могут переопределить эту настройку."
+msgid "Start Hakone in compact mode. After a change, close Hakone. Start Hakone again. Launch options can override this setting."
+msgstr "Запускает Hakone в компактном режиме. После изменения перезапустите Hakone. Параметры запуска могут переопределить эту настройку."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2185
-msgid "Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."
-msgstr "Добавляет внутренние сведения интерфейса, предупреждения и ошибки в журнал VLC. Используйте «Подробность журнала» для выбора сохраняемых сообщений."
+msgid "Add internal interface information, warnings and errors to the Hakone log. Use Log details to select which messages to save."
+msgstr "Добавляет внутренние сведения интерфейса, предупреждения и ошибки в журнал Hakone. Используйте «Подробность журнала» для выбора сохраняемых сообщений."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2196
-msgid "Select a language for the interface. Changes apply at once. If text has no translation, VLC shows it in English."
+msgid "Select a language for the interface. Changes apply at once. If text has no translation, Hakone shows it in English."
 msgstr "Выберите язык интерфейса. Изменения применяются сразу. Текст без перевода отображается на английском языке."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2218
-msgid "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."
-msgstr "Введите только параметры VLC. Текст с пробелами заключайте в кавычки. Команда запуска имеет приоритет. После изменения перезапустите VLC. Параметр --ignore-config позволяет запуститься без сохранённых параметров."
+msgid "Enter Hakone options only. Use quotes for text with spaces. The launch command takes priority. After a change, close Hakone. Start Hakone again. Use --ignore-config to start without saved options."
+msgstr "Введите только параметры Hakone. Текст с пробелами заключайте в кавычки. Команда запуска имеет приоритет. После изменения перезапустите Hakone. Параметр --ignore-config позволяет запуститься без сохранённых параметров."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2239
-msgid "Close VLC. Start VLC again to use this option. A command-line option can stop VLC from reading file information."
-msgstr "Перезапустите VLC для применения этой настройки. Параметр командной строки может запретить чтение сведений о файлах."
+msgid "Close Hakone. Start Hakone again to use this option. A command-line option can stop Hakone from reading file information."
+msgstr "Перезапустите Hakone для применения этой настройки. Параметр командной строки может запретить чтение сведений о файлах."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2240
-msgid "Turn on \"Read file metadata automatically\" in Advanced Options. Close VLC. Start VLC again to use this option."
-msgstr "Включите «Автоматически читать метаданные файлов» в дополнительных параметрах и перезапустите VLC для применения этой настройки."
+msgid "Turn on \"Read file metadata automatically\" in Advanced Options. Close Hakone. Start Hakone again to use this option."
+msgstr "Включите «Автоматически читать метаданные файлов» в дополнительных параметрах и перезапустите Hakone для применения этой настройки."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2245
-msgid "Read file information for items added to the queue. After a change, close VLC. Start VLC again."
-msgstr "Читает сведения о файлах для элементов, добавленных в очередь. После изменения перезапустите VLC."
+msgid "Read file information for items added to the queue. After a change, close Hakone. Start Hakone again."
+msgstr "Читает сведения о файлах для элементов, добавленных в очередь. После изменения перезапустите Hakone."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2613
-msgid "Enter VLC options only. Make sure that the option names and quotation marks are correct."
-msgstr "Введите только параметры VLC. Проверьте названия параметров и кавычки."
+msgid "Enter Hakone options only. Make sure that the option names and quotation marks are correct."
+msgstr "Введите только параметры Hakone. Проверьте названия параметров и кавычки."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2626
 msgid "Select a language from the list."
 msgstr "Выберите язык из списка."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2851 modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3161
-msgid "VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct."
-msgstr "VLC не удаётся восстановить файл настроек. Перезапустите VLC и проверьте настройки."
+msgid "Hakone cannot restore the settings file. Close Hakone. Start Hakone again. Make sure that your settings are correct."
+msgstr "Hakone не удаётся восстановить файл настроек. Перезапустите Hakone и проверьте настройки."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3299
 msgid "Select color"
 msgstr "Выбрать цвет"
 
 #: modules/gui/qt/medialibrary/medialib.cpp:296
-msgid "VLC cannot rescan this folder. Make sure that you can read the folder. Try again."
-msgstr "VLC не удаётся повторно проверить эту папку. Проверьте папку и повторите попытку."
+msgid "Hakone cannot rescan this folder. Make sure that you can read the folder. Try again."
+msgstr "Hakone не удаётся повторно проверить эту папку. Проверьте папку и повторите попытку."
 
 #: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:128
 msgid "Select a Playlist"
 msgstr "Выбрать плейлист"
 
 #: modules/gui/qt/player/qml/redesign/RedesignFolderInfo.qml:28
-msgid "VLC cannot read this folder. Make sure that you can read the folder. Try again."
-msgstr "VLC не удаётся прочитать эту папку. Проверьте папку и повторите попытку."
+msgid "Hakone cannot read this folder. Make sure that you can read the folder. Try again."
+msgstr "Hakone не удаётся прочитать эту папку. Проверьте папку и повторите попытку."
 
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:45
-msgid "VLC cannot open these streams. Make sure that the links are correct. Try again."
-msgstr "VLC не удаётся открыть эти потоки. Проверьте ссылки и повторите попытку."
+msgid "Hakone cannot open these streams. Make sure that the links are correct. Try again."
+msgstr "Hakone не удаётся открыть эти потоки. Проверьте ссылки и повторите попытку."
 
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:159
-msgid "To save a playlist, turn on the media library in Settings. Close VLC. Start VLC again."
-msgstr "Чтобы сохранить плейлист, включите медиатеку в настройках и перезапустите VLC."
+msgid "To save a playlist, turn on the media library in Settings. Close Hakone. Start Hakone again."
+msgstr "Чтобы сохранить плейлист, включите медиатеку в настройках и перезапустите Hakone."
 
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:89
 msgid "Select a media folder to start with"
 msgstr "Выберите папку с медиафайлами для начала"
 
 #: modules/gui/qt/player/qml/redesign/RedesignPlayerPreset.qml:243
-msgid "Save all VLC settings in this profile. Some settings apply to the next file or after you close VLC and start it again."
-msgstr "Сохраните все настройки VLC в этом профиле. Некоторые настройки применяются к следующему файлу или после перезапуска VLC."
+msgid "Save all Hakone settings in this profile. Some settings apply to the next file or after you close Hakone and start it again."
+msgstr "Сохраните все настройки Hakone в этом профиле. Некоторые настройки применяются к следующему файлу или после перезапуска Hakone."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferenceRow.qml:204
-msgid "Close VLC. Start VLC again to use this change."
-msgstr "Перезапустите VLC, чтобы применить это изменение."
+msgid "Close Hakone. Start Hakone again to use this change."
+msgstr "Перезапустите Hakone, чтобы применить это изменение."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:53
-msgid "Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting."
-msgstr "Показывает рамку и заголовок отдельного видеоокна. Перезапустите VLC для применения этой настройки."
+msgid "Show a border and title bar on a separate video window. Close Hakone. Start Hakone again to use this setting."
+msgstr "Показывает рамку и заголовок отдельного видеоокна. Перезапустите Hakone для применения этой настройки."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:83
-msgid "This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again."
-msgstr "Это действие заменяет все настройки VLC значениями по умолчанию. После выполнения перезапустите VLC."
+msgid "This action replaces all Hakone settings with the default settings. After this action, close Hakone. Start Hakone again."
+msgstr "Это действие заменяет все настройки Hakone значениями по умолчанию. После выполнения перезапустите Hakone."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:153
-msgid "VLC saved the default settings. Close VLC. Start VLC again to use all settings."
-msgstr "VLC сохранил настройки по умолчанию. Перезапустите VLC для применения всех настроек."
+msgid "Hakone saved the default settings. Close Hakone. Start Hakone again to use all settings."
+msgstr "Hakone сохранил настройки по умолчанию. Перезапустите Hakone для применения всех настроек."
 
 #: modules/gui/qt/player/qml/redesign/RedesignSubtitleProviderSetup.qml:24
-msgid "VLC cannot save this change. Make sure that the key is correct. Try again."
-msgstr "VLC не удалось сохранить это изменение. Проверьте ключ и повторите попытку."
+msgid "Hakone cannot save this change. Make sure that the key is correct. Try again."
+msgstr "Hakone не удалось сохранить это изменение. Проверьте ключ и повторите попытку."
 
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:288
-msgid "VLC cannot save the API key. Make sure that the API key is correct. Try again."
-msgstr "VLC не удалось сохранить ключ API. Проверьте его и повторите попытку."
+msgid "Hakone cannot save the API key. Make sure that the API key is correct. Try again."
+msgstr "Hakone не удалось сохранить ключ API. Проверьте его и повторите попытку."
 
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
 msgid "Select a folder or select track files from your computer."
@@ -47246,8 +47270,8 @@ msgid "Paste a direct subtitle file link. Then select Add."
 msgstr "Вставьте прямую ссылку на файл субтитров и нажмите «Добавить»."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
-msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
-msgstr "Использует одно окно VLC при запуске приложения. Настройка файлового менеджера также охватывает открытые из него файлы. После включения закройте все окна VLC и запустите его заново. Параметры командной строки могут переопределить эти настройки."
+msgid "Use one Hakone window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all Hakone windows. Start Hakone again. Command-line options can override these settings."
+msgstr "Использует одно окно Hakone при запуске приложения. Настройка файлового менеджера также охватывает открытые из него файлы. После включения закройте все окна Hakone и запустите его заново. Параметры командной строки могут переопределить эти настройки."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178

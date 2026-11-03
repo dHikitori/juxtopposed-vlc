@@ -850,8 +850,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "גרסת ה־VLC היא %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "גרסת ה־Hakone היא %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5186,17 +5186,17 @@ msgstr "הקובץ „%s“ שהתקבל אינו תקין. לכן הוא נמח
 
 #: src/misc/update.c:723
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
-msgstr "הגרסה החדשה התקבלה בהצלחה. האם ברצונך לסגור את VLC ולהתקין אותה כעת?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
+msgstr "הגרסה החדשה התקבלה בהצלחה. האם ברצונך לסגור את Hakone ולהתקין אותה כעת?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:200
 msgid "Install"
 msgstr "התקנה"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "עדכון הנגן VLC"
+msgid "Update Hakone Media Player"
+msgstr "עדכון הנגן Hakone"
 
 #: src/playlist/engine.c:247 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:321
@@ -10868,18 +10868,19 @@ msgstr "האצת וידאו Direct‏ (DXVA)‏ 2.0"
 #: modules/codec/avcodec/encoder.c:376
 #, c-format
 msgid ""
-"It seems your Libav/FFmpeg (libavcodec) installation lacks the following encoder:\n"
+"It seems your Libav/FFmpeg (libavcodec) installation lacks the following "
+"encoder:\n"
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 "מתברר כי בהתקנה של Libav/FFmpeg‏ (libavcodec) חסר המצפין הבא:\n"
 "%s.\n"
 "אם לא ידוע לך כיצד לתקן זאת, מוטב לך לבקש עזרה מצוות התמיכה של ההפצה שלך.\n"
 "\n"
-"זו אינה שגיאה בתוך נגן המדיה VLC.\n"
+"זו אינה שגיאה בתוך נגן המדיה Hakone.\n"
 "לא ליצור קשר עם מיזם VideoLAN בנוגע לתקלה זו.\n"
 
 #: modules/codec/avcodec/encoder.c:892
@@ -13664,6 +13665,26 @@ msgstr "מנשק שליטת D-Bus"
 msgid "VLC media player"
 msgstr "נגן המדיה VLC"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:185
+#: modules/gui/macosx/VLCMainWindow.m:687
+#: modules/gui/macosx/VLCMainWindow.m:693
+#: modules/gui/macosx/VLCMainWindow.m:1318
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1026
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1258
+#: modules/gui/qt/main_interface.cpp:1262
+#: modules/gui/qt/main_interface.cpp:1301
+#: modules/gui/qt/main_interface.cpp:1303
+#: modules/gui/qt/main_interface.cpp:1411
+#: modules/gui/qt/main_interface.cpp:1428
+#: modules/gui/qt/main_interface.cpp:1436
+#: modules/gui/qt/main_interface.cpp:1459 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "נגן המדיה Hakone"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr "לא לפתוח מנשק תיבת פקודות DOS"
@@ -13869,10 +13890,12 @@ msgstr "מהירות: %.2fx"
 #: modules/control/intromsg.h:34
 msgid ""
 "\n"
-"Warning: if you cannot access the GUI anymore, open a command-line window, go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"Warning: if you cannot access the GUI anymore, open a command-line window, "
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
-"אזהרה: אם אין לך גישה עוד למנשק הגרפי, עליך לפתוח חלון שורת פקודה, לגשת לתיקייה בה התקנת את VLC ולהריץ את הפקודה „vlc -I qt”\n"
+"אזהרה: אם אין לך גישה עוד למנשק הגרפי, עליך לפתוח חלון שורת פקודה, לגשת "
+"לתיקייה בה התקנת את Hakone ולהריץ את הפקודה „vlc -I qt”\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -15608,19 +15631,27 @@ msgid ""
 msgstr "נגן הווידאו של VLC ו־VideoLAN הם סימני מסחר של התאגדות VideoLAN."
 
 #: modules/gui/macosx/VLCAboutWindowController.m:130
+#, fuzzy
 msgid ""
-"<p>VLC media player is a free and open source media player, encoder, and "
-"streamer made by the volunteers of the <a "
-"href=\"https://www.videolan.org/\"><span style=\" text-decoration: "
-"underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses "
-"its internal codecs, works on essentially every popular platform, and can "
-"read almost all files, CDs, DVDs, network streams, capture cards and other "
-"media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span "
-"style=\" text-decoration: underline; color:#0057ae;\">Help and join "
-"us!</span></a>"
+"<p>Hakone Media Player is a free and open source media player, encoder, and "
+"streamer. Hakone is a fork of VLC media player, made by the volunteers of "
+"the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: "
+"underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>Hakone "
+"uses its internal codecs, works on essentially every popular platform, and "
+"can read almost all files, CDs, DVDs, network streams, capture cards and "
+"other media formats!</p><p><a href=\"https://hakone.org/\"><span style=\" "
+"text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>"
 msgstr ""
 "<div style=\"direction:rtl;\">\n"
-"<p>נגן המדיה VLC הוא נגן מדיה, מקודד וסטרימר חופשי ובקוד פתוח, שנוצר ע״י המתנדבים של קהילת <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a>.</p><p>הנגן VLC משתמש במקודדים הפנימיים שלו, שעובדים בערך על כל פלטפורמה נפוצה שהיא, ומסוגל לקרוא כמעט את כל סוגי הקבצים, תקליטורי השמע, ה־DVD, תזרימי הרשת, כרטיסי הלכידה וצורות מדיה נוספות!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">הצטרפו אלינו וסייעו לנו!</span></a>"
+"<p>נגן המדיה VLC הוא נגן מדיה, מקודד וסטרימר חופשי ובקוד פתוח, שנוצר ע״י "
+"המתנדבים של קהילת <a href=\"https://www.videolan.org/\"><span style=\" "
+"text-decoration: underline; "
+"color:#0057ae;\">VideoLAN</span></a>.</p><p>הנגן VLC משתמש במקודדים "
+"הפנימיים שלו, שעובדים בערך על כל פלטפורמה נפוצה שהיא, ומסוגל לקרוא כמעט את "
+"כל סוגי הקבצים, תקליטורי השמע, ה־DVD, תזרימי הרשת, כרטיסי הלכידה וצורות "
+"מדיה נוספות!</p><p><a href=\"https://www.videolan.org/contribute/\"><span "
+"style=\" text-decoration: underline; color:#0057ae;\">הצטרפו אלינו וסייעו "
+"לנו!</span></a>"
 
 #: modules/gui/macosx/VLCAddonsWindowController.m:105
 #: modules/gui/macosx/VLCAddonsWindowController.m:357
@@ -16079,6 +16110,13 @@ msgstr "רזולוציה"
 #: modules/gui/qt/ui/profiles.h:738
 msgid ""
 "You just need to fill one of the three following parameters, VLC will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:738
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
 "autodetect the other using the original aspect ratio"
 msgstr ""
 
@@ -16631,6 +16669,10 @@ msgstr "הצגת הכול"
 #: modules/gui/macosx/VLCMainMenu.m:352
 msgid "Quit VLC"
 msgstr "יציאה מ־VLC"
+
+#: modules/gui/macosx/VLCMainMenu.m:352
+msgid "Quit Hakone"
+msgstr "יציאה מ־Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:354
 msgid "1:File"
@@ -18662,7 +18704,7 @@ msgstr ""
 #: modules/gui/qt/components/extended_panels.cpp:645
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
@@ -18983,7 +19025,7 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:899
-msgid "Use VLC pace"
+msgid "Use Hakone pace"
 msgstr ""
 
 #: modules/gui/qt/components/open_panels.cpp:919
@@ -19270,8 +19312,8 @@ msgid "Higher latency"
 msgstr ""
 
 #: modules/gui/qt/components/simple_preferences.cpp:745
-msgid "This is VLC's skinnable interface. You can download other skins at"
-msgstr "זהו מנשק ה־VLC הניתן לעיצוב. ניתן להוריד ערכות עיצוב אחרות ב"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
+msgstr "זהו מנשק ה־Hakone הניתן לעיצוב. ניתן להוריד ערכות עיצוב אחרות ב"
 
 #: modules/gui/qt/components/simple_preferences.cpp:747
 msgid "VLC skins website"
@@ -19336,7 +19378,7 @@ msgid "Create"
 msgstr "יצירה"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:635
-msgid "This muxer is not provided directly by VLC: It could be missing."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
 msgstr ""
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:642
@@ -19639,16 +19681,16 @@ msgid "&No"
 msgstr "&לא"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:144
-msgid "VLC media player updates"
-msgstr "עדכוני נגן המדיה VLC"
+msgid "Hakone Media Player updates"
+msgstr "עדכוני נגן המדיה Hakone"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "גרסה חדשה של VLC ‏(‎%1.%2.%3%4) זמינה להורדה."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "גרסה חדשה של Hakone ‏(‎%1.%2.%3%4) זמינה להורדה."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "גרסת ה־VLC המותקנת היא הגרסה העדכנית ביותר."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "גרסת ה־Hakone המותקנת היא הגרסה העדכנית ביותר."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -19858,8 +19900,8 @@ msgid "No addons found"
 msgstr "לא נמצאו תוספות"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
-msgstr "תוספת זו הותקנה ידנית, ל־VLC אין אפשרות לנהל אותה עצמאית."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
+msgstr "תוספת זו הותקנה ידנית, ל־Hakone אין אפשרות לנהל אותה עצמאית."
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
 msgid "Version %1"
@@ -19945,8 +19987,8 @@ msgid "Preferences file could not be saved"
 msgstr "לא ניתן לשמור את קובץ התצורה"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
-msgstr "האם אכן ברצונך לאפס את העדפות נגן המדיה שלך VLC?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
+msgstr "האם אכן ברצונך לאפס את העדפות נגן המדיה שלך Hakone?"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:198
 msgid "Stream Output"
@@ -20524,12 +20566,12 @@ msgid "&Playback"
 msgstr "נ&גינה"
 
 #: modules/gui/qt/menus.cpp:1174
-msgid "&Hide VLC media player in taskbar"
-msgstr "&הסרת הנגן VLC בשורת המשימות"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "&הסרת הנגן Hakone בשורת המשימות"
 
 #: modules/gui/qt/menus.cpp:1180
-msgid "Sho&w VLC media player"
-msgstr "ה&צגת נגן הווידאו VLC"
+msgid "Sho&w Hakone Media Player"
+msgstr "ה&צגת נגן הווידאו Hakone"
 
 #: modules/gui/qt/menus.cpp:1191
 msgid "&Open Media"
@@ -20569,16 +20611,16 @@ msgstr "סמל בשורת המשימות"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
-msgstr "הצגת סמל בשורת המשימות המאפשר לך לשלוט בנגן המדיה VLC באופן בסיסי."
+msgstr "הצגת סמל בשורת המשימות המאפשר לך לשלוט בנגן המדיה Hakone באופן בסיסי."
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "הפעלת VLC עם סמל בשורת המשימות בלבד"
+msgid "Start Hakone with only a systray icon"
+msgstr "הפעלת Hakone עם סמל בשורת המשימות בלבד"
 
 #: modules/gui/qt/qt.cpp:92
-msgid "VLC will start with just an icon in your taskbar."
+msgid "Hakone will start with just an icon in your taskbar."
 msgstr ""
 
 #: modules/gui/qt/qt.cpp:101
@@ -20677,12 +20719,12 @@ msgstr ""
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"הפעלת VLC:\n"
+"הפעלת Hakone:\n"
 " - במצב רגיל\n"
 " - עם איזור שתמיד יציג מידע כגון מילות השירים, עטיפות האלבומים וכו׳...\n"
 " - מצב מזערי עם כמות מוגבלת של פקדים"
@@ -20741,13 +20783,13 @@ msgstr "התעלמות ממקשי השליטה בעצמת השמע שבמקלד�
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
 "כאשר אפשרות זאת מסומנת, הלחצנים המשמשים להגברה, הנמכה והשתקה של השמע במקלדת "
 "שלך תמיד ישנו את עצמת השמע של המערכת. כאשר אפשרות זאת אינה מסומנת, לחצני "
-"עצמת השמע ישנו את עצמת השמע של VLC כאשר המיקוד הוא על VLC ואת עצמת השמע של "
-"המערכת כאשר המיקוד אינו על VLC."
+"עצמת השמע ישנו את עצמת השמע של Hakone כאשר המיקוד הוא על Hakone ואת עצמת "
+"השמע של המערכת כאשר המיקוד אינו על Hakone."
 
 #: modules/gui/qt/qt.cpp:188
 msgid "When to raise the interface"
@@ -26695,8 +26737,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -27428,8 +27470,8 @@ msgstr "זמן:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "נגן המדיה VLC - מנשק דפדפן"
+msgid "Hakone Media Player - Web Interface"
+msgstr "נגן המדיה Hakone - מנשק דפדפן"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -27597,8 +27639,8 @@ msgid "Extra media"
 msgstr "מדיה נוספת"
 
 #: modules/gui/qt/ui/open.h:274
-msgid "Complete MRL for VLC internal"
-msgstr "כתובת המדיה המלאה לשימוש פנימי של VLC"
+msgid "Complete MRL for Hakone internal"
+msgstr "כתובת המדיה המלאה לשימוש פנימי של Hakone"
 
 #: modules/gui/qt/ui/open.h:277
 msgid "Select the file"
@@ -28219,8 +28261,8 @@ msgid "Clear List"
 msgstr "ניקוי הרשימה"
 
 #: modules/gui/qt/ui/update.h:145
-msgid "Check for VLC updates"
-msgstr "חיפוש עדכונים ל־VLC"
+msgid "Check for Hakone updates"
+msgstr "חיפוש עדכונים ל־Hakone"
 
 #: modules/gui/qt/ui/update.h:146
 msgid "Launching an update request..."
@@ -28378,5 +28420,5 @@ msgid "Choose a language for the interface. Changes apply at once. Text without 
 msgstr "יש לבחור שפה לממשק. השינויים חלים מיד. טקסט שלא תורגם מוצג באנגלית."
 
 #. Redesign translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
-msgstr "אין אפשרות לטעון שפה זו ב־VLC."
+msgid "Hakone cannot load this language."
+msgstr "אין אפשרות לטעון שפה זו ב־Hakone."

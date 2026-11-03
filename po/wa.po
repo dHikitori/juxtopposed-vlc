@@ -808,8 +808,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "Modêye di VLC %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Modêye di Hakone %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5182,10 +5182,10 @@ msgstr "L' fitchî \"%s\" aberweté esteut crombe. Adon il esteut disfacé."
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
-"Li novele modêye esteut aberwetêye come i fåt. Voloz-v' clôre VLC et l' "
+"Li novele modêye esteut aberwetêye come i fåt. Voloz-v' clôre Hakone et l' "
 "astaler asteure?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
@@ -5193,8 +5193,8 @@ msgid "Install"
 msgstr "Astaler"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "Mete a djoû l' djouweu d' media VLC"
+msgid "Update Hakone Media Player"
+msgstr "Mete a djoû l' djouweu d' media Hakone"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -10889,7 +10889,7 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 
@@ -13765,6 +13765,26 @@ msgstr "Eterface di controle D-Bus"
 msgid "VLC media player"
 msgstr "Djouweu d' media VLC"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Djouweu d' media Hakone"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr ""
@@ -13976,12 +13996,12 @@ msgstr "Raddisté: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
 "Prindoz asteme: si vos n' ploz ni pu moussî ezès eterface grafike (GUI), "
 "drovi ene finiesse e roye di comande, alez å ridant wice ki vos avoz astalé "
-"VLC et enondez \"vlc -I qt\"\n"
+"Hakone et enondez \"vlc -I qt\"\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -16265,6 +16285,13 @@ msgid ""
 "autodetect the other using the original aspect ratio"
 msgstr ""
 
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -16810,6 +16837,10 @@ msgstr "Mostrer tertos"
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "Cwiter VLC"
+
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Cwiter Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -18922,7 +18953,7 @@ msgstr "Masse imådje"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
@@ -19263,8 +19294,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "Eployî l' alaedje di VLC"
+msgid "Use Hakone pace"
+msgstr "Eployî l' alaedje di Hakone"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -19551,7 +19582,7 @@ msgid "Higher latency"
 msgstr "Pus hôte latince"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
 msgstr ""
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
@@ -19617,7 +19648,7 @@ msgid "Create"
 msgstr "Ahiver"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
 msgstr ""
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
@@ -19917,16 +19948,16 @@ msgid "&No"
 msgstr "&Neni"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "Metaedjes a djoû do djouweu d' media VLC"
+msgid "Hakone Media Player updates"
+msgstr "Metaedjes a djoû do djouweu d' media Hakone"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "Ene novele modêye di VLC (%1.%2.%3%4) est disponibe."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "Ene novele modêye di Hakone (%1.%2.%3%4) est disponibe."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "Vos avoz li dierinne modêye do djouweu d' media VLC."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "Vos avoz li dierinne modêye do djouweu d' media Hakone."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -20136,7 +20167,7 @@ msgid "No addons found"
 msgstr "Nole intrêye di trovêye"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
 msgstr ""
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
@@ -20225,7 +20256,7 @@ msgid "Preferences file could not be saved"
 msgstr "L' fitchî preferinces n' a savou nén esse shapé"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
 msgstr ""
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
@@ -20815,11 +20846,11 @@ msgid "&Playback"
 msgstr "&Djouwaedje"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
+msgid "&Hide Hakone Media Player in taskbar"
 msgstr ""
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
+msgid "Sho&w Hakone Media Player"
 msgstr ""
 
 #: modules/gui/qt/menus.cpp:1188
@@ -20860,16 +20891,16 @@ msgstr "Imådjete do scriftôr"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
 msgstr ""
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
+msgid "Start Hakone with only a systray icon"
 msgstr ""
 
 #: modules/gui/qt/qt.cpp:92
-msgid "VLC will start with just an icon in your taskbar."
+msgid "Hakone will start with just an icon in your taskbar."
 msgstr ""
 
 #: modules/gui/qt/qt.cpp:101
@@ -20966,12 +20997,12 @@ msgstr ""
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"Enonder VLC avou:\n"
+"Enonder Hakone avou:\n"
 " - môde normå\n"
 " - ene redjon tofer prezinte po mostrer des informåcions come les paroles, "
 "les potchetes d' albom...\n"
@@ -21033,8 +21064,8 @@ msgstr ""
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
 
 #: modules/gui/qt/qt.cpp:188
@@ -27099,8 +27130,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -27851,8 +27882,8 @@ msgstr "Tins:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "Djouweu d' media VLC - Eterface Waibe"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Djouweu d' media Hakone - Eterface Waibe"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -28021,7 +28052,7 @@ msgid "Extra media"
 msgstr "Media di pus"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
+msgid "Complete MRL for Hakone internal"
 msgstr ""
 
 #: modules/gui/qt/ui/open.h:280
@@ -28696,8 +28727,8 @@ msgid "Clear List"
 msgstr "Netyî Djivêye"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "Cachî après des metaedjes a djoû VLC"
+msgid "Check for Hakone updates"
+msgstr "Cachî après des metaedjes a djoû Hakone"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."

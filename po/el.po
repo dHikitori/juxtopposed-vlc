@@ -901,8 +901,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "Έκδοση VLC %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Έκδοση Hakone %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5596,10 +5596,10 @@ msgstr ""
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
-"Η νέα έκδοση κατέβηκε επιτυχώς. Θέλετε να κλείσετε τον VLC και να την "
+"Η νέα έκδοση κατέβηκε επιτυχώς. Θέλετε να κλείσετε τον Hakone και να την "
 "εγκαταστήσετε τώρα;"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
@@ -5607,8 +5607,8 @@ msgid "Install"
 msgstr "Εγκατάσταση"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "Ενημέρωση αναπαραγωγού πολυμέσων VLC"
+msgid "Update Hakone Media Player"
+msgstr "Ενημέρωση αναπαραγωγού πολυμέσων Hakone"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -11689,7 +11689,7 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 "Φαίνεται ότι η εγκατάσταση Libav/FFmpeg (libavcodec) στο σύστημά σας δεν "
@@ -11698,7 +11698,7 @@ msgstr ""
 "Αν δεν γνωρίζετε πώς να το επιδιορθώσετε, ζητήστε υποστήριξη από τη διανομή "
 "σας.\n"
 "\n"
-"Αυτό δεν είναι ένα πρόβλημα του αναπαραγωγού πολυμέσων VLC.\n"
+"Αυτό δεν είναι ένα πρόβλημα του αναπαραγωγού πολυμέσων Hakone.\n"
 "Μην επικοινωνήσετε με το πρόγραμμα VideoLAN για αυτό το ζήτημα.\n"
 
 #: modules/codec/avcodec/encoder.c:872
@@ -14918,6 +14918,26 @@ msgstr "Διεπαφή ελέγχου D-Bus"
 msgid "VLC media player"
 msgstr "Αναπαραγωγός πολυμέσων VLC"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Αναπαραγωγός πολυμέσων Hakone"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr "Να μην ανοίξει μία διεπαφή πλαισίου εντολών DOS"
@@ -15135,12 +15155,12 @@ msgstr "Ταχύτητα: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
-"Προειδοποίηση: εάν δεν μπορείτε πλέον να έχετε πρόσβαση στο GUI, ανοίξτε ένα "
-"παράθυρο τερματικού, μεταβείτε στο φάκελο όπου εγκαταστήσατε τον VLC και "
-"εκτελέστε την εντολή \"vlc -I qt\"\n"
+"Προειδοποίηση: εάν δεν μπορείτε πλέον να έχετε πρόσβαση στο GUI, ανοίξτε "
+"ένα παράθυρο τερματικού, μεταβείτε στο φάκελο όπου εγκαταστήσατε τον Hakone "
+"και εκτελέστε την εντολή \"vlc -I qt\"\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -17517,6 +17537,16 @@ msgstr ""
 "VLC θα ανιχνεύσει αυτόματα τις άλλες χρησιμοποιώντας την αρχική αναλογία "
 "διαστάσεων"
 
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+"Χρειάζεται να συμπληρώσετε μόνο μία από τις ακόλουθες τρεις παραμέτρους, το "
+"Hakone θα ανιχνεύσει αυτόματα τις άλλες χρησιμοποιώντας την αρχική αναλογία "
+"διαστάσεων"
+
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -18109,6 +18139,10 @@ msgstr "Προβολή όλων"
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "Έξοδος από το VLC"
+
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Έξοδος από το Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -20279,12 +20313,12 @@ msgstr "Μάσκα εικόνας"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
 "Δεν βρέθηκε υπόσταση v4l2.\n"
-"Παρακαλώ ελέγξτε ότι η συσκευή έχει ανοικτεί με τον VLC και ότι "
+"Παρακαλώ ελέγξτε ότι η συσκευή έχει ανοικτεί με τον Hakone και ότι "
 "αναπαράγεται.\n"
 "\n"
 "Τα στοιχεία ελέγχου θα εμφανιστούν αυτομάτως εδώ."
@@ -20633,8 +20667,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "Χρήση βήματος του VLC"
+msgid "Use Hakone pace"
+msgstr "Χρήση βήματος του Hakone"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -20930,9 +20964,9 @@ msgid "Higher latency"
 msgstr "Υψηλότερη λανθάνουσα κατάσταση"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
 msgstr ""
-"Αυτή είναι η διεπαφή του VLC με δυνατότητα αλλαγής πρόσοψης. Μπορείτε να "
+"Αυτή είναι η διεπαφή του Hakone με δυνατότητα αλλαγής πρόσοψης. Μπορείτε να "
 "κατεβάσετε άλλες προσόψεις από την"
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
@@ -20998,8 +21032,8 @@ msgid "Create"
 msgstr "Δημιουργία"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
-msgstr "Ο πολυπλέκτης δεν παρέχεται άμεσα από τον VLC: Μπορεί να λείπει."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
+msgstr "Ο πολυπλέκτης δεν παρέχεται άμεσα από τον Hakone: Μπορεί να λείπει."
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
 msgid "This muxer is missing. Using this profile will fail"
@@ -21320,16 +21354,16 @@ msgid "&No"
 msgstr "&Όχι"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "Ενημερώσεις αναπαραγωγού πολυμέσων VLC"
+msgid "Hakone Media Player updates"
+msgstr "Ενημερώσεις αναπαραγωγού πολυμέσων Hakone"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "Μία νέα έκδοση του VLC (%1.%2.%3%4) είναι διαθέσιμη."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "Μία νέα έκδοση του Hakone (%1.%2.%3%4) είναι διαθέσιμη."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "Διαθέτετε την τελευταία έκδοση του αναπαραγωγού πολυμέσων VLC."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "Διαθέτετε την τελευταία έκδοση του αναπαραγωγού πολυμέσων Hakone."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -21550,9 +21584,9 @@ msgid "No addons found"
 msgstr "Δεν βρέθηκαν πρόσθετα"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
 msgstr ""
-"Αυτό το πρόσθετο εγκαταστάθηκε χειροκίνητα. Ο VLC δεν μπορεί να το "
+"Αυτό το πρόσθετο εγκαταστάθηκε χειροκίνητα. Ο Hakone δεν μπορεί να το "
 "διαχειριστεί από μόνος του."
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
@@ -21638,10 +21672,10 @@ msgid "Preferences file could not be saved"
 msgstr "Το αρχείο προτιμήσεων δεν μπόρεσε να αποθηκευτεί"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
 msgstr ""
 "Είστε σίγουροι ότι θέλετε να επαναφέρετε τις προτιμήσεις σας για τον "
-"αναπαραγωγό πολυμέσων VLC;"
+"αναπαραγωγό πολυμέσων Hakone;"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
 msgid "Stream Output"
@@ -22234,12 +22268,12 @@ msgid "&Playback"
 msgstr "&Αναπαραγωγή"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "&Απόκρυψη του αναπαραγωγού πολυμέσων VLC στη γραμμή εργασιών"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "&Απόκρυψη του αναπαραγωγού πολυμέσων Hakone στη γραμμή εργασιών"
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "Προβο&λή αναπαραγωγού πολυμέσων VLC"
+msgid "Sho&w Hakone Media Player"
+msgstr "Προβο&λή αναπαραγωγού πολυμέσων Hakone"
 
 #: modules/gui/qt/menus.cpp:1188
 msgid "&Open Media"
@@ -22281,20 +22315,20 @@ msgstr "Εικονίδιο περιοχής ειδοποιήσεων"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
 msgstr ""
 "Προβολή ενός εικονιδίου στην περιοχή ειδοποιήσεων το οποίο να σας επιτρέπει "
-"να ελέγξετε τις βασικές ενέργειες του αναπαραγωγού πολυμέσων VLC."
+"να ελέγξετε τις βασικές ενέργειες του αναπαραγωγού πολυμέσων Hakone."
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "Έναρξη VLC με ένα μόνο εικονίδιο στην περιοχή ειδοποιήσεων"
+msgid "Start Hakone with only a systray icon"
+msgstr "Έναρξη Hakone με ένα μόνο εικονίδιο στην περιοχή ειδοποιήσεων"
 
 #: modules/gui/qt/qt.cpp:92
 #, fuzzy
-msgid "VLC will start with just an icon in your taskbar."
-msgstr "Ο VLC θα εκκινηθεί με μόνο ένα εικονίδιο στη γραμμή εργασιών σας"
+msgid "Hakone will start with just an icon in your taskbar."
+msgstr "Ο Hakone θα εκκινηθεί με μόνο ένα εικονίδιο στη γραμμή εργασιών σας"
 
 #: modules/gui/qt/qt.cpp:101
 msgid "Show playing item name in window title"
@@ -22413,12 +22447,12 @@ msgstr "Επιλογή της λειτουργίας και όψης έναρξ�
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"Έναρξη του VLC με:\n"
+"Έναρξη του Hakone με:\n"
 " - κανονική λειτουργία\n"
 " - μία ζώνη πάντα παρούσα για να προβάλλει πληροφορίες όπως στίχοι, τέχνες "
 "άλμπουμ...\n"
@@ -22486,15 +22520,15 @@ msgstr "Αγνόηση πλήκτρων ήχου από το πληκτρολό�
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
 "Με αυτή την επιλογή τσεκαρισμένη, τα κουμπιά αύξησης έντασης ήχου, μείωσης "
-"έντασης ήχου και σίγασης στο πληκτρολόγιό σας πάντοτε θα αλλάζουν την ένταση "
-"ήχου του συστήματός σας. Με αυτή την επιλογή μη τσεκαρισμένη, τα κουμπιά "
-"έντασης ήχου θα αλλάζουν την ένταση ήχου του VLC όταν ο VLC είναι "
-"επιλεγμένος και την ένταση ήχου του συστήματος όταν ο VLC δεν είναι "
-"επιλεγμένος."
+"έντασης ήχου και σίγασης στο πληκτρολόγιό σας πάντοτε θα αλλάζουν την "
+"ένταση ήχου του συστήματός σας. Με αυτή την επιλογή μη τσεκαρισμένη, τα "
+"κουμπιά έντασης ήχου θα αλλάζουν την ένταση ήχου του Hakone όταν ο Hakone "
+"είναι επιλεγμένος και την ένταση ήχου του συστήματος όταν ο Hakone δεν "
+"είναι επιλεγμένος."
 
 #: modules/gui/qt/qt.cpp:188
 #, fuzzy
@@ -29065,8 +29099,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -29856,8 +29890,8 @@ msgstr "Χρόνος:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "Αναπαραγωγός πολυμέσων VLC - Διεπαφή ιστού"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Αναπαραγωγός πολυμέσων Hakone - Διεπαφή ιστού"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -30039,8 +30073,8 @@ msgid "Extra media"
 msgstr "Επιπρόσθετα πολυμέσα"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
-msgstr "Πλήρες MRL για το εσωτερικό του VLC"
+msgid "Complete MRL for Hakone internal"
+msgstr "Πλήρες MRL για το εσωτερικό του Hakone"
 
 #: modules/gui/qt/ui/open.h:280
 msgid "Select the file"
@@ -30691,8 +30725,8 @@ msgid "Clear List"
 msgstr "Εκκαθάριση λίστας"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "Έλεγχος για ενημερώσεις του VLC"
+msgid "Check for Hakone updates"
+msgstr "Έλεγχος για ενημερώσεις του Hakone"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."
@@ -41299,5 +41333,5 @@ msgid "Choose a language for the interface. Changes apply at once. Text without 
 msgstr "Επιλέξτε γλώσσα για τη διεπαφή. Οι αλλαγές εφαρμόζονται αμέσως. Το κείμενο χωρίς μετάφραση εμφανίζεται στα αγγλικά."
 
 #. Redesign translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
-msgstr "Το VLC δεν μπορεί να φορτώσει αυτή τη γλώσσα."
+msgid "Hakone cannot load this language."
+msgstr "Το Hakone δεν μπορεί να φορτώσει αυτή τη γλώσσα."

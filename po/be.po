@@ -876,8 +876,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "Версія VLC %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Версія Hakone %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5408,18 +5408,19 @@ msgstr "Сцягнуты файл \"%s\" быў пашкоджаны. Таму �
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
-"Новая версія паспяхова сцягнута. Жадаеце закрыць VLC і ўсталяваць яе зараз?"
+"Новая версія паспяхова сцягнута. Жадаеце закрыць Hakone і ўсталяваць яе "
+"зараз?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
 msgid "Install"
 msgstr "Усталяваць"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "Абнавіць медыяплэер VLC"
+msgid "Update Hakone Media Player"
+msgstr "Абнавіць медыяплэер Hakone"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -11413,7 +11414,7 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 "Выглядае, што ва ўсталяваным Libav/FFmpeg (libavcodec) не стае гэтага "
@@ -11422,7 +11423,7 @@ msgstr ""
 "Калі не ведаеце, як гэта выправіць, звярніцеся ў службу падтрымкі вашага "
 "дыстрыбутыва.\n"
 "\n"
-"Гэта не памылка медыяплэера VLC.\n"
+"Гэта не памылка медыяплэера Hakone.\n"
 "Не звяртайцеся да ўдзельнікаў праекту VideoLAN з гэтым пытаннем.\n"
 "\n"
 "\n"
@@ -14560,6 +14561,26 @@ msgstr "Інтэрфейс кіравання D-Bus"
 msgid "VLC media player"
 msgstr "Медыяплэер VLC"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Медыяплэер Hakone"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr "Не адкрываць інтэрфейс уводу загадаў DOS"
@@ -14774,11 +14795,11 @@ msgstr "Хуткасць: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
-"Увага! Калі вы не бачыце графічнага інтэрфейсу VLC, запусціце загадны радок, "
-"перайдзіце ў каталог з VLC і выканайце \"vlc -I qt\"\n"
+"Увага! Калі вы не бачыце графічнага інтэрфейсу Hakone, запусціце загадны "
+"радок, перайдзіце ў каталог з Hakone і выканайце \"vlc -I qt\"\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -17134,6 +17155,15 @@ msgstr ""
 "Вам трэба запоўніць толькі адзін з трох наступных параметраў, VLC сам "
 "вызначыць іншыя паводле стасунку бакоў"
 
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+"Вам трэба запоўніць толькі адзін з трох наступных параметраў, Hakone сам "
+"вызначыць іншыя паводле стасунку бакоў"
+
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -17712,6 +17742,10 @@ msgstr "Паказаць усё"
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "Выйсці з VLC"
+
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Выйсці з Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -19869,12 +19903,12 @@ msgstr "Маска паводле відарысу"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
 "Модуль-апрацоўнік v4l2 не знойдзены.\n"
-"Спраўдзіце, што прылада была адкрыта праз VLC і паказвае відэа.\n"
+"Спраўдзіце, што прылада была адкрыта праз Hakone і паказвае відэа.\n"
 "\n"
 "Элементы кіравання з'явяцца тут аўтаматычна."
 
@@ -20216,8 +20250,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "Хуткасць VLC"
+msgid "Use Hakone pace"
+msgstr "Хуткасць Hakone"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -20519,8 +20553,8 @@ msgid "Higher latency"
 msgstr "Найбольшая затрымка"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
-msgstr "Інтэрфейс VLC падтрымлівае абалонкі. Сцягнуць абалонкі можна з"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
+msgstr "Інтэрфейс Hakone падтрымлівае абалонкі. Сцягнуць абалонкі можна з"
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
 msgid "VLC skins website"
@@ -20585,8 +20619,8 @@ msgid "Create"
 msgstr "Стварыць"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
-msgstr "Мультыплексар не пастаўляецца разам з VLC: ён можа адсутнічаць."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
+msgstr "Мультыплексар не пастаўляецца разам з Hakone: ён можа адсутнічаць."
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
 msgid "This muxer is missing. Using this profile will fail"
@@ -20893,16 +20927,16 @@ msgid "&No"
 msgstr "&Не"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "Абноўленая версія медыяплэера VLC"
+msgid "Hakone Media Player updates"
+msgstr "Абноўленая версія медыяплэера Hakone"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "Выйшла новая версія VLC (%1.%2.%3%4)."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "Выйшла новая версія Hakone (%1.%2.%3%4)."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "У вас найноўшая версія медыяплэера VLC."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "У вас найноўшая версія медыяплэера Hakone."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -21115,7 +21149,7 @@ msgid "No addons found"
 msgstr "Няма ўводу"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
 msgstr ""
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
@@ -21204,8 +21238,8 @@ msgid "Preferences file could not be saved"
 msgstr "Не выйшла захаваць файл настаўленняў"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
-msgstr "Напраўду скінуць настаўленні медыяплэера VLC?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
+msgstr "Напраўду скінуць настаўленні медыяплэера Hakone?"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
 msgid "Stream Output"
@@ -21801,12 +21835,12 @@ msgid "&Playback"
 msgstr "&Гранне"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "&Хаваць медыяплэер VLC у панэлі заданняў"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "&Хаваць медыяплэер Hakone у панэлі заданняў"
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "Пака&заць медыяплэер VLC"
+msgid "Sho&w Hakone Media Player"
+msgstr "Пака&заць медыяплэер Hakone"
 
 #: modules/gui/qt/menus.cpp:1188
 msgid "&Open Media"
@@ -21846,18 +21880,18 @@ msgstr "Значок у сістэмным трэі"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
-msgstr "Паказваць значок у трэі для асноўных аперацый з медыяплэерам VLC."
+msgstr "Паказваць значок у трэі для асноўных аперацый з медыяплэерам Hakone."
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "Запуск VLC у выглядзе значка ў сістэмным трэі"
+msgid "Start Hakone with only a systray icon"
+msgstr "Запуск Hakone у выглядзе значка ў сістэмным трэі"
 
 #: modules/gui/qt/qt.cpp:92
 #, fuzzy
-msgid "VLC will start with just an icon in your taskbar."
-msgstr "Запускаць VLC толькі як значок у панэлі заданняў"
+msgid "Hakone will start with just an icon in your taskbar."
+msgstr "Запускаць Hakone толькі як значок у панэлі заданняў"
 
 #: modules/gui/qt/qt.cpp:101
 msgid "Show playing item name in window title"
@@ -21969,12 +22003,12 @@ msgstr "Выбар рэжыму запуску і выгляду"
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"Запускаць VLC або ў звычайным рэжыме, альбо з пастаяннай інфармацыйнай "
+"Запускаць Hakone або ў звычайным рэжыме, альбо з пастаяннай інфармацыйнай "
 "панэллю для тэксту песні, вокладкі альбому і г. д., або ў спрошчаным рэжыме "
 "з абмежаваным кіраваннем"
 
@@ -22040,12 +22074,13 @@ msgstr "Ігнараваць кіраванне гучнасцю з клавія
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
 "Калі гэты параметр задзейнічаны, кнопкі павелічэння, змяншэння і адключэння "
-"гучнасці на клавіятуры будуць змяняць гучнасць у сістэме. Калі ён зняты, яны "
-"будуць кіраваць гучнасцю ў VLC (калі праграма VLC на пярэднім плане)."
+"гучнасці на клавіятуры будуць змяняць гучнасць у сістэме. Калі ён зняты, "
+"яны будуць кіраваць гучнасцю ў Hakone (калі праграма Hakone на пярэднім "
+"плане)."
 
 #: modules/gui/qt/qt.cpp:188
 #, fuzzy
@@ -28467,8 +28502,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -29223,8 +29258,8 @@ msgstr "Час:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "Вэб-інтэрфейс медыяплэера VLC"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Вэб-інтэрфейс медыяплэера Hakone"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -29402,7 +29437,7 @@ msgid "Extra media"
 msgstr "Іншы файл"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
+msgid "Complete MRL for Hakone internal"
 msgstr "Поўны MRL"
 
 #: modules/gui/qt/ui/open.h:280
@@ -30047,8 +30082,8 @@ msgid "Clear List"
 msgstr "Ачысціць спіс"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "Праверыць абнаўленні VLC"
+msgid "Check for Hakone updates"
+msgstr "Праверыць абнаўленні Hakone"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."
@@ -36782,5 +36817,5 @@ msgid "Choose a language for the interface. Changes apply at once. Text without 
 msgstr "Выберыце мову інтэрфейсу. Змены ўжываюцца адразу. Неперакладзены тэкст паказваецца па-англійску."
 
 #. Redesign translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
-msgstr "VLC не можа загрузіць гэтую мову."
+msgid "Hakone cannot load this language."
+msgstr "Hakone не можа загрузіць гэтую мову."

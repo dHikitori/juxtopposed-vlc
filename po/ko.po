@@ -857,8 +857,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "VLC 버전 %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Hakone 버전 %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5328,8 +5328,8 @@ msgstr "다운로드한 \"%s\" 파일이 손상되서 삭제했습니다."
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr "새 버전을 성공적으로 다운로드했습니다. VLC를 닫고 지금 설치할까요?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
@@ -5337,8 +5337,8 @@ msgid "Install"
 msgstr "설치"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "VLC 미디어 재생기 업데이트"
+msgid "Update Hakone Media Player"
+msgstr "Hakone 미디어 재생기 업데이트"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -11265,7 +11265,7 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 "귀하의 Libav/FFmpeg (libavcodec) 설치에 다음 인코더가 누락된 것 같습니다:\n"
@@ -14338,6 +14338,26 @@ msgstr "D-Bus 제어 인터페이스"
 msgid "VLC media player"
 msgstr "VLC 미디어 재생기"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Hakone 미디어 재생기"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr "도스 명령 상자 인터페이스를 열지 않기"
@@ -14552,11 +14572,11 @@ msgstr "속도: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
-"경고: GUI 에 더 이상 접근할 수 없으면, 명령행 창을 열고 VLC가 설치된 폴더로 "
-"이동하여 \"vlc -I qt\" 를 실행하세요\n"
+"경고: GUI 에 더 이상 접근할 수 없으면, 명령행 창을 열고 VLC가 설치된 폴더로 이동하여 \"vlc -I qt\" 를 "
+"실행하세요\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -16865,6 +16885,14 @@ msgstr ""
 "다음 세가지 변수 중 하나를 채워야 합니다. VLC는 원본의 화면 비율을 사용해서 "
 "나머지는 자동 감지할 것입니다."
 
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+"다음 세가지 변수 중 하나를 채워야 합니다. VLC는 원본의 화면 비율을 사용해서 나머지는 자동 감지할 것입니다."
+
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -17436,6 +17464,10 @@ msgstr "모두 보기"
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "VLC 종료"
+
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Hakone 종료"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -19576,7 +19608,7 @@ msgstr "이미지 마스크"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
@@ -19923,8 +19955,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "VLC 페이스 사용"
+msgid "Use Hakone pace"
+msgstr "Hakone 페이스 사용"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -20217,10 +20249,9 @@ msgid "Higher latency"
 msgstr "더 높은 지연시간"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
 msgstr ""
-"VLC의 사용자 스킨 인터페이스입니다. 다른 스킨은 다음에서 다운로드할 수 있습니"
-"다:"
+"VLC의 사용자 스킨 인터페이스입니다. 다른 스킨은 다음에서 다운로드할 수 있습니다:"
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
 msgid "VLC skins website"
@@ -20285,7 +20316,7 @@ msgid "Create"
 msgstr "만들기"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
 msgstr "이 먹서는 VLC가 직접 제공하지 않습니다: 없는 것 같네요."
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
@@ -20591,16 +20622,16 @@ msgid "&No"
 msgstr "아니오(&N)"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "VLC 미디어 재생기 업데이트"
+msgid "Hakone Media Player updates"
+msgstr "Hakone 미디어 재생기 업데이트"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "새 버전의 VLC (%1.%2.%3%4) 가 나왔습니다."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "새 버전의 Hakone (%1.%2.%3%4) 가 나왔습니다."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "최신 버전의 VLC 미디어 재생기를 사용 중입니다."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "최신 버전의 Hakone 미디어 재생기를 사용 중입니다."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -20817,7 +20848,7 @@ msgid "No addons found"
 msgstr "애드온이 없습니다"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
 msgstr "이 애드온은 직접 설치된 것이라, VLC는 이것을 관리할 수 없습니다."
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
@@ -20903,8 +20934,8 @@ msgid "Preferences file could not be saved"
 msgstr "환경설장 파일을 저장하지 못했습니다"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
-msgstr "VLC 미디어 재생기의 환경설정을 초기화 할까요?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
+msgstr "Hakone 미디어 재생기의 환경설정을 초기화 할까요?"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
 msgid "Stream Output"
@@ -21495,12 +21526,12 @@ msgid "&Playback"
 msgstr "재생(&P)"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "작업표시줄에서 VLC 숨기기(&H)"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "작업표시줄에서 Hakone 숨기기(&H)"
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "VLC 보이기(&W)"
+msgid "Sho&w Hakone Media Player"
+msgstr "Hakone 보이기(&W)"
 
 #: modules/gui/qt/menus.cpp:1188
 msgid "&Open Media"
@@ -21540,20 +21571,19 @@ msgstr "시스템 트레이 아이콘"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
 msgstr ""
-"VLC 미디어 재생기의 기본적인 동작을 조절할 수 있도록 트레이에 아이콘을 보여줍"
-"니다."
+"Hakone 미디어 재생기의 기본적인 동작을 조절할 수 있도록 트레이에 아이콘을 보여줍니다."
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "시스템 트레이 아이콘으로 VLC 시작하기"
+msgid "Start Hakone with only a systray icon"
+msgstr "시스템 트레이 아이콘으로 Hakone 시작하기"
 
 #: modules/gui/qt/qt.cpp:92
 #, fuzzy
-msgid "VLC will start with just an icon in your taskbar."
-msgstr "VLC 가 도구 표시줄의 아이콘으로 시작됩니다"
+msgid "Hakone will start with just an icon in your taskbar."
+msgstr "Hakone 가 도구 표시줄의 아이콘으로 시작됩니다"
 
 #: modules/gui/qt/qt.cpp:101
 msgid "Show playing item name in window title"
@@ -21665,12 +21695,12 @@ msgstr "시작 모드 및 모양 선택"
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"VLC 시작하기:\n"
+"Hakone 시작하기:\n"
 " - 보통 모드로\n"
 " - 가사, 앨범 아트 등의 정보 출력창으로\n"
 " - 제한된 컨트롤의 최소 모드로"
@@ -21735,13 +21765,11 @@ msgstr "키보드의 볼륨 버튼을 무시하기"
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
-"이 옵션 사용시, 키보드의 볼륨 조절 버튼이나 음소거 버튼 사용시에 시스템 볼륨"
-"을 항상 변경할 것입니다. 이 옵션 미사용시, 키보드의 볼륨 버튼들은 VLC 창이 활"
-"성화시는 항상 VLC의 볼륨을, VLC 창이 비활성화시는 시스템 볼륨을 변경할 것입니"
-"다."
+"이 옵션 사용시, 키보드의 볼륨 조절 버튼이나 음소거 버튼 사용시에 시스템 볼륨을 항상 변경할 것입니다. 이 옵션 미사용시, 키보드의 "
+"볼륨 버튼들은 Hakone 창이 활성화시는 항상 VLC의 볼륨을, Hakone 창이 비활성화시는 시스템 볼륨을 변경할 것입니다."
 
 #: modules/gui/qt/qt.cpp:188
 #, fuzzy
@@ -28064,8 +28092,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -28815,8 +28843,8 @@ msgstr "시간:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "VLC 미디어 재생기 - 웹 인터페이스"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Hakone 미디어 재생기 - 웹 인터페이스"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -28991,8 +29019,8 @@ msgid "Extra media"
 msgstr "별도의 미디어"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
-msgstr "VLC 내부에서 사용할 완전한 MRL"
+msgid "Complete MRL for Hakone internal"
+msgstr "Hakone 내부에서 사용할 완전한 MRL"
 
 #: modules/gui/qt/ui/open.h:280
 msgid "Select the file"
@@ -29636,8 +29664,8 @@ msgid "Clear List"
 msgstr "목록 지우기"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "VLC 업데이트 확인"
+msgid "Check for Hakone updates"
+msgstr "Hakone 업데이트 확인"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."
@@ -41122,5 +41150,5 @@ msgid "Choose a language for the interface. Changes apply at once. Text without 
 msgstr "인터페이스 언어를 선택하세요. 변경 사항은 즉시 적용됩니다. 번역되지 않은 텍스트는 영어로 표시됩니다."
 
 #. Redesign translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
+msgid "Hakone cannot load this language."
 msgstr "VLC에서 이 언어를 불러올 수 없습니다."

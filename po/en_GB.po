@@ -841,7 +841,7 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
 msgstr ""
 
 #: src/config/help.c:722
@@ -5161,8 +5161,8 @@ msgstr ""
 
 #: src/misc/update.c:723
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
@@ -5170,7 +5170,7 @@ msgid "Install"
 msgstr "Install"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
+msgid "Update Hakone Media Player"
 msgstr ""
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
@@ -10885,7 +10885,7 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 
@@ -13741,6 +13741,27 @@ msgstr ""
 msgid "VLC media player"
 msgstr "VLC media player"
 
+#. Redesign British English translation by Codex (first pass; review welcome).
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Hakone Media Player"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr ""
@@ -13956,11 +13977,11 @@ msgstr ""
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"vlc -I qt\"\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -16223,6 +16244,14 @@ msgid ""
 msgstr "You just need to fill one of the three following parameters, VLC will autodetect the other using the original aspect ratio"
 
 #. First-pass British English translation; fluent-speaker review is welcome.
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr "You just need to fill one of the three following parameters, Hakone will autodetect the other using the original aspect ratio"
+
+#. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -16779,6 +16808,11 @@ msgstr ""
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "Quit VLC"
+
+#. Redesign British English translation by Codex (first pass; review welcome).
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Quit Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -18955,10 +18989,10 @@ msgstr "Image mask"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
-msgstr "No v4l2 instance found.\nPlease check that the device has been opened with VLC and is playing.\n\nControls will automatically appear here."
+msgstr "No v4l2 instance found.\nPlease check that the device has been opened with Hakone and is playing.\n\nControls will automatically appear here."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/components/extended_panels.cpp:1086
@@ -19347,8 +19381,8 @@ msgstr ""
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "Use VLC pace"
+msgid "Use Hakone pace"
+msgstr "Use Hakone pace"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/components/open_panels.cpp:914
@@ -19664,8 +19698,8 @@ msgstr "Higher latency"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
-msgstr "This is VLC's skinnable interface. You can download other skins at"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
+msgstr "This is Hakone's skinnable interface. You can download other skins at"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/components/simple_preferences.cpp:697
@@ -19743,8 +19777,8 @@ msgstr "Create"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
-msgstr "This muxer is not provided directly by VLC: It could be missing."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
+msgstr "This muxer is not provided directly by Hakone: It could be missing."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
@@ -20091,18 +20125,18 @@ msgstr "&No"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "VLC media player updates"
+msgid "Hakone Media Player updates"
+msgstr "Hakone Media Player updates"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "A new version of VLC (%1.%2.%3%4) is available."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "A new version of Hakone (%1.%2.%3%4) is available."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "You have the latest version of VLC media player."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "You have the latest version of Hakone Media Player."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/help.cpp:326
@@ -20351,8 +20385,8 @@ msgstr "No addons found"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
-msgstr "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
+msgstr "This addon has been installed manually. Hakone can't manage it by itself."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/plugins.cpp:1196
@@ -20458,8 +20492,8 @@ msgstr "Preferences file could not be saved"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
-msgstr "Are you sure you want to reset your VLC media player preferences?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
+msgstr "Are you sure you want to reset your Hakone Media Player preferences?"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
@@ -21117,13 +21151,13 @@ msgstr "&Playback"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "&Hide VLC media player in taskbar"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "&Hide Hakone Media Player in taskbar"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "Sho&w VLC media player"
+msgid "Sho&w Hakone Media Player"
+msgstr "Sho&w Hakone Media Player"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/menus.cpp:1188
@@ -21167,19 +21201,19 @@ msgstr "Systray icon"
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
-msgstr "Show an icon in the systray allowing you to control VLC media player for basic actions."
+msgstr "Show an icon in the systray allowing you to control Hakone Media Player for basic actions."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "Start VLC with only a systray icon"
+msgid "Start Hakone with only a systray icon"
+msgstr "Start Hakone with only a systray icon"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/qt.cpp:92
-msgid "VLC will start with just an icon in your taskbar."
-msgstr "VLC will start with just an icon in your taskbar."
+msgid "Hakone will start with just an icon in your taskbar."
+msgstr "Hakone will start with just an icon in your taskbar."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/qt.cpp:101
@@ -21295,11 +21329,11 @@ msgstr "Selection of the starting mode and look"
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
-msgstr "Start VLC with:\n - normal mode\n - a zone always present to show information as lyrics, album arts...\n - minimal mode with limited controls"
+msgstr "Start Hakone with:\n - normal mode\n - a zone always present to show information as lyrics, album arts...\n - minimal mode with limited controls"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/qt.cpp:151
@@ -21368,9 +21402,9 @@ msgstr "Ignore keyboard volume buttons."
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
-msgstr "With this option checked, the volume up, volume down and mute buttons on your keyboard will always change your system volume. With this option unchecked, the volume buttons will change VLC's volume when VLC is selected and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
+msgstr "With this option checked, the volume up, volume down and mute buttons on your keyboard will always change your system volume. With this option unchecked, the volume buttons will change Hakone's volume when Hakone is selected and change the system volume when Hakone is not selected."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 #: modules/gui/qt/qt.cpp:188
@@ -27386,7 +27420,7 @@ msgid "VLC"
 msgstr ""
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
+msgid "Hakone"
 msgstr ""
 
 #: modules/video_output/xcb/window.c:700
@@ -28122,7 +28156,7 @@ msgstr ""
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
+msgid "Hakone Media Player - Web Interface"
 msgstr ""
 
 #: share/lua/http/index.html:215
@@ -28308,8 +28342,8 @@ msgstr "Extra media"
 
 #. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
-msgstr "Complete MRL for VLC internal"
+msgid "Complete MRL for Hakone internal"
+msgstr "Complete MRL for Hakone internal"
 
 #. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/qt/ui/open.h:280
@@ -29070,8 +29104,8 @@ msgstr ""
 
 #. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "Check for VLC updates"
+msgid "Check for Hakone updates"
+msgstr "Check for Hakone updates"
 
 #. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/qt/ui/update.h:149
@@ -33845,28 +33879,28 @@ msgid "Custom…"
 msgstr "Custom…"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot start the plugin scan. Check that the cache generator is installed."
-msgstr "VLC cannot start the plugin scan. Check that the cache generator is installed."
+msgid "Hakone cannot start the plugin scan. Check that the cache generator is installed."
+msgstr "Hakone cannot start the plugin scan. Check that the cache generator is installed."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "The plugin scan timed out. Try again."
 msgstr "The plugin scan timed out. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot update the plugin cache. Check folder access and try again."
-msgstr "VLC cannot update the plugin cache. Check folder access and try again."
+msgid "Hakone cannot update the plugin cache. Check folder access and try again."
+msgstr "Hakone cannot update the plugin cache. Check folder access and try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC updated the plugin cache. Restart VLC to use plugin changes."
-msgstr "VLC updated the plugin cache. Restart VLC to use plugin changes."
+msgid "Hakone updated the plugin cache. Restart Hakone to use plugin changes."
+msgstr "Hakone updated the plugin cache. Restart Hakone to use plugin changes."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Enable audio to run this test."
 msgstr "Enable audio to run this test."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot start the audio test."
-msgstr "VLC cannot start the audio test."
+msgid "Hakone cannot start the audio test."
+msgstr "Hakone cannot start the audio test."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Unmute audio to run this test."
@@ -33889,8 +33923,8 @@ msgid "Right channel"
 msgstr "Right channel"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read the saved presets."
-msgstr "VLC cannot read the saved presets."
+msgid "Hakone cannot read the saved presets."
+msgstr "Hakone cannot read the saved presets."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Enter a unique preset name with 1 to 80 characters."
@@ -33905,8 +33939,8 @@ msgid "This preset is no longer available."
 msgstr "This preset is no longer available."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot apply this preset. Check its saved settings."
-msgstr "VLC cannot apply this preset. Check its saved settings."
+msgid "Hakone cannot apply this preset. Check its saved settings."
+msgstr "Hakone cannot apply this preset. Check its saved settings."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Fullscreen controls sensitivity"
@@ -33929,8 +33963,8 @@ msgid "Log details"
 msgstr "Log details"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Choose the messages to save in the log file. Restart VLC after a change."
-msgstr "Choose the messages to save in the log file. Restart VLC after a change."
+msgid "Choose the messages to save in the log file. Restart Hakone after a change."
+msgstr "Choose the messages to save in the log file. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Scanning…"
@@ -33941,8 +33975,8 @@ msgid "Rescan"
 msgstr "Rescan"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Check plugin files and update the plugin cache. Restart VLC after the scan to use plugin changes."
-msgstr "Check plugin files and update the plugin cache. Restart VLC after the scan to use plugin changes."
+msgid "Check plugin files and update the plugin cache. Restart Hakone after the scan to use plugin changes."
+msgstr "Check plugin files and update the plugin cache. Restart Hakone after the scan to use plugin changes."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "1 (Lowest)"
@@ -33965,8 +33999,8 @@ msgid "Saved device (%1)"
 msgstr "Saved device (%1)"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Reopen the video after a change."
-msgstr "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Reopen the video after a change."
+msgid "Automatic lets Hakone select a decoder device. Off uses software decoding and keeps your saved device choice. Reopen the video after a change."
+msgstr "Automatic lets Hakone select a decoder device. Off uses software decoding and keeps your saved device choice. Reopen the video after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Automatic (fallback: %1)"
@@ -33981,8 +34015,8 @@ msgid "Text encoding"
 msgstr "Text encoding"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Reopen the subtitle file after a change."
-msgstr "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Reopen the subtitle file after a change."
+msgid "Automatic detects UTF-8 text first. If detection fails, Hakone uses the default text encoding. Select a specific encoding to turn off this detection. Reopen the subtitle file after a change."
+msgstr "Automatic detects UTF-8 text first. If detection fails, Hakone uses the default text encoding. Select a specific encoding to turn off this detection. Reopen the subtitle file after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "The current automatic fallback is %1."
@@ -34085,12 +34119,12 @@ msgid "Choose a language. System language uses your system's language. Choose Cu
 msgstr "Choose a language. System language uses your system's language. Choose Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Replace all VLC settings with the default settings."
-msgstr "Replace all VLC settings with the default settings."
+msgid "Replace all Hakone settings with the default settings."
+msgstr "Replace all Hakone settings with the default settings."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Open the folder that contains the VLC settings."
-msgstr "Open the folder that contains the VLC settings."
+msgid "Open the folder that contains the Hakone settings."
+msgstr "Open the folder that contains the Hakone settings."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Unavailable device (%1)"
@@ -34109,12 +34143,12 @@ msgid "Web remote control"
 msgstr "Web remote control"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Control VLC from a web browser. Restart VLC after changing the web remote, port or password."
-msgstr "Control VLC from a web browser. Restart VLC after changing the web remote, port or password."
+msgid "Control Hakone from a web browser. Restart Hakone after changing the web remote, port or password."
+msgstr "Control Hakone from a web browser. Restart Hakone after changing the web remote, port or password."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Web remote control is unavailable in this VLC build."
-msgstr "Web remote control is unavailable in this VLC build."
+msgid "Web remote control is unavailable in this Hakone build."
+msgstr "Web remote control is unavailable in this Hakone build."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Current item"
@@ -34133,8 +34167,8 @@ msgid "When playback finishes"
 msgstr "When playback finishes"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Request a higher process priority from the system. Restart VLC after a change."
-msgstr "Request a higher process priority from the system. Restart VLC after a change."
+msgid "Request a higher process priority from the system. Restart Hakone after a change."
+msgstr "Request a higher process priority from the system. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "System monospace"
@@ -34169,16 +34203,16 @@ msgid "System proxy"
 msgstr "System proxy"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Select an audio output driver. Restart VLC to use a new driver."
-msgstr "Select an audio output driver. Restart VLC to use a new driver."
+msgid "Select an audio output driver. Restart Hakone to use a new driver."
+msgstr "Select an audio output driver. Restart Hakone to use a new driver."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Set the pitch in semitones. Use 0 to turn off this effect. Playback speed does not change."
 msgstr "Set the pitch in semitones. Use 0 to turn off this effect. Playback speed does not change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot use spatial audio in this version."
-msgstr "VLC cannot use spatial audio in this version."
+msgid "Hakone cannot use spatial audio in this version."
+msgstr "Hakone cannot use spatial audio in this version."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Current screen"
@@ -34225,40 +34259,40 @@ msgid "Select the encoding speed. Slow presets use more processor time and can p
 msgstr "Select the encoding speed. Slow presets use more processor time and can produce smaller files."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Save messages to a file. Restart VLC after a change."
-msgstr "Save messages to a file. Restart VLC after a change."
+msgid "Save messages to a file. Restart Hakone after a change."
+msgstr "Save messages to a file. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Choose the log file. VLC adds new messages to the end of this file. Restart VLC after a change."
-msgstr "Choose the log file. VLC adds new messages to the end of this file. Restart VLC after a change."
+msgid "Choose the log file. Hakone adds new messages to the end of this file. Restart Hakone after a change."
+msgstr "Choose the log file. Hakone adds new messages to the end of this file. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Choose plain text or HTML for the log file. Restart VLC after a change."
-msgstr "Choose plain text or HTML for the log file. Restart VLC after a change."
+msgid "Choose plain text or HTML for the log file. Restart Hakone after a change."
+msgstr "Choose plain text or HTML for the log file. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Choose the VLC log level. File logs can use this level or a separate file log level. Restart VLC after a change."
-msgstr "Choose the VLC log level. File logs can use this level or a separate file log level. Restart VLC after a change."
+msgid "Choose the Hakone log level. File logs can use this level or a separate file log level. Restart Hakone after a change."
+msgstr "Choose the Hakone log level. File logs can use this level or a separate file log level. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Show the VLC icon in the system tray."
-msgstr "Show the VLC icon in the system tray."
+msgid "Show the Hakone icon in the system tray."
+msgstr "Show the Hakone icon in the system tray."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Start VLC in the system tray. This turns on the tray icon. Restart VLC after a change."
-msgstr "Start VLC in the system tray. This turns on the tray icon. Restart VLC after a change."
+msgid "Start Hakone in the system tray. This turns on the tray icon. Restart Hakone after a change."
+msgstr "Start Hakone in the system tray. This turns on the tray icon. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Show a track message always, only when VLC is hidden or minimized, or never."
-msgstr "Show a track message always, only when VLC is hidden or minimised, or never."
+msgid "Show a track message always, only when Hakone is hidden or minimized, or never."
+msgstr "Show a track message always, only when Hakone is hidden or minimised, or never."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Choose how long the track popup is shown. The system can change this time."
 msgstr "Choose how long the track popup is shown. The system can change this time."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Change the opacity of the main VLC window. The change applies at once."
-msgstr "Change the opacity of the main VLC window. The change applies at once."
+msgid "Change the opacity of the main Hakone window. The change applies at once."
+msgstr "Change the opacity of the main Hakone window. The change applies at once."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Change the opacity of the control backgrounds in fullscreen. The text and icons stay clear."
@@ -34277,16 +34311,16 @@ msgid "Select Never to keep the window size. Select Always to resize the window 
 msgstr "Select Never to keep the window size. Select Always to resize the window when a video opens. Fullscreen and maximised windows keep their size. Audio visualisers do not change the window size."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Start VLC in compact mode. Restart VLC after a change. Launch options can override this setting."
-msgstr "Start VLC in compact mode. Restart VLC after a change. Launch options can override this setting."
+msgid "Start Hakone in compact mode. Restart Hakone after a change. Launch options can override this setting."
+msgstr "Start Hakone in compact mode. Restart Hakone after a change. Launch options can override this setting."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Add internal interface information, warnings and errors to the VLC log. Use Log details to choose which messages to save."
-msgstr "Add internal interface information, warnings and errors to the VLC log. Use Log details to choose which messages to save."
+msgid "Add internal interface information, warnings and errors to the Hakone log. Use Log details to choose which messages to save."
+msgstr "Add internal interface information, warnings and errors to the Hakone log. Use Log details to choose which messages to save."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Show error messages and confirmation questions. When this is off, VLC cancels normal and warning questions. Errors stay in the error history. Login, progress and critical questions stay on."
-msgstr "Show error messages and confirmation questions. When this is off, VLC cancels normal and warning questions. Errors stay in the error history. Login, progress and critical questions stay on."
+msgid "Show error messages and confirmation questions. When this is off, Hakone cancels normal and warning questions. Errors stay in the error history. Login, progress and critical questions stay on."
+msgstr "Show error messages and confirmation questions. When this is off, Hakone cancels normal and warning questions. Errors stay in the error history. Login, progress and critical questions stay on."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Saved language (%1)"
@@ -34305,24 +34339,24 @@ msgid "Saved encoder (%1)"
 msgstr "Saved encoder (%1)"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Select the decoder to try first. Automatic lets VLC select it. Open the file again after a change."
-msgstr "Select the decoder to try first. Automatic lets VLC select it. Open the file again after a change."
+msgid "Select the decoder to try first. Automatic lets Hakone select it. Open the file again after a change."
+msgstr "Select the decoder to try first. Automatic lets Hakone select it. Open the file again after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC uses this encoder for conversion and streaming. It must support the output format. An output profile can override this choice."
-msgstr "VLC uses this encoder for conversion and streaming. It must support the output format. An output profile can override this choice."
+msgid "Hakone uses this encoder for conversion and streaming. It must support the output format. An output profile can override this choice."
+msgstr "Hakone uses this encoder for conversion and streaming. It must support the output format. An output profile can override this choice."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. Restart VLC after a change. Use --ignore-config to start without saved options."
-msgstr "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. Restart VLC after a change. Use --ignore-config to start without saved options."
+msgid "Enter Hakone options only. Use quotes for text with spaces. The launch command takes priority. Restart Hakone after a change. Use --ignore-config to start without saved options."
+msgstr "Enter Hakone options only. Use quotes for text with spaces. The launch command takes priority. Restart Hakone after a change. Use --ignore-config to start without saved options."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Control input clock synchronization for live streams. Default uses the source settings. Open the stream again after a change."
 msgstr "Control input clock synchronization for live streams. Default uses the source settings. Open the stream again after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Set the maximum variation in input delay that VLC can correct, in milliseconds. Open the file or stream again after a change."
-msgstr "Set the maximum variation in input delay that VLC can correct, in milliseconds. Open the file or stream again after a change."
+msgid "Set the maximum variation in input delay that Hakone can correct, in milliseconds. Open the file or stream again after a change."
+msgstr "Set the maximum variation in input delay that Hakone can correct, in milliseconds. Open the file or stream again after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Set the number of clock samples used to smooth timing changes. Higher values give a slower response. The input buffer also affects this value. Open the file or stream again after a change."
@@ -34337,24 +34371,24 @@ msgid "Include subfolders adds files from the folder and keeps its subfolders in
 msgstr "Include subfolders adds files from the folder and keeps its subfolders in the queue. Open folders on playback reads a folder when you play it. Expand all subfolders reads all files at once. Changes apply to the next folder you add."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Restart VLC to use this option. A command-line option can stop VLC from reading file information."
-msgstr "Restart VLC to use this option. A command-line option can stop VLC from reading file information."
+msgid "Restart Hakone to use this option. A command-line option can stop Hakone from reading file information."
+msgstr "Restart Hakone to use this option. A command-line option can stop Hakone from reading file information."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Turn on \"Read file metadata automatically\" in Advanced Options, then restart VLC to use this option."
-msgstr "Turn on \"Read file metadata automatically\" in Advanced Options, then restart VLC to use this option."
+msgid "Turn on \"Read file metadata automatically\" in Advanced Options, then restart Hakone to use this option."
+msgstr "Turn on \"Read file metadata automatically\" in Advanced Options, then restart Hakone to use this option."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Read file information for items added to the queue. Restart VLC after a change."
-msgstr "Read file information for items added to the queue. Restart VLC after a change."
+msgid "Read file information for items added to the queue. Restart Hakone after a change."
+msgstr "Read file information for items added to the queue. Restart Hakone after a change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Use one VLC window for app launches. The file manager option also includes files opened from the file manager. Close all VLC windows and start VLC again after you turn this on. Command-line options can override these settings."
-msgstr "Use one VLC window for app launches. The file manager option also includes files opened from the file manager. Close all VLC windows and start VLC again after you turn this on. Command-line options can override these settings."
+msgid "Use one Hakone window for app launches. The file manager option also includes files opened from the file manager. Close all Hakone windows and start Hakone again after you turn this on. Command-line options can override these settings."
+msgstr "Use one Hakone window for app launches. The file manager option also includes files opened from the file manager. Close all Hakone windows and start Hakone again after you turn this on. Command-line options can override these settings."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Use the same VLC window for files opened from the file manager."
-msgstr "Use the same VLC window for files opened from the file manager."
+msgid "Use the same Hakone window for files opened from the file manager."
+msgstr "Use the same Hakone window for files opened from the file manager."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Keep the current item playing and add new files to the queue. Otherwise, start the new files."
@@ -34365,8 +34399,8 @@ msgid "Enter a language name or a two or three letter language code."
 msgstr "Enter a language name or a two or three letter language code."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Enter VLC options only. Check the option names and quotation marks."
-msgstr "Enter VLC options only. Check the option names and quotation marks."
+msgid "Enter Hakone options only. Check the option names and quotation marks."
+msgstr "Enter Hakone options only. Check the option names and quotation marks."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Choose a language from the list."
@@ -34377,20 +34411,20 @@ msgid "Enter a value within the allowed range."
 msgstr "Enter a value within the allowed range."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
-msgstr "VLC cannot load this language."
+msgid "Hakone cannot load this language."
+msgstr "Hakone cannot load this language."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save the preferences file. Your changes are still open."
-msgstr "VLC cannot save the preferences file. Your changes are still open."
+msgid "Hakone cannot save the preferences file. Your changes are still open."
+msgstr "Hakone cannot save the preferences file. Your changes are still open."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save the default settings. Your settings did not change."
-msgstr "VLC cannot save the default settings. Your settings did not change."
+msgid "Hakone cannot save the default settings. Your settings did not change."
+msgstr "Hakone cannot save the default settings. Your settings did not change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot restore the settings file. Restart VLC and check your settings."
-msgstr "VLC cannot restore the settings file. Restart VLC and check your settings."
+msgid "Hakone cannot restore the settings file. Restart Hakone and check your settings."
+msgstr "Hakone cannot restore the settings file. Restart Hakone and check your settings."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Select folder"
@@ -34457,24 +34491,24 @@ msgid "Discover"
 msgstr "Discover"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot rescan this folder. Check the folder and try again."
-msgstr "VLC cannot rescan this folder. Check the folder and try again."
+msgid "Hakone cannot rescan this folder. Check the folder and try again."
+msgstr "Hakone cannot rescan this folder. Check the folder and try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this playlist. Select it again."
-msgstr "VLC cannot read this playlist. Select it again."
+msgid "Hakone cannot read this playlist. Select it again."
+msgstr "Hakone cannot read this playlist. Select it again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read these files. Select them again."
-msgstr "VLC cannot read these files. Select them again."
+msgid "Hakone cannot read these files. Select them again."
+msgstr "Hakone cannot read these files. Select them again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read the saved folder matches. Save again to replace them."
-msgstr "VLC cannot read the saved folder matches. Save again to replace them."
+msgid "Hakone cannot read the saved folder matches. Save again to replace them."
+msgstr "Hakone cannot read the saved folder matches. Save again to replace them."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this folder. Select it again."
-msgstr "VLC cannot read this folder. Select it again."
+msgid "Hakone cannot read this folder. Select it again."
+msgstr "Hakone cannot read this folder. Select it again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Select subtitle files or folders."
@@ -34489,88 +34523,88 @@ msgid "Some files cannot be used. Select track files or folders."
 msgstr "Some files cannot be used. Select track files or folders."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save these folder matches. Select the folder again."
-msgstr "VLC cannot save these folder matches. Select the folder again."
+msgid "Hakone cannot save these folder matches. Select the folder again."
+msgstr "Hakone cannot save these folder matches. Select the folder again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save this selection. Select the files again."
-msgstr "VLC cannot save this selection. Select the files again."
+msgid "Hakone cannot save this selection. Select the files again."
+msgstr "Hakone cannot save this selection. Select the files again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "The saved tracks changed. Close this window and select the files again."
 msgstr "The saved tracks changed. Close this window and select the files again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this media: %1"
-msgstr "VLC cannot read this media: %1"
+msgid "Hakone cannot read this media: %1"
+msgstr "Hakone cannot read this media: %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot use this track: %1"
-msgstr "VLC cannot use this track: %1"
+msgid "Hakone cannot use this track: %1"
+msgstr "Hakone cannot use this track: %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC already uses this file for another track: %1"
-msgstr "VLC already uses this file for another track: %1"
+msgid "Hakone already uses this file for another track: %1"
+msgstr "Hakone already uses this file for another track: %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this track: %1"
-msgstr "VLC cannot read this track: %1"
+msgid "Hakone cannot read this track: %1"
+msgstr "Hakone cannot read this track: %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "This VLC build cannot replace saved tracks."
-msgstr "This VLC build cannot replace saved tracks."
+msgid "This Hakone build cannot replace saved tracks."
+msgstr "This Hakone build cannot replace saved tracks."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save the tracks for %1. Try again."
-msgstr "VLC cannot save the tracks for %1. Try again."
+msgid "Hakone cannot save the tracks for %1. Try again."
+msgstr "Hakone cannot save the tracks for %1. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save the folder matches. Try Save again."
-msgstr "VLC cannot save the folder matches. Try Save again."
+msgid "Hakone cannot save the folder matches. Try Save again."
+msgstr "Hakone cannot save the folder matches. Try Save again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save this change. Try again."
-msgstr "VLC cannot save this change. Try again."
+msgid "Hakone cannot save this change. Try again."
+msgstr "Hakone cannot save this change. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save this playlist. Try again."
-msgstr "VLC cannot save this playlist. Try again."
+msgid "Hakone cannot save this playlist. Try again."
+msgstr "Hakone cannot save this playlist. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "You cannot change this playlist."
 msgstr "You cannot change this playlist."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read or save this image. Select another image."
-msgstr "VLC cannot read or save this image. Select another image."
+msgid "Hakone cannot read or save this image. Select another image."
+msgstr "Hakone cannot read or save this image. Select another image."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC saved the name but cannot save the thumbnail. Open the properties again to see the saved values."
-msgstr "VLC saved the name but cannot save the thumbnail. Open the properties again to see the saved values."
+msgid "Hakone saved the name but cannot save the thumbnail. Open the properties again to see the saved values."
+msgstr "Hakone saved the name but cannot save the thumbnail. Open the properties again to see the saved values."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot export this playlist. Select it again."
-msgstr "VLC cannot export this playlist. Select it again."
+msgid "Hakone cannot export this playlist. Select it again."
+msgstr "Hakone cannot export this playlist. Select it again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save this file. Select another location."
-msgstr "VLC cannot save this file. Select another location."
+msgid "Hakone cannot save this file. Select another location."
+msgstr "Hakone cannot save this file. Select another location."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this media. Select the file again."
-msgstr "VLC cannot read this media. Select the file again."
+msgid "Hakone cannot read this media. Select the file again."
+msgstr "Hakone cannot read this media. Select the file again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save this track: %1"
-msgstr "VLC cannot save this track: %1"
+msgid "Hakone cannot save this track: %1"
+msgstr "Hakone cannot save this track: %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this file: %1"
-msgstr "VLC cannot read this file: %1"
+msgid "Hakone cannot read this file: %1"
+msgstr "Hakone cannot read this file: %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot add this folder: %1"
-msgstr "VLC cannot add this folder: %1"
+msgid "Hakone cannot add this folder: %1"
+msgstr "Hakone cannot add this folder: %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Install services"
@@ -34645,8 +34679,8 @@ msgid "maximize player"
 msgstr "maximise player"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save this selection. Try again."
-msgstr "VLC cannot save this selection. Try again."
+msgid "Hakone cannot save this selection. Try again."
+msgstr "Hakone cannot save this selection. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Choose a Playlist"
@@ -34669,8 +34703,8 @@ msgid "No playlists match your search."
 msgstr "No playlists match your search."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC has no saved playlists."
-msgstr "VLC has no saved playlists."
+msgid "Hakone has no saved playlists."
+msgstr "Hakone has no saved playlists."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Or create a new playlist"
@@ -34755,8 +34789,8 @@ msgid "Right Sidebar"
 msgstr "Right Sidebar"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC Settings"
-msgstr "VLC Settings"
+msgid "Hakone Settings"
+msgstr "Hakone Settings"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Go Home"
@@ -34851,8 +34885,8 @@ msgid "Playlist\nName"
 msgstr "Playlist\nName"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save this layout. Try again."
-msgstr "VLC cannot save this layout. Try again."
+msgid "Hakone cannot save this layout. Try again."
+msgstr "Hakone cannot save this layout. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Top center"
@@ -34919,8 +34953,8 @@ msgid "Folder Info"
 msgstr "Folder Info"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this folder. Check the folder and try again."
-msgstr "VLC cannot read this folder. Check the folder and try again."
+msgid "Hakone cannot read this folder. Check the folder and try again."
+msgstr "Hakone cannot read this folder. Check the folder and try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "%1 %2 (%3)"
@@ -35013,10 +35047,6 @@ msgstr "Move later"
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Remove from playlist"
 msgstr "Remove from playlist"
-
-#. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC Media Player"
-msgstr "VLC Media Player"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Most played first"
@@ -35313,8 +35343,8 @@ msgid "Keyboard Shortcuts"
 msgstr "Keyboard Shortcuts"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "About VLC"
-msgstr "About VLC"
+msgid "About Hakone"
+msgstr "About Hakone"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Open player"
@@ -35337,8 +35367,8 @@ msgid "Play queue"
 msgstr "Play queue"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot open these streams. Check the links and try again."
-msgstr "VLC cannot open these streams. Check the links and try again."
+msgid "Hakone cannot open these streams. Check the links and try again."
+msgstr "Hakone cannot open these streams. Check the links and try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Network URL"
@@ -35365,8 +35395,8 @@ msgid "Save these links in a playlist with this name."
 msgstr "Save these links in a playlist with this name."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "To save a playlist, turn on the media library in Settings. Then restart VLC."
-msgstr "To save a playlist, turn on the media library in Settings. Then restart VLC."
+msgid "To save a playlist, turn on the media library in Settings. Then restart Hakone."
+msgstr "To save a playlist, turn on the media library in Settings. Then restart Hakone."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "e.g., Favorite TV Channels"
@@ -35393,12 +35423,12 @@ msgid "Close setup"
 msgstr "Close setup"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Welcome to VLC!"
-msgstr "Welcome to VLC!"
+msgid "Welcome to Hakone!"
+msgstr "Welcome to Hakone!"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later."
-msgstr "VLC is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later."
+msgid "Hakone is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later."
+msgstr "Hakone is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Choose a media folder to start with"
@@ -35425,8 +35455,8 @@ msgid "Online media information"
 msgstr "Online media information"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC does not collect personal data. If you allow online media information, VLC can request cover art and track details from online services. These requests can identify your media to those services. Clear the option to keep these requests off."
-msgstr "VLC does not collect personal data. If you allow online media information, VLC can request cover art and track details from online services. These requests can identify your media to those services. Clear the option to keep these requests off."
+msgid "Hakone does not collect personal data. If you allow online media information, Hakone can request cover art and track details from online services. These requests can identify your media to those services. Clear the option to keep these requests off."
+msgstr "Hakone does not collect personal data. If you allow online media information, Hakone can request cover art and track details from online services. These requests can identify your media to those services. Clear the option to keep these requests off."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Select your preferred theme and color."
@@ -35453,8 +35483,8 @@ msgid "Finish"
 msgstr "Finish"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Welcome — VLC Media Player"
-msgstr "Welcome — VLC Media Player"
+msgid "Welcome — Hakone Media Player"
+msgstr "Welcome — Hakone Media Player"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "15 minutes"
@@ -35489,8 +35519,8 @@ msgid "This subtitle track has no cue times."
 msgstr "This subtitle track has no cue times."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read the times for this subtitle track."
-msgstr "VLC cannot read the times for this subtitle track."
+msgid "Hakone cannot read the times for this subtitle track."
+msgstr "Hakone cannot read the times for this subtitle track."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Show Statistics"
@@ -35673,8 +35703,8 @@ msgid "Remove %1"
 msgstr "Remove %1"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this playlist. Try again."
-msgstr "VLC cannot read this playlist. Try again."
+msgid "Hakone cannot read this playlist. Try again."
+msgstr "Hakone cannot read this playlist. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Loading playlist…"
@@ -35705,16 +35735,16 @@ msgid "Unknown durations"
 msgstr "Unknown durations"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Saved in the VLC library"
-msgstr "Saved in the VLC library"
+msgid "Saved in the Hakone library"
+msgstr "Saved in the Hakone library"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "%1 — %2"
 msgstr "%1 — %2"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "This playlist has no files that VLC can use."
-msgstr "This playlist has no files that VLC can use."
+msgid "This playlist has no files that Hakone can use."
+msgstr "This playlist has no files that Hakone can use."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "The files in this playlist are not available."
@@ -35737,8 +35767,8 @@ msgid "Reset to default"
 msgstr "Reset to default"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Restart VLC to use this change."
-msgstr "Restart VLC to use this change."
+msgid "Restart Hakone to use this change."
+msgstr "Restart Hakone to use this change."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Use this value"
@@ -35893,8 +35923,8 @@ msgid "Show window decorations"
 msgstr "Show window decorations"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Show a border and title bar on a separate video window. Restart VLC to use this setting."
-msgstr "Show a border and title bar on a separate video window. Restart VLC to use this setting."
+msgid "Show a border and title bar on a separate video window. Restart Hakone to use this setting."
+msgstr "Show a border and title bar on a separate video window. Restart Hakone to use this setting."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Show the file name in the title bar"
@@ -36297,8 +36327,8 @@ msgid "Opening Files"
 msgstr "Opening Files"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Only allow one VLC window"
-msgstr "Only allow one VLC window"
+msgid "Only allow one Hakone window"
+msgstr "Only allow one Hakone window"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Apply to files opened from the file manager"
@@ -36373,8 +36403,8 @@ msgid "Skip late video frames"
 msgstr "Skip late video frames"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Give VLC higher priority"
-msgstr "Give VLC higher priority"
+msgid "Give Hakone higher priority"
+msgstr "Give Hakone higher priority"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Rescan plugins"
@@ -36509,8 +36539,8 @@ msgid "Pause video when window is minimized"
 msgstr "Pause video when window is minimised"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Bring VLC to the front when playback starts"
-msgstr "Bring VLC to the front when playback starts"
+msgid "Bring Hakone to the front when playback starts"
+msgstr "Bring Hakone to the front when playback starts"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Show cover art in the window when playing audio"
@@ -36609,16 +36639,16 @@ msgid "Connection timeout (ms)"
 msgstr "Connection timeout (ms)"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "This action replaces all VLC settings with the default settings. Restart VLC after this action."
-msgstr "This action replaces all VLC settings with the default settings. Restart VLC after this action."
+msgid "This action replaces all Hakone settings with the default settings. Restart Hakone after this action."
+msgstr "This action replaces all Hakone settings with the default settings. Restart Hakone after this action."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot open the settings folder."
-msgstr "VLC cannot open the settings folder."
+msgid "Hakone cannot open the settings folder."
+msgstr "Hakone cannot open the settings folder."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC saved the default settings. Restart VLC to use all settings."
-msgstr "VLC saved the default settings. Restart VLC to use all settings."
+msgid "Hakone saved the default settings. Restart Hakone to use all settings."
+msgstr "Hakone saved the default settings. Restart Hakone to use all settings."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "App"
@@ -36685,12 +36715,12 @@ msgid "Hide Advanced Options"
 msgstr "Hide Advanced Options"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Hide all VLC options"
-msgstr "Hide all VLC options"
+msgid "Hide all Hakone options"
+msgstr "Hide all Hakone options"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "All VLC options"
-msgstr "All VLC options"
+msgid "All Hakone options"
+msgstr "All Hakone options"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "%1s"
@@ -36841,8 +36871,8 @@ msgid "Startup volume in percent"
 msgstr "Startup volume in percent"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Volume on the next VLC startup (0–300%)."
-msgstr "Volume on the next VLC startup (0–300%)."
+msgid "Volume on the next Hakone startup (0–300%)."
+msgstr "Volume on the next Hakone startup (0–300%)."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Playback Statistics"
@@ -36889,12 +36919,12 @@ msgid "OpenSubtitles setup"
 msgstr "OpenSubtitles setup"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "This app can use OpenSubtitles without a personal key. You can add your own application API key here. VLC stores it in your profile."
-msgstr "This app can use OpenSubtitles without a personal key. You can add your own application API key here. VLC stores it in your profile."
+msgid "This app can use OpenSubtitles without a personal key. You can add your own application API key here. Hakone stores it in your profile."
+msgstr "This app can use OpenSubtitles without a personal key. You can add your own application API key here. Hakone stores it in your profile."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Add your OpenSubtitles application API key. VLC stores it in your profile."
-msgstr "Add your OpenSubtitles application API key. VLC stores it in your profile."
+msgid "Add your OpenSubtitles application API key. Hakone stores it in your profile."
+msgstr "Add your OpenSubtitles application API key. Hakone stores it in your profile."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Get an API key"
@@ -37005,28 +37035,28 @@ msgid "Add Subtitles"
 msgstr "Add Subtitles"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read these files. Try again."
-msgstr "VLC cannot read these files. Try again."
+msgid "Hakone cannot read these files. Try again."
+msgstr "Hakone cannot read these files. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this folder. Try again."
-msgstr "VLC cannot read this folder. Try again."
+msgid "Hakone cannot read this folder. Try again."
+msgstr "Hakone cannot read this folder. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot search for subtitles. Try again."
-msgstr "VLC cannot search for subtitles. Try again."
+msgid "Hakone cannot search for subtitles. Try again."
+msgstr "Hakone cannot search for subtitles. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "VLC cannot save the API key. Check it and try again."
 msgstr "VLC cannot save the API key. Check it and try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save these tracks. Try again."
-msgstr "VLC cannot save these tracks. Try again."
+msgid "Hakone cannot save these tracks. Try again."
+msgstr "Hakone cannot save these tracks. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC kept the changes that it saved. Try Save again for the other files."
-msgstr "VLC kept the changes that it saved. Try Save again for the other files."
+msgid "Hakone kept the changes that it saved. Try Save again for the other files."
+msgstr "Hakone kept the changes that it saved. Try Save again for the other files."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Search subtitles"
@@ -37085,24 +37115,24 @@ msgid "OpenSubtitles is not set up. Add an API key to use this source."
 msgstr "OpenSubtitles is not set up. Add an API key to use this source."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC will remove the saved folder matches."
-msgstr "VLC will remove the saved folder matches."
+msgid "Hakone will remove the saved folder matches."
+msgstr "Hakone will remove the saved folder matches."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Automatic matching is off in Settings. These choices apply to the current files."
 msgstr "Automatic matching is off in Settings. These choices apply to the current files."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC will use these matches for new files in this folder."
-msgstr "VLC will use these matches for new files in this folder."
+msgid "Hakone will use these matches for new files in this folder."
+msgstr "Hakone will use these matches for new files in this folder."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC will save these choices for the current files."
-msgstr "VLC will save these choices for the current files."
+msgid "Hakone will save these choices for the current files."
+msgstr "Hakone will save these choices for the current files."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC will also save the folder matches."
-msgstr "VLC will also save the folder matches."
+msgid "Hakone will also save the folder matches."
+msgstr "Hakone will also save the folder matches."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Clear selected tracks"
@@ -37185,8 +37215,8 @@ msgid "Use Direct3D11 output for this setting. The mode applies when a video out
 msgstr "Use Direct3D11 output for this setting. The mode applies when a video output starts. Unavailable formats are dimmed."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "This VLC build does not include Direct3D11 HDR output."
-msgstr "This VLC build does not include Direct3D11 HDR output."
+msgid "This Hakone build does not include Direct3D11 HDR output."
+msgstr "This Hakone build does not include Direct3D11 HDR output."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "SDR to HDR"
@@ -37541,11 +37571,12 @@ msgid "Select a theme and color."
 msgstr "Select a theme and colour."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save the theme. Check the settings folder and try again."
-msgstr "VLC cannot save the theme. Check the settings folder and try again."
+msgid "Hakone cannot save the theme. Check the settings folder and try again."
+msgstr "Hakone cannot save the theme. Check the settings folder and try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>"
+#, fuzzy
+msgid "<p>Hakone Media Player is a free and open source media player, encoder, and streamer. Hakone is a fork of VLC media player, made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>Hakone uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://hakone.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>"
 msgstr "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
@@ -37721,8 +37752,8 @@ msgid "Restart Required"
 msgstr "Restart Required"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC needs to be restarted for the reset to take full effect.\n\nRestart now?"
-msgstr "VLC needs to be restarted for the reset to take full effect.\n\nRestart now?"
+msgid "Hakone needs to be restarted for the reset to take full effect.\n\nRestart now?"
+msgstr "Hakone needs to be restarted for the reset to take full effect.\n\nRestart now?"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Action hotkey mappings."
@@ -37917,12 +37948,12 @@ msgid "Open Location from clipboard"
 msgstr "Open Location from clipboard"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "A new version of VLC is available: <font color=\"%1\">%2.%3.%4%5</font>"
-msgstr "A new version of VLC is available: <font color=\"%1\">%2.%3.%4%5</font>"
+msgid "A new version of Hakone is available: <font color=\"%1\">%2.%3.%4%5</font>"
+msgstr "A new version of Hakone is available: <font color=\"%1\">%2.%3.%4%5</font>"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "You have the latest version of VLC media player: <font color=\"%1\">%2</font>."
-msgstr "You have the latest version of VLC media player: <font color=\"%1\">%2</font>."
+msgid "You have the latest version of Hakone Media Player: <font color=\"%1\">%2</font>."
+msgstr "You have the latest version of Hakone Media Player: <font color=\"%1\">%2</font>."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "An <font color=\"%1\">error</font> occurred while checking for updates..."
@@ -37961,8 +37992,8 @@ msgid "Select a playlist or enter a new name."
 msgstr "Select a playlist or enter a new name."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot read this selection. Select the files again."
-msgstr "VLC cannot read this selection. Select the files again."
+msgid "Hakone cannot read this selection. Select the files again."
+msgstr "Hakone cannot read this selection. Select the files again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "This selection has no media to add."
@@ -37977,16 +38008,16 @@ msgid "Please enter the new playlist name:"
 msgstr "Please enter the new playlist name:"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot add these files. Try again."
-msgstr "VLC cannot add these files. Try again."
+msgid "Hakone cannot add these files. Try again."
+msgstr "Hakone cannot add these files. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "The playlist changed. Use playlist order and try again."
 msgstr "The playlist changed. Use playlist order and try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot change this playlist. Try again."
-msgstr "VLC cannot change this playlist. Try again."
+msgid "Hakone cannot change this playlist. Try again."
+msgstr "Hakone cannot change this playlist. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Artist banner"
@@ -38469,12 +38500,12 @@ msgid "Discard the filtered out items"
 msgstr "Discard the filtered out items"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot add %1."
-msgstr "VLC cannot add %1."
+msgid "Hakone cannot add %1."
+msgstr "Hakone cannot add %1."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot remove %1."
-msgstr "VLC cannot remove %1."
+msgid "Hakone cannot remove %1."
+msgstr "Hakone cannot remove %1."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Documents"
@@ -38769,12 +38800,12 @@ msgid "Blue key"
 msgstr "Blue key"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot add this add-on."
-msgstr "VLC cannot add this add-on."
+msgid "Hakone cannot add this add-on."
+msgstr "Hakone cannot add this add-on."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot remove this add-on."
-msgstr "VLC cannot remove this add-on."
+msgid "Hakone cannot remove this add-on."
+msgstr "Hakone cannot remove this add-on."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Add-ons"
@@ -38817,8 +38848,8 @@ msgid "Close add-on details"
 msgstr "Close add-on details"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot change this add-on because it was added manually."
-msgstr "VLC cannot change this add-on because it was added manually."
+msgid "Hakone cannot change this add-on because it was added manually."
+msgstr "Hakone cannot change this add-on because it was added manually."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Open website"
@@ -38837,8 +38868,8 @@ msgid "Priority"
 msgstr "Priority"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Sort by priority. VLC uses priority to select a plugin when more than one plugin can do the same task."
-msgstr "Sort by priority. VLC uses priority to select a plugin when more than one plugin can do the same task."
+msgid "Sort by priority. Hakone uses priority to select a plugin when more than one plugin can do the same task."
+msgstr "Sort by priority. Hakone uses priority to select a plugin when more than one plugin can do the same task."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "%1, %2, priority %3"
@@ -38891,8 +38922,8 @@ msgid "Keep the window size or resize it to fit each video. Audio visualizations
 msgstr "Keep the window size or resize it to fit each video. Audio visualisations do not change the window size."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Show a notification popup with the artist and track name when the current play queue item changes, when VLC is minimized or hidden."
-msgstr "Show a notification popup with the artist and track name when the current play queue item changes, when VLC is minimised or hidden."
+msgid "Show a notification popup with the artist and track name when the current play queue item changes, when Hakone is minimized or hidden."
+msgstr "Show a notification popup with the artist and track name when the current play queue item changes, when Hakone is minimised or hidden."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Sets the windows opacity between 0.1 and 1 for main interface, play queue and extended panel. This option only works with Windows and X11 with composite extensions."
@@ -39031,8 +39062,8 @@ msgid "Track notification duration (ms)"
 msgstr "Track notification duration (ms)"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "Show short notices for warnings in VLC's log. Warnings that arrive together share a notice."
-msgstr "Show short notices for warnings in VLC's log. Warnings that arrive together share a notice."
+msgid "Show short notices for warnings in Hakone's log. Warnings that arrive together share a notice."
+msgstr "Show short notices for warnings in Hakone's log. Warnings that arrive together share a notice."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Search for cast devices when you open the device list. Turn this off to stop the search. This does not stop a cast that is in use."
@@ -39091,8 +39122,8 @@ msgid "play queue"
 msgstr "play queue"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC did not close normally.\nRestore the %1 saved on %2?"
-msgstr "VLC did not close normally.\nRestore the %1 saved on %2?"
+msgid "Hakone did not close normally.\nRestore the %1 saved on %2?"
+msgstr "Hakone did not close normally.\nRestore the %1 saved on %2?"
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Restore saved items"
@@ -39199,8 +39230,8 @@ msgid "The subtitle server could not complete this request. Try again."
 msgstr "The subtitle server could not complete this request. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot connect to the subtitle server. Try again."
-msgstr "VLC cannot connect to the subtitle server. Try again."
+msgid "Hakone cannot connect to the subtitle server. Try again."
+msgstr "Hakone cannot connect to the subtitle server. Try again."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "The subtitle server returned an invalid response. Try again."
@@ -39235,16 +39266,16 @@ msgid "This download does not contain valid subtitles."
 msgstr "This download does not contain valid subtitles."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot save these subtitles."
-msgstr "VLC cannot save these subtitles."
+msgid "Hakone cannot save these subtitles."
+msgstr "Hakone cannot save these subtitles."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "Use direct subtitle file links that start with http:// or https://."
 msgstr "Use direct subtitle file links that start with http:// or https://."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
-msgid "VLC cannot create the subtitle folder."
-msgstr "VLC cannot create the subtitle folder."
+msgid "Hakone cannot create the subtitle folder."
+msgstr "Hakone cannot create the subtitle folder."
 
 #. Redesign British English translation by Codex (first pass; review welcome).
 msgid "This link contains an archive. Extract its subtitle files, then add them from Computer."
@@ -39319,18 +39350,18 @@ msgstr "HDMI/SPDIF audio passthrough"
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:75
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:98
 #, qt-format
-msgid "VLC will use custom skin."
-msgstr "VLC will use custom skin."
+msgid "Hakone will use custom skin."
+msgstr "Hakone will use custom skin."
 
 #. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:112
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:137
 #, qt-format
 msgid ""
-"VLC will use a modern layout with\n"
+"Hakone will use a modern layout with\n"
 "no menubar or pinned controls but\n"
 "with client-side decoration."
-msgstr "VLC will use a modern layout with\nno menubar or pinned controls but\nwith client-side decoration."
+msgstr "Hakone will use a modern layout with\nno menubar or pinned controls but\nwith client-side decoration."
 
 #. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:142
@@ -39343,10 +39374,10 @@ msgstr "Modern"
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:181
 #, qt-format
 msgid ""
-"VLC will use a classic layout with\n"
+"Hakone will use a classic layout with\n"
 "a menubar and pinned controls but\n"
 "with no client-side decoration."
-msgstr "VLC will use a classic layout with\na menubar and pinned controls but\nwith no client-side decoration."
+msgstr "Hakone will use a classic layout with\na menubar and pinned controls but\nwith no client-side decoration."
 
 #. First-pass British English translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/preferences/sprefs_interface.ui:186
@@ -39513,8 +39544,8 @@ msgstr "Log messages not shown: %1"
 #. First-pass interface translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/messages/messages.cpp:259
 #, qt-format
-msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. Restart VLC after this change."
-msgstr "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. Restart VLC after this change."
+msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. Restart Hakone after this change."
+msgstr "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. Restart Hakone after this change."
 
 #. First-pass interface translation; fluent-speaker review is welcome.
 #: modules/gui/qt/dialogs/messages/messages.cpp:416
@@ -39555,12 +39586,12 @@ msgid "Enter a valid regular expression."
 msgstr "Enter a valid regular expression."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:49
-msgid "VLC cleared the playback history."
-msgstr "VLC cleared the playback history."
+msgid "Hakone cleared the playback history."
+msgstr "Hakone cleared the playback history."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:49 modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:89
-msgid "VLC cannot clear the playback history. Try again."
-msgstr "VLC cannot clear the playback history. Try again."
+msgid "Hakone cannot clear the playback history. Try again."
+msgstr "Hakone cannot clear the playback history. Try again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1415
 msgid "Remove the playback history for local files and network streams. Keep media files and playlists."
@@ -39583,8 +39614,8 @@ msgid "Read audio levels from a local file. Show them on the seekbar."
 msgstr "Read audio levels from a local file. Show them on the seekbar."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPlaybackSettings.qml:155
-msgid "VLC cannot read audio levels for this file."
-msgstr "VLC cannot read audio levels for this file."
+msgid "Hakone cannot read audio levels for this file."
+msgstr "Hakone cannot read audio levels for this file."
 
 #: modules/gui/qt/player/qml/redesign/RedesignMenu.qml:179
 msgid "New"
@@ -39639,16 +39670,16 @@ msgid "VLC cannot apply this profile. Check its saved settings."
 msgstr "VLC cannot apply this profile. Check its saved settings."
 
 #. Application profiles in the redesigned interface
-msgid "VLC cannot read the saved profiles."
-msgstr "VLC cannot read the saved profiles."
+msgid "Hakone cannot read the saved profiles."
+msgstr "Hakone cannot read the saved profiles."
 
 #. Application profiles in the redesigned interface
-msgid "VLC cannot save the interface settings. Try again."
-msgstr "VLC cannot save the interface settings. Try again."
+msgid "Hakone cannot save the interface settings. Try again."
+msgstr "Hakone cannot save the interface settings. Try again."
 
 #. Application profiles in the redesigned interface
-msgid "VLC cannot save these profiles. Remove unused profiles."
-msgstr "VLC cannot save these profiles. Remove unused profiles."
+msgid "Hakone cannot save these profiles. Remove unused profiles."
+msgstr "Hakone cannot save these profiles. Remove unused profiles."
 
 #. The first argument is the action feedback; the second is the actual key.
 #: src/video_output/video_text.c:174
@@ -39658,52 +39689,52 @@ msgstr "%s\nShortcut: %s"
 
 #. Add-on discovery failed; the user can retry with Find more extensions.
 #: modules/gui/qt/network/addonsmodel.cpp:770
-msgid "VLC cannot load the add-on list. Try again."
-msgstr "VLC cannot load the add-on list. Try again."
+msgid "Hakone cannot load the add-on list. Try again."
+msgstr "Hakone cannot load the add-on list. Try again."
 
 #: modules/gui/qt/dialogs/firstrun/firstrunwizard.cpp:121
-msgid "VLC cannot save the theme. Make sure that you have access to the settings folder. Try again."
-msgstr "VLC cannot save the theme. Make sure that you have access to the settings folder. Try again."
+msgid "Hakone cannot save the theme. Make sure that you have access to the settings folder. Try again."
+msgstr "Hakone cannot save the theme. Make sure that you have access to the settings folder. Try again."
 
 #: modules/gui/qt/dialogs/messages/messages.cpp:264
-msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again."
-msgstr "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again."
+msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close Hakone. Start Hakone again."
+msgstr "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:728
-msgid "VLC cannot start the plugin scan. Make sure that the cache generator is installed."
-msgstr "VLC cannot start the plugin scan. Make sure that the cache generator is installed."
+msgid "Hakone cannot start the plugin scan. Make sure that the cache generator is installed."
+msgstr "Hakone cannot start the plugin scan. Make sure that the cache generator is installed."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:735
-msgid "VLC cannot update the plugin cache. Make sure that you have access to the folder. Try again."
-msgstr "VLC cannot update the plugin cache. Make sure that you have access to the folder. Try again."
+msgid "Hakone cannot update the plugin cache. Make sure that you have access to the folder. Try again."
+msgstr "Hakone cannot update the plugin cache. Make sure that you have access to the folder. Try again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:737
-msgid "VLC updated the plugin cache. Close VLC. Start VLC again to use plugin changes."
-msgstr "VLC updated the plugin cache. Close VLC. Start VLC again to use plugin changes."
+msgid "Hakone updated the plugin cache. Close Hakone. Start Hakone again to use plugin changes."
+msgstr "Hakone updated the plugin cache. Close Hakone. Start Hakone again to use plugin changes."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
-msgid "VLC cannot apply this profile. Make sure that its saved settings are correct."
-msgstr "VLC cannot apply this profile. Make sure that its saved settings are correct."
+msgid "Hakone cannot apply this profile. Make sure that its saved settings are correct."
+msgstr "Hakone cannot apply this profile. Make sure that its saved settings are correct."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
-msgid "VLC cannot apply this preset. Make sure that its saved settings are correct."
-msgstr "VLC cannot apply this preset. Make sure that its saved settings are correct."
+msgid "Hakone cannot apply this preset. Make sure that its saved settings are correct."
+msgstr "Hakone cannot apply this preset. Make sure that its saved settings are correct."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1699
-msgid "Select the messages to save in the log file. After a change, close VLC. Start VLC again."
-msgstr "Select the messages to save in the log file. After a change, close VLC. Start VLC again."
+msgid "Select the messages to save in the log file. After a change, close Hakone. Start Hakone again."
+msgstr "Select the messages to save in the log file. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1714
-msgid "VLC examines plugin files and updates the plugin cache. After the scan, close VLC. Start VLC again to use plugin changes."
-msgstr "VLC examines plugin files and updates the plugin cache. After the scan, close VLC. Start VLC again to use plugin changes."
+msgid "Hakone examines plugin files and updates the plugin cache. After the scan, close Hakone. Start Hakone again to use plugin changes."
+msgstr "Hakone examines plugin files and updates the plugin cache. After the scan, close Hakone. Start Hakone again to use plugin changes."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1763
-msgid "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
-msgstr "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
+msgid "Automatic lets Hakone select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
+msgstr "Automatic lets Hakone select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1791
-msgid "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
-msgstr "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
+msgid "Automatic detects UTF-8 text first. If detection fails, Hakone uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
+msgstr "Automatic detects UTF-8 text first. If detection fails, Hakone uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1938
 msgid "Select a track for the next video. Track numbers start at 1. Automatic uses the language setting."
@@ -39714,144 +39745,144 @@ msgid "Select a language. System language uses your system's language. Select Cu
 msgstr "Select a language. System language uses your system's language. Select Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1965
-msgid "Select the device to use for audio. If the device is not connected, VLC uses the audio driver's default device."
-msgstr "Select the device to use for audio. If the device is not connected, VLC uses the audio driver's default device."
+msgid "Select the device to use for audio. If the device is not connected, Hakone uses the audio driver's default device."
+msgstr "Select the device to use for audio. If the device is not connected, Hakone uses the audio driver's default device."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1976
-msgid "Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again."
-msgstr "Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again."
+msgid "Control Hakone from a web browser. After you change the web remote, port or password, close Hakone. Start Hakone again."
+msgstr "Control Hakone from a web browser. After you change the web remote, port or password, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2004
-msgid "Request a higher process priority from the system. After a change, close VLC. Start VLC again."
-msgstr "Request a higher process priority from the system. After a change, close VLC. Start VLC again."
+msgid "Request a higher process priority from the system. After a change, close Hakone. Start Hakone again."
+msgstr "Request a higher process priority from the system. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2033
-msgid "Select an audio output driver. Close VLC. Start VLC again to use a new driver."
-msgstr "Select an audio output driver. Close VLC. Start VLC again to use a new driver."
+msgid "Select an audio output driver. Close Hakone. Start Hakone again to use a new driver."
+msgstr "Select an audio output driver. Close Hakone. Start Hakone again to use a new driver."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2110
 msgid "Select how closely subtitle file names must match the video title."
 msgstr "Select how closely subtitle file names must match the video title."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2157
-msgid "Save messages to a file. After a change, close VLC. Start VLC again."
-msgstr "Save messages to a file. After a change, close VLC. Start VLC again."
+msgid "Save messages to a file. After a change, close Hakone. Start Hakone again."
+msgstr "Save messages to a file. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2159
-msgid "Select the log file. VLC adds new messages to the end of this file. After a change, close VLC. Start VLC again."
-msgstr "Select the log file. VLC adds new messages to the end of this file. After a change, close VLC. Start VLC again."
+msgid "Select the log file. Hakone adds new messages to the end of this file. After a change, close Hakone. Start Hakone again."
+msgstr "Select the log file. Hakone adds new messages to the end of this file. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2161
-msgid "Select plain text or HTML for the log file. After a change, close VLC. Start VLC again."
-msgstr "Select plain text or HTML for the log file. After a change, close VLC. Start VLC again."
+msgid "Select plain text or HTML for the log file. After a change, close Hakone. Start Hakone again."
+msgstr "Select plain text or HTML for the log file. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2163
-msgid "Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."
-msgstr "Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."
+msgid "Select the Hakone log level. File logs can use this level or a separate file log level. After a change, close Hakone. Start Hakone again."
+msgstr "Select the Hakone log level. File logs can use this level or a separate file log level. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2167
-msgid "Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."
-msgstr "Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."
+msgid "Start Hakone in the system tray. This turns on the tray icon. After a change, close Hakone. Start Hakone again."
+msgstr "Start Hakone in the system tray. This turns on the tray icon. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2171
-msgid "Select how long VLC shows the track popup. The system can change this time."
-msgstr "Select how long VLC shows the track popup. The system can change this time."
+msgid "Select how long Hakone shows the track popup. The system can change this time."
+msgstr "Select how long Hakone shows the track popup. The system can change this time."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2183
-msgid "Start VLC in compact mode. After a change, close VLC. Start VLC again. Launch options can override this setting."
-msgstr "Start VLC in compact mode. After a change, close VLC. Start VLC again. Launch options can override this setting."
+msgid "Start Hakone in compact mode. After a change, close Hakone. Start Hakone again. Launch options can override this setting."
+msgstr "Start Hakone in compact mode. After a change, close Hakone. Start Hakone again. Launch options can override this setting."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2185
-msgid "Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."
-msgstr "Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."
+msgid "Add internal interface information, warnings and errors to the Hakone log. Use Log details to select which messages to save."
+msgstr "Add internal interface information, warnings and errors to the Hakone log. Use Log details to select which messages to save."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2196
-msgid "Select a language for the interface. Changes apply at once. If text has no translation, VLC shows it in English."
-msgstr "Select a language for the interface. Changes apply at once. If text has no translation, VLC shows it in English."
+msgid "Select a language for the interface. Changes apply at once. If text has no translation, Hakone shows it in English."
+msgstr "Select a language for the interface. Changes apply at once. If text has no translation, Hakone shows it in English."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2218
-msgid "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."
-msgstr "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."
+msgid "Enter Hakone options only. Use quotes for text with spaces. The launch command takes priority. After a change, close Hakone. Start Hakone again. Use --ignore-config to start without saved options."
+msgstr "Enter Hakone options only. Use quotes for text with spaces. The launch command takes priority. After a change, close Hakone. Start Hakone again. Use --ignore-config to start without saved options."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2239
-msgid "Close VLC. Start VLC again to use this option. A command-line option can stop VLC from reading file information."
-msgstr "Close VLC. Start VLC again to use this option. A command-line option can stop VLC from reading file information."
+msgid "Close Hakone. Start Hakone again to use this option. A command-line option can stop Hakone from reading file information."
+msgstr "Close Hakone. Start Hakone again to use this option. A command-line option can stop Hakone from reading file information."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2240
-msgid "Turn on \"Read file metadata automatically\" in Advanced Options. Close VLC. Start VLC again to use this option."
-msgstr "Turn on \"Read file metadata automatically\" in Advanced Options. Close VLC. Start VLC again to use this option."
+msgid "Turn on \"Read file metadata automatically\" in Advanced Options. Close Hakone. Start Hakone again to use this option."
+msgstr "Turn on \"Read file metadata automatically\" in Advanced Options. Close Hakone. Start Hakone again to use this option."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2245
-msgid "Read file information for items added to the queue. After a change, close VLC. Start VLC again."
-msgstr "Read file information for items added to the queue. After a change, close VLC. Start VLC again."
+msgid "Read file information for items added to the queue. After a change, close Hakone. Start Hakone again."
+msgstr "Read file information for items added to the queue. After a change, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2613
-msgid "Enter VLC options only. Make sure that the option names and quotation marks are correct."
-msgstr "Enter VLC options only. Make sure that the option names and quotation marks are correct."
+msgid "Enter Hakone options only. Make sure that the option names and quotation marks are correct."
+msgstr "Enter Hakone options only. Make sure that the option names and quotation marks are correct."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2626
 msgid "Select a language from the list."
 msgstr "Select a language from the list."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2851 modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3161
-msgid "VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct."
-msgstr "VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct."
+msgid "Hakone cannot restore the settings file. Close Hakone. Start Hakone again. Make sure that your settings are correct."
+msgstr "Hakone cannot restore the settings file. Close Hakone. Start Hakone again. Make sure that your settings are correct."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3299
 msgid "Select color"
 msgstr "Select color"
 
 #: modules/gui/qt/medialibrary/medialib.cpp:296
-msgid "VLC cannot rescan this folder. Make sure that you can read the folder. Try again."
-msgstr "VLC cannot rescan this folder. Make sure that you can read the folder. Try again."
+msgid "Hakone cannot rescan this folder. Make sure that you can read the folder. Try again."
+msgstr "Hakone cannot rescan this folder. Make sure that you can read the folder. Try again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:128
 msgid "Select a Playlist"
 msgstr "Select a Playlist"
 
 #: modules/gui/qt/player/qml/redesign/RedesignFolderInfo.qml:28
-msgid "VLC cannot read this folder. Make sure that you can read the folder. Try again."
-msgstr "VLC cannot read this folder. Make sure that you can read the folder. Try again."
+msgid "Hakone cannot read this folder. Make sure that you can read the folder. Try again."
+msgstr "Hakone cannot read this folder. Make sure that you can read the folder. Try again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:45
-msgid "VLC cannot open these streams. Make sure that the links are correct. Try again."
-msgstr "VLC cannot open these streams. Make sure that the links are correct. Try again."
+msgid "Hakone cannot open these streams. Make sure that the links are correct. Try again."
+msgstr "Hakone cannot open these streams. Make sure that the links are correct. Try again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:159
-msgid "To save a playlist, turn on the media library in Settings. Close VLC. Start VLC again."
-msgstr "To save a playlist, turn on the media library in Settings. Close VLC. Start VLC again."
+msgid "To save a playlist, turn on the media library in Settings. Close Hakone. Start Hakone again."
+msgstr "To save a playlist, turn on the media library in Settings. Close Hakone. Start Hakone again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:89
 msgid "Select a media folder to start with"
 msgstr "Select a media folder to start with"
 
 #: modules/gui/qt/player/qml/redesign/RedesignPlayerPreset.qml:243
-msgid "Save all VLC settings in this profile. Some settings apply to the next file or after you close VLC and start it again."
-msgstr "Save all VLC settings in this profile. Some settings apply to the next file or after you close VLC and start it again."
+msgid "Save all Hakone settings in this profile. Some settings apply to the next file or after you close Hakone and start it again."
+msgstr "Save all Hakone settings in this profile. Some settings apply to the next file or after you close Hakone and start it again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferenceRow.qml:204
-msgid "Close VLC. Start VLC again to use this change."
-msgstr "Close VLC. Start VLC again to use this change."
+msgid "Close Hakone. Start Hakone again to use this change."
+msgstr "Close Hakone. Start Hakone again to use this change."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:53
-msgid "Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting."
-msgstr "Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting."
+msgid "Show a border and title bar on a separate video window. Close Hakone. Start Hakone again to use this setting."
+msgstr "Show a border and title bar on a separate video window. Close Hakone. Start Hakone again to use this setting."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:83
-msgid "This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again."
-msgstr "This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again."
+msgid "This action replaces all Hakone settings with the default settings. After this action, close Hakone. Start Hakone again."
+msgstr "This action replaces all Hakone settings with the default settings. After this action, close Hakone. Start Hakone again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:153
-msgid "VLC saved the default settings. Close VLC. Start VLC again to use all settings."
-msgstr "VLC saved the default settings. Close VLC. Start VLC again to use all settings."
+msgid "Hakone saved the default settings. Close Hakone. Start Hakone again to use all settings."
+msgstr "Hakone saved the default settings. Close Hakone. Start Hakone again to use all settings."
 
 #: modules/gui/qt/player/qml/redesign/RedesignSubtitleProviderSetup.qml:24
-msgid "VLC cannot save this change. Make sure that the key is correct. Try again."
-msgstr "VLC cannot save this change. Make sure that the key is correct. Try again."
+msgid "Hakone cannot save this change. Make sure that the key is correct. Try again."
+msgstr "Hakone cannot save this change. Make sure that the key is correct. Try again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:288
-msgid "VLC cannot save the API key. Make sure that the API key is correct. Try again."
-msgstr "VLC cannot save the API key. Make sure that the API key is correct. Try again."
+msgid "Hakone cannot save the API key. Make sure that the API key is correct. Try again."
+msgstr "Hakone cannot save the API key. Make sure that the API key is correct. Try again."
 
 #: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
 msgid "Select a folder or select track files from your computer."
@@ -39874,8 +39905,8 @@ msgid "Paste a direct subtitle file link. Then select Add."
 msgstr "Paste a direct subtitle file link. Then select Add."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
-msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
-msgstr "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
+msgid "Use one Hakone window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all Hakone windows. Start Hakone again. Command-line options can override these settings."
+msgstr "Use one Hakone window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all Hakone windows. Start Hakone again. Command-line options can override these settings."
 
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
 #: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178

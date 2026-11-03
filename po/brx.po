@@ -851,8 +851,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "VLC बिसान %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Hakone बिसान %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -5355,19 +5355,19 @@ msgstr "डाउनल'ड खालामखानाय फाइल \"%s\" �
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
-"गोदान बिसानखौ जाफुंसारै डाउनल'ड खालामबाय। नोंथाङा VLC खौ बन्द खालामनो आरो दा बेखौ "
-"इनष्टल खालामनो लुबैयो नामा?"
+"गोदान बिसानखौ जाफुंसारै डाउनल'ड खालामबाय। नोंथाङा Hakone खौ बन्द खालामनो "
+"आरो दा बेखौ इनष्टल खालामनो लुबैयो नामा?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
 msgid "Install"
 msgstr "इनष्टल खालाम"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "VLC मेडिया प्लेयारखौ आपडेट खालाम"
+msgid "Update Hakone Media Player"
+msgstr "Hakone मेडिया प्लेयारखौ आपडेट खालाम"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -11283,14 +11283,16 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
-"नोंथांनि Libav/FFmpeg (libavcodec) इनष्टलेसनहा गाहायनि एनक'डार गैया बादि नुयो:\n"
+"नोंथांनि Libav/FFmpeg (libavcodec) इनष्टलेसनहा गाहायनि एनक'डार गैया बादि "
+"नुयो:\n"
 "%s.\n"
-"नोंथाङा बेखौ सुस्रांनो रोङाब्ला, नोंथांनि रानना होनाय निफ्राय हेफाजाबखौ सों।\n"
+"नोंथाङा बेखौ सुस्रांनो रोङाब्ला, नोंथांनि रानना होनाय निफ्राय हेफाजाबखौ "
+"सों।\n"
 "\n"
-"बेयो VLC मेडिया प्लेयारनि सिङाव मोनसे गोरोन्थि नङा।\n"
+"बेयो Hakone मेडिया प्लेयारनि सिङाव मोनसे गोरोन्थि नङा।\n"
 "बे जेंनानि सोमोन्दै भिडिअ'LAN प्रजेक्टखौ जगाजग खालामनो नाङा।\n"
 
 #: modules/codec/avcodec/encoder.c:872
@@ -14381,6 +14383,26 @@ msgstr "D-बास दबथायनाय इन्टारफेस"
 msgid "VLC media player"
 msgstr "VLC मेडिया प्लेयार"
 
+#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
+#: modules/gui/macosx/VLCMainWindow.m:669
+#: modules/gui/macosx/VLCMainWindow.m:675
+#: modules/gui/macosx/VLCMainWindow.m:1269
+#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
+#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
+#: modules/gui/qt/main_interface.cpp:1238
+#: modules/gui/qt/main_interface.cpp:1277
+#: modules/gui/qt/main_interface.cpp:1279
+#: modules/gui/qt/main_interface.cpp:1388
+#: modules/gui/qt/main_interface.cpp:1405
+#: modules/gui/qt/main_interface.cpp:1413
+#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
+#: modules/notify/osx_notifications.m:302
+#: modules/video_output/wayland/shell.c:348
+#: modules/video_output/wayland/xdg-shell.c:291
+#: modules/video_output/xcb/window.c:464
+msgid "Hakone Media Player"
+msgstr "Hakone मेडिया प्लेयार"
+
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
 msgstr "मोनसे DOS बिथोन बाक्सु इन्टारफेसखौ खेवनो नाङा"
@@ -14595,11 +14617,12 @@ msgstr "खारथाय: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
-"सांग्रांथि: नोंथाङा GUI खौ दा हाबहोनो हानाय नंलिया, मोनसे बिथोन-सारि उइन्ड'खौ खेव, "
-"डिरेक्टरिआव थां जेराव नोंथाङा VLC खौ इनष्टल खालामो आरो \"vlc -I qt\" खौ सालायो।\n"
+"सांग्रांथि: नोंथाङा GUI खौ दा हाबहोनो हानाय नंलिया, मोनसे बिथोन-सारि "
+"उइन्ड'खौ खेव, डिरेक्टरिआव थां जेराव नोंथाङा Hakone खौ इनष्टल खालामो आरो "
+"\"vlc -I qt\" खौ सालायो।\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -16909,6 +16932,15 @@ msgstr ""
 "नोंथाङा गाहायनि मोनथाम पेरामिटार निफ्राय मोनसेल' आबुं खालामनांगोन, VLC आ गुबै नुथाय "
 "रुजुथायखौ बाहायनानै गुबुनखौ हार्सिं-संना दिहुनगोन।"
 
+#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
+#: modules/gui/qt/ui/profiles.h:740
+msgid ""
+"You just need to fill one of the three following parameters, Hakone will "
+"autodetect the other using the original aspect ratio"
+msgstr ""
+"नोंथाङा गाहायनि मोनथाम पेरामिटार निफ्राय मोनसेल' आबुं खालामनांगोन, Hakone आ "
+"गुबै नुथाय रुजुथायखौ बाहायनानै गुबुनखौ हार्सिं-संना दिहुनगोन।"
+
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
 msgid "Scale"
@@ -17477,6 +17509,10 @@ msgstr "गासैबो दिन्थि"
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit VLC"
 msgstr "VLC खौ नागार"
+
+#: modules/gui/macosx/VLCMainMenu.m:343
+msgid "Quit Hakone"
+msgstr "Hakone खौ नागार"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -19615,12 +19651,13 @@ msgstr "मुसुखा मास्क"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
 "जेबो v4l2 बिदिन्थि मोनाखै।\n"
-"डिभाइसखौ VLC जों खेवबाय नामा आरो बेखौ दामगासिनो दं नामा अननानै आनजाद खालाम।\n"
+"डिभाइसखौ Hakone जों खेवबाय नामा आरो बेखौ दामगासिनो दं नामा अननानै आनजाद "
+"खालाम।\n"
 "\n"
 "दबथायनाया बेयाव गावनो गाव महरै नुजागोन।"
 
@@ -19962,8 +19999,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "VLC पेसखौ बाहाय"
+msgid "Use Hakone pace"
+msgstr "Hakone पेसखौ बाहाय"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -20257,9 +20294,10 @@ msgid "Higher latency"
 msgstr "गोजौसिन लेटेन्सि"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
 msgstr ""
-"बेयो VLCनि स्किन खालामजाथाव इन्टारफेस। नोंथाङा गुबुन स्किनखौ डाउनल'ड खालामनो हायो"
+"बेयो VLCनि स्किन खालामजाथाव इन्टारफेस। नोंथाङा गुबुन स्किनखौ डाउनल'ड "
+"खालामनो हायो"
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
 msgid "VLC skins website"
@@ -20324,8 +20362,8 @@ msgid "Create"
 msgstr "सोरजि"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
-msgstr "बे माक्सारआ VLC जों थोंजोङै जगायना होजाया: बेयो गोमानो हागौ।"
+msgid "This muxer is not provided directly by Hakone: It could be missing."
+msgstr "बे माक्सारआ Hakone जों थोंजोङै जगायना होजाया: बेयो गोमानो हागौ।"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
 msgid "This muxer is missing. Using this profile will fail"
@@ -20630,16 +20668,16 @@ msgid "&No"
 msgstr "नङा"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "VLC मेडिया प्लेयार आपडेट"
+msgid "Hakone Media Player updates"
+msgstr "Hakone मेडिया प्लेयार आपडेट"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "VLC (%1.%2.%3%4) नि गोदान बिसानआ मोननो हाथाव।"
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "Hakone (%1.%2.%3%4) नि गोदान बिसानआ मोननो हाथाव।"
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "नोंथांहा VLC मेडिया प्लेयारनि बावैसोनि बिसान दं।"
+msgid "You have the latest version of Hakone Media Player."
+msgstr "नोंथांहा Hakone मेडिया प्लेयारनि बावैसोनि बिसान दं।"
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -20856,9 +20894,10 @@ msgid "No addons found"
 msgstr "जेबो addons मोनाखै"
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
 msgstr ""
-"बे addon खौ मेनुयेलि इनष्टल खालामबाय। VLC आ बेखौ गाव हार्सिङै मेनेज खालामनो हाया।"
+"बे addon खौ मेनुयेलि इनष्टल खालामबाय। Hakone आ बेखौ गाव हार्सिङै मेनेज "
+"खालामनो हाया।"
 
 #: modules/gui/qt/dialogs/plugins.cpp:1196
 msgid "Version %1"
@@ -20943,8 +20982,8 @@ msgid "Preferences file could not be saved"
 msgstr "पसन्द फाइलखौ थिना दोननो हायाखै"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
-msgstr "थारैनो नोंथाङा नोंथांनि VLC मेडिया प्लेयार पसन्दखौ फिन फजनो लुबैयो नामा?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
+msgstr "थारैनो नोंथाङा नोंथांनि Hakone मेडिया प्लेयार पसन्दखौ फिन फजनो लुबैयो नामा?"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
 msgid "Stream Output"
@@ -21535,12 +21574,12 @@ msgid "&Playback"
 msgstr "प्लेबेक"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "VLC मेडिया प्लेयारखौ टास्कबारआव दोनखोमा"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "Hakone मेडिया प्लेयारखौ टास्कबारआव दोनखोमा"
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "VLC मेडिया प्लेयारखौ दिन्थि"
+msgid "Sho&w Hakone Media Player"
+msgstr "Hakone मेडिया प्लेयारखौ दिन्थि"
 
 #: modules/gui/qt/menus.cpp:1188
 msgid "&Open Media"
@@ -21580,20 +21619,20 @@ msgstr "सिस्ट्रे आइकन"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
 msgstr ""
-"गुदि हाबानि थाखाय VLC मेडिया प्लेयारखौ दबथायनो नोंथांखौ गनायथि होनाय सिस्ट्रेआव मोनसे "
-"आइकनखौ दिन्थि"
+"गुदि हाबानि थाखाय Hakone मेडिया प्लेयारखौ दबथायनो नोंथांखौ गनायथि होनाय "
+"सिस्ट्रेआव मोनसे आइकनखौ दिन्थि"
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
-msgstr "सिस्ट्रे आइकनजोंल' VLC खौ जागाय"
+msgid "Start Hakone with only a systray icon"
+msgstr "सिस्ट्रे आइकनजोंल' Hakone खौ जागाय"
 
 #: modules/gui/qt/qt.cpp:92
 #, fuzzy
-msgid "VLC will start with just an icon in your taskbar."
-msgstr "VLC आ नोंथांनि टास्कबारआव मोनसेल' आइकनजों जागायगोन"
+msgid "Hakone will start with just an icon in your taskbar."
+msgstr "Hakone आ नोंथांनि टास्कबारआव मोनसेल' आइकनजों जागायगोन"
 
 #: modules/gui/qt/qt.cpp:101
 msgid "Show playing item name in window title"
@@ -21706,15 +21745,15 @@ msgstr "जागायनाय म'ड आरो लकनि सायखन�
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"VLC खौ जागाय:\n"
+"Hakone खौ जागाय:\n"
 " - सरासनस्रा म'डजों\n"
-"  - फोरमायथिहोग्रा जेरै- मेथायनि बाथ्रा, एलबाम आरिमु बादिखौ दिन्थिनो थाखाय थानाय "
-"मोनसे ओनसोलजों...\n"
+"  - फोरमायथिहोग्रा जेरै- मेथायनि बाथ्रा, एलबाम आरिमु बादिखौ दिन्थिनो थाखाय "
+"थानाय मोनसे ओनसोलजों...\n"
 " - सिमागोनां दबथायनायजों इसेल' म'डजों"
 
 #: modules/gui/qt/qt.cpp:151
@@ -21777,13 +21816,13 @@ msgstr "किबर्ड भलिउम बुथामखौ नेवसि
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
-"बे उफ्राखौ आनजाद खालामनायजों, नोंथांनि किबर्डआव थानाय भलिउम गोजौ, भलिउम गाहाय आरो "
-"सोदोबगैयै बुथामआ अरायबो नोंथांनि सिस्टेम भलिउमखौ सोलायगोन। बे उफ्राखौ आनजाद-नङै "
-"खालामनायजों, VLC खौ सायखनाय समाव भलिउम बुथामआ VLCनि भलिउमखौ सोलायगोन आरो VLC "
-"खौ सायखयै समाव सिस्टेम भलिउमखौ सोलायगोन।"
+"बे उफ्राखौ आनजाद खालामनायजों, नोंथांनि किबर्डआव थानाय भलिउम गोजौ, भलिउम "
+"गाहाय आरो सोदोबगैयै बुथामआ अरायबो नोंथांनि सिस्टेम भलिउमखौ सोलायगोन। बे "
+"उफ्राखौ आनजाद-नङै खालामनायजों, Hakone खौ सायखनाय समाव भलिउम बुथामआ VLCनि "
+"भलिउमखौ सोलायगोन आरो Hakone खौ सायखयै समाव सिस्टेम भलिउमखौ सोलायगोन।"
 
 #: modules/gui/qt/qt.cpp:188
 #, fuzzy
@@ -28117,8 +28156,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -28875,8 +28914,8 @@ msgstr "सम:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "VLC मेडिया प्लेयार - वेब इन्टारफेस"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Hakone मेडिया प्लेयार - वेब इन्टारफेस"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -29051,8 +29090,8 @@ msgid "Extra media"
 msgstr "बांद्राय मेडिया"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
-msgstr "VLC इसिंनि थाखाय आबुं MRL"
+msgid "Complete MRL for Hakone internal"
+msgstr "Hakone इसिंनि थाखाय आबुं MRL"
 
 #: modules/gui/qt/ui/open.h:280
 msgid "Select the file"
@@ -29694,8 +29733,8 @@ msgid "Clear List"
 msgstr "लिस्टखौ खोमोर"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "VLC आपडेटखौ आनजाद खालाम"
+msgid "Check for Hakone updates"
+msgstr "Hakone आपडेटखौ आनजाद खालाम"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."
