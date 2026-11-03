@@ -242,6 +242,44 @@ private slots:
         QCOMPARE(legacy->productName, QStringLiteral("Hakone"));
         QVERIFY(legacy->subtitle.isEmpty());
     }
+    void macDiskImagesAreNotUpdatePackages()
+    {
+        // Mac releases also publish a drag-to-install .dmg (and checksums) beside
+        // each .zip. Exact names keep the .zip selected, whatever the asset order.
+        const auto tag = QStringLiteral("1.0.0");
+        const auto base = QStringLiteral("https://github.com/hakone-org/hakone/releases/download/1.0.0/");
+        const auto asset = [&](const QString& suffix) {
+            const QString name = QStringLiteral("sample-player-1.0.0-") + suffix;
+            return QJsonObject{{QStringLiteral("name"), name}, {QStringLiteral("state"), QStringLiteral("uploaded")},
+                               {QStringLiteral("size"), 1234}, {QStringLiteral("digest"), QStringLiteral("sha256:example")},
+                               {QStringLiteral("browser_download_url"), QString(base + name)}};
+        };
+        auto object = describedRelease(tag);
+        const auto beta = version("0.9.0-beta.1");
+        for (const auto& arch : {QStringLiteral("arm64"), QStringLiteral("x86_64")})
+        {
+            const Target mac{QStringLiteral("macos"), arch};
+            const auto prefix = QStringLiteral("macos-") + arch;
+            QJsonArray assets{asset(prefix + QStringLiteral(".dmg")), asset(prefix + QStringLiteral(".dmg.sha256")),
+                              asset(prefix + QStringLiteral(".zip")), asset(prefix + QStringLiteral(".zip.sha256"))};
+            for (int order = 0; order < 2; ++order)
+            {
+                object[QStringLiteral("assets")] = assets;
+                const auto chosen = selectRelease({object}, beta, mac);
+                QVERIFY(chosen);
+                QCOMPARE(chosen->asset.name, QStringLiteral("sample-player-1.0.0-") + prefix + QStringLiteral(".zip"));
+                QCOMPARE(chosen->asset.url.toString(), base + chosen->asset.name);
+                QJsonArray reversed;
+                for (auto i = assets.size(); i > 0; --i)
+                    reversed.append(assets.at(i - 1));
+                assets = reversed;
+            }
+            // A disk image alone is not an update package for the in-app checker.
+            object[QStringLiteral("assets")] = QJsonArray{asset(prefix + QStringLiteral(".dmg")),
+                                                         asset(QStringLiteral("macos-universal.dmg"))};
+            QVERIFY(!selectRelease({object}, beta, mac));
+        }
+    }
     void invalidMetadata()
     {
         const Target win{QStringLiteral("windows"), QStringLiteral("x86_64")};

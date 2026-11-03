@@ -5,8 +5,8 @@ The release pipeline builds four native targets:
 | Target | Download |
 | --- | --- |
 | Windows 10 (1809+) / 11, x86_64 | `hakone-<tag>-win64.zip` (portable `hakone-win64` folder with `hakone.exe`) |
-| macOS Apple Silicon | `hakone-<tag>-macos-arm64.zip` (`Hakone.app`) |
-| macOS Intel | `hakone-<tag>-macos-x86_64.zip` (`Hakone.app`) |
+| macOS Apple Silicon | `hakone-<tag>-macos-arm64.dmg` (drag-to-install) or `hakone-<tag>-macos-arm64.zip` (`Hakone.app`) |
+| macOS Intel | `hakone-<tag>-macos-x86_64.dmg` (drag-to-install) or `hakone-<tag>-macos-x86_64.zip` (`Hakone.app`) |
 | Linux x86_64, glibc >= 2.35, GLIBCXX >= 3.4.30 | `hakone-<tag>-linux-x86_64.tar.gz` portable directory bundle |
 
 Releases up to `4.0.0-beta.5` used the `vlc-juxtopposed-<tag>-...` names and a
@@ -24,6 +24,21 @@ code before its containing bundle and verifies the completed app. Invalid ad-hoc
 signatures still fail packaging because they can prevent execution on Apple
 Silicon. Downloaded Mac apps remain subject to Gatekeeper's checks for unverified
 publishers.
+
+Each Mac target also produces a drag-to-install disk image,
+`hakone-<tag>-macos-<arch>.dmg`, containing the same signed `Hakone.app` as the
+ZIP and an `Applications` link. Opening it shows a fixed-size Finder window
+("Install Hakone", "Drag to Applications") without toolbar, sidebar or status
+bar; the volume is named `Hakone` and uses `share/icons/hakone.icns`. The image
+itself is neither signed nor notarized, like the ZIP, so the same Gatekeeper
+steps apply after copying the app. It is built by `extras/package/release/dmg.py`
+with [dmgbuild](https://pypi.org/project/dmgbuild/) at the exact versions in
+`extras/package/release/dmg/requirements.txt`; dmgbuild writes the Finder layout
+directly and needs no GUI session. Images are LZFSE-compressed (`ULFO`), which
+macOS 10.11 and later can open, below any `LSMinimumSystemVersion` the app
+records. The window artwork is `extras/package/release/dmg/background.svg`;
+the committed 1x and @2x PNGs (combined into a HiDPI TIFF at build time) are
+re-rendered with `dmg/render-background.py` after editing it.
 
 The maximum deployment version found across the included binaries becomes
 `LSMinimumSystemVersion` and
@@ -109,8 +124,9 @@ notes in the published release format: platform summary and Git tag, full
 changelog link, design attribution, changes since the previous release, usage
 instructions and current limits. Assembly appends the final
 `Package | Binary source commit | Download` table with the actual source commits
-and `[download](#)` placeholders. Replace each `#` with the matching package's
-download URL in the draft before publishing. Build run details and the packaging
+and `[download](#)` placeholders (Mac rows also have `[disk image](#)`).
+Replace each `#` with the matching package's (or `.dmg`'s) download URL in the
+draft before publishing. Build run details and the packaging
 commit remain in the workflow artifacts. Inspect the candidate release source
 before creating a tag:
 
@@ -222,6 +238,8 @@ selects those targets for rebuilding. The Windows-only launcher and plugin-loade
 sources may differ when **win64 is rebuilt**; changes to shared application
 sources still require a full build. A recovery run itself cannot serve
 as the original full run for another recovery; keep using the original run ID.
+Mac packages from runs made before disk images were added have no `.dmg` and
+fail reuse validation; rebuild those Mac targets.
 
 The completed bundle includes `RELEASE_MANIFEST.json` with each package's source
 commit, originating run, size, hash and reuse status. Existing package metadata
@@ -229,8 +247,9 @@ and embedded source commits are preserved. `SOURCE_COMMIT.txt` identifies the
 current release packaging commit, not every binary's source: the release notes
 and manifest list the sources individually. Metadata, manifests and dependency
 audits remain in the workflow's `<version>-complete` artifact. The draft release
-attaches only `SHA256SUMS.txt`, the four application archives and their individual
-`.sha256` files. `SHA256SUMS.txt` covers only the application archives. No custom
+attaches only `SHA256SUMS.txt`, the four application archives, the two Mac disk
+images and their individual `.sha256` files. `SHA256SUMS.txt` covers only the
+application archives and disk images. No custom
 source archives are generated; releases use GitHub's automatic source downloads.
 
 **create_draft** is also available for full manual builds. It uses the checked-out
@@ -348,7 +367,7 @@ git push origin refs/tags/4.0.0-beta.5
 
 A pushed `4.0.0-beta.5` tag runs the same builds and creates a **draft prerelease** named
 `Hakone 4.0.0-beta.5`. It attaches only the four application
-archives, their `.sha256` files and `SHA256SUMS.txt`. Build metadata stays in the
+archives, the two Mac disk images, their `.sha256` files and `SHA256SUMS.txt`. Build metadata stays in the
 workflow artifacts; source downloads are provided automatically by GitHub.
 The notes are taken from the tagged source and include its commit hash.
 Inspect and publish the draft
@@ -418,6 +437,14 @@ build-release-tools/bin/aqt install-qt mac desktop 6.8.3 clang_64 -O build-relea
 export QT_ROOT_DIR="$PWD/build-release-qt/6.8.3/macos"
 ```
 
+Packaging also creates the disk image, so install the pinned dmgbuild too.
+`package.py` uses `$DMGBUILD`, then `build-release-tools/bin/dmgbuild`, then
+`dmgbuild` on `PATH`:
+
+```sh
+build-release-tools/bin/pip install -r extras/package/release/dmg/requirements.txt
+```
+
 Use an Intel Mac for the Intel package or an Apple Silicon Mac for ARM. Optional
 modules are detected from the installed libraries; inspect Meson's summary.
 
@@ -426,6 +453,12 @@ RELEASE_TAG=4.0.0-beta.5 JOBS=4 bash extras/package/release/build-native.sh
 python3 extras/package/release/verify.py \
     'build-release-output/macos-arm64/Hakone.app/Contents/MacOS/hakone'
 ```
+
+To check the disk image as CI does, mount it read-only and compare its app with
+a fresh extraction of the ZIP (`hdiutil attach -nobrowse -readonly -mountpoint
+<dir> <image>`, then `python3 extras/package/release/dmg.py check <dir>
+--reference <extracted>/Hakone.app`, then `hdiutil detach <dir>`). Opening the
+image normally shows the Finder layout.
 
 For an Intel build, replace `macos-arm64` with `macos-x86_64`. `QT_ROOT_DIR` can
 select a Qt installation other than Homebrew. The script builds a private patched
@@ -554,7 +587,9 @@ An asset must be uploaded, nonempty, and named exactly:
 
 The current workflow produces Windows x86_64, both native macOS packages, and
 Linux x86_64. Recognizing other target names does not claim CI builds for them.
-Source archives, SDKs, symbols and checksums are not eligible packages. Architecture
+Source archives, SDKs, symbols, checksums and the Mac `.dmg` disk images are not
+eligible packages: names are matched exactly, so the checker keeps selecting the
+`.zip` for each Mac (current and earlier clients alike). Architecture
 matching follows the running binary; automatic migration from emulated to native
 builds is not enabled. Minimum OS/glibc requirements remain in release notes and
 build metadata; filename matching does not certify all operating system versions.

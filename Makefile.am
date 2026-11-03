@@ -23,6 +23,8 @@ EXTRA_DIST = \
 	extras/package/release/recovery.py \
 	extras/package/release/dependency-cache.py \
 	extras/package/release/package.py \
+	extras/package/release/dmg.py \
+	extras/package/release/dmg \
 	extras/package/release/build-native.sh \
 	extras/package/release/build-windows.sh \
 	extras/package/release/build-medialibrary.sh \
@@ -35,6 +37,7 @@ EXTRA_DIST = \
 	extras/package/release/tests/test_verify.py \
 	extras/package/release/tests/test_native_build.py \
 	extras/package/release/tests/test_package.py \
+	extras/package/release/tests/test_dmg.py \
 	extras/package/release/tests/test_recovery.py \
 	extras/package/release/tests/test_dependency_cache.py \
 	doc/RELEASING.md \

@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import dmg
 from version import validate_tag, bundle_version
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -248,7 +249,23 @@ def macos(stage, output, tag, commit, reuse_qt=False):
         signing='ad-hoc; no Developer ID or notarization'), indent=2) + '\n')
     archive = output / f'hakone-{tag}-macos-{arch}.zip'
     subprocess.run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive)], check=True)
+    # The drag-to-install image carries the same signed bundle as the ZIP.
+    dmg.build(app, disk_image_path(archive))
     return archive
+
+
+def disk_image_path(archive):
+    return archive.with_suffix('.dmg')
+
+
+def write_checksum(path):
+    with path.open('rb') as stream:
+        digest = hashlib.sha256()
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+        digest = digest.hexdigest()
+    path.with_suffix(path.suffix + '.sha256').write_text(f'{digest}  {path.name}\n')
+    return digest
 
 
 def windows(stage, output, tag, commit):
@@ -328,18 +345,20 @@ def main():
         archive = macos(args.stage.resolve(), args.output.resolve(), args.tag, commit, args.reuse_qt)
     else:
         archive = windows(args.stage.resolve(), args.output.resolve(), args.tag, commit)
-    with archive.open('rb') as stream:
-        digest = hashlib.sha256()
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(block)
-        digest = digest.hexdigest()
-    archive.with_suffix(archive.suffix + '.sha256').write_text(f'{digest}  {archive.name}\n')
+    digest = write_checksum(archive)
     metadata_path = args.output / (f"macos-{run('uname', '-m')}-build.json" if args.platform == 'macos' else 'windows-build.json')
     package_metadata = json.loads(metadata_path.read_text())
+    # asset_name stays the ZIP: update metadata and older clients select it.
     package_metadata.update(asset_name=archive.name, size=archive.stat().st_size,
                             sha256=digest, package_type='portable-zip')
+    if args.platform == 'macos':
+        image = disk_image_path(archive)
+        package_metadata['disk_image'] = dict(asset_name=image.name, size=image.stat().st_size,
+                                              sha256=write_checksum(image), package_type='drag-install-dmg')
     metadata_path.write_text(json.dumps(package_metadata, indent=2) + '\n')
     print(archive)
+    if args.platform == 'macos':
+        print(disk_image_path(archive))
 
 
 if __name__ == '__main__':

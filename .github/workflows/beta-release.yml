@@ -215,6 +215,11 @@ jobs:
         with:
           path: build-release-qt
           key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools
+      - name: Install pinned disk image tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dmg-tools"
+          "$RUNNER_TEMP/dmg-tools/bin/pip" install -r extras/package/release/dmg/requirements.txt
+          echo "DMGBUILD=$RUNNER_TEMP/dmg-tools/bin/dmgbuild" >> "$GITHUB_ENV"
       - name: Build and bundle
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
@@ -224,11 +229,27 @@ jobs:
           mkdir -p "$RUNNER_TEMP/relocated app"
           ditto -x -k build-release-output/hakone-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}.zip "$RUNNER_TEMP/relocated app"
           python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video "$RUNNER_TEMP/relocated app/Hakone.app/Contents/MacOS/hakone"
+      - name: Verify disk image
+        run: |
+          image="build-release-output/hakone-$RELEASE_TAG-macos-${{ matrix.arch }}.dmg"
+          hdiutil verify "$image"
+          test "$(hdiutil imageinfo -format "$image")" = ULFO
+          # Compare with a fresh extraction: running the app may leave files beside it.
+          mkdir -p "$RUNNER_TEMP/zip reference"
+          ditto -x -k "build-release-output/hakone-$RELEASE_TAG-macos-${{ matrix.arch }}.zip" "$RUNNER_TEMP/zip reference"
+          mount="$RUNNER_TEMP/disk image"
+          mkdir -p "$mount"
+          hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mount" "$image"
+          trap 'hdiutil detach "$mount" || hdiutil detach -force "$mount"' EXIT
+          # Same files as the verified ZIP app, then a non-GUI run from the read-only volume.
+          python3 extras/package/release/dmg.py check "$mount" --reference "$RUNNER_TEMP/zip reference/Hakone.app"
+          python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" "$mount/Hakone.app/Contents/MacOS/hakone"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}
           path: |
             build-release-output/*.zip
+            build-release-output/*.dmg
             build-release-output/*.sha256
             build-release-output/*.json
           if-no-files-found: error
