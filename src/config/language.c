@@ -88,7 +88,7 @@ static char *legacy_language(void)
 #ifdef _WIN32
     WCHAR value[128];
     DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\VideoLAN\\VLC", L"Lang",
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Hakone", L"Lang",
                      RRF_RT_REG_SZ, NULL, value, &size) == ERROR_SUCCESS)
         return FromWide(value);
 #elif defined(__APPLE__)

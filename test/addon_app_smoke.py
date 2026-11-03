@@ -128,7 +128,7 @@ class App:
         self.audit_path = home / f'{name}-gui-files.log' if args.gui_file_audit and driver else None
         if self.audit_path:
             env['LD_PRELOAD'] = ' '.join(filter(None, [str(args.gui_file_audit), env.get('LD_PRELOAD', '')]))
-            env['VLC_ADDON_GUI_FILE_AUDIT_ROOT'] = str(home / 'data' / 'vlc' / 'addons') + '/'
+            env['VLC_ADDON_GUI_FILE_AUDIT_ROOT'] = str(home / 'data' / 'hakone' / 'addons') + '/'
             env['VLC_ADDON_GUI_FILE_AUDIT_LOG'] = str(self.audit_path)
         self.process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -296,7 +296,7 @@ def run(args):
     # compositor fix also crash with a display.)
     args.env.pop('DISPLAY', None)
     args.env.pop('WAYLAND_DISPLAY', None)
-    store = home / 'data' / 'vlc' / 'addons'
+    store = home / 'data' / 'hakone' / 'addons'
     apps = []
     try:
         first = App(args, home, 'first', args.trace, args.driver)
@@ -446,7 +446,7 @@ def run(args):
                 opened = app.gui_store_opens(args.timeout)
                 results.setdefault('gui_store_opens', {})[app.name] = len(opened)
                 if opened:
-                    root = str(home / 'data' / 'vlc' / 'addons') + '/'
+                    root = str(home / 'data' / 'hakone' / 'addons') + '/'
                     raise Failure(f'{app.name}: the GUI thread opened add-on store files: '
                                   + ', '.join(path.replace(root, '') for path in opened[:12]))
         if second:

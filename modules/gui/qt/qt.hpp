@@ -159,6 +159,11 @@ static inline QString QVLCUserDir( vlc_userdir_t type )
     return res;
 }
 
+/* QSettings organization for the interface settings. On Linux and Windows
+ * it is also the folder name, so the file sits beside the core's hakone
+ * configuration directory. */
+#define QT_SETTINGS_ORGANIZATION "hakone"
+
 /* Application icon: the platform theme's "hakone" icon when one is
  * installed, otherwise the bundled renders. */
 static inline QIcon QVLCAppIcon()

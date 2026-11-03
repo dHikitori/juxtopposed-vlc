@@ -1133,8 +1133,10 @@ static void *Thread( void *obj )
         msg_Dbg(p_intf, "Qt configuration directory: %s", cConfigDir);
         QString configDir = cConfigDir;
         free( cConfigDir );
-        if( configDir.endsWith( "\\vlc" ) )
-            configDir.chop( 4 ); /* the "\vlc" dir is added again by QSettings */
+        /* QSettings adds the organization folder again */
+        const QString organizationDir = QStringLiteral( "\\" QT_SETTINGS_ORGANIZATION );
+        if( configDir.endsWith( organizationDir ) )
+            configDir.chop( organizationDir.size() );
         QSettings::setPath( QSettings::IniFormat, QSettings::UserScope, configDir );
     }
 #endif
@@ -1145,7 +1147,7 @@ static void *Thread( void *obj )
 #else
             QSettings::NativeFormat,
 #endif
-            QSettings::UserScope, "vlc", "vlc-qt-interface" );
+            QSettings::UserScope, QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
     msg_Dbg(p_intf, "Qt settings file: %s", qtu(p_intf->mainSettings->fileName()));
 #ifdef _WIN32
     static const WCHAR moduleMarker = 0;

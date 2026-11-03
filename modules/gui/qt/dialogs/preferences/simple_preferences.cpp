@@ -1374,7 +1374,7 @@ void SPrefsPanel::configML()
 #include "util/registry.hpp"
 
 void SPrefsPanel::cleanLang() {
-    QSettings language(QStringLiteral("HKEY_CURRENT_USER\\Software\\VideoLAN\\VLC"), QSettings::NativeFormat);
+    QSettings language(QStringLiteral("HKEY_CURRENT_USER\\Software\\Hakone"), QSettings::NativeFormat);
     language.remove(QStringLiteral("Lang"));
     language.sync();
 }
@@ -1389,7 +1389,7 @@ void SPrefsPanel::saveLang() {
     else
     {
         QVLCRegistry qvReg( HKEY_CURRENT_USER );
-        qvReg.WriteRegistry( "Software\\VideoLAN\\VLC\\", "Lang", lang );
+        qvReg.WriteRegistry( "Software\\Hakone\\", "Lang", lang );
     }
 }
 
@@ -1599,7 +1599,7 @@ void addAsso( QVLCRegistry *qvReg, const char *psz_ext )
 
         /* Get the installer path */
         QVLCRegistry qvReg2( HKEY_LOCAL_MACHINE );
-        QString str_temp = qvReg2.ReadRegistry( "Software\\VideoLAN\\VLC", "", "" );
+        QString str_temp = qvReg2.ReadRegistry( "Software\\Hakone", "", "" );
 
         if( str_temp.size() )
         {

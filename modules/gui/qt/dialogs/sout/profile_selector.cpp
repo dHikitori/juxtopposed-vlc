@@ -128,7 +128,7 @@ VLCProfileSelector::~VLCProfileSelector()
 #else
             QSettings::NativeFormat,
 #endif
-            QSettings::UserScope, "vlc", "vlc-qt-interface" );
+            QSettings::UserScope, QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
     ;
     settings.setValue( "codecs-profiles-selected", profileBox->currentText() );
 }
@@ -175,7 +175,7 @@ inline void VLCProfileSelector::fillProfilesCombo()
 #else
             QSettings::NativeFormat,
 #endif
-            QSettings::UserScope, "vlc", "vlc-qt-interface" );
+            QSettings::UserScope, QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
 
     const bool savedProfiles = settings.contains(QStringLiteral("codecs-profiles/size"));
     int i_size = settings.beginReadArray( "codecs-profiles" );
@@ -291,7 +291,7 @@ void VLCProfileSelector::saveProfiles()
 #else
             QSettings::NativeFormat,
 #endif
-            QSettings::UserScope, "vlc", "vlc-qt-interface" );
+            QSettings::UserScope, QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
 
     settings.remove( "codecs-profiles" ); /* Erase old profiles to be rewritten */
     settings.beginWriteArray( "codecs-profiles" );

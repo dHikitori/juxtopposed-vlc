@@ -3153,7 +3153,7 @@ bool RedesignPreferences::resetAll()
         ++m_revision; emit changed(); return false;
     };
 #ifdef _WIN32
-    QSettings language(QStringLiteral("HKEY_CURRENT_USER\\Software\\VideoLAN\\VLC"), QSettings::NativeFormat);
+    QSettings language(QStringLiteral("HKEY_CURRENT_USER\\Software\\Hakone"), QSettings::NativeFormat);
     const bool hasLanguage = language.contains(QStringLiteral("Lang"));
     const QVariant previousLanguage = language.value(QStringLiteral("Lang"));
     if (hasLanguage && !language.isWritable()) return failed();

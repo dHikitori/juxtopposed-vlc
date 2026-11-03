@@ -67,7 +67,7 @@ class CacheGeneratorTest(unittest.TestCase):
         cache = self.plugins / "plugins.dat"
         empty_size = cache.stat().st_size
         shutil.copyfile(PLUGIN, self.plugins / PLUGIN.name)
-        config = self.root / "config" / "vlc"
+        config = self.root / "config" / "hakone"
         config.mkdir(parents=True)
         (config / "vlcrc").write_text("[core]\nplugins-scan=0\n")
         self.run_helper("--verify")
