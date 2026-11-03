@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
 #include "subtitle_source_service.hpp"
 #include "subtitle_matching.hpp"
 #include "addons/addon_manager.hpp"
@@ -496,7 +499,7 @@ QNetworkReply* SubtitleSourceService::request(const QUrl& url, const QByteArray&
                                               bool api, qint64 limit, ReplyCallback callback)
 {
     QNetworkRequest request(url);
-    request.setRawHeader("User-Agent", "VLC-Juxtopposed v4.0");
+    request.setRawHeader("User-Agent", "Hakone v" PACKAGE_VERSION);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
         api ? QNetworkRequest::SameOriginRedirectPolicy : QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setMaximumRedirectsAllowed(5);
