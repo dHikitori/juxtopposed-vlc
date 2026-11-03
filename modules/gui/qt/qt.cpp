@@ -52,6 +52,8 @@ extern "C" char **environ;
 #endif
 
 #include <QApplication>
+#include <QDialog>
+#include <QTimer>
 #include <QFontDatabase>
 #include <atomic>
 #include <QDate>
@@ -585,6 +587,54 @@ Q_DECLARE_METATYPE(QQmlError)
 static qt_intf_t* g_qtIntf = nullptr;
 // Only the app thread reads or writes this pointer.
 static vlc::addons::AddonAppShutdown* g_addonAppShutdown = nullptr;
+
+namespace {
+/* Counts nested event deliveries on each thread, so shutdown can tell when
+ * it runs inside an event handler's nested loop, such as a blocking dialog. */
+class QVLCApplication : public QApplication
+{
+public:
+    using QApplication::QApplication;
+
+    bool notify( QObject *receiver, QEvent *event ) override
+    {
+        ++s_eventDepth;
+        const auto leave = qScopeGuard( [] { --s_eventDepth; } );
+        return QApplication::notify( receiver, event );
+    }
+
+    static int eventDepth() { return s_eventDepth; }
+
+private:
+    static thread_local int s_eventDepth;
+};
+
+thread_local int QVLCApplication::s_eventDepth = 0;
+}
+
+/* A blocking dialog opened from an event handler (often a QML signal
+ * handler) runs a nested event loop. Unloading the interface from inside it
+ * deletes objects whose handlers are still on the stack, which Qt aborts on.
+ * Close the topmost modal dialog and retry until the work runs from the
+ * outermost event delivery. Give up waiting after about five seconds. */
+static void runOutsideNestedEventLoops( std::function<void()> work, int attempt = 0 )
+{
+    if( QVLCApplication::eventDepth() <= 1 || attempt >= 200 )
+    {
+        work();
+        return;
+    }
+    if( QWidget *modal = QApplication::activeModalWidget() )
+    {
+        if( auto *dialog = qobject_cast<QDialog *>( modal ) )
+            dialog->reject();
+        else
+            modal->close();
+    }
+    QTimer::singleShot( 25, qApp, [work = std::move( work ), attempt]() mutable {
+        runOutsideNestedEventLoops( std::move( work ), attempt + 1 );
+    } );
+}
 static vlc::threads::condition_variable wait_ready;
 static vlc::threads::mutex lock;
 static bool busy = false;
@@ -798,13 +848,15 @@ static void Close( vlc_object_t *p_this )
         struct Completion { std::mutex mutex; std::condition_variable changed; bool done=false; };
         const auto completion=std::make_shared<Completion>();
         QMetaObject::invokeMethod(qApp,[p_intf,completion] {
-            const auto cleanup=[p_intf,completion] {
-                ThreadCleanup(p_intf,CLEANUP_INTF_CLOSED);
-                { std::lock_guard<std::mutex> guard(completion->mutex); completion->done=true; }
-                completion->changed.notify_all();
-            };
-            if(!g_addonAppShutdown || !g_addonAppShutdown->requestNativeClose(cleanup))
-                msg_Err(p_intf,"The app cannot stop add-on work.");
+            runOutsideNestedEventLoops([p_intf,completion] {
+                const auto cleanup=[p_intf,completion] {
+                    ThreadCleanup(p_intf,CLEANUP_INTF_CLOSED);
+                    { std::lock_guard<std::mutex> guard(completion->mutex); completion->done=true; }
+                    completion->changed.notify_all();
+                };
+                if(!g_addonAppShutdown || !g_addonAppShutdown->requestNativeClose(cleanup))
+                    msg_Err(p_intf,"The app cannot stop add-on work.");
+            });
         },Qt::QueuedConnection);
         { std::unique_lock<std::mutex> guard(completion->mutex); completion->changed.wait(guard,[&] { return completion->done; }); }
 
@@ -990,7 +1042,7 @@ static void *Thread( void *obj )
         qputenv("QSG_DISTANCEFIELD_ANTIALIASING", QByteArrayLiteral("gray"));
 
     /* Start the QApplication here */
-    QApplication app( argc, argv );
+    QVLCApplication app( argc, argv );
     // Declared after the app, so it also reports waits in the final cleanup.
     std::unique_ptr<HangReporter> hangReporter;
     if (var_InheritBool(p_intf, "qt-hang-report"))
