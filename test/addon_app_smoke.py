@@ -289,7 +289,7 @@ def run(args):
                     LIBGL_ALWAYS_SOFTWARE='1',
                     VLC_PLUGIN_PATH=str(args.build / 'modules'),
                     VLC_DATA_PATH=str(args.build / 'share'),
-                    VLC_LIBEXEC_PATH=str(args.build / 'bin'))
+                    VLC_LIBEXEC_PATH=str(libexec_directory(args.build)))
     args.env.pop('DBUS_SESSION_BUS_ADDRESS', None)
     # No window reaches the desktop: Qt is offscreen, and without a display
     # a video gets no native window either. (Builds without the offscreen
@@ -485,6 +485,18 @@ def run(args):
         results.pop('stderr_tail', None)
     print(json.dumps(results, indent=2))
     return return_code
+
+
+def libexec_directory(build):
+    """Where the build puts vlc-qt-check: modules/ with meson, bin/ otherwise.
+
+    A debug build's vlc sets this path itself; a release-type build uses the
+    one given here, and Qt does not start without the helper.
+    """
+    for name in ('modules', 'bin'):
+        if (build / name / 'vlc-qt-check').exists():
+            return build / name
+    return build / 'bin'
 
 
 def main():

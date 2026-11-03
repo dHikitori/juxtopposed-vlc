@@ -45,6 +45,9 @@ PY
         rm -rf -- "$temporary"
     fi
     rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update || return 1
+    # The build compiles each bundled add-on's module for this target on
+    # every platform. $1 is an extra target, such as a worker cross target.
+    rustup target add --toolchain "$RUSTUP_TOOLCHAIN" wasm32-unknown-unknown || return 1
     if [[ -n "${1:-}" ]]; then
         rustup target add --toolchain "$RUSTUP_TOOLCHAIN" "$1" || return 1
     fi

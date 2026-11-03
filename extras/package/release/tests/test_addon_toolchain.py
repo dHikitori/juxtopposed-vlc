@@ -72,6 +72,8 @@ class AddonToolchainTests(unittest.TestCase):
                 calls = [json.loads(line) for line in (root / "calls.jsonl").read_text().splitlines()]
                 self.assertIn(["rustup", "toolchain", "install", pin, "--profile", "minimal", "--no-self-update"], calls)
                 self.assertIn(["rustup", "target", "add", "--toolchain", pin, "x86_64-pc-windows-gnu"], calls)
+                # Every platform builds the bundled add-on modules for wasm32.
+                self.assertIn(["rustup", "target", "add", "--toolchain", pin, "wasm32-unknown-unknown"], calls)
                 environment = json.loads(done.stdout.splitlines()[-1])
                 self.assertEqual(environment, {"RUSTUP_TOOLCHAIN": pin, "RUSTUP_AUTO_INSTALL": "0"})
 
@@ -134,6 +136,8 @@ class AddonToolchainTests(unittest.TestCase):
             pin = (SCRIPTS / "addon-rust-version.txt").read_text().strip()
             self.assertIn(["rustup", "toolchain", "install", pin, "--profile", "minimal", "--no-self-update"], calls)
             self.assertIn(["rustup", "target", "add", "--toolchain", pin, "x86_64-pc-windows-gnu"], calls)
+            # Every platform builds the bundled add-on modules for wasm32.
+            self.assertIn(["rustup", "target", "add", "--toolchain", pin, "wasm32-unknown-unknown"], calls)
 
     def test_worker_builder_defaults_to_stable_and_respects_override(self):
         for override in (None, "nightly-2026-10-25"):
