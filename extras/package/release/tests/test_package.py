@@ -39,8 +39,8 @@ class PackageTests(unittest.TestCase):
 
     def test_macos_signs_nested_code_before_bundles_without_identity(self):
         with tempfile.TemporaryDirectory() as temp:
-            app = Path(temp) / 'VLC Juxtopposed.app'
-            launcher = self.make_bundle(app, 'vlc')
+            app = Path(temp) / 'Hakone.app'
+            launcher = self.make_bundle(app, 'hakone')
             framework = app / 'Contents/Frameworks/QtCore.framework'
             framework_main = self.make_bundle(framework, 'QtCore', framework=True)
             helper = framework / 'Helpers/Helper.app'
@@ -68,8 +68,8 @@ class PackageTests(unittest.TestCase):
 
     def test_macos_invalid_adhoc_signature_stops_packaging(self):
         with tempfile.TemporaryDirectory() as temp:
-            app = Path(temp) / 'VLC.app'
-            launcher = self.make_bundle(app, 'vlc')
+            app = Path(temp) / 'Hakone.app'
+            launcher = self.make_bundle(app, 'hakone')
             error = subprocess.CalledProcessError(1, ['codesign'])
             with mock.patch.object(package.subprocess, 'run', side_effect=error) as tool:
                 with self.assertRaises(subprocess.CalledProcessError):
@@ -82,7 +82,7 @@ class PackageTests(unittest.TestCase):
                 root = Path(temp)
                 stage, output, qt, sources = [root / p for p in ('stage', 'output', 'qt', 'sources')]
                 output.mkdir()
-                for name in ('bin/vlc', 'bin/vlc-addon-worker', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
+                for name in ('bin/hakone', 'bin/vlc-addon-worker', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
                              'libexec/vlc/vlc-qt-check', 'lib/libvlc.dylib',
                              'lib/vlc/plugins/gui/libqt_plugin.dylib'):
                     path = stage / name
@@ -90,13 +90,13 @@ class PackageTests(unittest.TestCase):
                     path.write_bytes(b'\xcf\xfa\xed\xfe')
                 for name in ('share/vlc', 'share/locale'):
                     (stage / name).mkdir(parents=True)
-                for name in ('share/vlc512x512.png', 'modules/gui/macosx/Resources/App-Icons/VLC.icns',
+                for name in ('share/vlc512x512.png', 'share/icons/hakone.icns',
                              'modules/gui/qt/fonts/LICENSE.txt', 'COPYING', 'COPYING.LIB',
                              'AUTHORS', 'THANKS', 'README.md'):
                     path = sources / name
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_bytes(b'fixture')
-                app = output / f'macos-{arch}/VLC Juxtopposed.app'
+                app = output / f'macos-{arch}/Hakone.app'
                 verified = False
                 sealed_info = None
                 signed_paths = []
@@ -153,7 +153,7 @@ class PackageTests(unittest.TestCase):
             root = Path(temp)
             stage = root / 'stage'
             stage.mkdir()
-            for name in ('vlc.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll'):
+            for name in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll'):
                 (stage / name).write_bytes(b'fixture')
             (stage / 'plugins').mkdir()
             output = root / 'output'
@@ -170,12 +170,12 @@ class PackageTests(unittest.TestCase):
             argv = ['package.py', 'windows', str(stage), '--output', str(output), '--tag', tag]
             with mock.patch.object(sys, 'argv', argv), mock.patch.object(package, 'run', side_effect=tool):
                 package.main()
-            archive = output / f'vlc-juxtopposed-{tag}-win64.zip'
+            archive = output / f'hakone-{tag}-win64.zip'
             self.assertTrue(archive.is_file())
             with zipfile.ZipFile(archive) as bundled:
-                self.assertIn('vlc-win64/portable/', bundled.namelist())
-                self.assertIn('vlc-win64/vlc-addon-worker.exe', bundled.namelist())
-                self.assertEqual(bundled.read('vlc-win64/SOURCE_COMMIT.txt'), ('a' * 40 + '\n').encode())
+                self.assertIn('hakone-win64/portable/', bundled.namelist())
+                self.assertIn('hakone-win64/vlc-addon-worker.exe', bundled.namelist())
+                self.assertEqual(bundled.read('hakone-win64/SOURCE_COMMIT.txt'), ('a' * 40 + '\n').encode())
             metadata = json.loads((output / 'windows-build.json').read_text())
             self.assertEqual(metadata['version'], tag)
             self.assertEqual(metadata['asset_name'], archive.name)

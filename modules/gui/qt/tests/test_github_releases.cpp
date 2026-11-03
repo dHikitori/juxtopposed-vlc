@@ -15,6 +15,7 @@ static Version version(const char* value)
     return Version::parse(QString::fromLatin1(value)).value();
 }
 
+// A legacy release without a metadata block, named like the pre-rebrand packages.
 static QJsonObject release(const QString& tag, const QString& suffix = QStringLiteral("win64.zip"))
 {
     const QString name = QStringLiteral("vlc-juxtopposed-") + tag + QLatin1Char('-') + suffix;
@@ -238,7 +239,7 @@ private slots:
         QVERIFY(!selectRelease({draft}, beta, win));
         const auto legacy = selectRelease({release(QStringLiteral("4.0.0-beta.5"))}, version("4.0.0-beta.4"), win);
         QVERIFY(legacy);
-        QCOMPARE(legacy->productName, QStringLiteral("VLC"));
+        QCOMPARE(legacy->productName, QStringLiteral("Hakone"));
         QVERIFY(legacy->subtitle.isEmpty());
     }
     void invalidMetadata()

@@ -63,7 +63,7 @@ def sign_macos_adhoc(app, all_binaries):
                     if main.is_file():
                         main_executables.add(main.resolve())
                 break
-    # Signing Contents/MacOS/vlc directly can seal the app before its nested
+    # Signing Contents/MacOS/hakone directly can seal the app before its nested
     # libraries are signed. Framework executables must also be signed via their
     # bundle, including versioned frameworks whose top-level executable is a link.
     targets = code_bundles | {p for p in all_binaries if p.resolve() not in main_executables}
@@ -78,7 +78,7 @@ def sign_macos_adhoc(app, all_binaries):
 
 def macos(stage, output, tag, commit, reuse_qt=False):
     arch = run('uname', '-m')
-    app = output / f'macos-{arch}' / 'VLC Juxtopposed.app'
+    app = output / f'macos-{arch}' / 'Hakone.app'
     if app.exists() and not reuse_qt:
         raise SystemExit(f'Remove the old package before rebuilding: {app}')
     contents = app / 'Contents'
@@ -93,7 +93,7 @@ def macos(stage, output, tag, commit, reuse_qt=False):
             existing_qt = plistlib.load(stream)['CFBundleVersion']
         if existing_qt != run(qt / 'bin/qmake', '-query', 'QT_VERSION'):
             raise SystemExit('Cannot reuse a deployment from a different Qt version')
-    copy(stage / 'bin/vlc', binaries / 'vlc')
+    copy(stage / 'bin/hakone', binaries / 'hakone')
     # Copy the worker before the dependency checks, Qt deployment and code signature.
     copy(stage / 'bin/vlc-addon-worker', binaries / 'vlc-addon-worker')
     for helper in ('vlc-preparser', 'vlc-cache-gen', 'vlc-qt-check'):
@@ -106,21 +106,21 @@ def macos(stage, output, tag, commit, reuse_qt=False):
         shutil.copy2(library, frameworks / library.name, follow_symlinks=True)
     copy(stage / 'share/vlc', resources / 'share')
     copy(stage / 'share/locale', resources / 'share/locale')
-    copy(ROOT / 'share/vlc512x512.png', resources / 'vlc.png')
-    copy(ROOT / 'modules/gui/macosx/Resources/App-Icons/VLC.icns', resources / 'vlc.icns')
+    copy(ROOT / 'share/vlc512x512.png', resources / 'hakone.png')
+    copy(ROOT / 'share/icons/hakone.icns', resources / 'hakone.icns')
     for name in ('COPYING', 'COPYING.LIB', 'AUTHORS', 'THANKS', 'README.md'):
         copy(ROOT / name, resources / name)
     copy(ROOT / 'modules/gui/qt/fonts/LICENSE.txt', resources / 'Inter-LICENSE.txt')
     (resources / 'SOURCE_COMMIT.txt').write_text(commit + '\n')
     # The Qt plugin has greater interface priority than minimal_macosx.
     # Keep a native main executable so NSBundle, Finder file events and AppKit work.
-    info = dict(CFBundleExecutable='vlc', CFBundleName='VLC Juxtopposed',
-                CFBundleDisplayName='VLC Juxtopposed', CFBundlePackageType='APPL',
-                CFBundleIdentifier='org.juxtopposed.vlc', CFBundleIconFile='vlc.icns',
+    info = dict(CFBundleExecutable='hakone', CFBundleName='Hakone',
+                CFBundleDisplayName='Hakone', CFBundlePackageType='APPL',
+                CFBundleIdentifier='org.hakone.hakone', CFBundleIconFile='hakone.icns',
                 CFBundleVersion=bundle_version(tag),
                 CFBundleShortVersionString=tag.split('-')[0], NSHighResolutionCapable=True,
-                NSMicrophoneUsageDescription='VLC can play and record audio from input devices.',
-                NSCameraUsageDescription='VLC can play and record video from input devices.')
+                NSMicrophoneUsageDescription='Hakone can play and record audio from input devices.',
+                NSCameraUsageDescription='Hakone can play and record video from input devices.')
     with (contents / 'Info.plist').open('wb') as stream:
         plistlib.dump(info, stream)
     deploy = qt / 'bin/macdeployqt'
@@ -246,17 +246,17 @@ def macos(stage, output, tag, commit, reuse_qt=False):
         tag=tag, version=tag, channel=validate_tag(tag)['channel'], platform='macos', source_commit=commit,
         architecture=arch, minimum_macos=minimum, qt=run(qt / 'bin/qmake', '-query', 'QT_VERSION'),
         signing='ad-hoc; no Developer ID or notarization'), indent=2) + '\n')
-    archive = output / f'vlc-juxtopposed-{tag}-macos-{arch}.zip'
+    archive = output / f'hakone-{tag}-macos-{arch}.zip'
     subprocess.run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive)], check=True)
     return archive
 
 
 def windows(stage, output, tag, commit):
-    target = output / 'vlc-win64'
+    target = output / 'hakone-win64'
     if target.exists():
         raise SystemExit(f'Remove the old package before rebuilding: {target}')
     copy(stage, target)
-    for required in ('vlc.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
+    for required in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
         if not (target / required).exists():
             raise RuntimeError(f'Windows installation missing {required}')
     # MinGW's compiler runtimes are not part of a stock Windows installation.
@@ -296,7 +296,7 @@ def windows(stage, output, tag, commit):
     (target / 'SOURCE_COMMIT.txt').write_text(commit + '\n')
     copy(ROOT / 'modules/gui/qt/fonts/LICENSE.txt', target / 'Inter-LICENSE.txt')
     # Zip entries preserve the empty portable folder.
-    archive = output / f'vlc-juxtopposed-{tag}-win64.zip'
+    archive = output / f'hakone-{tag}-win64.zip'
     shutil.make_archive(str(archive.with_suffix('')), 'zip', output, target.name)
     return archive
 

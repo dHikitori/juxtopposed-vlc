@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
                     raise SystemExit(f'Video playback missing: {required}')
             if 'using vout display module "vdummy"' in gui.stdout or 'video output display creation failed' in gui.stdout:
                 raise SystemExit('Video output did not render to a working display')
-        for failure in ('failed to load component', 'qqmlapplicationengine failed', 'is not installed', 'qml loading', 'cannot load the vlc interface', 'svg icon plugin is not found',
+        for failure in ('failed to load component', 'qqmlapplicationengine failed', 'is not installed', 'qml loading', 'cannot load the vlc interface', 'cannot load the hakone interface', 'svg icon plugin is not found',
                         'failed to load client buffer integration', 'scene graph error:',
                         'failed to initialize graphics backend', 'failed to create opengl context',
                         'egl not available', 'failed to initialize egl display',

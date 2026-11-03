@@ -174,7 +174,7 @@ class RecoveryTests(unittest.TestCase):
     def fixture_package(self, directory, target, source):
         spec = recovery.TARGETS[target]
         directory.mkdir(parents=True)
-        filename = f'vlc-juxtopposed-{VERSION}-{target}.{spec["extension"]}'
+        filename = f'hakone-{VERSION}-{target}.{spec["extension"]}'
         data = ('archive ' + target).encode()
         digest = hashlib.sha256(data).hexdigest()
         (directory / filename).write_bytes(data)
@@ -307,7 +307,7 @@ class RecoveryTests(unittest.TestCase):
             update_metadata = json.loads((output / 'UPDATE_METADATA.json').read_text())
             self.assertEqual(update_metadata['version'], VERSION)
             self.assertEqual(update_metadata['generation'], 0)
-            self.assertEqual(update_metadata['product_name'], 'VLC')
+            self.assertEqual(update_metadata['product_name'], 'Hakone')
             self.assertIn(recovery.append_metadata('', update_metadata).strip(), notes)
             self.assertIn(f'`{old}`', notes)
             self.assertIn(f'`{new}`', notes)
@@ -413,11 +413,11 @@ class RecoveryTests(unittest.TestCase):
             (output / 'windows-build.json').write_text('{}')
             (output / 'UPDATE_METADATA.json').write_text('{}')
             (output / 'SOURCE_COMMIT.txt').write_text(NEW)
-            (output / f'vlc-juxtopposed-{VERSION}-source.tar.gz').write_bytes(b'old source archive')
-            (output / f'vlc-juxtopposed-{VERSION}-source.zip').write_bytes(b'old source archive')
+            (output / f'hakone-{VERSION}-source.tar.gz').write_bytes(b'old source archive')
+            (output / f'hakone-{VERSION}-source.zip').write_bytes(b'old source archive')
             expected = ['SHA256SUMS.txt']
             for target, spec in recovery.TARGETS.items():
-                name = f'vlc-juxtopposed-{VERSION}-{target}.{spec["extension"]}'
+                name = f'hakone-{VERSION}-{target}.{spec["extension"]}'
                 expected.extend((name, name + '.sha256'))
             for name in expected:
                 (output / name).write_bytes(b'package or checksum')

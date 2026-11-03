@@ -22,7 +22,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             self.fixture(root)
             result = release_metadata('4.0.0-beta.5', root)
             self.assertEqual(result, dict(schema=1, version='4.0.0-beta.5', generation=0,
-                                         product_name='VLC', package_prefix='vlc-juxtopposed', subtitle=''))
+                                         product_name='Hakone', package_prefix='hakone', subtitle=''))
 
     def test_optional_display_fields_and_compiled_generation(self):
         with tempfile.TemporaryDirectory() as temp:

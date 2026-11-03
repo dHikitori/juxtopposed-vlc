@@ -184,7 +184,7 @@ def validate_package(directory, target, version, source):
     if (directory / spec['metadata']).is_symlink():
         raise ValueError(f'{target}: symbolic links are not valid package metadata')
     metadata = json.loads((directory / spec['metadata']).read_text())
-    asset_name = f'vlc-juxtopposed-{version}-{target}.{spec["extension"]}'
+    asset_name = f'hakone-{version}-{target}.{spec["extension"]}'
     for key, expected in dict(tag=version, version=version, platform=spec['platform'],
                               architecture=spec['architecture'], source_commit=source,
                               asset_name=asset_name).items():
@@ -213,7 +213,7 @@ def file_digest(path):
 
 
 def package_asset_names(version):
-    return sorted(f'vlc-juxtopposed-{version}-{target}.{spec["extension"]}'
+    return sorted(f'hakone-{version}-{target}.{spec["extension"]}'
                   for target, spec in TARGETS.items())
 
 
@@ -339,7 +339,7 @@ def main():
             flags = ['--prerelease'] if validate_tag(version)['channel'] != 'stable' else []
             assets = [str(p) for p in release_assets(args.output, version)]
             subprocess.run(['gh', 'release', 'create', version, '--target', current, '--draft', *flags,
-                            '--title', f'VLC Juxtopposed Redesign - {version}',
+                            '--title', f'Hakone {version}',
                             '--notes-file', str(args.output / 'RELEASE_NOTES.md'), *assets], check=True)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         parser.error(str(error))

@@ -74,7 +74,7 @@ class RuntimeTests(unittest.TestCase):
             libraries.mkdir(parents=True)
             (app / 'usr/bin').mkdir(parents=True)
             (app / 'usr/libexec/vlc').mkdir(parents=True)
-            binary = app / 'usr/bin/vlc'
+            binary = app / 'usr/bin/hakone'
             binary.touch()
             for soname, versioned in self.WAYLAND_LIBRARIES:
                 (libraries / versioned).write_bytes(b'old Wayland runtime')
@@ -161,7 +161,7 @@ class RuntimeTests(unittest.TestCase):
             launch = app / 'AppRun'
             shutil.copy2(SCRIPTS / 'AppRun.linux', launch)
             launch.chmod(0o755)
-            binary = app / 'usr/bin/vlc'
+            binary = app / 'usr/bin/hakone'
             binary.write_text(f'#!{sys.executable}\nimport os,sys,json\nprint(json.dumps(dict(cwd=os.getcwd(), args=sys.argv[1:], env=dict(os.environ))))\n')
             binary.chmod(0o755)
             env = dict(os.environ, APPDIR='/wrong/app', LD_LIBRARY_PATH='/wrong/lib',

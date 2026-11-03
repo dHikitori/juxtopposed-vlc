@@ -222,8 +222,8 @@ jobs:
       - name: Verify relocated app
         run: |
           mkdir -p "$RUNNER_TEMP/relocated app"
-          ditto -x -k build-release-output/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}.zip "$RUNNER_TEMP/relocated app"
-          python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video "$RUNNER_TEMP/relocated app/VLC Juxtopposed.app/Contents/MacOS/vlc"
+          ditto -x -k build-release-output/hakone-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}.zip "$RUNNER_TEMP/relocated app"
+          python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video "$RUNNER_TEMP/relocated app/Hakone.app/Contents/MacOS/hakone"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}
@@ -281,7 +281,7 @@ jobs:
       - name: Verify relocated directory bundle
         run: |
           mkdir -p "$RUNNER_TEMP/relocated"
-          tar -xzf build-release-output/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated"
+          tar -xzf build-release-output/hakone-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated"
           python3 extras/package/release/bundle-linux-runtime.py --verify-only "$RUNNER_TEMP/relocated/AppDir"
           QT_QPA_PLATFORM=xcb LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a \
             python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video --require-opengl "$RUNNER_TEMP/relocated/AppDir/AppRun"
@@ -419,22 +419,22 @@ jobs:
           path: downloads
       - shell: pwsh
         run: |
-          Expand-Archive downloads/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-win64.zip "$env:RUNNER_TEMP/relocated"
-          $vlc = "$env:RUNNER_TEMP/relocated/vlc-win64/vlc.exe"
-          python extras/package/release/version.py "$env:RELEASE_TAG" --executable $vlc --require-module qt --require-module avcodec --require-module medialibrary
+          Expand-Archive downloads/hakone-${{ needs.prepare.outputs.version }}-win64.zip "$env:RUNNER_TEMP/relocated"
+          $hakone = "$env:RUNNER_TEMP/relocated/hakone-win64/hakone.exe"
+          python extras/package/release/version.py "$env:RELEASE_TAG" --executable $hakone --require-module qt --require-module avcodec --require-module medialibrary
           if ($LASTEXITCODE -ne 0) { throw 'Compiled version or required plugin verification failed' }
           python -c "import wave; w=wave.open('sample.wav','wb'); w.setparams((1,2,48000,0,'NONE','not compressed')); w.writeframes(b'\0\0'*96000); w.close()"
           $sample = (Resolve-Path sample.wav).Path
           # Reuse the portable profile to exercise the cached graphics probe.
           foreach ($attempt in 1..2) {
-            $log = "$env:RUNNER_TEMP/vlc-smoke-$attempt.log"
-            $process = Start-Process $vlc -ArgumentList '--ignore-config','-vv','-I','qt','--no-video','--aout=dummy','--no-qt-privacy-ask','--no-qt-updates-notif','--no-media-library','--no-metadata-network-access','--play-and-exit','--file-logging',"--logfile=$log",$sample -PassThru
-            if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'VLC startup timed out' }
-            if ($process.ExitCode -ne 0) { throw "VLC exited $($process.ExitCode)" }
+            $log = "$env:RUNNER_TEMP/hakone-smoke-$attempt.log"
+            $process = Start-Process $hakone -ArgumentList '--ignore-config','-vv','-I','qt','--no-video','--aout=dummy','--no-qt-privacy-ask','--no-qt-updates-notif','--no-media-library','--no-metadata-network-access','--play-and-exit','--file-logging',"--logfile=$log",$sample -PassThru
+            if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Hakone startup timed out' }
+            if ($process.ExitCode -ne 0) { throw "Hakone exited $($process.ExitCode)" }
             $messages = Get-Content $log -Raw
             if ($messages -notmatch 'using interface module "qt"') { throw 'Qt interface did not start' }
             if ($messages -notmatch 'using audio decoder module') { throw 'Audio decoder did not start' }
-            if ($messages -match 'failed to load component|QQmlApplicationEngine failed|is not installed|qml loading|Cannot load the VLC interface|svg icon plugin is not found|Scene Graph Error|Failed to create RHI|Failed to initialize graphics backend') { throw 'Qt interface reported a startup failure' }
+            if ($messages -match 'failed to load component|QQmlApplicationEngine failed|is not installed|qml loading|Cannot load the (VLC|Hakone) interface|svg icon plugin is not found|Scene Graph Error|Failed to create RHI|Failed to initialize graphics backend') { throw 'Qt interface reported a startup failure' }
           }
 
   draft:

@@ -121,7 +121,9 @@ static bool githubUrl(const QUrl& url, const QString& path)
 struct Metadata
 {
     unsigned generation = 0;
-    QString productName = QStringLiteral("VLC");
+    QString productName = QStringLiteral("Hakone");
+    // Only releases published before the metadata block existed lack it; they
+    // used the pre-rebrand asset names. Newer releases state their own prefix.
     QString packagePrefix = QStringLiteral("vlc-juxtopposed");
     QString subtitle;
     QString notes;

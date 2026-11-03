@@ -63,11 +63,12 @@ def bundle_version(tag):
 
 
 def reported_version(output):
-    # The CLI uses "VLC version"; accept the familiar product-name banner too.
+    # The CLI uses "Hakone version"; accept the product-name banner and the
+    # pre-rebrand "VLC" banners too.
     # Match the application token, never a version in the parenthesized changeset.
-    banner = re.search(r'^VLC (?:version|media player) (\S+)(?=\s|$)', output, re.MULTILINE)
+    banner = re.search(r'^(?:Hakone|VLC) (?:version|[Mm]edia [Pp]layer) (\S+)(?=\s|$)', output, re.MULTILINE)
     if not banner:
-        raise ValueError('Could not read the application version from VLC --version output')
+        raise ValueError('Could not read the application version from Hakone --version output')
     return banner[1]
 
 
@@ -105,7 +106,7 @@ def verify_required_modules(executable, required, env=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('tag', nargs='?', default=os.environ.get('RELEASE_TAG') or None)
-    parser.add_argument('--executable', type=Path, help='Also verify the installed VLC executable')
+    parser.add_argument('--executable', type=Path, help='Also verify the installed Hakone executable')
     parser.add_argument('--require-module', action='append', default=[], help='Require a loadable module in --list output')
     args = parser.parse_args()
     try:

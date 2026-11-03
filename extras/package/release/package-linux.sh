@@ -8,14 +8,16 @@ appdir="$output/linux-x86_64/AppDir"
 [[ ! -e "$appdir" ]] || { echo "Remove old AppDir first: $appdir" >&2; exit 1; }
 mkdir -p "$appdir/usr" "$output/tools/downloads"
 cp -a "$stage/." "$appdir/usr/"
-mkdir -p "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/256x256/apps"
-cp "$root/share/icons/256x256/vlc.png" "$appdir/usr/share/icons/hicolor/256x256/apps/vlc-juxtopposed.png"
-cat > "$appdir/usr/share/applications/vlc-juxtopposed.desktop" <<'EOF'
+mkdir -p "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/256x256/apps" \
+    "$appdir/usr/share/icons/hicolor/scalable/apps"
+cp "$root/share/icons/256x256/hakone.png" "$appdir/usr/share/icons/hicolor/256x256/apps/hakone.png"
+cp "$root/share/icons/hakone.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/hakone.svg"
+cat > "$appdir/usr/share/applications/hakone.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=VLC Juxtopposed
-Exec=vlc
-Icon=vlc-juxtopposed
+Name=Hakone Media Player
+Exec=hakone
+Icon=hakone
 Categories=AudioVideo;Player;
 Terminal=false
 EOF
@@ -58,7 +60,7 @@ export EXTRA_PLATFORM_PLUGINS='libqwayland-egl.so;libqwayland-generic.so;libqoff
 export LD_LIBRARY_PATH="$stage/lib:$stage/lib/vlc:${RELEASE_DEPS_DIR:-$root/build-release-linux-deps}/prefix/lib:${LD_LIBRARY_PATH:-}"
 # linuxdeploy recursively scans the installed VLC modules in AppDir.
 "$output/tools/linuxdeploy" --appdir "$appdir" \
-    --executable "$appdir/usr/bin/vlc" \
+    --executable "$appdir/usr/bin/hakone" \
     --executable "$appdir/usr/bin/vlc-addon-worker" \
     --executable "$appdir/usr/libexec/vlc/vlc-preparser" \
     --executable "$appdir/usr/libexec/vlc/vlc-cache-gen" \
@@ -70,14 +72,14 @@ python3 "$root/extras/package/release/bundle-linux-runtime.py" "$appdir" \
 cp "$root/COPYING" "$root/COPYING.LIB" "$root/README.md" "$appdir/"
 cp "$root/modules/gui/qt/fonts/LICENSE.txt" "$appdir/Inter-LICENSE.txt"
 git -C "$root" rev-parse HEAD > "$appdir/SOURCE_COMMIT.txt"
-tar -C "$(dirname "$appdir")" -czf "$output/vlc-juxtopposed-$tag-linux-x86_64.tar.gz" AppDir
+tar -C "$(dirname "$appdir")" -czf "$output/hakone-$tag-linux-x86_64.tar.gz" AppDir
 cd "$output"
-sha256sum "vlc-juxtopposed-$tag-linux-x86_64.tar.gz" > "vlc-juxtopposed-$tag-linux-x86_64.tar.gz.sha256"
+sha256sum "hakone-$tag-linux-x86_64.tar.gz" > "hakone-$tag-linux-x86_64.tar.gz.sha256"
 python3 - "$tag" <<'PYMETA'
 import hashlib, json, os, pathlib, subprocess, sys
 metadata_path = pathlib.Path("linux-build.json")
 metadata = json.loads(metadata_path.read_text())
-archive = pathlib.Path(f"vlc-juxtopposed-{sys.argv[1]}-linux-x86_64.tar.gz")
+archive = pathlib.Path(f"hakone-{sys.argv[1]}-linux-x86_64.tar.gz")
 digest = hashlib.sha256()
 with archive.open("rb") as stream:
     for block in iter(lambda: stream.read(1024 * 1024), b""):
