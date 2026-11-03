@@ -41,7 +41,7 @@ C.Dialog {
     }
     function finish(success, error = "") {
         if (success) close()
-        else errorMessage = error || qsTr("VLC cannot save this change. Make sure that the key is correct. Try again.")
+        else errorMessage = error || qsTr("Hakone cannot save this change. Make sure that the key is correct. Try again.")
     }
     onOpened: { errorMessage = ""; apiKeyField.forceActiveFocus(); Qt.callLater(revealKeyField) }
     onClosed: apiKeyField.text = ""

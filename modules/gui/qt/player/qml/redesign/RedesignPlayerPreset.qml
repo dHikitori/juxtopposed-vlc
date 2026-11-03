@@ -240,7 +240,7 @@ Item {
             Text { Layout.fillWidth: true; text: root.nameAction === "delete" ? root.applicationProfile ? qsTr("Delete Profile") : qsTr("Delete Preset") : root.nameAction === "select" ? qsTr("Change Profile") : root.applicationProfile ? root.nameAction === "rename" ? qsTr("Rename Profile") : root.nameAction === "duplicate" ? qsTr("Duplicate Profile") : qsTr("New Profile") : root.nameAction === "rename" ? qsTr("Rename Preset") : root.nameAction === "duplicate" ? qsTr("Duplicate Preset") : qsTr("New Preset"); color: root.theme.bright; font.pixelSize: root.theme.dp(20) }
             Text {
                 Layout.fillWidth: true; visible: root.applicationProfile && root.nameAction !== "select" && root.nameAction !== "delete"
-                text: qsTr("Save all VLC settings in this profile. Some settings apply to the next file or after you close VLC and start it again.")
+                text: qsTr("Save all Hakone settings in this profile. Some settings apply to the next file or after you close Hakone and start it again.")
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(13); wrapMode: Text.WordWrap
             }
             C.TextField {

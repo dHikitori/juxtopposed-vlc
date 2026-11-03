@@ -231,7 +231,7 @@ TestCase {
         verify(!note.visible)
         const height = startupRow.implicitHeight
         startupStore.metadata.restartRequired = true; startupStore.revision++
-        tryCompare(note, "visible", true); compare(note.text, "Close VLC. Start VLC again to use this change.")
+        tryCompare(note, "visible", true); compare(note.text, "Close Hakone. Start Hakone again to use this change.")
         tryVerify(() => startupRow.implicitHeight > height)
         startupStore.revision++
         verify(note.visible)
@@ -239,7 +239,7 @@ TestCase {
         tryCompare(note, "visible", false)
     }
     function test_librarySearchUsesApplicationSettingAndKeepsExpertAccess() {
-        const nativeOptions = [{name: "media-library", title: "Use media library"}, {name: "media-library-startup", title: "Use the media library when VLC starts"}]
+        const nativeOptions = [{name: "media-library", title: "Use media library"}, {name: "media-library-startup", title: "Use the media library when Hakone starts"}]
         const result = catalog.searchResults("media library", nativeOptions)
         compare(result.length, 1); compare(result[0].name, "media-library-startup")
         const expert = catalog.searchResults("media-library", [nativeOptions[0]])
@@ -636,7 +636,7 @@ TestCase {
         id: confirmation
         parent: testCase
         title: "Reset all settings"
-        message: "This action replaces all VLC settings with the default settings."
+        message: "This action replaces all Hakone settings with the default settings."
         confirmText: "Reset"; destructive: true
     }
     SignalSpy { id: confirmationAccepted; target: confirmation; signalName: "accepted" }

@@ -382,7 +382,7 @@ C.Dialog {
     function loadSearch(request, result) {
         if (!visible || request !== searchRequestId || !onlineMode) return
         searching = false
-        if (!result.success) { errorMessage = result.error || qsTr("VLC cannot search for subtitles. Try again."); return }
+        if (!result.success) { errorMessage = result.error || qsTr("Hakone cannot search for subtitles. Try again."); return }
         searchIdentities = result.identities || ({})
         errorMessage = result.warning || ""
         onlineSources = (result.sources || []).map(item => Object.assign({}, item, {url: sourceMappings[item.url] || item.url})); performMatching(true)
@@ -406,7 +406,7 @@ C.Dialog {
             providerSetup.close()
             providerCheckPending = true; runPendingProviderSearch()
         }
-        else providerSetup.errorMessage = error || qsTr("VLC cannot save the API key. Make sure that the API key is correct. Try again.")
+        else providerSetup.errorMessage = error || qsTr("Hakone cannot save the API key. Make sure that the API key is correct. Try again.")
     }
     function setTracks(url, selection) {
         const draft = drafts[url]

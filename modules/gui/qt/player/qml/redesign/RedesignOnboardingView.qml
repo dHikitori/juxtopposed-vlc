@@ -80,7 +80,7 @@ FocusScope {
         Item {
             objectName: "onboardingWelcome"
             anchors.fill: parent; visible: root.page === 0
-            RedesignIcon { objectName: "onboardingWelcomeCone"; x: 475; y: 116; width: 140; height: 140; name: "cone"; color: root.accentColor }
+            RedesignIcon { objectName: "onboardingWelcomeCone"; x: 475; y: 116; width: 140; height: 140; name: "logo"; color: root.accentColor }
             Label { x: 248; y: 286; width: 594; height: 50; text: qsTr("Welcome to Hakone!"); color: "#eaeaea"; font.pixelSize: 32; horizontalAlignment: Text.AlignHCenter; leftPadding: -0.5; rightPadding: -leftPadding }
             Label {
                 x: 248; y: 366; width: 594; height: 84; lineHeight: 1.4; color: "#969696"

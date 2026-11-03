@@ -50,7 +50,7 @@ QtObject {
                 ["qt-video-autoresize", qsTr("Resize window to fit video"), {choices: [{label: qsTr("Never"), value: false}, {label: qsTr("Always"), value: true}]}],
                 ["qt-remember-window-geometry", qsTr("Remember window size and position")],
                 ["video-on-top", qsTr("Keep window above other windows")],
-                ["video-deco", qsTr("Show window decorations"), {help: qsTr("Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting.")}],
+                ["video-deco", qsTr("Show window decorations"), {help: qsTr("Show a border and title bar on a separate video window. Close Hakone. Start Hakone again to use this setting.")}],
                 ["qt-name-in-title", qsTr("Show the file name in the title bar")],
                 ["qt-fullscreen-screennumber", qsTr("Open fullscreen on")] ] },
             { title: qsTr("Playback Controls"), rows: [
@@ -66,7 +66,7 @@ QtObject {
             { title: qsTr("Playlist"), rows: [ ["qt-single-click-activate", qsTr("Single click to open or play items")], ["playlist-tree", qsTr("Show the playlist as a tree"), {help: qsTr("Show folders and playlists as groups in the queue. Expand a group to show its items. The playback order does not change.")}] ] } ],
         privacy: [
             { title: qsTr("History"), rows: [
-                ["save-recentplay", qsTr("Save recently played items"), {help: qsTr("Keep a list of the items that you play. If this option is OFF, VLC does not add items to the list.")}],
+                ["save-recentplay", qsTr("Save recently played items"), {help: qsTr("Keep a list of the items that you play. If this option is OFF, Hakone does not add items to the list.")}],
                 ["restore-playback-pos", qsTr("Remember the playback position"), {editor: "toggle", toggleValues: {on: 2, off: 0}}],
                 ["recentplay-filter", qsTr("Never remember items matching"), {rowHeight: 46}],
                 ["redesign-clear-history", qsTr("Clear history now"), {rowHeight: 42}] ] },
@@ -124,7 +124,7 @@ QtObject {
         audio: [
             { title: qsTr("Output"), rows: [ ["audio", qsTr("Enable audio")], ["redesign-audio-device", qsTr("Output device"), {dynamicChoices: true}], ["mix-mode", qsTr("Speaker setup"), {choiceLabels: {0: qsTr("Automatic"), 2: qsTr("Headphones"), 3: qsTr("Surround 4.0"), 4: qsTr("Surround 5.1"), 5: qsTr("Surround 7.1")}}] ] },
             { title: qsTr("Volume"), rows: [ ["qt-max-volume", qsTr("Maximum volume"), {editor: "slider", rowHeight: 67, sliderHeight: 50, sliderSpacing: 7, tickHeight: 15, tickFontSize: 12, mutedTicks: true, alignTicksToHandle: true, alignSliderTop: true, sliderTopMargin: 7, sliderPadding: 0, trackHeight: 16, trackRadius: 6, trackInset: 2, from: 100, to: 300, step: 1, suffix: "%", ticks: [100, 200, 300], trackTicks: [125, 150, 175, 200, 225, 250, 275], hideHelp: true}],
-                ["volume-save", qsTr("Startup volume"), {editor: "startup-volume", rowHeight: 98, help: qsTr("Select the volume level to use when you start VLC.")}], ["volume-step", qsTr("Volume step"), {factor: 100 / 256, decimals: 1, suffix: "%"}] ] },
+                ["volume-save", qsTr("Startup volume"), {editor: "startup-volume", rowHeight: 98, help: qsTr("Select the volume level to use when you start Hakone.")}], ["volume-step", qsTr("Volume step"), {factor: 100 / 256, decimals: 1, suffix: "%"}] ] },
             { title: qsTr("Loudness"), rows: [ ["filter:audio-filter:normvol", qsTr("Normalize loudness")],
                 ["norm-max-level", qsTr("Target level"), {enabledWhen: "filter:audio-filter:normvol"}],
                 ["filter:audio-filter:compressor", qsTr("Night mode")], ["audio-replay-gain-mode", qsTr("Replay gain"), {choiceLabels: {none: qsTr("Off")}}],
@@ -204,7 +204,6 @@ QtObject {
         interface: [ {title: "", rows: [ ["qt-opacity", qsTr("Window opacity"), interfaceSlider({from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],
             ["qt-pause-minimized", qsTr("Pause video when window is minimized"), {hideHelp: true}], ["qt-auto-raise", qsTr("Bring Hakone to the front when playback starts")],
             ["qt-bgcone", qsTr("Show cover art in the window when playing audio"), {hideHelp: true}], ["qt-embedded-open", qsTr("Show the file browser inside the open dialog"), {hideHelp: true}],
-            ["qt-icon-change", qsTr("Allow the app icon to change"), {hideHelp: true}],
             ["qt-fs-opacity", qsTr("Fullscreen controls opacity"), interfaceSlider({rowHeight: 52, from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],
             ["redesign-fullscreen-sensitivity", qsTr("Fullscreen controls sensitivity"), interfaceSlider({rowHeight: 52, from: 0, to: 6, step: 1, ticks: [0, 3, 6], tickLabels: [qsTr("Low"), qsTr("Medium"), qsTr("High")], trackTicks: [3]})] ] } ],
         playback: [ {title: "", rows: [ ["input-timeshift-path", qsTr("Time-shift buffer folder"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8, placeholder: qsTr("Default")}], ["input-timeshift-granularity", qsTr("Time-shift buffer size"), {dynamicChoices: true}] ] } ],

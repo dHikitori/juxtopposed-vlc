@@ -256,7 +256,7 @@
               <item>
                <widget class="QPlainTextEdit" name="optionsText">
                 <property name="placeholderText">
-                 <string>One VLC input option per line</string>
+                 <string>One Hakone input option per line</string>
                 </property>
                 <property name="lineWrapMode">
                  <enum>QPlainTextEdit::NoWrap</enum>

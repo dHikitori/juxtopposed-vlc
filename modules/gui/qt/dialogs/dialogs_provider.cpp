@@ -282,7 +282,7 @@ public:
     {
         setObjectName(QStringLiteral("redesignNativeMessage"));
         setWindowRole("vlc-message");
-        setWindowTitle(title.isEmpty() ? qtr("VLC media player") : title);
+        setWindowTitle(title.isEmpty() ? qtr("Hakone Media Player") : title);
         auto *root = new QVBoxLayout(this);
         auto *headingRow = new QHBoxLayout;
         m_icon = new QLabel(this);
@@ -1424,7 +1424,7 @@ QUrl DialogsProvider::recoverLibraryFolder(const QUrl& folder)
     const QString path = folder.isLocalFile() ? toNativeSeparators(folder.toLocalFile())
         : folder.toDisplayString(QUrl::RemovePassword);
     const auto answer = messageDialog(
-        qtr("VLC cannot add this folder.\nMake sure that you can read the folder.\n\n%1").arg(path),
+        qtr("Hakone cannot add this folder.\nMake sure that you can read the folder.\n\n%1").arg(path),
         qtr("Add folder to media library"), QMessageBox::Retry | QMessageBox::Yes | QMessageBox::Cancel,
         QMessageBox::Cancel, QMessageBox::Warning, nullptr, qtr("Select folder"));
     if (!context) return {};
@@ -1607,7 +1607,7 @@ void DialogsProvider::selectLibraryPlaylistExport(const MLItemId& playlist, cons
                 return;
             }
             const auto answer = messageDialog(
-                qtr("VLC cannot save this file.\n\n%1\n\nSelect another file or folder.")
+                qtr("Hakone cannot save this file.\n\n%1\n\nSelect another file or folder.")
                     .arg(toNativeSeparators(file.toLocalFile())),
                 qtr("Export Playlist"), QMessageBox::Yes | QMessageBox::Cancel,
                 QMessageBox::Cancel, QMessageBox::Warning, nullptr, qtr("Select file"));
@@ -1664,7 +1664,7 @@ void DialogsProvider::savePlayingToPlaylist()
             return;
         }
         const auto answer = messageDialog(
-            qtr("VLC cannot save this file.\n\n%1\n\nVLC did not change the play queue. Select another file or folder.")
+            qtr("Hakone cannot save this file.\n\n%1\n\nHakone did not change the play queue. Select another file or folder.")
                 .arg(toNativeSeparators(file.toLocalFile())),
             qtr("Save play queue"), QMessageBox::Yes | QMessageBox::Cancel,
             QMessageBox::Cancel, QMessageBox::Warning, nullptr, qtr("Select file"));

@@ -155,7 +155,7 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true; Layout.bottomMargin: theme.dp(8)
         visible: root.showWaveform && root.waveformState === "unavailable"
-        text: qsTr("VLC cannot read audio levels for this file.")
+        text: qsTr("Hakone cannot read audio levels for this file.")
         color: theme.foreground; font.pixelSize: theme.dp(12); wrapMode: Text.WordWrap
     }
     RedesignSettingSlider {

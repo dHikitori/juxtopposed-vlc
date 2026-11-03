@@ -766,7 +766,7 @@ void AddonsModelPrivate::discoveryEnded(int status)
     Q_Q(AddonsModel);
     assert( m_loading );
     if (status != VLC_SUCCESS)
-        m_error = qtr("VLC cannot load the add-on list. Try again.");
+        m_error = qtr("Hakone cannot load the add-on list. Try again.");
     m_loading = false;
     emit q->loadingChanged();
     m_revision++;

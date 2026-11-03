@@ -118,7 +118,7 @@ bool FirstRunWizard::finish(const QString& folder, int scheme, const QString& ac
         if (oldScheme.isValid()) settings.setValue(schemeKey, oldScheme);
         else settings.remove(schemeKey);
         settings.sync();
-        return fail(qtr("VLC cannot save the theme. Make sure that you have access to the settings folder. Try again."));
+        return fail(qtr("Hakone cannot save the theme. Make sure that you have access to the settings folder. Try again."));
     }
 
     RedesignPreferences preferences;

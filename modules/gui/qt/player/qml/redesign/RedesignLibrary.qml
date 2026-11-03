@@ -711,7 +711,7 @@ RedesignLibraryView {
                 if (["file", "folder"].includes(pin.kind)) request(Qt.resolvedUrl(pin.key), pin.category !== 2)
         }
         onSelectionFinished: (url, success) => {
-            if (!success) DialogsProvider.messageDialog(qsTr("VLC could not save this artwork. Choose a readable image and try again."), qsTr("Artwork"))
+            if (!success) DialogsProvider.messageDialog(qsTr("Hakone could not save this artwork. Choose a readable image and try again."), qsTr("Artwork"))
         }
     }
     Loader {

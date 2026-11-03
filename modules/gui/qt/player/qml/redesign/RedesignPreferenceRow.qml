@@ -203,7 +203,7 @@ ColumnLayout {
         objectName: "preferenceRestartNote"
         Layout.fillWidth: true
         visible: !!root.description.restartRequired
-        text: qsTr("Close VLC. Start VLC again to use this change.")
+        text: qsTr("Close Hakone. Start Hakone again to use this change.")
         color: theme.foreground; font.pixelSize: theme.dp(12); wrapMode: Text.WordWrap
     }
     Component {
