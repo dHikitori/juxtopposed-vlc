@@ -109,7 +109,7 @@ static FILE *config_OpenConfigFile( libvlc_int_t *p_obj )
                     FILE *p_readme = vlc_fopen( psz_readme, "wt" );
                     if( p_readme )
                     {
-                        fprintf( p_readme, "The VLC media player "
+                        fprintf( p_readme, "The Hakone Media Player "
                                  "configuration folder has moved to comply\n"
                                  "with the XDG Base Directory Specification "
                                  "version 0.6. Your\nconfiguration has been "

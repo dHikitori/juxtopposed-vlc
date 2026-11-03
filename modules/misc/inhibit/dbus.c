@@ -132,7 +132,7 @@ static void Inhibit(vlc_inhibit_t *ih, unsigned flags)
 
     if (flags)
     {
-        const char *app = PACKAGE;
+        const char *app = "hakone";
         const char *reason = (flags & VLC_INHIBIT_VIDEO) ? N_("Playing video")
                                                          : N_("Playing audio");
         reason = vlc_gettext(reason);

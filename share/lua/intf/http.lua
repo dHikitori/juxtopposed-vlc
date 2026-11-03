@@ -123,7 +123,7 @@ function callback_error(path,url,msg)
 <h1>Error loading ]]..url..[[</h1><pre>]]..(config.no_error_detail and "Remove configuration option `no_error_detail' on the server to get more information."
 or vlc.strings.convert_xml_special_chars(tostring(msg)))..[[</pre>
 <p>
-<a href="https://www.videolan.org/">VideoLAN</a><br/>
+<a href="https://hakone.org/">Hakone</a><br/>
 <a href="https://www.lua.org/manual/5.1/">Lua 5.1 Reference Manual</a>
 </p>
 </body>

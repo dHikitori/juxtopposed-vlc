@@ -56,7 +56,7 @@ VLC_WEAK GdkPixbuf *gtk_icon_theme_load_icon(GtkIconTheme *,
 static int  Open    ( vlc_object_t * );
 static void Close   ( vlc_object_t * );
 
-#define APPLICATION_NAME "VLC media player"
+#define APPLICATION_NAME "Hakone Media Player"
 
 #define TIMEOUT_TEXT N_("Timeout (ms)")
 #define TIMEOUT_LONGTEXT N_("How long the notification will be displayed.")
@@ -254,13 +254,13 @@ static void on_current_media_changed(vlc_player_t *player,
     {
         /* First try to get an icon from the current theme. */
         GtkIconTheme* p_theme = gtk_icon_theme_get_default();
-        pix = gtk_icon_theme_load_icon( p_theme, "vlc", 72, 0, NULL);
+        pix = gtk_icon_theme_load_icon( p_theme, "hakone", 72, 0, NULL);
     }
     else
     {   /* Load icon from share/ */
         GError *p_error = NULL;
         char *psz_pixbuf = config_GetSysPath(VLC_SYSDATA_DIR,
-                                     "icons/hicolor/48x48/"PACKAGE_NAME".png");
+                                     "icons/hicolor/48x48/hakone.png");
         if (psz_pixbuf != NULL)
         {
             pix = gdk_pixbuf_new_from_file( psz_pixbuf, &p_error );

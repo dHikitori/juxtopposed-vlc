@@ -73,19 +73,16 @@
 /*************** Video filters **************/
 
 #define I_LONGHELP N_("<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" /></head><body>" \
-    "<h2>Welcome to VLC media player Help</h2>" \
+    "<h2>Welcome to Hakone Media Player Help</h2>" \
         "<h3>Documentation</h3>" \
-            "<p>You can find VLC documentation on VideoLAN's <a href=\"http://wiki.videolan.org\">wiki</a> website.</p>" \
-            "<p>If you are a newcomer to VLC media player, please read the<br><a href=\"http://wiki.videolan.org/Documentation:VLC_for_dummies\"><em>Introduction to VLC media player</em></a>.</p>" \
-            "<p>You will find some information on how to use the player in the <br>\"<a href=\"http://wiki.videolan.org/Documentation:Play_HowTo\"><em>How to play files with VLC media player</em></a>\" document.</p>" \
-            "<p>For all the saving, converting, transcoding, encoding, muxing and streaming tasks, you should find useful information in the <a href=\"http://wiki.videolan.org/Documentation:Streaming_HowTo\">Streaming Documentation</a>.</p>" \
-            "<p>If you are unsure about terminology, please consult the <a href=\"http://wiki.videolan.org/Knowledge_Base\">knowledge base</a>.</p>" \
-            "<p>To understand the main keyboard shortcuts, read the <a href=\"http://wiki.videolan.org/Hotkeys\">shortcuts</a> page.</p>" \
+            "<p>You can find news, downloads and information about Hakone on the <a href=\"https://hakone.org/\">Hakone website</a>.</p>" \
+            "<p>Hakone is based on VLC media player, so most of VLC's documentation on VideoLAN's <a href=\"https://wiki.videolan.org\">wiki</a> website also applies.</p>" \
+            "<p>For all the saving, converting, transcoding, encoding, muxing and streaming tasks, you should find useful information in VLC's <a href=\"https://wiki.videolan.org/Documentation:Streaming_HowTo\">Streaming Documentation</a>.</p>" \
+            "<p>If you are unsure about terminology, please consult VLC's <a href=\"https://wiki.videolan.org/Knowledge_Base\">knowledge base</a>.</p>" \
         "<h3>Help</h3>" \
-            "<p>Before asking any question, please refer yourself to the <a href=\"http://www.videolan.org/support/faq.html\">FAQ</a>.</p>" \
-            "<p>You might then get (and give) help on the <a href=\"http://forum.videolan.org\">Forums</a>, the <a href=\"http://www.videolan.org/vlc/lists.html\">mailing-lists</a> or our IRC channel (<em>#videolan</em> on irc.libera.chat).</p>" \
+            "<p>To report a problem or ask a question, please use the <a href=\"https://github.com/hakone-org/hakone/issues\">Hakone issue tracker</a>. Please do not ask VideoLAN for help with Hakone.</p>" \
         "<h3>Contribute to the project</h3>" \
-            "<p>You can help the VideoLAN project giving some of your time to help the community, to design skins, to translate the documentation, to test and to code. You can also give funds and material to help us. And of course, you can <b>promote</b> VLC media player.</p>" \
+            "<p>Hakone is free software developed on <a href=\"https://github.com/hakone-org/hakone\">GitHub</a>. You can help by giving some of your time to test, report bugs, translate and code. And of course, you can <b>promote</b> Hakone Media Player.</p>" \
     "</body></html>")
 
 #endif

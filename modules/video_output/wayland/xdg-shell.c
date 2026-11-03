@@ -729,7 +729,7 @@ static int Open(vlc_window_t *wnd)
 
     char *title = var_InheritString(wnd, "video-title");
     xdg_toplevel_set_title(toplevel,
-                           (title != NULL) ? title : _("VLC media player"));
+                           (title != NULL) ? title : _("Hakone Media Player"));
     free(title);
 
     char *app_id = var_InheritString(wnd, "app-id");

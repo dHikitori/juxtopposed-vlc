@@ -279,7 +279,7 @@ static size_t httpd_HtmlError (char **body, int code, const char *url)
         "<body>\n"
         "<h1>%d %s%s%s%s</h1>\n"
         "<hr />\n"
-        "<a href=\"http://www.videolan.org\">VideoLAN</a>\n"
+        "<a href=\"https://hakone.org/\">Hakone</a>\n"
         "</body>\n"
         "</html>\n", errname, code, errname,
         (url_Encoded ? " (" : ""), (url_Encoded ? url_Encoded : ""), (url_Encoded ? ")" : ""));

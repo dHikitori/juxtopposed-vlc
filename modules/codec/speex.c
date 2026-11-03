@@ -1174,8 +1174,8 @@ static int OpenEncoder( vlc_object_t *p_this )
     char *p_header_alloc;
     pp_header[0] = p_header_alloc = speex_header_to_packet( &p_sys->header, &i_tmp );
     pi_header[0] = i_tmp;
-    pp_header[1] = "ENCODER=VLC media player";
-    pi_header[1] = sizeof("ENCODER=VLC media player");
+    pp_header[1] = "ENCODER=Hakone Media Player";
+    pi_header[1] = sizeof("ENCODER=Hakone Media Player");
 
     if( !p_header_alloc ||
         BuildExtradata( &p_enc->fmt_out, false, pi_header, pp_header ) != VLC_SUCCESS )

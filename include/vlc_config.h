@@ -96,4 +96,4 @@
 #define VOUT_OUTMEM_SLEEP               VLC_TICK_FROM_MS(20)
 
 /* The default video output window title */
-#define VOUT_TITLE                      "VLC"
+#define VOUT_TITLE                      "Hakone"

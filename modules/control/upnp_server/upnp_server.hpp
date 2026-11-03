@@ -25,7 +25,7 @@
 
 #define SERVER_PREFIX "upnp-server-"
 
-#define SERVER_DEFAULT_NAME N_("VLC Media Server")
+#define SERVER_DEFAULT_NAME N_("Hakone Media Server")
 #define SERVER_NAME_DESC N_("Upnp server name")
 #define SERVER_NAME_LONGTEXT N_("The client exposed upnp server name")
 #define SERVER_SHARE_PRIVATE_MEDIA_TEXT N_("Share private media")

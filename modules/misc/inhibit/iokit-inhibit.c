@@ -63,7 +63,7 @@ static void UpdateInhibit(vlc_inhibit_t *ih, unsigned mask)
     if ((mask & VLC_INHIBIT_DISPLAY) == VLC_INHIBIT_DISPLAY) {
 
         // Display inhibition
-        CFStringRef activity_reason = CFSTR("VLC video playback");
+        CFStringRef activity_reason = CFSTR("Hakone video playback");
 
         msg_Dbg(ih, "Inhibiting display sleep");
 
@@ -84,7 +84,7 @@ static void UpdateInhibit(vlc_inhibit_t *ih, unsigned mask)
     } else if ((mask & VLC_INHIBIT_SUSPEND) == VLC_INHIBIT_SUSPEND) {
 
         // Idle sleep inhibition
-        CFStringRef activity_reason = CFSTR("VLC audio playback");
+        CFStringRef activity_reason = CFSTR("Hakone audio playback");
 
         msg_Dbg(ih, "Inhibiting idle sleep");
 

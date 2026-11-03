@@ -519,7 +519,7 @@ static void PMThread( void *arg )
                             WS_VISIBLE,         /* frame window style */
                             &i_frame_flags,     /* window style */
                             WC_VLC_WINDOW_OS2,  /* class name */
-                            "VLC Video Window", /* window title */
+                            "Hakone Video Window", /* window title */
                             0L,                 /* default client style */
                             NULLHANDLE,         /* resource in exe file */
                             1,                  /* frame window id */
