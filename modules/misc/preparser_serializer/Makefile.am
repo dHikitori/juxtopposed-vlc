@@ -2,6 +2,8 @@
 libpreparserserializer_json_plugin_la_SOURCES = \
 	misc/preparser_serializer/json/serializer.c \
 	misc/preparser_serializer/json/serializer.h \
+	misc/preparser_serializer/json/native_facts_tojson.h \
+	misc/preparser_serializer/json/native_facts_fromjson.h \
 	misc/preparser_serializer/json/fromjson.c \
 	misc/preparser_serializer/json/tojson.c
 

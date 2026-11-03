@@ -1,0 +1,10 @@
+{
+  "description": "data is null.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "no_match",
+    "data": null
+  }
+}

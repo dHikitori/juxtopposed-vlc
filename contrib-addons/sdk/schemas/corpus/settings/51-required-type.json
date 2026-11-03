@@ -1,0 +1,14 @@
+{
+  "description": "The required list is not an array.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "a": {
+        "type": "string"
+      }
+    },
+    "required": "a"
+  }
+}

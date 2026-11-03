@@ -178,7 +178,7 @@ std::optional<Release> selectRelease(const QJsonArray& releases,
                                     const Version& installed, const Target& target)
 {
     std::optional<Release> best;
-    const QString repo = QStringLiteral("/dsojevic/juxtopposed-vlc/releases/");
+    const QString repo = QStringLiteral("/hakone-org/hakone/releases/");
     for (const auto& entry : releases)
     {
         const auto object = entry.toObject();

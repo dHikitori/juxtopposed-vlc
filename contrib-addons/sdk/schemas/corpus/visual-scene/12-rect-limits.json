@@ -1,0 +1,23 @@
+{
+  "description": "Rectangle values at the limits.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "spectrum",
+        "count": 32,
+        "color": "theme.accent",
+        "rect": [
+          -2,
+          2,
+          0.001,
+          4
+        ],
+        "opacity": 0,
+        "gain": 0
+      }
+    ]
+  }
+}

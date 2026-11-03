@@ -319,8 +319,8 @@ void MediaInfoDialog::updateButtons()
 {
     const bool editing = MP->isInEditMode();
     const bool pendingInput = isMainInputInfo && displayedInput.get() != THEMIM->getInput();
-    saveMetaButton->setEnabled(editing);
-    saveMetaButton->setDefault(editing);
+    saveMetaButton->setEnabled(MP->canSaveMeta());
+    saveMetaButton->setDefault(MP->canSaveMeta());
     closeButton->setText(editing ? qtr("&Cancel") : qtr("&Close"));
     closeButton->setDefault(!editing);
     const auto help = !displayedInput ? qtr("Open a file to view its information.")

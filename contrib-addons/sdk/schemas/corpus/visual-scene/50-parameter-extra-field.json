@@ -1,0 +1,26 @@
+{
+  "description": "A parameter declaration has a fifth field.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "spectrum",
+        "count": 32,
+        "color": "theme.accent",
+        "id": "bars",
+        "gain": 1
+      }
+    ],
+    "parameters": {
+      "gain": {
+        "node": "bars",
+        "property": "gain",
+        "minimum": 0,
+        "maximum": 4,
+        "step": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "description": "The message has no data.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "no_match"
+  }
+}

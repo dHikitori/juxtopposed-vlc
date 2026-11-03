@@ -74,20 +74,21 @@ C.ComboBox {
     signal aboutToOpen()
     property color accentColor: "#d37918"
     property color labelColor: theme.foreground
+    property int labelTextFormat: Text.AutoText
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     implicitHeight: theme.dp(34)
     font.pixelSize: theme.dp(14)
     leftPadding: theme.dp(16); rightPadding: theme.dp(40)
     contentItem: Text {
-        text: root.displayText; font: root.font
+        text: root.displayText; textFormat: root.labelTextFormat; font: root.font
         topPadding: root.theme.dp(root.labelVerticalOffset); bottomPadding: -topPadding
         color: root.labelColor
         verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
     }
     background: Rectangle {
-        radius: root.theme.dp(6); color: root.lightTheme ? root.theme.background : "#191919"
+        radius: root.theme.dp(root.theme.controlRadius); color: root.theme.menuPanel
         border.width: root.theme.dp(2)
-        border.color: root.visualFocus ? root.theme.accent : root.theme.field
+        border.color: root.visualFocus ? root.theme.focusRing : root.theme.field
     }
     indicator: RedesignIcon {
         name: "chevron-down"; color: root.theme.foreground
@@ -143,7 +144,7 @@ C.ComboBox {
             }
             Text {
                 Layout.fillWidth: true
-                text: root.labelAt(index); font: root.font; color: root.theme.foreground
+                text: root.labelAt(index); textFormat: root.labelTextFormat; font: root.font; color: root.theme.foreground
                 opacity: choiceDelegate.enabled ? 1 : .4
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                 Layout.topMargin: choiceDelegate.index > 0 && !root.theme.compactMenus ? root.theme.dp(root.subsequentLabelOffset) : 0
@@ -160,7 +161,7 @@ C.ComboBox {
             x: root.theme.dp(2); y: root.theme.dp(2)
             width: parent.width - root.theme.dp(4); height: parent.height - root.theme.dp(2)
             radius: root.theme.dp(4)
-            color: !parent.highlighted ? "transparent" : root.lightTheme ? root.theme.hover : "#1f1f1f"
+            color: !parent.highlighted ? "transparent" : root.theme.menuHover
         }
     }
     popup: C.Popup {
@@ -180,9 +181,9 @@ C.ComboBox {
         }
         background: Rectangle {
             id: surface
-            readonly property color fill: root.lightTheme ? root.theme.background : "#191919"
+            readonly property color fill: root.theme.menuPanel
             color: Qt.rgba(fill.r, fill.g, fill.b, root.theme.floatingOpacity)
-            radius: root.theme.dp(6)
+            radius: root.theme.dp(root.theme.controlRadius)
             Loader {
                 anchors.fill: parent
                 z: -1

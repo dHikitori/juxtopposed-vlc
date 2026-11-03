@@ -37,6 +37,8 @@
 
 #include <vlc_common.h>
 #include <vlc_modules.h>
+#include <vlc_stream.h>
+#include "../input/stream_observer.h"
 #include "../libvlc.h"
 #include "config/configuration.h"
 #include "vlc_arrays.h"
@@ -254,13 +256,27 @@ done:
 static int generic_start(void *func, bool forced, va_list ap)
 {
     vlc_object_t *obj = va_arg(ap, vlc_object_t *);
+    const char *cap = va_arg(ap, const char *);
     int (*activate)(vlc_object_t *) = func;
     int ret;
+
+    /* module_need alone uses this private probe and supplies cap. Observe each
+     * failed filter constructor, including one followed by a successful cache.
+     * No observer or object lock spans module activation or resource cleanup. */
+    vlc_stream_observer_t *observer = !strcmp(cap, "stream_filter")
+        ? vlc_stream_observer_HoldObject(obj) : NULL;
+    stream_t *source = observer != NULL ? ((stream_t *)obj)->s : NULL;
+    const uint64_t source_offset = source != NULL ? vlc_stream_Tell(source) : 0;
 
     obj->force = forced;
     ret = activate(obj);
     if (ret != VLC_SUCCESS)
+    {
         vlc_objres_clear(obj);
+        if (source != NULL && vlc_stream_Tell(source) != source_offset)
+            vlc_stream_observer_Fail(observer);
+    }
+    vlc_stream_observer_Release(observer);
     return ret;
 }
 
@@ -270,7 +286,7 @@ module_t *module_need(vlc_object_t *obj, const char *cap, const char *name,
 {
     const bool b_force_backup = obj->force; /* FIXME: remove this */
     module_t *module = vlc_module_load(obj->logger, cap, name, strict,
-                                       generic_start, obj);
+                                       generic_start, obj, cap);
     if (module != NULL) {
         var_Create(obj, "module-name", VLC_VAR_STRING);
         var_SetString(obj, "module-name", module_get_object(module));

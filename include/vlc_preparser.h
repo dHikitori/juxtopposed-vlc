@@ -509,6 +509,10 @@ VLC_API void vlc_preparser_req_Release( vlc_preparser_req *req );
  *
  * @param preparser the preparser object
  * All pending input items will be released.
+ *
+ * Call this function outside every callback from this preparser. This rule also
+ * applies to callbacks that vlc_preparser_Cancel() delivers on the caller thread.
+ * Request release and cancellation remain safe in callbacks.
  */
 VLC_API void vlc_preparser_Delete( vlc_preparser_t *preparser );
 

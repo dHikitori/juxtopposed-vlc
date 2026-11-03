@@ -1,0 +1,13 @@
+{
+  "description": "nextCheckSeconds is a string.",
+  "valid": false,
+  "value": {
+    "items": [
+      {
+        "id": "item-1",
+        "title": "Item 1"
+      }
+    ],
+    "nextCheckSeconds": "300"
+  }
+}

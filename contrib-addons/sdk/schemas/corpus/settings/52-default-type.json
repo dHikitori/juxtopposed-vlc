@@ -1,0 +1,24 @@
+{
+  "description": "A default value must have the type of its field.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "language": {
+        "type": "string",
+        "default": "en"
+      },
+      "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9,
+        "default": 3
+      },
+      "enabled": {
+        "type": "boolean",
+        "default": "yes"
+      }
+    }
+  }
+}

@@ -1434,4 +1434,24 @@ TestCase {
         compare(cancelSpy.count, 0)
     }
 
+    function test_legacyExtensionStartupIsAdvancedAndHasExplicitScope() {
+        compare(catalog.sections.extensions.length, 0)
+        const section = catalog.advancedSections.extensions.find(item => item.title === "Legacy extensions")
+        verify(section)
+        compare(section.rows[0][0], "qt-autoload-extensions")
+        verify(section.rows[0][1].includes("legacy Lua extensions"))
+        verify(section.rows[0][2].help.includes("does not change enabled add-ons"))
+        const matches = catalog.find("legacy Lua extensions")
+        compare(matches.length, 1); compare(matches[0].name, "qt-autoload-extensions")
+    }
+
+    function test_addonRegistryOptionsAreAdvanced() {
+        const section = catalog.advancedSections.extensions.find(item => item.title === "Add-on registry")
+        verify(section)
+        compare(section.rows.map(row => row[0]), ["qt-addon-registry", "qt-addon-registry-url"])
+        compare(section.rows[1][2].placeholder, "https://api.hakone.org/v1")
+        verify(section.rows[1][2].help.includes("localhost"))
+        compare(catalog.find("Registry address")[0].name, "qt-addon-registry-url")
+    }
+
 }

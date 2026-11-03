@@ -1,0 +1,15 @@
+{
+  "description": "An ambiguous result can state keep library; the host ignores it for this status.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "ambiguous",
+    "data": {
+      "retention": {
+        "reuseSeconds": 600,
+        "keep": "library"
+      }
+    }
+  }
+}

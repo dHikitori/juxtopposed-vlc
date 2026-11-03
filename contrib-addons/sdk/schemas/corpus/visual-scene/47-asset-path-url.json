@@ -1,0 +1,12 @@
+{
+  "description": "An asset path is a URL.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [],
+    "assets": {
+      "tile": "https://example.com/tile.png"
+    }
+  }
+}

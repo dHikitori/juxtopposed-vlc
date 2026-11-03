@@ -11,7 +11,7 @@ liblua_plugin_la_SOURCES = \
 	lua/extension.c lua/extension.h \
 	lua/extension_thread.c \
 	lua/intf.c \
-	lua/meta.c \
+	lua/meta.c lua/meta_selector.h lua/meta_outcome.h \
 	lua/stream_filter.c \
 	lua/services_discovery.c \
 	lua/vlc.c lua/vlc.h \

@@ -1,0 +1,51 @@
+{
+  "description": "A button with an icon, an intent, enabled and visible flags, and command arguments that use JSON data, a binding and a message.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play",
+            "arguments": {
+              "station": {
+                "bind": "state.current.ref"
+              },
+              "label": {
+                "message": "play.label"
+              },
+              "options": {
+                "volume": 0.5,
+                "repeat": false,
+                "tags": [
+                  "a",
+                  1,
+                  null,
+                  true
+                ]
+              }
+            }
+          },
+          "id": "play-button",
+          "icon": "play",
+          "intent": "destructive",
+          "visible": true,
+          "enabled": {
+            "bind": "state.ready"
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "groups": [{
+    "id": "account",
+    "title": "TheSubtitleDB",
+    "description": "Get an API key from your TheSubtitleDB account. Hakone sends the key only to the API origin. The add-on does not receive the key.",
+    "fields": ["apiKey", "language"],
+    "links": [{"label": "Get an API key", "url": "https://thesubtitledb.org/account/keys"}]
+  }]
+}

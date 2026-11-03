@@ -26,6 +26,7 @@
 #include <vlc_memstream.h>
 #include <vlc_dialog.h>
 #include "player.h"
+#include <vlc_rand.h>
 
 struct vlc_player_track_priv *
 vlc_player_input_FindTrackById(struct vlc_player_input *input, vlc_es_id_t *id,
@@ -81,14 +82,16 @@ vlc_player_input_HandleAtoBLoop(struct vlc_player_input *input, bool forced)
         vlc_tick_t time = vlc_player_input_GetTime(input, false, now);
         if (forced
          || (time != VLC_TICK_INVALID && time >= input->abloop_state[1].time))
-            vlc_player_SetTime(player, input->abloop_state[0].time);
+            vlc_player_SeekByTimeInternal(player, input->abloop_state[0].time,
+                VLC_PLAYER_SEEK_PRECISE, VLC_PLAYER_WHENCE_ABSOLUTE, VLC_ADDON_SESSION_CORE);
         return true;
     }
 
     double pos = vlc_player_input_GetPos(input, false, now);
     if (forced || pos >= input->abloop_state[1].pos)
     {
-        vlc_player_SetPosition(player, input->abloop_state[0].pos);
+        vlc_player_SeekByPosInternal(player, input->abloop_state[0].pos,
+            VLC_PLAYER_SEEK_PRECISE, VLC_PLAYER_WHENCE_ABSOLUTE, VLC_ADDON_SESSION_CORE);
         return true;
     }
 
@@ -280,6 +283,8 @@ vlc_player_input_HandleState(struct vlc_player_input *input,
             break;
         case VLC_PLAYER_STATE_STOPPING:
         {
+            if (input == player->input)
+                vlc_addon_session_state_Input(player->addon_session, false);
             enum vlc_player_media_stopping_reason reason;
             /* The order matters. input->error is only set while the
                input->started flag is set, so an error or EOS that follows a
@@ -734,7 +739,7 @@ vlc_player_input_HandleTitleEvent(struct vlc_player_input *input,
                 if (input->ml.restore == VLC_RESTOREPOINT_TITLE &&
                     (size_t)input->ml.states.current_title < ev->list.count)
                 {
-                    vlc_player_SelectTitleIdx(player, input->ml.states.current_title);
+                    vlc_player_SelectTitleIdxInternal(player, input->ml.states.current_title, VLC_ADDON_SESSION_CORE);
                 }
                 input->ml.restore = VLC_RESTOREPOINT_POSITION;
             }
@@ -754,6 +759,7 @@ vlc_player_input_HandleTitleEvent(struct vlc_player_input *input,
                 (size_t)input->ml.states.current_title == ev->selected_idx &&
                 input->ml.pos > .0f)
             {
+                vlc_player_session_Record(player, VLC_ADDON_SESSION_CORE, VLC_ADDON_SESSION_SEEK);
                 input_SetPosition(input->thread, input->ml.pos, false);
             }
             /* Reset the wanted title to avoid forcing it or the position
@@ -1022,6 +1028,10 @@ input_thread_Events(input_thread_t *input_thread,
 
     switch (event->type)
     {
+        case INPUT_EVENT_ADDON_SESSION:
+            if (input == player->input)
+                vlc_player_session_Completed(player, &event->addon_session);
+            break;
         case INPUT_EVENT_STATE:
             vlc_player_input_HandleStateEvent(input, event->state.value,
                                               event->state.date);
@@ -1032,11 +1042,12 @@ input_thread_Events(input_thread_t *input_thread,
                 break;
             if (player->play_and_pause)
             {
-                vlc_player_Pause(player);
+                vlc_player_SetPauseInternal(player, true, VLC_ADDON_SESSION_CORE);
                 handled = true;
             }
             else if (input->repeat > 0)
             {
+                vlc_player_session_Record(player, VLC_ADDON_SESSION_CORE, VLC_ADDON_SESSION_OTHER);
                 input->repeat--;
                 handled =
                     input_ControlPush(input->thread,
@@ -1319,7 +1330,19 @@ vlc_player_input_New(vlc_player_t *player, input_item_t *item)
         .on_event = input_thread_Events,
     };
 
+    struct vlc_addon_session_snapshot session;
+    vlc_addon_session_state_Snapshot(player->addon_session, &session);
+    if (session.exhausted) {
+        vlc_addon_session_id next_owner;
+        vlc_rand_bytes(&next_owner, sizeof(next_owner));
+        if (vlc_addon_session_state_Rekey(player->addon_session, next_owner) == VLC_ADDON_SESSION_OK)
+            vlc_addon_session_state_Media(player->addon_session, true);
+    }
+    vlc_addon_session_state_Input(player->addon_session, true);
+    struct vlc_addon_session_input_scope scope;
+    const bool scoped = vlc_addon_session_scope_Capture(player->addon_session, &scope);
     const struct vlc_input_thread_cfg cfg = {
+        .session_scope = scoped ? &scope : NULL,
         .type = INPUT_TYPE_PLAYBACK,
         .hw_dec = INPUT_CFG_HW_DEC_DEFAULT,
         .resource = player->resource,
@@ -1331,8 +1354,10 @@ vlc_player_input_New(vlc_player_t *player, input_item_t *item)
     input->repeat = player->repeat;
 
     input->thread = input_Create(player, item, &cfg);
+    vlc_addon_session_scope_Release(&scope);
     if (!input->thread)
     {
+        vlc_addon_session_state_Input(player->addon_session, false);
         free(input);
         return NULL;
     }

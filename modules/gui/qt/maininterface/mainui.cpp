@@ -35,6 +35,14 @@
 #include "player/control_list_model.hpp"
 #include "player/control_list_filter.hpp"
 #include "player/delay_estimator.hpp"
+#include "addons/addon_profile_host.hpp"
+#include "addons/addon_account_setup.hpp"
+#include "maininterface/addon_guest_sources.hpp"
+#include "addons/addon_media_siblings.hpp"
+#include <QFileDialog>
+#ifdef VLC_ADDON_TEST_DRIVER
+#include "addons/addon_test_driver.hpp"
+#endif
 
 #include "dialogs/toolbar/controlbar_profile_model.hpp"
 #include "dialogs/toolbar/controlbar_profile.hpp"
@@ -56,6 +64,7 @@
 #include "util/effects_image_provider.hpp"
 #include "util/vlcaccess_image_provider.hpp"
 #include "util/seek_preview_image_provider.hpp"
+#include "util/thumbnail_cache.hpp"
 #include "util/csdbuttonmodel.hpp"
 #include "util/vlctick.hpp"
 #include "util/list_selection_model.hpp"
@@ -72,7 +81,36 @@
 #include "dialogs/firstrun/firstrunwizard.hpp"
 #include "util/redesign_folder_model.hpp"
 #include "util/subtitle_source_service.hpp"
+#include "addons/addon_manager.hpp"
+#include "addons/addon_registry.hpp"
+#include "addons/addon_catalogue_view.hpp"
+#include "addons/addon_package_summaries.hpp"
+#include "addons/addon_metadata_service.hpp"
+#include "addons/addon_native_metadata_owner.hpp"
+#include "addons/addon_accepted_identities.hpp"
+#include "addons/addon_identity_choice.hpp"
+#include "addons/addon_process_launch.hpp"
+#include <vlc_metadata_owner.h>
+#include "addon_distribution_paths.hpp"
+#include "addons/addon_theme_service.hpp"
+#include "addons/addon_ui_registry.hpp"
+#include "addons/addon_ui_assets.hpp"
+#include "addons/addon_asset_image_provider.hpp"
+#include "addons/addon_player_visualizers.hpp"
+#include "addons/addon_player_sessions.hpp"
+#include "addons/addon_session_ui.hpp"
+#include "addons/addon_visualizer_surface.hpp"
+#include "addons/addon_discovery_service.hpp"
+#include "addons/addon_native_queue_store.hpp"
+#include "addons/addon_native_library_store.hpp"
+#include "addons/addon_native_library_targets.hpp"
+#include "addons/addon_player_discovery.hpp"
+#include "addons/addon_discovery_source_owner.hpp"
+#include <QApplication>
 #include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QStyleHints>
 #include <vlc_configuration.h>
 #include <QQmlContext>
 #include "dialogs/dialogs/dialogmodel.hpp"
@@ -148,6 +186,14 @@ MainUI::MainUI(qt_intf_t *p_intf, MainCtx *mainCtx, QWindow* interfaceWindow,  Q
 
 MainUI::~MainUI()
 {
+    vlc::addons::setHelperLaunchObserver({});
+    for (auto* manager:findChildren<vlc::addons::AddonManager*>(QString(),Qt::FindDirectChildrenOnly)) manager->setNativeStreamAvailable(false);
+    for (auto* source:findChildren<vlc::addons::AddonDiscoverySourceOwner*>(QString(),Qt::FindDirectChildrenOnly)) source->close();
+    for (auto* sessions:findChildren<vlc::addons::AddonPlayerSessions*>(QString(),Qt::FindDirectChildrenOnly)) sessions->close();
+    for (auto* service:findChildren<AddonMetadataService*>(QString(),Qt::FindDirectChildrenOnly)) service->shutdown();
+    for (auto* queue:findChildren<vlc::addons::AddonNativeQueueStore*>(QString(),Qt::FindDirectChildrenOnly)) queue->close();
+    for (auto* picker:findChildren<vlc::addons::AddonNativeLibraryTargets*>(QString(),Qt::FindDirectChildrenOnly)) picker->close();
+    for (auto* library:findChildren<vlc::addons::AddonNativeLibraryStore*>(QString(),Qt::FindDirectChildrenOnly)) library->close();
     if (!m_engineBound)
     {
         // If the global engine is dead, we assume no other QML engine exists hence can clear the
@@ -182,8 +228,18 @@ bool MainUI::setup(QQmlEngine* engine)
     engine->addImageProvider(QStringLiteral("svgcolor"), new SVGColorImageImageProvider());
     engine->rootContext()->setContextProperty(QStringLiteral("redesignSvgImages"), true);
     engine->rootContext()->setContextProperty(QStringLiteral("redesignAppearance"), m_mainCtx);
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignThemeService"), vlc::addons::AddonThemeService::instance());
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignAddonUi"), findChild<vlc::addons::AddonUiRegistry*>());
+    if (auto* assets = findChild<vlc::addons::AddonUiAssets*>())
+        engine->addImageProvider(QStringLiteral("addonassets"), new vlc::addons::AddonAssetImageProvider(assets));
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignDiscoveryService"), findChild<vlc::addons::AddonDiscoveryService*>());
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignSeriesModel"), findChild<SeriesModel*>(QStringLiteral("redesignSeriesModel")));
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignMediaSiblings"), findChild<vlc::addons::AddonMediaSiblings*>(QStringLiteral("redesignMediaSiblings")));
     engine->addImageProvider(QStringLiteral("vlcaccess"), new VLCAccessImageProvider());
     engine->addImageProvider(QStringLiteral("seekpreview"), new SeekPreviewImageProvider());
+    auto* thumbnails = new ThumbnailCache(ThumbnailCache::defaultLimit, engine);
+    engine->addImageProvider(QLatin1String(ThumbnailCache::providerId), thumbnails->createProvider());
+    engine->rootContext()->setContextProperty(QStringLiteral("redesignThumbnails"), thumbnails);
 
     m_component  = new QQmlComponent(engine, QStringLiteral("qrc:/qt/qml/VLC/MainInterface/MainInterface.qml"), QQmlComponent::PreferSynchronous, engine);
     if (m_component->isLoading())
@@ -294,6 +350,7 @@ void MainUI::registerQMLTypes()
 
         // @uri VLC.Dialogs
         qmlRegisterType<RedesignPreferences>(uri, versionMajor, versionMinor, "RedesignPreferences");
+        qmlRegisterType<vlc::addons::AddonAccountSetup>(uri, versionMajor, versionMinor, "AddonAccountSetup");
         qmlRegisterType<FirstRunWizard>(uri, versionMajor, versionMinor, "RedesignFirstRunSetup");
         qmlRegisterType<RedesignFolderModel>(uri, versionMajor, versionMinor, "RedesignFolderModel");
         qmlRegisterType<SeriesModel>(uri, versionMajor, versionMinor, "SeriesModel");
@@ -341,10 +398,272 @@ void MainUI::registerQMLTypes()
         assert(m_intf->p_mainPlayerController);
         qmlRegisterSingletonInstance<PlayerController>(uri, versionMajor, versionMinor, "Player", m_intf->p_mainPlayerController);
         qmlRegisterTypesAndRevisions<TimedText>(uri, versionMajor);
-        auto* subtitleSources = new SubtitleSourceService(this);
         char* userDirectory = config_GetUserDir(VLC_USERDATA_DIR);
-        if (userDirectory) subtitleSources->setStorageDirectory(QDir(qfu(userDirectory)).filePath(QStringLiteral("subtitles")));
+        const QString dataDirectory = userDirectory ? qfu(userDirectory)
+            : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
         free(userDirectory);
+        vlc::addons::AddonManager* addonManager = nullptr;
+        AddonMetadataService* metadataService = nullptr;
+        if (!dataDirectory.isEmpty()) {
+            // Package and profile reads for the GUI run on background work.
+            vlc::addons::AddonManager::setBackgroundReads(true);
+            addonManager = new vlc::addons::AddonManager(QDir(dataDirectory).filePath(QStringLiteral("addons")), this);
+            msg_Dbg(m_intf, "Add-on store directory: %s", qtu(addonManager->storageDirectory()));
+            // Several app windows share this profile. Attach the profile peer
+            // before the bundled setup and before any native consumer starts.
+            auto* profileHost = new vlc::addons::AddonProfileHost(addonManager,
+                vlc::addons::AddonStreamLifetime::applicationHandle(), this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, profileHost, [profileHost] { profileHost->close(); },
+                Qt::DirectConnection);
+            if (!profileHost->start())
+                msg_Warn(m_intf, "Cannot share the add-on profile with other app windows");
+            qmlRegisterSingletonInstance<vlc::addons::AddonManager>(uri, versionMajor, versionMinor, "AddonManager", addonManager);
+            // Browse and update lookups from the hosted registry. Its index
+            // is cached per registry address in the user cache folder.
+            char* cacheDirectory = config_GetUserDir(VLC_CACHE_DIR);
+            auto* addonRegistry = new vlc::addons::AddonRegistry(addonManager,
+                cacheDirectory ? qfu(cacheDirectory) : QStandardPaths::writableLocation(QStandardPaths::CacheLocation), this);
+            free(cacheDirectory);
+            addonRegistry->setSettingsSource([] {
+                vlc::addons::AddonRegistryClient::Settings settings;
+                settings.enabled = config_GetInt("qt-addon-registry") != 0;
+                char* address = config_GetPsz("qt-addon-registry-url");
+                if (address) settings.address = qfu(address);
+                free(address);
+                return settings;
+            });
+            qmlRegisterSingletonInstance<vlc::addons::AddonRegistry>(uri, versionMajor, versionMinor, "AddonRegistry", addonRegistry);
+            addonManager->setMediaCapabilitiesSource(m_intf->p_mainPlayerController);
+            // File and folder settings use the app's own dialog; the add-on
+            // gets a handle, not the path.
+            addonManager->setPathPicker([](const QString& kind, std::function<void(const QString&)> done) {
+                auto* dialog = new QFileDialog(nullptr, kind == QLatin1String("folder") ? qtr("Select a folder") : qtr("Select a file"));
+                dialog->setAttribute(Qt::WA_DeleteOnClose);
+                dialog->setFileMode(kind == QLatin1String("folder") ? QFileDialog::Directory : QFileDialog::ExistingFile);
+                if (kind == QLatin1String("folder")) dialog->setOption(QFileDialog::ShowDirsOnly);
+                auto answered = std::make_shared<bool>(false);
+                QObject::connect(dialog, &QFileDialog::fileSelected, dialog, [done, answered](const QString& path) { *answered = true; done(path); });
+                QObject::connect(dialog, &QDialog::finished, dialog, [done, answered] { if (!*answered) done({}); });
+                dialog->open();
+            });
+            // Read-only queue, library and playing-file projections for add-ons.
+            mountAddonGuestSources(m_intf, m_mainCtx, addonManager->hostServices(), this);
+            // The other episodes of the playing media, for add-on player panels.
+            auto* series = new SeriesModel(this); series->setObjectName(QStringLiteral("redesignSeriesModel"));
+            mountAddonMediaSiblings(addonManager->hostServices(), series, this)->setObjectName(QStringLiteral("redesignMediaSiblings"));
+            char* sharedDirectory = config_GetSysPath(VLC_PKG_DATA_DIR, nullptr);
+            const auto installedRoot = sharedDirectory ? QDir(qfu(sharedDirectory)).filePath(QStringLiteral("addons/reference")) : QString();
+            free(sharedDirectory);
+            QList<vlc::addons::DistributionBootstrapEntry> bundledAddons;
+            // The artwork and Radio Browser examples are not bundled. The Lua
+            // art scripts serve artwork until the native metadata owner is on.
+            // Profiles that already have these add-ons keep them.
+            for (const auto& entry : QList<QPair<QString,QString>>{
+                    {QStringLiteral("tvmaze"),QStringLiteral("org.videolan.tvmaze")},
+                    {QStringLiteral("thesubtitledb"),QStringLiteral("org.hakone.thesubtitledb")},
+                    {QStringLiteral("episodes"),QStringLiteral("org.videolan.episodes")}}) {
+                bundledAddons.append({entry.second,
+                    installedRoot.isEmpty()?QString():QDir(installedRoot).filePath(entry.first),
+                    QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(entry.first)});
+            }
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, addonManager,
+                &vlc::addons::AddonManager::cancelDistributionBootstrap, Qt::DirectConnection);
+            connect(addonManager, &vlc::addons::AddonManager::distributionBootstrapChanged, this,
+                [this, owner=QPointer<vlc::addons::AddonManager>(addonManager)] {
+                    if(!owner || owner->distributionBootstrapInProgress())return;
+                    for(const auto& result:owner->distributionBootstrapResults()) {
+                        const auto row=result.toMap();if(row.value(QStringLiteral("success")).toBool())continue;
+                        const auto id=row.value(QStringLiteral("id")).toString(), error=row.value(QStringLiteral("error")).toString();
+                        msg_Warn(m_intf,"Cannot prepare bundled add-on %s: %s",qtu(id),qtu(error));
+                    }
+                });
+            if(!addonManager->beginDistributionBootstrap(std::move(bundledAddons)))
+                msg_Warn(m_intf,"Cannot start bundled add-on preparation: %s",qtu(addonManager->errorMessage()));
+            auto* displayCatalogue = new vlc::addons::AddonCatalogueView(addonManager,
+                m_mainCtx->addonStreamLifetime());
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, displayCatalogue,
+                &vlc::addons::AddonCatalogueView::close, Qt::DirectConnection);
+            auto* packageSummaries = new vlc::addons::AddonPackageSummaries(addonManager,
+                m_mainCtx->addonStreamLifetime(), this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, packageSummaries,
+                &vlc::addons::AddonPackageSummaries::close, Qt::DirectConnection);
+            qmlRegisterSingletonInstance<vlc::addons::AddonPackageSummaries>(uri, versionMajor, versionMinor,
+                "AddonPackageSummaries", packageSummaries);
+            metadataService = new AddonMetadataService(addonManager, this);
+            if (!metadataService->bindApplicationLifetime(m_mainCtx->addonStreamLifetime()))
+                metadataService->shutdown();
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                metadataService, &AddonMetadataService::shutdown, Qt::DirectConnection);
+            connect(addonManager, &vlc::addons::AddonManager::retiring,
+                metadataService, &AddonMetadataService::shutdown, Qt::DirectConnection);
+            metadataService->setAutomaticNetworkAllowed(var_InheritBool(m_intf, "metadata-network-access"));
+            m_intf->p_mainPlayerController->setMetadataService(metadataService);
+            connect(m_intf->p_mainPlayerController, &PlayerController::metadataNetworkAccessChanged,
+                metadataService, &AddonMetadataService::setAutomaticNetworkAllowed);
+            // For the Windows cursor check: Tools > Messages, debug level.
+            vlc::addons::setHelperLaunchObserver([intf = m_intf](quint64 count, const QString& program) {
+                msg_Dbg(intf, "Add-on helper launch %llu%s%s", static_cast<unsigned long long>(count),
+                        program.isEmpty() ? "" : ": ", qtu(program));
+            });
+            auto acceptedIdentities = std::make_shared<vlc::addons::AddonAcceptedIdentities>(addonManager->storageDirectory());
+            metadataService->setAcceptedIdentities(acceptedIdentities);
+            auto* identityChoice = new vlc::addons::AddonIdentityChoice(metadataService, acceptedIdentities,
+                [player = m_intf->p_mainPlayerController->getPlayer()]() -> input_item_t* {
+                    vlc_player_locker lock(player);
+                    input_item_t* item = vlc_player_GetCurrentMedia(player);
+                    return item ? input_item_Hold(item) : nullptr;
+                }, this);
+            connect(m_intf->p_mainPlayerController, &PlayerController::inputChanged,
+                identityChoice, &vlc::addons::AddonIdentityChoice::cancel);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                identityChoice, &vlc::addons::AddonIdentityChoice::close, Qt::DirectConnection);
+            qmlRegisterSingletonInstance<vlc::addons::AddonIdentityChoice>(uri, versionMajor, versionMinor,
+                "AddonIdentityChoice", identityChoice);
+            // One-way for this instance: once the owner is registered, Core never
+            // runs its own online lookups again, even after the owner closes.
+            if (var_InheritBool(m_intf, "metadata-native-owner")) {
+                AddonNativeMetadataOwner::Options options;
+                options.cacheDirectory = QDir(addonManager->storageDirectory()).filePath(QStringLiteral("native-artwork-cache"));
+                options.activateCoreOwner = true;
+                // Every family's add-on passed the parity test, so no Core
+                // script runs under the owner.
+                options.nativeFamilies = QStringList{};
+                m_metadataOwner = AddonNativeMetadataOwner::create(metadataService, addonManager, VLC_OBJECT(m_intf), options);
+                if (!m_metadataOwner)
+                    msg_Warn(m_intf, "Cannot start the add-on metadata owner; online metadata lookups are off");
+                else
+                    msg_Dbg(m_intf, "Add-on metadata owner active");
+            }
+            auto* themes = new vlc::addons::AddonThemeService(addonManager, this);
+            const auto updateThemeAccent = [this, themes] {
+                char* option = var_InheritString(m_intf, "qt-accent-color");
+                themes->setUserAccentOverride(option ? qfu(option) : QString());
+                free(option);
+            };
+            updateThemeAccent();
+            themes->observePlatformPreferences(qApp->styleHints());
+            connect(m_mainCtx, &MainCtx::redesignAccentChanged, themes, updateThemeAccent);
+            connect(m_mainCtx, &MainCtx::redesignPlayerPreferencesChanged, themes, updateThemeAccent);
+            qmlRegisterSingletonInstance<vlc::addons::AddonThemeService>(uri, versionMajor, versionMinor, "AddonThemes", themes);
+            auto* addonUi = new vlc::addons::AddonUiRegistry(addonManager, this);
+            auto* uiAssets = new vlc::addons::AddonUiAssets(addonManager, this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, uiAssets, &vlc::addons::AddonUiAssets::close);
+            addonUi->setAssetService(uiAssets);
+            qmlRegisterSingletonInstance<vlc::addons::AddonUiRegistry>(uri, versionMajor, versionMinor, "AddonUiRegistry", addonUi);
+            auto* visualizers = vlc::addons::createPlayerVisualizers(addonManager, m_intf->p_mainPlayerController, this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, visualizers, &vlc::addons::AddonVisualizers::close);
+            qmlRegisterSingletonInstance<vlc::addons::AddonVisualizers>(uri, versionMajor, versionMinor, "AddonVisualizers", visualizers);
+            auto* sessions = new vlc::addons::AddonPlayerSessions(addonManager,
+                m_intf->p_mainPlayerController->getPlayer(), m_intf->p_mainPlayerController,
+                m_mainCtx->addonStreamLifetime(), this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                sessions, &vlc::addons::AddonPlayerSessions::close, Qt::DirectConnection);
+            sessions->activate();
+            if (sessions->ui())
+                qmlRegisterSingletonInstance<vlc::addons::AddonSessionUi>(uri, versionMajor, versionMinor, "AddonSessions", sessions->ui());
+            const QPointer<vlc::addons::AddonManager> managerOwner(addonManager);
+            auto admissions = std::make_shared<vlc::addons::AddonSourceAdmissions>(addonManager->storageDirectory(),
+                [managerOwner](const QVariantMap& reference) { return vlc::addons::discoveryReferenceAvailable(managerOwner, reference); });
+            auto* nativeQueue = new vlc::addons::AddonNativeQueueStore(m_intf->p_mainPlaylistController ? m_intf->p_mainPlaylistController->getPlaylist().m_playlist : nullptr, admissions, this);
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring,
+                nativeQueue, &vlc::addons::AddonNativeQueueStore::close, Qt::DirectConnection);
+            connect(addonManager, &vlc::addons::AddonManager::retiring,
+                nativeQueue, &vlc::addons::AddonNativeQueueStore::close, Qt::DirectConnection);
+            nativeQueue->setObjectName(QStringLiteral("addonNativeQueueStore"));
+            auto* sourceOwner = new vlc::addons::AddonDiscoverySourceOwner(addonManager,
+                VLC_OBJECT(m_intf), admissions, m_mainCtx->addonStreamLifetime(), this);
+            const QPointer<vlc::addons::AddonDiscoverySourceOwner> sourceAccess(sourceOwner);
+            const QPointer<vlc::addons::AddonManager> sourceManager(addonManager);
+            connect(sourceOwner, &vlc::addons::AddonDiscoverySourceOwner::changed, addonManager,
+                [sourceAccess, sourceManager] {
+                    if (sourceManager) sourceManager->setNativeStreamAvailable(sourceAccess && sourceAccess->active());
+                    if (sourceManager) sourceManager->setNativeStreamTransportHint(
+                        sourceAccess && sourceAccess->transportKnown(),
+                        sourceAccess && sourceAccess->transportAvailable());
+                });
+            connect(m_mainCtx, &MainCtx::addonWorkRetiring, sourceOwner,
+                [sourceAccess, sourceManager] {
+                    if (sourceManager) sourceManager->setNativeStreamAvailable(false);
+                    if (sourceManager) sourceManager->setNativeStreamTransportHint(false, false);
+                    if (sourceAccess) sourceAccess->close();
+                }, Qt::DirectConnection);
+            connect(m_intf->p_mainPlayerController, &QObject::destroyed, sourceOwner,
+                [sourceAccess, sourceManager] {
+                    if (sourceManager) sourceManager->setNativeStreamAvailable(false);
+                    if (sourceManager) sourceManager->setNativeStreamTransportHint(false, false);
+                    if (sourceAccess) sourceAccess->close();
+                });
+            sourceOwner->activate();
+            auto nativeBackend=nativeQueue->backend();
+            vlc::addons::AddonNativeLibraryTargets* libraryTargets=nullptr;
+            if (auto* mediaLibrary=m_mainCtx->getMediaLibrary()) {
+                const auto dispatcher=vlc::addons::AddonNativeLibraryStore::dispatcherFor(mediaLibrary);
+                auto* libraryStore=new vlc::addons::AddonNativeLibraryStore(dispatcher,admissions,addonManager,this);
+                connect(m_mainCtx,&MainCtx::addonWorkRetiring,libraryStore,&vlc::addons::AddonNativeLibraryStore::close);
+                libraryStore->setObjectName(QStringLiteral("addonNativeLibraryStore"));
+                libraryTargets=new vlc::addons::AddonNativeLibraryTargets(dispatcher,libraryStore,this);
+                connect(m_mainCtx,&MainCtx::addonWorkRetiring,libraryTargets,&vlc::addons::AddonNativeLibraryTargets::close);
+                connect(addonManager,&QObject::destroyed,libraryTargets,&vlc::addons::AddonNativeLibraryTargets::close);
+                nativeBackend=vlc::addons::combineDiscoveryBackends(std::move(nativeBackend),libraryStore->backend());
+            }
+            auto* discovery = vlc::addons::createPlayerDiscoveryWithSources(addonManager, sourceOwner, std::move(nativeBackend), this);
+            if (libraryTargets) discovery->setPlaylistBackend(libraryTargets->backend());
+            // A queue-fill session reacts to queue changes only.
+            connect(nativeQueue, &vlc::addons::AddonNativeQueueStore::revisionChanged, discovery, &vlc::addons::AddonDiscoveryService::noteQueueChanged);
+            qmlRegisterSingletonInstance<vlc::addons::AddonDiscoveryService>(uri, versionMajor, versionMinor, "AddonDiscovery", discovery);
+#ifdef VLC_ADDON_TEST_DRIVER
+            if (auto* driver = vlc::addons::AddonTestDriver::create(addonManager, packageSummaries, discovery, this)) {
+                connect(m_mainCtx, &MainCtx::addonWorkRetiring, driver, [driver] { driver->close(); }, Qt::DirectConnection);
+                driver->setMetadataReport([this, service = QPointer<AddonMetadataService>(metadataService)] {
+                    bool owned = false;
+                    vlc_metadata_backend_t* current = vlc_metadata_owner_Hold(VLC_OBJECT(m_intf), &owned);
+                    vlc_metadata_backend_t* ours = service ? service->holdCoreBackend() : nullptr;
+                    const bool same = current && current == ours;
+                    if (current) vlc_metadata_backend_Release(current);
+                    if (ours) vlc_metadata_backend_Release(ours);
+                    return QVariantMap{{QStringLiteral("owned"), owned}, {QStringLiteral("ownerIsThisWindow"), same},
+                        {QStringLiteral("ownerActive"), m_metadataOwner && m_metadataOwner->active()},
+                        {QStringLiteral("coreRequests"), service ? qint64(service->coreRequestCount()) : -1}};
+                });
+                // What the player gets: the registry's panels, as QML reads them.
+                driver->setPanelsReport([registry = QPointer<vlc::addons::AddonUiRegistry>(findChild<vlc::addons::AddonUiRegistry*>()),
+                                         series = QPointer<SeriesModel>(findChild<SeriesModel*>(QStringLiteral("redesignSeriesModel")))](const QString& argument) {
+                    if (!registry) return QVariantMap{{QStringLiteral("registry"), false}};
+                    const auto verb = argument.section(QLatin1Char(' '), 0, 0), value = argument.section(QLatin1Char(' '), 1);
+                    if (verb == QLatin1String("open")) {
+                        // As the player's panel frame opens one: a session,
+                        // its owner, then the panel's media context.
+                        const auto session = registry->createSession(value, {}, {{QStringLiteral("surface"), QStringLiteral("player.panels@1")}});
+                        if (session.isEmpty()) return QVariantMap{{QStringLiteral("session"), QString()}};
+                        auto* owner = new QObject(registry);
+                        owner->setObjectName(QStringLiteral("driverPanel:") + session);
+                        connect(registry, &vlc::addons::AddonUiRegistry::sessionFailed, owner, [owner, session](const QString& id) {
+                            if (id == session) owner->setProperty("failed", true);
+                        });
+                        const bool bound = registry->bindSessionOwner(session, owner);
+                        return QVariantMap{{QStringLiteral("session"), session}, {QStringLiteral("bound"), bound},
+                            {QStringLiteral("attached"), registry->attachPanelSession(session)}};
+                    }
+                    if (verb == QLatin1String("state")) {
+                        auto* owner = registry->findChild<QObject*>(QStringLiteral("driverPanel:") + value);
+                        return QVariantMap{{QStringLiteral("descriptor"), registry->session(value)},
+                            {QStringLiteral("failed"), owner && owner->property("failed").toBool()}};
+                    }
+                    QVariantMap result{{QStringLiteral("registry"), true}, {QStringLiteral("available"), registry->available()},
+                        {QStringLiteral("siblingsWanted"), registry->siblingsWanted()}, {QStringLiteral("panels"), registry->panels()}};
+                    if (series)
+                        result.insert(QStringLiteral("series"), QVariantMap{{QStringLiteral("available"), series->available()},
+                            {QStringLiteral("loading"), series->loading()}, {QStringLiteral("siblings"), qint64(series->siblings().size())}});
+                    return result;
+                });
+            }
+#endif
+        }
+        qmlRegisterType<vlc::addons::AddonVisualizerSurface>(uri, versionMajor, versionMinor, "AddonVisualizerSurface");
+        auto* subtitleSources = new SubtitleSourceService(this);
+        subtitleSources->setAddonManager(addonManager);
+        subtitleSources->setMetadataService(metadataService);
+        if (!dataDirectory.isEmpty()) subtitleSources->setStorageDirectory(QDir(dataDirectory).filePath(QStringLiteral("subtitles")));
         qmlRegisterSingletonInstance<SubtitleSourceService>(uri, versionMajor, versionMinor, "SubtitleSources", subtitleSources);
         qmlRegisterType<PlayerHighResolutionTimeUpdater>(uri, versionMajor, versionMinor, "HighResolutionTimeUpdater");
         qmlRegisterUncreatableMetaObject(VLCTickForeign::staticMetaObject, uri, versionMajor, versionMinor, "VLCTick", "Not Instantiable" );

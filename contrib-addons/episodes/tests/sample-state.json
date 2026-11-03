@@ -1,0 +1,115 @@
+{
+  "episodes": [
+    {
+      "key": "media:e9",
+      "number": "9",
+      "playKey": "media:e9",
+      "playLabel": "Play",
+      "subtitle": "Watched",
+      "title": "Episode 9"
+    },
+    {
+      "key": "media:e10",
+      "number": "10",
+      "playKey": "media:e10",
+      "playLabel": "Resume",
+      "progress": 1.0,
+      "subtitle": "Watched",
+      "title": "Glass"
+    },
+    {
+      "artwork": "media:e11",
+      "description": "Ronin follows a lead to the old harbour, where the wand's last owner waits.",
+      "expanded": true,
+      "fileLabel": "The.Wand.S01E11.mkv",
+      "hasDescription": true,
+      "hasFile": true,
+      "hasSource": true,
+      "hasVideo": false,
+      "key": "media:e11",
+      "mark": "Now playing",
+      "multiple": true,
+      "number": "11",
+      "playEnabled": false,
+      "playKey": "media:e11",
+      "playLabel": "Playing",
+      "progress": 0.35,
+      "sourceKey": "media:e11",
+      "title": "Old Harbour",
+      "version": "media:e11",
+      "versions": [
+        {
+          "key": "media:e11",
+          "label": "The.Wand.S01E11.mkv"
+        },
+        {
+          "key": "media:e11b",
+          "label": "The.Wand.S01E11.1080p.mkv"
+        }
+      ],
+      "videoKey": "",
+      "current": true
+    },
+    {
+      "key": "media:e12",
+      "number": "12",
+      "playKey": "media:e12",
+      "playLabel": "Play",
+      "title": "Episode 12"
+    },
+    {
+      "key": "media:e13",
+      "number": "13",
+      "playKey": "media:e13",
+      "playLabel": "Play",
+      "title": "Ashes"
+    },
+    {
+      "key": "media:e14",
+      "number": "14",
+      "playKey": "media:e14",
+      "playLabel": "Play",
+      "title": "Return"
+    }
+  ],
+  "expanded": "",
+  "files": true,
+  "hasNotice": false,
+  "kind": "folder",
+  "less": false,
+  "more": false,
+  "notice": "",
+  "page": 0,
+  "revision": 1.0,
+  "season": 1,
+  "seasonLabel": "Season 1",
+  "show": "The Wand",
+  "status": "ready",
+  "version": "",
+  "versionEpisode": "",
+  "seasonRows": [
+    {
+      "key": 0,
+      "label": "Specials",
+      "icon": "",
+      "current": false
+    },
+    {
+      "key": 1,
+      "label": "Season 1",
+      "icon": "check",
+      "current": true
+    },
+    {
+      "key": 2,
+      "label": "Season 2",
+      "icon": "",
+      "current": false
+    }
+  ],
+  "showingSeasons": false,
+  "seasonsClosed": true,
+  "oneSeason": false,
+  "headerSubtitle": "Season 1",
+  "episodesShown": true
+}

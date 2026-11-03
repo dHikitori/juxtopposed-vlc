@@ -1,0 +1,16 @@
+{
+  "description": "A node ID starts with a digit.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "spectrum",
+        "count": 32,
+        "color": "theme.accent",
+        "id": "1bars"
+      }
+    ]
+  }
+}

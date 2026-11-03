@@ -26,6 +26,7 @@
 #endif
 
 #include <assert.h>
+#include <stdatomic.h>
 
 #include <vlc_common.h>
 #include <vlc_url.h>
@@ -35,6 +36,33 @@
 #include "input_internal.h"
 #include "../preparser/art.h"
 #include <vlc_charset.h>
+#include <vlc_metadata_revision.h>
+#include "metadata_revision.h"
+
+static atomic_uint_fast64_t metadata_revision_sequence;
+static uint64_t vlc_metadata_revision_Next(void)
+{
+    uint_fast64_t current = atomic_load_explicit(&metadata_revision_sequence, memory_order_relaxed);
+    while (current < UINT64_MAX) {
+        if (atomic_compare_exchange_weak_explicit(&metadata_revision_sequence, &current, current + 1,
+                                                  memory_order_relaxed, memory_order_relaxed)) return current + 1;
+    }
+    return UINT64_MAX;
+}
+bool vlc_meta_ReserveRevisions(unsigned count, uint64_t *first)
+{
+    if (first == NULL || count > VLC_META_TYPE_COUNT + 2) return false;
+    if (count == 0) { *first = 0; return true; }
+    uint_fast64_t current = atomic_load_explicit(&metadata_revision_sequence, memory_order_relaxed);
+    while (current < UINT64_MAX) {
+        if (count >= UINT64_MAX - current) return false;
+        if (atomic_compare_exchange_weak_explicit(&metadata_revision_sequence, &current, current + count,
+                                                  memory_order_relaxed, memory_order_relaxed)) {
+            *first = current + 1; return true;
+        }
+    }
+    return false;
+}
 
 struct vlc_meta_value
 {
@@ -45,10 +73,13 @@ struct vlc_meta_value
 struct vlc_meta_t
 {
     struct vlc_meta_value meta[VLC_META_TYPE_COUNT];
+    uint64_t revisions[VLC_META_TYPE_COUNT];
+    uint64_t extra_revision;
 
     vlc_dictionary_t extra_tags;
 
     int i_status;
+    uint64_t status_revision;
 };
 
 const char *vlc_meta_TypeToString(vlc_meta_type_t meta_type)
@@ -106,10 +137,14 @@ vlc_meta_t *vlc_meta_New( void )
     vlc_meta_t *m = (vlc_meta_t*)malloc( sizeof(*m) );
     if( !m )
         return NULL;
+    const uint64_t initial_revision = vlc_metadata_revision_Next();
+    m->extra_revision = initial_revision;
+    m->status_revision = initial_revision;
     for( int i = 0; i < VLC_META_TYPE_COUNT ; i++ )
     {
         m->meta[i].value = NULL;
         m->meta[i].priority = VLC_META_PRIORITY_BASIC;
+        m->revisions[i] = initial_revision;
     }
     m->i_status = 0;
     vlc_dictionary_init( &m->extra_tags, 0 );
@@ -157,7 +192,32 @@ void vlc_meta_SetWithPriority( vlc_meta_t *p_meta, vlc_meta_type_t meta_type, co
     assert( psz_val == NULL || IsUTF8( psz_val ) );
     p_meta->meta[meta_type].value = psz_val ? strdup( psz_val ) : NULL;
     p_meta->meta[meta_type].priority = priority;
+    p_meta->revisions[meta_type] = vlc_metadata_revision_Next();
 }
+
+void vlc_meta_SetOwnedRevision(vlc_meta_t *meta, vlc_meta_type_t type, char *value, uint64_t revision)
+{
+    assert(value == NULL || IsUTF8(value));
+    assert(revision != 0 && revision != UINT64_MAX);
+    free(meta->meta[type].value);
+    meta->meta[type].value = value;
+    meta->meta[type].priority = VLC_META_PRIORITY_BASIC;
+    meta->revisions[type] = revision;
+}
+bool vlc_meta_TrySetOwned(vlc_meta_t *meta, vlc_meta_type_t type, char *value)
+{
+    uint64_t revision;
+    if (!vlc_meta_ReserveRevisions(1, &revision)) return false;
+    vlc_meta_SetOwnedRevision(meta, type, value, revision); return true;
+}
+
+uint64_t vlc_meta_FieldRevision(const vlc_meta_t *meta, vlc_meta_type_t type)
+{
+    assert(type >= 0 && type < VLC_META_TYPE_COUNT);
+    return meta != NULL ? meta->revisions[type] : 0;
+}
+uint64_t vlc_meta_ExtraRevision(const vlc_meta_t *meta)
+{ return meta != NULL ? meta->extra_revision : 0; }
 
 const char *vlc_meta_GetWithPriority(const vlc_meta_t *meta, vlc_meta_type_t meta_type, vlc_meta_priority_t *restrict priority)
 {
@@ -174,6 +234,7 @@ const char *vlc_meta_GetWithPriority(const vlc_meta_t *meta, vlc_meta_type_t met
 void vlc_meta_SetExtraWithPriority( vlc_meta_t *m, const char *psz_name, const char *psz_value, vlc_meta_priority_t priority )
 {
     assert( psz_name );
+    m->extra_revision = vlc_metadata_revision_Next();
     struct vlc_meta_value *old_meta_value = vlc_dictionary_value_for_key( &m->extra_tags, psz_name );
     if( old_meta_value != kVLCDictionaryNotFound )
         vlc_dictionary_remove_value_for_key( &m->extra_tags, psz_name,
@@ -218,6 +279,83 @@ int vlc_meta_GetStatus( const vlc_meta_t *m )
 void vlc_meta_SetStatus( vlc_meta_t *m, int status )
 {
     m->i_status = status;
+    m->status_revision = vlc_metadata_revision_Next();
+}
+
+uint64_t vlc_meta_StatusRevision(const vlc_meta_t *meta)
+{ return meta != NULL ? meta->status_revision : 0; }
+
+void vlc_meta_SetStatusOwned(vlc_meta_t *meta, int status, uint64_t revision)
+{
+    assert(revision != 0 && revision != UINT64_MAX);
+    meta->i_status = status; meta->status_revision = revision;
+}
+
+void vlc_meta_SwapExtraOwned(vlc_meta_t *target, vlc_meta_t *prepared, uint64_t revision)
+{
+    assert(revision != 0 && revision != UINT64_MAX);
+    vlc_dictionary_t old = target->extra_tags;
+    target->extra_tags = prepared->extra_tags; prepared->extra_tags = old;
+    target->extra_revision = revision;
+}
+
+static char *copy_native_string(const char *source, size_t *remaining)
+{
+    if (source == NULL) return NULL;
+    const size_t length = strnlen(source, *remaining);
+    if (length == *remaining) return NULL;
+    char *value = strdup(source);
+    if (value != NULL) *remaining -= length + 1;
+    return value;
+}
+
+vlc_meta_t *vlc_meta_CopyNative(const vlc_meta_t *source, size_t *remaining)
+{
+    if (source == NULL || remaining == NULL || *remaining < sizeof(vlc_meta_t)) return NULL;
+    *remaining -= sizeof(vlc_meta_t);
+    vlc_meta_t *copy = vlc_meta_New();
+    if (copy == NULL) return NULL;
+    for (unsigned i = 0; i < VLC_META_TYPE_COUNT; ++i) {
+        copy->meta[i].value = copy_native_string(source->meta[i].value, remaining);
+        if (source->meta[i].value != NULL && copy->meta[i].value == NULL) goto error;
+        copy->meta[i].priority = source->meta[i].priority;
+        copy->revisions[i] = source->revisions[i];
+    }
+    const size_t count = vlc_dictionary_keys_count(&source->extra_tags);
+    if (count > 4096 || source->extra_tags.i_size > 16384) goto error;
+    /* The generic dictionary insert has no allocation-error result. Prepare
+     * each entry directly, so a failed copy cannot become a partial delta. */
+    if (count != 0) {
+        if (count > *remaining / sizeof(*copy->extra_tags.p_entries)) goto error;
+        *remaining -= count * sizeof(*copy->extra_tags.p_entries);
+        copy->extra_tags.i_size = count;
+        copy->extra_tags.p_entries = calloc(count, sizeof(*copy->extra_tags.p_entries));
+        if (copy->extra_tags.p_entries == NULL) { copy->extra_tags.i_size = 0; goto error; }
+    }
+    for (size_t bucket = 0; bucket < source->extra_tags.i_size; ++bucket) {
+        for (vlc_dictionary_entry_t *entry = source->extra_tags.p_entries[bucket]; entry != NULL; entry = entry->p_next) {
+            struct vlc_meta_value *original = entry->p_value;
+            if (*remaining < sizeof(vlc_dictionary_entry_t) + sizeof(struct vlc_meta_value)) goto error;
+            *remaining -= sizeof(vlc_dictionary_entry_t) + sizeof(struct vlc_meta_value);
+            vlc_dictionary_entry_t *next = calloc(1, sizeof(*next));
+            struct vlc_meta_value *value = calloc(1, sizeof(*value));
+            if (next == NULL || value == NULL) { free(next); free(value); goto error; }
+            next->psz_key = copy_native_string(entry->psz_key, remaining);
+            value->value = copy_native_string(original->value, remaining);
+            if (next->psz_key == NULL || (original->value != NULL && value->value == NULL)) {
+                free(next->psz_key); free(next); free(value->value); free(value); goto error;
+            }
+            value->priority = original->priority; next->p_value = value;
+            const size_t index = DictHash(next->psz_key, count);
+            next->p_next = copy->extra_tags.p_entries[index]; copy->extra_tags.p_entries[index] = next;
+        }
+    }
+    copy->extra_revision = source->extra_revision;
+    copy->status_revision = source->status_revision;
+    copy->i_status = source->i_status;
+    return copy;
+error:
+    vlc_meta_Delete(copy); return NULL;
 }
 
 
@@ -238,6 +376,7 @@ void vlc_meta_Merge( vlc_meta_t *dst, const vlc_meta_t *src )
             free( dst->meta[i].value );
             dst->meta[i].value = strdup( src->meta[i].value );
             dst->meta[i].priority = src->meta[i].priority;
+            dst->revisions[i] = vlc_metadata_revision_Next();
         }
     }
 
@@ -259,11 +398,13 @@ void vlc_meta_Merge( vlc_meta_t *dst, const vlc_meta_t *src )
         }
 
         vlc_meta_InsertExtra( dst, ppsz_all_keys[i], src_meta_value->value, src_meta_value->priority );
+        dst->extra_revision = vlc_metadata_revision_Next();
 
         free( ppsz_all_keys[i] );
     }
     free( ppsz_all_keys );
     dst->i_status |= src->i_status;
+    dst->status_revision = vlc_metadata_revision_Next();
 }
 
 

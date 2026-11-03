@@ -17,6 +17,8 @@
  *****************************************************************************/
 
 #include "medialib.hpp"
+#include <vlc_medialibrary_work.h>
+#include <QScopeGuard>
 #include "mlhelper.hpp"
 #include "playlist/playlist_controller.hpp"
 #include "util/shared_input_item.hpp"
@@ -55,12 +57,33 @@ MediaLib::MediaLib(qt_intf_t *_intf, vlc::playlist::PlaylistController* playlist
     m_event_cb.reset( vlc_ml_event_register_callback( m_ml, MediaLib::onMediaLibraryEvent,
                                                       this ) );
     m_runner = new ThreadRunner();
+    m_addonRunner = new MLJoinedThreadRunner(vlc::addons::AddonStreamLifetime::applicationHandle(),this);
 }
 
 MediaLib::~MediaLib()
 {
     cancelTrackMatching();
+    m_addonRunner->close();
     m_runner->destroy();
+}
+
+struct MediaLib::NativeTask {
+    vlc_ml_work_t* lease;
+    explicit NativeTask(vlc_ml_work_t* value) : lease(value) {}
+    ~NativeTask() { vlc_ml_work_Release(lease); }
+};
+std::shared_ptr<MediaLib::NativeTask> MediaLib::nativeTask() const
+{
+    auto* lease=vlc_ml_work_Acquire(m_ml); if (!lease) return {};
+    try { return std::make_shared<NativeTask>(lease); }
+    catch (...) { vlc_ml_work_Release(lease); throw; }
+}
+void MediaLib::invokeNativeTask(const std::shared_ptr<NativeTask>& task,
+    const std::function<void(vlc_medialibrary_t*)>& work)
+{
+    auto* ml=vlc_ml_work_Begin(task->lease); if (!ml) return;
+    const auto finish=qScopeGuard([&] { vlc_ml_work_End(task->lease); });
+    work(ml);
 }
 
 void MediaLib::setFolderRoots(QStringList roots)
@@ -1325,8 +1348,8 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                 const char* queue)
 {
     struct NoCtx{};
-    return m_runner->runOnThread<NoCtx>(obj,
-    [mlCb, ml=m_ml](NoCtx&){
+    return runOnMLThread<NoCtx>(obj,
+    [mlCb](vlc_medialibrary_t* ml,NoCtx&){
         mlCb(ml);
     },
     [uiCb](quint64, NoCtx&){
@@ -1340,8 +1363,8 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                 std::function< void(quint64)> uiCb, const char* queue)
 {
     struct NoCtx{};
-    return m_runner->runOnThread<NoCtx>(obj,
-    [mlCb, ml=m_ml](NoCtx&){
+    return runOnMLThread<NoCtx>(obj,
+    [mlCb](vlc_medialibrary_t* ml,NoCtx&){
         mlCb(ml);
     },
     [uiCb](quint64 requestId, NoCtx&){
@@ -1355,8 +1378,8 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                 const char* queue)
 {
     struct NoCtx{};
-    return m_runner->runOnThread<NoCtx>(obj,
-    [mlCb, ml=m_ml](NoCtx&){
+    return runOnMLThread<NoCtx>(obj,
+    [mlCb](vlc_medialibrary_t* ml,NoCtx&){
         mlCb(ml);
     },
     [](quint64, NoCtx&){
@@ -1366,6 +1389,7 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
 
 void MediaLib::cancelMLTask(const QObject* object, quint64 taskId)
 {
+    if (QThread::currentThread()==thread() && m_addonRunner->cancelTask(object,taskId)) return;
     m_runner->cancelTask(object, taskId);
 }
 

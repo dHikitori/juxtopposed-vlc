@@ -17,11 +17,48 @@ FocusScope {
     readonly property ColorContext colorContext: ColorContext { palette: VLCStyle.palette; colorSet: ColorContext.Window }
     readonly property bool resumeAvailable: Player.canRestorePlayback
     property int queueTab: 0
+    property string subtitleReplacementTicket: ""
+    function openTrackDialog(page) {
+        if (page === "audio") { DialogsProvider.loadAudioFile(); return }
+        if (subtitleReplacementTicket.length) return
+        const registry = typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
+        subtitleReplacementTicket = registry ? registry.executeReplacement("actions.subtitles.open@1", {}) : ""
+        if (!subtitleReplacementTicket.length) DialogsProvider.loadSubtitlesFile()
+    }
+    Connections {
+        target: typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
+        function onReplacementFinished(ticket, success) {
+            if (ticket !== rootPlayer.subtitleReplacementTicket) return
+            rootPlayer.subtitleReplacementTicket = ""
+            if (!success) DialogsProvider.loadSubtitlesFile()
+        }
+    }
+    RedesignAddonWindow {
+        id: addonWindow
+        registry: typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
+        scaleFactor: view.scaleFactor; accentColor: view.accentColor; lightTheme: view.lightTheme
+    }
+    RedesignAddonDiscoveryWindow {
+        id: discoveryWindow
+        backend: typeof AddonDiscovery === "undefined" ? null : AddonDiscovery
+        settingsBackend: typeof AddonManager === "undefined" ? null : AddonManager
+        scaleFactor: view.scaleFactor; accentColor: view.accentColor; lightTheme: view.lightTheme
+        onManageRequested: DialogsProvider.prefsPageDialog("extensions")
+    }
     // The projection retains folder state while its lazy source is unloaded.
     PlaylistTreeModel { id: queueTreeModel; treeEnabled: MainCtx.playlistTree }
     property int requestedLibraryCategory: -1
     property var requestedNetworkPlaylist: null
-    SeriesModel { id: seriesModel; objectName: "seriesEpisodeModel" }
+    // The app owns the series model, so add-on panels can read it through
+    // media.siblings. A test without the app uses a local one.
+    SeriesModel { id: localSeriesModel; objectName: "seriesEpisodeModel" }
+    readonly property var seriesModel: typeof redesignSeriesModel !== "undefined" && redesignSeriesModel ? redesignSeriesModel : localSeriesModel
+    readonly property var addonPanelRegistry: typeof AddonUiRegistry === "undefined" ? null : AddonUiRegistry
+    readonly property var mediaSiblings: typeof redesignMediaSiblings === "undefined" ? null : redesignMediaSiblings
+    // The series is found only while an enabled panel can read it.
+    readonly property bool seriesWanted: !!addonPanelRegistry && addonPanelRegistry.siblingsWanted
+    onSeriesWantedChanged: seriesContextTimer.restart()
+    property string panelMediaUrl: ""
     EpisodeMetadata {
         id: episodeMetadata
         objectName: "seriesEpisodeMetadata"
@@ -35,8 +72,20 @@ FocusScope {
     Timer {
         id: seriesContextTimer; interval: 0
         onTriggered: {
-            episodeMetadata.request(Player.url, Player.seriesContext)
-            seriesModel.setCurrent(Player.url, Player.seriesContext)
+            if (rootPlayer.seriesWanted) {
+                episodeMetadata.request(Player.url, Player.seriesContext)
+                seriesModel.setCurrent(Player.url, Player.seriesContext)
+            }
+            if (!rootPlayer.addonPanelRegistry) return
+            // A new media gets one context call for each panel; a metadata
+            // change only refreshes the open panels.
+            const url = String(Player.url || "")
+            if (url !== rootPlayer.panelMediaUrl) {
+                rootPlayer.panelMediaUrl = url
+                rootPlayer.addonPanelRegistry.setPanelMedia({
+                    kind: !url.length ? "none" : Player.videoTracks.count > 0 ? "video" : Player.audioTracks.count > 0 ? "audio" : "none",
+                    durationMs: Player.length.valid() ? Player.length.toSeconds() * 1000 : 0})
+            } else rootPlayer.addonPanelRegistry.refreshPanels()
         }
     }
     property string seriesFeedUrl: seriesModel.feed.toString()
@@ -70,6 +119,32 @@ FocusScope {
         source: active ? "qrc:///qt/qml/VLC/Player/RedesignSeriesMetadata.qml" : ""
         onLoaded: { item.seriesModel = seriesModel; seriesModel.loadStates() }
     }
+    // Effects that a click in an add-on panel asked for. The siblings
+    // projection checks them; the app runs them on its own paths.
+    Connections {
+        target: rootPlayer.addonPanelRegistry
+        ignoreUnknownSignals: true
+        function onPanelEffect(sessionId, packageId, effect, value) {
+            if (rootPlayer.mediaSiblings) rootPlayer.mediaSiblings.runEffect(packageId, effect, value)
+        }
+    }
+    Connections {
+        target: rootPlayer.mediaSiblings
+        ignoreUnknownSignals: true
+        function onChanged() { if (rootPlayer.addonPanelRegistry) rootPlayer.addonPanelRegistry.refreshPanels() }
+        function onPlayRequested(url, feedIndex, version, fromStart) {
+            if (feedIndex >= 0) seriesFeed.playEpisode(feedIndex, version > 0, fromStart)
+            else Player.playSeriesEpisode(url, fromStart)
+        }
+        function onRescanRequested(chooseFolder) {
+            if (rootPlayer.seriesFeedUrl) { seriesFeed.setSources([]); seriesFeed.setSources([{mrl: rootPlayer.seriesFeedUrl}]); return }
+            if (!chooseFolder) { seriesModel.refresh(); return }
+            const folder = DialogsProvider.selectLibraryFolder(seriesModel.folder)
+            if (folder.toString()) seriesModel.refresh(folder)
+        }
+        function onIdentifyRequested() { identityDialog.begin() }
+        function onSourceRequested(url) { Qt.openUrlExternally(url) }
+    }
     Connections {
         target: DialogsProvider
         function onShowRedesignNetworkPlaylist(urls, name) {
@@ -80,7 +155,7 @@ FocusScope {
     function beginCustomization() {
         if (MainCtx.minimalView) MainCtx.minimalView = false
         mediaMenu.dismiss(); tracksPopup.close(); customChoice.close()
-        view.settingsPage = ""; view.queueOpen = false; view.episodesOpen = false
+        view.settingsPage = ""; view.queueOpen = false; view.panelOpen = ""
         view.libraryOpen = false; view.libraryExpanded = false
         customizationPreferences.discard()
         customizationEditor.begin()
@@ -137,7 +212,7 @@ FocusScope {
         else if (action === "home" || action === "playlists") openLibraryCategory(action === "home" ? 0 : 4)
         else if (action === "properties") DialogsProvider.mediaInfoDialog()
         else if (action === "replay") Player.replay()
-        else if (action === "episodes") view.toggleEpisodes()
+        else if (action === "episodes") view.togglePanel(view.layoutModel.episodesPanel.slice(6))
         else if (action === "chapters" || action === "bookmarks") {
             rootPlayer.queueTab = action === "chapters" ? 2 : 1
             view.settingsPage = ""; view.queueOpen = true
@@ -192,6 +267,14 @@ FocusScope {
         onWheelLeftRight: steps => adjust(steps)
     }
     RedesignSleepTimer { id: sleepTimer; onTriggered: MainPlaylistController.pause() }
+    RedesignIdentityDialog {
+        id: identityDialog
+        objectName: "identityDialog"
+        parent: view
+        scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
+        videoBackdropContent: rootPlayer.menuBackdropContent
+        backend: typeof AddonIdentityChoice !== "undefined" ? AddonIdentityChoice : null
+    }
     RedesignGotoTimeDialog {
         id: gotoTime
         objectName: "gotoTimeDialog"
@@ -274,7 +357,7 @@ FocusScope {
     Binding {
         target: MainCtx
         property: "preferHotkeys"
-        value: MainCtx.useGlobalShortcuts && !view.controlsLocked && !tracksPopup.visible && !mediaMenu.visible && !shortcutEditor.visible
+        value: MainCtx.useGlobalShortcuts && !view.controlsLocked && !tracksPopup.visible && !mediaMenu.visible && !shortcutEditor.visible && !addonWindow.visible && !discoveryWindow.visible
         restoreMode: Binding.RestoreBindingOrValue
     }
     Binding { target: Player; property: "seekPreviewEnabled"; value: MainCtx.redesignPlayerPreferences.seekPreview }
@@ -326,7 +409,7 @@ FocusScope {
         accentColor: MainCtx.redesignAccent
         playerLayout: MainCtx.redesignPlayerPreferences.layout
         customMenuOpen: customChoice.visible || mediaMenu.visible
-        episodesAvailable: seriesModel.available
+        addonPanels: { const registry = rootPlayer.addonPanelRegistry; return registry ? registry.panels : [] }
         customControlStates: ({
             speed: {enabled: Player.ratechangable},
             forward10: {enabled: view.seekable}, backward10: {enabled: view.seekable},
@@ -346,7 +429,6 @@ FocusScope {
                 icon: favoriteLoader.item && favoriteLoader.item.favorite ? "favorite-active" : "favorite"},
             bookmark: {enabled: Player.isStarted && MainCtx.mediaLibraryAvailable}, bookmarks: {enabled: MainCtx.mediaLibraryAvailable},
             chapters: {enabled: Player.isStarted && Player.hasChapters}, properties: {enabled: Player.isStarted}, replay: {enabled: view.seekable},
-            episodes: {enabled: seriesModel.available, checked: view.episodesOpen},
             thumbnail: {artwork: Player.artwork}, fileName: {value: Player.name}, artist: {value: Player.artist},
             folderName: {value: rootPlayer.mediaFolderName()}, playlistName: {value: MainPlaylistController.currentItem.playlistName}
         })
@@ -474,6 +556,16 @@ FocusScope {
             if (library && Player.artist) library.openArtistByName(Player.artist)
         }
         trackPopup: tracksPopup
+        addonVisualizerContent: Component {
+            AddonVisualizerSurface {
+                controller: typeof AddonVisualizers === "undefined" ? null : AddonVisualizers
+                backgroundColor: view.theme.background
+                foregroundColor: view.theme.bright
+                accentColor: view.theme.accent
+                reducedMotion: view.theme.reducedMotion
+            }
+        }
+        addonVisualizerActive: typeof AddonVisualizers !== "undefined" && AddonVisualizers.active
         onMenuRequested: anchor => mediaMenu.toggleFrom(anchor, view)
         onContextMenuRequested: globalPosition => audioContextMenu.popup(globalPosition)
         onResumeRequested: resume => {
@@ -520,6 +612,7 @@ FocusScope {
                     item.videoBackdropContent = rootPlayer.menuBackdropContent
                     item.expanded = Qt.binding(() => view.libraryExpanded)
                     item.fullLibraryRequested.connect(() => { view.libraryExpanded = !view.libraryExpanded })
+                    item.discoveryRequested.connect(source => discoveryWindow.openSource(source))
                     rootPlayer.applyLibraryCategory()
                 }
                 Loader {
@@ -537,6 +630,7 @@ FocusScope {
                         onFolderRequested: DialogsProvider.PLOpenDir()
                         onFullLibraryRequested: view.libraryExpanded = !view.libraryExpanded
                         onPreferencesRequested: DialogsProvider.prefsPageDialog("library")
+                        onDiscoveryRequested: source => discoveryWindow.openSource(source)
                     }
                     onLoaded: rootPlayer.applyLibraryCategory()
                 }
@@ -599,32 +693,20 @@ FocusScope {
                 onSleepTimerRequested: minutes => sleepTimer.start(minutes)
             }
         }
-        episodesContent: Component {
-            RedesignEpisodesView {
+        panelContent: Component {
+            RedesignAddonPanel {
+                registry: rootPlayer.addonPanelRegistry
+                panelId: view.panelOpen
+                entry: view.panel(view.panelOpen)
+                hostArtwork: {
+                    const siblings = rootPlayer.mediaSiblings
+                    if (!siblings || !entry) return ({})
+                    siblings.artworkRevision
+                    return siblings.artwork(entry.packageId)
+                }
                 scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
-                episodesModel: seriesModel
-                showTitle: seriesModel.showTitle
-                seasons: seriesModel.seasons
-                selectedSeason: seriesModel.selectedSeason
-                currentSeason: seriesModel.currentSeason
-                loading: seriesModel.loading; limited: seriesModel.limited; message: seriesModel.message
-                podcast: !!rootPlayer.seriesFeedUrl
-                onSeasonRequested: season => seriesModel.selectedSeason = season
-                onDetailsRequested: row => seriesModel.requestDetails(row)
-                onCloseRequested: view.episodesOpen = false
-                onRefreshRequested: {
-                    if (rootPlayer.seriesFeedUrl) { seriesFeed.setSources([]); seriesFeed.setSources([{mrl: rootPlayer.seriesFeedUrl}]) }
-                    else seriesModel.refresh()
-                }
-                onFolderRequested: {
-                    const folder = DialogsProvider.selectLibraryFolder(seriesModel.folder)
-                    if (folder.toString()) seriesModel.refresh(folder)
-                }
-                onEpisodeRequested: (row, version, fromStart) => {
-                    const episode = seriesModel.get(row)
-                    if (episode.feedIndex >= 0) seriesFeed.playEpisode(episode.feedIndex, version > 0, fromStart)
-                    else if (episode.urls && version >= 0 && version < episode.urls.length) Player.playSeriesEpisode(episode.urls[version], fromStart)
-                }
+                onCloseRequested: view.panelOpen = ""
+                onManageRequested: DialogsProvider.prefsPageDialog("extensions")
             }
         }
     }
@@ -645,8 +727,8 @@ FocusScope {
                 model.setData(model.index(i, 0), false, Qt.CheckStateRole)
         }
         canAddTracks: Player.isStarted
-        onAddTracksRequested: page => page === "audio" ? DialogsProvider.loadAudioFile() : DialogsProvider.loadSubtitlesFile()
-        onEditTracksRequested: page => page === "audio" ? DialogsProvider.loadAudioFile() : DialogsProvider.loadSubtitlesFile()
+        onAddTracksRequested: page => rootPlayer.openTrackDialog(page)
+        onEditTracksRequested: page => rootPlayer.openTrackDialog(page)
         onPreferencesRequested: page => view.settingsPage = page
     }
 
@@ -702,6 +784,7 @@ FocusScope {
         recentFilesEnabled: { playerPreferences.revision; return !!playerPreferences.value("save-recentplay") }
         profiles: { applicationProfiles.revision; return applicationProfiles.playerPresets }
         selectedProfile: { applicationProfiles.revision; return applicationProfiles.selectedPlayerPreset }
+        onDiscoveryRequested: discoveryWindow.openSource("")
         onRecentRequested: mediaId => { if (recentMenuModel.item) recentMenuModel.item.playMedia(mediaId) }
         onClearRecentRequested: if (recentMenuModel.item) recentMenuModel.item.clearHistory()
         onProfileActionsRequested: (profileId, name, x, y) => profileEditor.openProfileActions(profileId, name, x, y)

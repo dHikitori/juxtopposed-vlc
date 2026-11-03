@@ -1,0 +1,17 @@
+{
+  "description": "reuseSeconds is above 86400.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "fields": {
+        "title": "A"
+      },
+      "retention": {
+        "reuseSeconds": 86401
+      }
+    }
+  }
+}

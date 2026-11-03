@@ -1,0 +1,78 @@
+{
+  "description": "Only a player panel can ask for a layout zone.",
+  "valid": false,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.hakone.example.panels",
+    "name": "Panels",
+    "version": "1.0.0",
+    "publisher": "Hakone add-on examples",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-panels.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "ui": "^1.0.0"
+      }
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "views/panel.json",
+      "icons/panel.svg"
+    ],
+    "contributions": [
+      {
+        "id": "episodes",
+        "type": "ui.panel",
+        "contract": "ui@1",
+        "hook": "player.panels@1",
+        "name": "Episodes",
+        "label": "Show the other episodes",
+        "icon": "icons/panel.svg",
+        "view": "views/panel.json",
+        "command": "context",
+        "placement": "footerRight",
+        "stateSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        },
+        "state": {
+          "status": "Loading"
+        }
+      },
+      {
+        "id": "context",
+        "type": "ui.command",
+        "contract": "ui@1",
+        "label": "Context",
+        "command": "context",
+        "operations": [
+          "context"
+        ],
+        "placement": "above"
+      }
+    ],
+    "permissions": {
+      "required": {
+        "ui.contribute": {
+          "hooks": [
+            "player.panels@1"
+          ]
+        },
+        "media.siblings": {
+          "sources": [
+            "folder",
+            "feed"
+          ]
+        }
+      }
+    }
+  }
+}

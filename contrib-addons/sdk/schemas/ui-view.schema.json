@@ -1,0 +1,1572 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.invalid/schemas/ui-view.schema.json",
+  "title": "UI view document (ui@1)",
+  "description": "A data-only view document that the host renders with its own components. The host does not run package code. Validator: validateView in modules/gui/qt/player/qml/redesign/AddonUi.js. Contract: contrib-addons/sdk/ui-document.md.",
+  "$comment": "Host-only rules that this schema cannot express: (1) The command in action, primaryAction, moreAction and each menu entry action must be in the command registry of the package (the commands list that the host supplies). (2) The complete view has at most 256 components. (3) The complete document has at most 10,000 JSON values and 131,072 UTF-16 code units across all strings. (4) The complete document has at most 20 nested JSON levels. This limit includes component nesting, so the effective component depth is less than the ten-level component limit, and deep command arguments in deep components are refused. (5) The host counts string lengths in UTF-16 code units. JSON Schema maxLength counts code points, so a string with characters outside the Basic Multilingual Plane can pass this schema and fail the host. (6) State projection checks (bound values have the correct type, list keys are present and different, tab entries have a key and a label, at most 64 tabs) run on each state update, not on the document.",
+  "type": "object",
+  "required": [
+    "contract",
+    "id",
+    "root"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "ui@1"
+    },
+    "id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "root": {
+      "$ref": "#/$defs/node"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "description": "An identifier: an ASCII letter or underscore, then at most 95 letters, digits, underscores, full stops or hyphens. Reserved object names are not permitted.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,95}$",
+      "not": {
+        "enum": [
+          "__proto__",
+          "prototype",
+          "constructor"
+        ]
+      }
+    },
+    "bindingPath": {
+      "description": "A property path that starts with state or item. Each part follows the identifier rules and contains no full stop. No expressions or index access.",
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(state|item)(\\.[A-Za-z_][A-Za-z0-9_-]{0,95})+$",
+      "not": {
+        "pattern": "\\.(__proto__|prototype|constructor)(\\.|$)"
+      }
+    },
+    "binding": {
+      "description": "A binding to view state or to the current list item.",
+      "type": "object",
+      "required": [
+        "bind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "bind": {
+          "$ref": "#/$defs/bindingPath"
+        }
+      }
+    },
+    "message": {
+      "description": "A key in the host locale dictionary of the package. The host shows the key when the dictionary has no value.",
+      "type": "object",
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "text": {
+      "description": "Plain text, a message or a binding.",
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        }
+      ]
+    },
+    "label": {
+      "description": "A required label: text that is not empty, a message or a binding.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        }
+      ]
+    },
+    "flag": {
+      "description": "A Boolean or a binding. A message is not permitted.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        }
+      ]
+    },
+    "progress": {
+      "description": "A number or a binding. The host limits the displayed value to zero through one.",
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        }
+      ]
+    },
+    "commandId": {
+      "description": "A command identifier in the form package.id/command-id.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]{1,127}/[A-Za-z0-9_.-]{1,96}$"
+    },
+    "action": {
+      "description": "A command request. The command must also be in the command registry of the package (host-only check).",
+      "type": "object",
+      "required": [
+        "command"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/commandId"
+        },
+        "arguments": {
+          "$ref": "#/$defs/argument0"
+        }
+      }
+    },
+    "argument0": {
+      "description": "A command argument value at nesting level 0. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument1"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument1"
+          }
+        }
+      ]
+    },
+    "argument1": {
+      "description": "A command argument value at nesting level 1. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument2"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument2"
+          }
+        }
+      ]
+    },
+    "argument2": {
+      "description": "A command argument value at nesting level 2. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument3"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument3"
+          }
+        }
+      ]
+    },
+    "argument3": {
+      "description": "A command argument value at nesting level 3. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument4"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument4"
+          }
+        }
+      ]
+    },
+    "argument4": {
+      "description": "A command argument value at nesting level 4. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument5"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument5"
+          }
+        }
+      ]
+    },
+    "argument5": {
+      "description": "A command argument value at nesting level 5. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument6"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument6"
+          }
+        }
+      ]
+    },
+    "argument6": {
+      "description": "A command argument value at nesting level 6. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument7"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument7"
+          }
+        }
+      ]
+    },
+    "argument7": {
+      "description": "A command argument value at nesting level 7. An object that has bind or message is a value binding. Containers have at most 32 entries.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument8"
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/argument8"
+          }
+        }
+      ]
+    },
+    "argument8": {
+      "description": "A command argument value at nesting level 8. An object that has bind or message is a value binding. Containers at this level must be empty.",
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "number"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "$ref": "#/$defs/message"
+        },
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "bind"
+                ]
+              },
+              {
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "items": false
+        }
+      ]
+    },
+    "icon": {
+      "description": "A host icon name.",
+      "enum": [
+        "play",
+        "pause",
+        "stop",
+        "queue",
+        "music",
+        "video",
+        "network",
+        "folder",
+        "playlist",
+        "refresh",
+        "search",
+        "info",
+        "close",
+        "settings",
+        "subtitles",
+        "favorite",
+        "home",
+        "chevron-left",
+        "chevron-right",
+        "episodes",
+        "chapters",
+        "more",
+        "check",
+        "replay",
+        "play-outline",
+        "chevron-down",
+        "chevron-up"
+      ]
+    },
+    "node": {
+      "description": "A host component. Each type permits type, id, visible, enabled and its own properties.",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "Page",
+            "Section",
+            "Column",
+            "Row",
+            "Heading",
+            "Text",
+            "Notice",
+            "EmptyState",
+            "Button",
+            "IconButton",
+            "Image",
+            "MediaCard",
+            "List",
+            "Progress",
+            "Tabs",
+            "Menu",
+            "MediaRow"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Page"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Page"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Section"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Section"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Column"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Column"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Row"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Row"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Heading"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Heading"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Text"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Notice"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Notice"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "EmptyState"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/EmptyState"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Button"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Button"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "IconButton"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/IconButton"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Image"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Image"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "MediaCard"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/MediaCard"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "List"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/List"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Progress"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Progress"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Tabs"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Tabs"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "Menu"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/Menu"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "MediaRow"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/MediaRow"
+          }
+        }
+      ]
+    },
+    "Page": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "title": {
+          "$ref": "#/$defs/text"
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    },
+    "Section": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "title": {
+          "$ref": "#/$defs/text"
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    },
+    "Column": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    },
+    "Row": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    },
+    "Heading": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "Text": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        },
+        "style": {
+          "enum": [
+            "body",
+            "small",
+            "caption"
+          ],
+          "description": "body (default), small (13 px) or caption (12 px, secondary color)."
+        },
+        "maxLines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Elide after this many lines; one line elides in the middle."
+        }
+      }
+    },
+    "Notice": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "EmptyState": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "Button": {
+      "type": "object",
+      "required": [
+        "type",
+        "text",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "subtitle": {
+          "description": "A second line: the button becomes a two-line heading (a panel header, say).",
+          "$ref": "#/$defs/text"
+        },
+        "icon": {
+          "$ref": "#/$defs/icon"
+        },
+        "intent": {
+          "enum": [
+            "primary",
+            "secondary",
+            "destructive",
+            "link"
+          ],
+          "description": "link: a quiet text action in the secondary color."
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        }
+      }
+    },
+    "IconButton": {
+      "type": "object",
+      "required": [
+        "type",
+        "text",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "icon": {
+          "$ref": "#/$defs/icon"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        }
+      }
+    },
+    "Image": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "artwork": {
+          "$ref": "#/$defs/text"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "MediaCard": {
+      "type": "object",
+      "required": [
+        "type",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "title": {
+          "$ref": "#/$defs/label"
+        },
+        "subtitle": {
+          "$ref": "#/$defs/text"
+        },
+        "artwork": {
+          "$ref": "#/$defs/text"
+        },
+        "primaryAction": {
+          "$ref": "#/$defs/action"
+        }
+      }
+    },
+    "List": {
+      "type": "object",
+      "required": [
+        "type",
+        "items",
+        "keyField",
+        "itemTemplate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "items": {
+          "$ref": "#/$defs/binding"
+        },
+        "keyField": {
+          "$ref": "#/$defs/identifier"
+        },
+        "itemTemplate": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/node"
+            },
+            {
+              "$ref": "#/$defs/withoutList"
+            }
+          ]
+        },
+        "emptyText": {
+          "$ref": "#/$defs/text"
+        },
+        "scroll": {
+          "description": "false shows every row and lets the frame around the view scroll. The default is true.",
+          "type": "boolean"
+        },
+        "more": {
+          "$ref": "#/$defs/flag"
+        },
+        "moreAction": {
+          "$ref": "#/$defs/action"
+        },
+        "moreText": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "Progress": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "value": {
+          "$ref": "#/$defs/progress"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "withoutList": {
+      "description": "A list item template and its descendants cannot contain a List.",
+      "properties": {
+        "type": {
+          "not": {
+            "const": "List"
+          }
+        },
+        "children": {
+          "items": {
+            "$ref": "#/$defs/withoutList"
+          }
+        }
+      }
+    },
+    "Tabs": {
+      "description": "A choice of one entry from a state list of {key, label}. Few entries show as buttons, more as a combo box; style can choose one. In the action, item.tab is the chosen entry and item is the enclosing list item.",
+      "type": "object",
+      "required": [
+        "type",
+        "items",
+        "text",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "items": {
+          "$ref": "#/$defs/binding"
+        },
+        "selected": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "$ref": "#/$defs/text"
+            }
+          ]
+        },
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "style": {
+          "enum": [
+            "buttons",
+            "dropdown"
+          ],
+          "description": "buttons up to four entries and a drop-down above, unless set."
+        }
+      }
+    },
+    "menuEntry": {
+      "type": "object",
+      "required": [
+        "text",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "icon": {
+          "$ref": "#/$defs/icon"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        }
+      }
+    },
+    "Menu": {
+      "description": "A button that opens a list of commands.",
+      "type": "object",
+      "required": [
+        "type",
+        "text",
+        "entries"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "text": {
+          "$ref": "#/$defs/label"
+        },
+        "icon": {
+          "$ref": "#/$defs/icon"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          }
+        }
+      }
+    },
+    "MediaRow": {
+      "description": "One media item: number, title, secondary text, a mark (for example 'Now playing'), progress and artwork. When expanded is true, the artwork and the children show below the row.",
+      "type": "object",
+      "required": [
+        "type",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "visible": {
+          "$ref": "#/$defs/flag"
+        },
+        "enabled": {
+          "$ref": "#/$defs/flag"
+        },
+        "grow": {
+          "description": "In a Row: take the free width. A row with a growing child keeps its children on one line.",
+          "type": "boolean"
+        },
+        "title": {
+          "$ref": "#/$defs/label"
+        },
+        "subtitle": {
+          "$ref": "#/$defs/text"
+        },
+        "number": {
+          "$ref": "#/$defs/text"
+        },
+        "mark": {
+          "$ref": "#/$defs/text"
+        },
+        "icon": {
+          "description": "A leading app icon, or a binding to an icon name (an unknown name shows none).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/icon"
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ]
+        },
+        "navigates": {
+          "description": "Show a chevron that opens something (a season, say).",
+          "type": "boolean"
+        },
+        "artwork": {
+          "$ref": "#/$defs/text"
+        },
+        "progress": {
+          "$ref": "#/$defs/progress"
+        },
+        "expanded": {
+          "$ref": "#/$defs/flag"
+        },
+        "selected": {
+          "description": "Highlight the row (the playing item, say). Without it the open row is highlighted.",
+          "$ref": "#/$defs/flag"
+        },
+        "primaryAction": {
+          "$ref": "#/$defs/action"
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    }
+  }
+}

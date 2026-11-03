@@ -62,7 +62,8 @@ inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
         const auto season = seasonFolder(name);
         if (season >= 0) {
             if (result.season < 0) result.season = season;
-            if (QRegularExpression(QStringLiteral("^\\d{1,4}(?:[ ._-]+.*)?$")).match(QFileInfo(url.fileName()).completeBaseName()).hasMatch()) result.title.clear();
+            static const QRegularExpression numberedFile(QStringLiteral("^\\d{1,4}(?:[ ._-]+.*)?$"));
+            if (numberedFile.match(QFileInfo(url.fileName()).completeBaseName()).hasMatch()) result.title.clear();
         } else {
             const auto folder = MediaIdentity::parse(name);
             if (result.title.isEmpty()) {
@@ -86,7 +87,8 @@ inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
     }
     if (result.season >= 0 && result.episodes.isEmpty()) {
         const auto stem = QFileInfo(url.fileName()).completeBaseName();
-        const auto number = QRegularExpression(QStringLiteral("^(\\d{1,4})(?:[ ._-]+.*)?$")).match(stem);
+        static const QRegularExpression leadingNumber(QStringLiteral("^(\\d{1,4})(?:[ ._-]+.*)?$"));
+        const auto number = leadingNumber.match(stem);
         if (number.hasMatch()) result.episodes.append(number.captured(1).toInt());
     }
     if (result.season >= 0 || !result.episodes.isEmpty() || !result.absoluteEpisode.isEmpty() || result.airDate.isValid())

@@ -1,0 +1,12 @@
+{
+  "description": "An asset path contains a backslash.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [],
+    "assets": {
+      "tile": "images\\tile.png"
+    }
+  }
+}

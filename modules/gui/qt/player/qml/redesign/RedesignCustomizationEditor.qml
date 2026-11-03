@@ -154,7 +154,7 @@ Item {
             return rect
         }
         if (id === "play") return centered(54, 34)
-        if (["audio", "subtitles", "episodes", "settings", "queue"].includes(id)) return centered(30, 32)
+        if (["audio", "subtitles", "settings", "queue"].includes(id) || id.startsWith("addon:")) return centered(30, 32)
         if (id === "volume" && groupedVolume) {
             const rect = united(actual, bounds(player.chromeItems.mute))
             return Qt.rect(rect.x + dp(1), rect.y + (rect.height - dp(36)) / 2, rect.width + dp(2), dp(36))
@@ -195,7 +195,7 @@ Item {
         placementAnchor.width = rect.width; placementAnchor.height = rect.height
         placement.toggleFrom(placementAnchor)
     }
-    RedesignCustomizationCatalog { id: catalog }
+    RedesignCustomizationCatalog { id: catalog; panels: root.player.addonPanels || [] }
     Connections {
         target: root.model
         function onEditingChanged() { if (root.opened && !root.model.editing && !root.saving) panel.close() }
@@ -355,6 +355,7 @@ Item {
                 const definition = catalog.definition(root.dragId) || {}
                 return definition.paletteIcon || definition.icon || ""
             }
+            markup: (catalog.definition(root.dragId) || {}).iconMarkup || ""
             color: root.theme.foreground
         }
     }
@@ -459,6 +460,7 @@ Item {
                         RedesignIcon {
                             anchors.centerIn: parent; width: root.theme.dp(24); height: width
                             name: cell.modelData.paletteIcon || cell.modelData.icon
+                            markup: cell.modelData.iconMarkup || ""
                             color: {
                                 if (cell.modelData.id === "thumbnail") return root.theme.lightTheme ? "#a3a3a3" : "#303030"
                                 if (cell.modelData.id === "divider") return root.theme.lightTheme ? root.theme.border : "#373737"

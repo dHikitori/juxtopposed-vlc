@@ -1,0 +1,23 @@
+{
+  "description": "A match with field claims and an identity.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "identity": {
+        "kind": "movie",
+        "title": "Example Film",
+        "year": 1999,
+        "ids": {
+          "imdb": "tt0000001"
+        }
+      },
+      "fields": {
+        "title": "Example Film",
+        "description": "A film."
+      }
+    }
+  }
+}

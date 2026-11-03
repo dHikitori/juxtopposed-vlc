@@ -1,0 +1,30 @@
+{
+  "description": "The TheSubtitleDB example schema with a secret and a language pattern.",
+  "valid": true,
+  "value": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "title": "API key",
+        "format": "password",
+        "writeOnly": true,
+        "x-hakone-secret": true,
+        "minLength": 1
+      },
+      "language": {
+        "type": "string",
+        "title": "Preferred subtitle language",
+        "default": "en",
+        "minLength": 2,
+        "maxLength": 16,
+        "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
+  }
+}

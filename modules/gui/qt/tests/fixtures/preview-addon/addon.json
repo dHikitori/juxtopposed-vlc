@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "id": "org.example.preview",
+  "name": "Preview fixture",
+  "version": "1.0.0",
+  "publisher": "Tests",
+  "license": "GPL-2.0-or-later",
+  "source": "https://git.example.org/preview.git",
+  "api": {"addon": ">=1.0.0 <2.0.0", "contracts": {"ui": "^1.0.0"}},
+  "files": ["addon.json", "LICENSE", "views/home.json"],
+  "contributions": [
+    {"id": "home", "type": "ui.route", "contract": "ui@1", "label": "Home", "route": "home", "view": "views/home.json",
+     "stateSchema": {"type": "object", "additionalProperties": false, "properties": {"summary": {"type": "string", "maxLength": 200}}},
+     "state": {"summary": "Two stations are ready."}},
+    {"id": "refresh", "type": "ui.command", "contract": "ui@1", "label": "Refresh"}
+  ],
+  "permissions": {}
+}

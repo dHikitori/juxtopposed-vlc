@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include <vlc_common.h>
+#include <vlc_block.h>
 #include <vlc_http.h>
 #include "resource.h"
 #include "file.h"
@@ -50,6 +51,16 @@ static bool etags = false;
 static int lang = -1;
 
 static vlc_http_cookie_jar_t *jar;
+
+struct read_step {
+    const char *bytes;
+    bool error;
+    bool complete;
+};
+static const struct read_step *read_steps;
+static size_t read_count, read_index;
+static bool read_terminal;
+static void test_read_outcomes(void);
 
 int main(void)
 {
@@ -270,6 +281,7 @@ int main(void)
     assert(f != NULL);
     vlc_http_file_destroy(f);
 
+    test_read_outcomes();
     vlc_http_cookies_destroy(jar);
     return 0;
 }
@@ -315,7 +327,26 @@ static struct vlc_http_msg *stream_read_headers(struct vlc_http_stream *s)
 static block_t *stream_read(struct vlc_http_stream *s)
 {
     assert(s == &stream);
+    if (read_steps != NULL && read_index < read_count) {
+        const struct read_step *step = &read_steps[read_index++];
+        read_terminal = step->complete;
+        if (step->error) return vlc_http_error;
+        if (step->bytes != NULL) {
+            const size_t length = strlen(step->bytes);
+            block_t *block = block_Alloc(length);
+            assert(block != NULL);
+            memcpy(block->p_buffer, step->bytes, length);
+            offset += length;
+            return block;
+        }
+    }
     return NULL;
+}
+
+static bool stream_is_complete(struct vlc_http_stream *s)
+{
+    assert(s == &stream);
+    return read_terminal;
 }
 
 static void stream_close(struct vlc_http_stream *s, bool abort)
@@ -330,6 +361,11 @@ static const struct vlc_http_stream_cbs stream_callbacks =
     NULL,
     stream_read,
     stream_close,
+    stream_is_complete,
+};
+
+static const struct vlc_http_stream_cbs no_witness_callbacks = {
+    stream_read_headers, NULL, stream_read, stream_close, NULL,
 };
 
 static struct vlc_http_stream stream = { &stream_callbacks };
@@ -403,4 +439,131 @@ struct vlc_http_cookie_jar_t *vlc_http_mgr_get_jar(struct vlc_http_mgr *mgr)
 {
     assert(mgr == NULL);
     return jar;
+}
+
+static struct vlc_http_resource *outcome_start(const char *first, const char *retry,
+                const struct read_step *steps, size_t count, bool witness)
+{
+    replies[0] = first;
+    replies[1] = retry;
+    offset = 0;
+    secure = true;
+    etags = true;
+    lang = -1;
+    read_steps = steps;
+    read_count = count;
+    read_index = 0;
+    read_terminal = false;
+    stream.cbs = witness ? &stream_callbacks : &no_witness_callbacks;
+    struct vlc_http_resource *file = vlc_http_file_create(NULL, url, ua, NULL);
+    assert(file != NULL);
+    return file;
+}
+
+static void outcome_read(struct vlc_http_resource *file,
+                         enum vlc_http_file_read_outcome expected, const char *bytes)
+{
+    enum vlc_http_file_read_outcome outcome = VLC_HTTP_FILE_COMPLETE;
+    block_t *block = vlc_http_file_read_outcome(file, &outcome);
+    assert(outcome == expected && block != vlc_http_error);
+    if (bytes == NULL) assert(block == NULL);
+    else {
+        assert(block != NULL && block->i_buffer == strlen(bytes));
+        assert(!memcmp(block->p_buffer, bytes, block->i_buffer));
+        block_Release(block);
+    }
+}
+
+static void test_read_outcomes(void)
+{
+    static const char known[] = "HTTP/1.1 200 OK\r\nETag: \"foobar42\"\r\nContent-Length: 5\r\n\r\n";
+    static const char unknown[] = "HTTP/1.1 200 OK\r\nETag: \"foobar42\"\r\n\r\n";
+    static const char whole[] = "HTTP/1.1 206 OK\r\nETag: \"foobar42\"\r\nContent-Range: bytes 0-4/5\r\nContent-Length: 5\r\n\r\n";
+    static const char resume[] = "HTTP/1.1 206 OK\r\nETag: \"foobar42\"\r\nContent-Range: bytes 2-4/5\r\nContent-Length: 3\r\n\r\n";
+    static const struct read_step clean[] = {{"empty",false,false},{NULL,false,true}};
+    static const struct read_step error[] = {{"em",false,false},{NULL,true,false}};
+    static const struct read_step short_body[] = {{"em",false,false},{NULL,false,true}};
+    static const struct read_step recovered[] = {
+        {"em",false,false},{NULL,true,false},{"pty",false,false},{NULL,false,true},
+    };
+    static const struct read_step resumed[] = {
+        {"em",false,false},{NULL,false,true},{"pty",false,false},{NULL,false,true},
+    };
+    struct vlc_http_resource *file = outcome_start(known, NULL, clean, ARRAY_SIZE(clean), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_COMPLETE, NULL);
+    vlc_http_file_destroy(file);
+
+    /* Unknown length is valid only with the parser's explicit terminal state. */
+    file = outcome_start(unknown, NULL, clean, ARRAY_SIZE(clean), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_COMPLETE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start(unknown, NULL, clean, ARRAY_SIZE(clean), false);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+
+    file = outcome_start(known, NULL, error, ARRAY_SIZE(error), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "em");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start(known, NULL, short_body, ARRAY_SIZE(short_body), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "em");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+
+    /* All old resume bytes are returned. Recovered evidence stays refused. */
+    file = outcome_start(whole, resume, recovered, ARRAY_SIZE(recovered), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "em");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, "pty");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start(whole, resume, resumed, ARRAY_SIZE(resumed), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "em");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, "pty");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start(whole, NULL, error, ARRAY_SIZE(error), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "em");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+
+    file = outcome_start(whole, NULL, clean, ARRAY_SIZE(clean), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_COMPLETE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start("HTTP/1.1 206 OK\r\nContent-Range: bytes 0-4/*\r\nContent-Length: 5\r\n\r\n",
+                         NULL, clean, ARRAY_SIZE(clean), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start("HTTP/1.1 200 OK\r\nContent-Length: 5junk\r\n\r\n",
+                         NULL, clean, ARRAY_SIZE(clean), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start("HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n",
+                         NULL, clean, ARRAY_SIZE(clean), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_UNAVAILABLE, NULL);
+    vlc_http_file_destroy(file);
+    file = outcome_start("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 999\r\n\r\n",
+                         NULL, clean, ARRAY_SIZE(clean), true);
+    outcome_read(file, VLC_HTTP_FILE_DATA, "empty");
+    outcome_read(file, VLC_HTTP_FILE_COMPLETE, NULL);
+    vlc_http_file_destroy(file);
+
+    file = outcome_start(whole, resume, recovered, ARRAY_SIZE(recovered), true);
+    block_t *block = vlc_http_file_read(file);
+    assert(block != NULL && block->i_buffer == 2);
+    block_Release(block);
+    block = vlc_http_file_read(file);
+    assert(block != NULL && block->i_buffer == 3);
+    block_Release(block);
+    assert(vlc_http_file_read(file) == NULL);
+    vlc_http_file_destroy(file);
+    read_steps = NULL;
+    stream.cbs = &stream_callbacks;
+    puts("All 14 HTTP file outcome groups passed.");
 }

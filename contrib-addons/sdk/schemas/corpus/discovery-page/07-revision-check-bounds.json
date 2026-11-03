@@ -1,0 +1,14 @@
+{
+  "description": "A revision of 256 visible characters and the shortest check time.",
+  "valid": true,
+  "value": {
+    "items": [
+      {
+        "id": "item-1",
+        "title": "Item 1"
+      }
+    ],
+    "revision": "!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr~",
+    "nextCheckSeconds": 60
+  }
+}

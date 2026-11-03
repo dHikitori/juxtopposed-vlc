@@ -37,14 +37,36 @@ disabled and the build still succeeds.
   disabled. Playback and the player UI work. The library sidebar does not
   list local media.
 
+## Portable add-on worker
+
+Qt builds include the add-on worker. Install Rust 1.97 or later. Install Cargo
+before you build VLC. The worker build uses an installed `stable` toolchain.
+Set `RUSTUP_TOOLCHAIN` to use a different installed toolchain. The build does
+not use the experimental module's nightly toolchain. The build does not
+install toolchains or targets. The `-Drust` option does not control this
+worker. Users use the worker program without a compiler.
+
+The worker installs next to VLC. TheSubtitleDB reference package installs
+at `share/vlc/addons/reference/thesubtitledb`. Each user must supply a separate
+API key in the protected settings form. The host uses Keychain for credentials.
+Do not put user keys in source files or package files. For HTTPS Git installs,
+install a Git program on `PATH`.
+
+Set `-Daddon-runtime=disabled` to omit executable add-ons.
+Package checks, settings and data-only UI resources operate without the worker.
+Executable providers cannot run without the worker. See
+[the Linux runtime section](BUILD-linux.md#portable-add-on-runtime) for target
+options and test commands. The old macOS build results at the top of this
+guide do not cover the new worker. Do the macOS release checks for this worker.
+
 ## Configure and build
 
 ```sh
 export PATH="$(brew --prefix bison)/bin:$(brew --prefix flex)/bin:$(brew --prefix qt)/bin:$(brew --prefix qt)/share/qt/libexec:$PATH"
 export PKG_CONFIG_PATH="$(brew --prefix qt)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig"
 
-git clone https://github.com/dsojevic/juxtopposed-vlc.git
-cd juxtopposed-vlc
+git clone https://github.com/hakone-org/hakone.git
+cd hakone
 meson setup build --prefix="$HOME/.local/vlc-dev" \
     -Dqt=enabled -Dtests=disabled -Dbuildtype=release
 ninja -C build

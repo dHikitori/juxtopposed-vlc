@@ -1,0 +1,57 @@
+{
+  "description": "A list whose item template is a column with a nested row and a button that uses item bindings.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "List",
+          "items": {
+            "bind": "state.items"
+          },
+          "keyField": "id",
+          "itemTemplate": {
+            "type": "Column",
+            "children": [
+              {
+                "type": "Row",
+                "children": [
+                  {
+                    "type": "Text",
+                    "text": {
+                      "bind": "item.name"
+                    }
+                  },
+                  {
+                    "type": "Button",
+                    "text": "Play",
+                    "action": {
+                      "command": "org.example.radio/play",
+                      "arguments": [
+                        {
+                          "bind": "item.id"
+                        }
+                      ]
+                    },
+                    "visible": {
+                      "bind": "item.playable"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

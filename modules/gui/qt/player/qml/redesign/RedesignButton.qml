@@ -10,14 +10,16 @@ T.Button {
     property bool lightTheme: false
     property string iconName
     property string selectedIconName: iconName
+    property string iconMarkup: ""
     property int tooltipTextFormat: Text.AutoText
     property bool tooltipEnabled: true
     property string caption
+    property int captionTextFormat: Text.AutoText
     property bool leftAligned: false
     property bool accent: false
     property bool primaryAction: false
     property bool filled: false
-    property real cornerRadius: 6
+    property real cornerRadius: theme.controlRadius
     property bool selected: false
     property bool highlightSelection: true
     // Media rows use selection on click and a separate activation gesture.
@@ -68,7 +70,7 @@ T.Button {
         color: root.primaryAction ? !root.enabled ? theme.hover : root.hovered ? theme.hover : theme.progress
             : root.accent ? theme.accent : (root.down || (root.selected && root.highlightSelection)) ? theme.selected : root.hovered ? theme.hover : root.filled ? theme.background : "transparent"
         border.width: root.visualFocus ? theme.dp(root.primaryAction ? 1 : 2) : 0
-        border.color: theme.accent
+        border.color: theme.focusRing
         opacity: root.enabled ? 1 : root.primaryAction ? 0.5 : 0.35
     }
     contentItem: Item {
@@ -82,12 +84,13 @@ T.Button {
         x: root.leftAligned ? theme.dp(root.contentLeftMargin) : (parent.width - width) / 2
         RedesignIcon {
             objectName: "redesignButtonIcon"
-            width: root.iconName ? root.iconSize : 0
+            width: root.iconName || root.iconMarkup ? root.iconSize : 0
             height: root.iconSize
             anchors.verticalCenter: parent.verticalCenter
             name: root.selected ? root.selectedIconName : root.iconName
+            markup: root.iconMarkup
             sidebarReveal: root.iconReveal
-            color: root.iconName === "cone" ? theme.accent : root.accent ? "#161616" : root.selected ? root.selectedIconForeground : root.hovered || root.visualFocus ? theme.bright : root.iconForeground
+            color: root.iconName === "cone" ? theme.accent : root.accent ? theme.onAccent : root.selected ? root.selectedIconForeground : root.hovered || root.visualFocus ? theme.bright : root.iconForeground
             detailColor: root.iconDetailColor === undefined ? color : root.iconDetailColor
             opacity: root.enabled ? 1 : root.primaryAction ? 0.5 : 0.35
         }
@@ -98,7 +101,8 @@ T.Button {
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: theme.dp(root.captionVerticalOffset)
             text: root.caption
-            color: root.iconName === "cone" ? theme.accent : root.accent ? "#161616" : root.selected ? root.selectedForeground : root.foreground
+            textFormat: root.captionTextFormat
+            color: root.iconName === "cone" ? theme.accent : root.accent ? theme.onAccent : root.selected ? root.selectedForeground : root.foreground
             font.pixelSize: theme.dp(root.captionFontSize)
             font.weight: root.captionFontWeight
             opacity: root.enabled ? 1 : root.primaryAction ? 0.5 : 0.35

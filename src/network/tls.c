@@ -38,6 +38,7 @@
 #endif
 
 #include <vlc_common.h>
+#include <vlc_input_policy.h>
 #include <vlc_threads.h>
 #include "../libvlc.h"
 
@@ -219,6 +220,7 @@ vlc_tls_t *vlc_tls_SocketOpenTLS(vlc_tls_client_t *creds, const char *name,
                                  unsigned port, const char *service,
                                  const char *const *alpn, char **alp)
 {
+    if (!vlc_input_policy_CheckConnection(VLC_OBJECT(creds), name, port, false)) { errno = EACCES; return NULL; }
     struct addrinfo hints =
     {
         .ai_socktype = SOCK_STREAM,

@@ -21,10 +21,10 @@ ColumnLayout {
     readonly property bool canOpenWebsite: /^https?:\/\/[^/\s]+(?:[/?#]|$)/i.test(website)
     spacing: theme.dp(6)
     function addSelected() {
-        if (canAdd) actionMessage = backend.installAddon(selectedId) ? "" : qsTr("VLC cannot add this add-on.")
+        if (canAdd) actionMessage = backend.installAddon(selectedId) ? "" : qsTr("The app cannot add this add-on.")
     }
     function removeSelected() {
-        if (canRemove) actionMessage = backend.removeAddon(selectedId) ? "" : qsTr("VLC cannot remove this add-on.")
+        if (canRemove) actionMessage = backend.removeAddon(selectedId) ? "" : qsTr("The app cannot remove this add-on.")
     }
     Text { text: qsTr("Add-ons"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; Layout.topMargin: theme.dp(8); Layout.bottomMargin: theme.dp(3) }
     Rectangle {
@@ -176,7 +176,7 @@ ColumnLayout {
                     DetailText {
                         objectName: "addonDetailsManual"
                         Layout.fillWidth: true; visible: root.selectedAddon.manageable === false
-                        text: qsTr("VLC cannot change this add-on because it was added manually.")
+                        text: qsTr("The app cannot change this add-on because you added it manually.")
                     }
                     ColumnLayout {
                         Layout.fillWidth: true; visible: (root.selectedAddon.files || []).length > 0; spacing: theme.dp(4)

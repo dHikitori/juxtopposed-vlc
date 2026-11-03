@@ -1,0 +1,256 @@
+{
+  "description": "A menu has at most 16 entries.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "episodes",
+    "root": {
+      "type": "Page",
+      "children": [
+        {
+          "type": "Row",
+          "children": [
+            {
+              "type": "Tabs",
+              "id": "seasons",
+              "items": {
+                "bind": "state.seasons"
+              },
+              "selected": {
+                "bind": "state.season"
+              },
+              "text": "Seasons",
+              "action": {
+                "command": "org.example.episodes/season",
+                "arguments": {
+                  "season": {
+                    "bind": "item.tab.key"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Menu",
+              "id": "options",
+              "text": "Episode options",
+              "icon": "more",
+              "entries": [
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                },
+                {
+                  "text": "Refresh",
+                  "action": {
+                    "command": "org.example.episodes/refresh"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "List",
+          "items": {
+            "bind": "state.episodes"
+          },
+          "keyField": "key",
+          "scroll": false,
+          "more": {
+            "bind": "state.more"
+          },
+          "moreAction": {
+            "command": "org.example.episodes/more"
+          },
+          "moreText": "Show more episodes",
+          "itemTemplate": {
+            "type": "MediaRow",
+            "number": {
+              "bind": "item.number"
+            },
+            "title": {
+              "bind": "item.title"
+            },
+            "mark": {
+              "bind": "item.mark"
+            },
+            "progress": {
+              "bind": "item.progress"
+            },
+            "artwork": {
+              "bind": "item.artwork"
+            },
+            "expanded": {
+              "bind": "item.expanded"
+            },
+            "primaryAction": {
+              "command": "org.example.episodes/expand",
+              "arguments": {
+                "key": {
+                  "bind": "item.key"
+                }
+              }
+            },
+            "children": [
+              {
+                "type": "Text",
+                "text": {
+                  "bind": "item.description"
+                }
+              },
+              {
+                "type": "Tabs",
+                "items": {
+                  "bind": "item.versions"
+                },
+                "selected": {
+                  "bind": "item.version"
+                },
+                "text": "Episode version",
+                "action": {
+                  "command": "org.example.episodes/expand",
+                  "arguments": {
+                    "key": {
+                      "bind": "item.key"
+                    },
+                    "version": {
+                      "bind": "item.tab.key"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "Button",
+                "text": "Play",
+                "icon": "play-outline",
+                "action": {
+                  "command": "org.example.episodes/play",
+                  "arguments": {
+                    "key": {
+                      "bind": "item.key"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "IconButton",
+                "text": "Play from beginning",
+                "icon": "replay",
+                "action": {
+                  "command": "org.example.episodes/play",
+                  "arguments": {
+                    "key": {
+                      "bind": "item.key"
+                    },
+                    "fromStart": true
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.episodes/season",
+      "org.example.episodes/expand",
+      "org.example.episodes/play",
+      "org.example.episodes/more",
+      "org.example.episodes/refresh"
+    ]
+  }
+}

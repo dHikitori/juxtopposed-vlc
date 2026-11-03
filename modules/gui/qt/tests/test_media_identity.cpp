@@ -10,6 +10,106 @@ using namespace MediaIdentity;
 class TestMediaIdentity : public QObject {
     Q_OBJECT
 private slots:
+    void sourceLocatorsDoNotSupplyFilenameEvidence() {
+        for (const QString scheme : {QStringLiteral("hakone-addon-source"), QStringLiteral("VLC-ADDON-SOURCE")}) {
+            const QUrl locator(scheme + QStringLiteral(":PRIVATE_LOCATOR_ONLY_987654321"));
+            const auto empty = identify(locator);
+            QVERIFY(empty.title.isEmpty()); QVERIFY(empty.release.isEmpty()); QCOMPARE(empty.kind, Kind::Unknown);
+            QVERIFY(identify(locator, {{"title", locator.toString()}}).title.isEmpty());
+            QVERIFY(identify(locator, {{"title", locator.path()}}).title.isEmpty());
+            const auto display = identify(locator, {{"title", "Admitted display title"}, {"type", "movie"}});
+            QCOMPARE(display.title, "Admitted display title"); QCOMPARE(display.kind, Kind::Movie);
+            QVERIFY(display.release.isEmpty());
+        }
+        QCOMPARE(identify(QUrl("file:///Example.Movie.2020.mkv")).title, "Example Movie");
+    }
+    void unknownScopedIdsKeepTransportFactsWithoutStrongAuthority() {
+        Identity value; value.kind = Kind::Movie; value.title = "An explicit title";
+        value.ids.insert("external:example.catalog:edition", "281");
+        value.ids.insert("external:tmdb:season", "281");
+        const auto transport = toMap(value).value("externalIds").toList();
+        QVERIFY(transport.contains(QVariantMap{{"namespace", "example.catalog"}, {"scope", "edition"}, {"value", "281"}}));
+        QVERIFY(transport.contains(QVariantMap{{"namespace", "tmdb"}, {"scope", "season"}, {"value", "281"}}));
+        const auto roundtrip = fromMap(toMap(value)); QCOMPARE(roundtrip.ids, value.ids);
+        QVERIFY(!compare(value, roundtrip).strong);
+    }
+    void seriesIdentityKeepsItsScope() {
+        Identity series; series.kind = Kind::Series; series.title = "Example";
+        series.ids.insert("seriesTmdb", "42");
+        const auto roundtrip = fromMap(toMap(series));
+        QCOMPARE(roundtrip.kind, Kind::Series); QCOMPARE(roundtrip.ids, series.ids);
+        QVERIFY(compare(series, roundtrip).strong);
+        auto episode = series; episode.kind = Kind::Episode; episode.season = 1; episode.episodes = {2};
+        QVERIFY(compare(series, episode).conflict);
+        auto movie = series; movie.kind = Kind::Movie; movie.ids.clear(); movie.ids.insert("tmdbMovie", "42");
+        QVERIFY(compare(series, movie).conflict);
+        auto unknown = episode; unknown.ids.clear(); unknown.ids.insert("external:example:series", "42");
+        auto other = unknown; other.title = "Different";
+        QVERIFY(!compare(unknown, other).strong);
+        QCOMPARE(parse("Example.2020.mkv").kind, Kind::Movie);
+    }
+    void strongIdsRequireExactEntityScope_data() {
+        QTest::addColumn<int>("entityKind"); QTest::addColumn<QString>("key"); QTest::addColumn<bool>("strong");
+        for (auto kind : {Kind::Movie, Kind::Series, Kind::Episode, Kind::MusicTrack, Kind::Album, Kind::Artist,
+                          Kind::Podcast, Kind::PodcastEpisode, Kind::Audiobook, Kind::Unknown}) {
+            for (const auto& key : {QStringLiteral("imdb"), QStringLiteral("tmdbMovie"), QStringLiteral("seriesImdb"),
+                     QStringLiteral("seriesTmdb"), QStringLiteral("seriesTvdb"), QStringLiteral("tvmazeShow"),
+                     QStringLiteral("episodeImdb"), QStringLiteral("tmdbEpisode"), QStringLiteral("tvdbEpisode"),
+                     QStringLiteral("tvmazeEpisode"), QStringLiteral("musicBrainzTrackId"),
+                     QStringLiteral("musicBrainzAlbumId"), QStringLiteral("musicBrainzArtistId")}) {
+                const bool expected = (kind == Kind::Movie && (key == "imdb" || key == "tmdbMovie"))
+                    || (kind == Kind::Series && (key == "seriesImdb" || key == "seriesTmdb" || key == "seriesTvdb" || key == "tvmazeShow"))
+                    || (kind == Kind::Episode && (key == "episodeImdb" || key == "tmdbEpisode" || key == "tvdbEpisode" || key == "tvmazeEpisode"))
+                    || (kind == Kind::MusicTrack && key == "musicBrainzTrackId")
+                    || (kind == Kind::Album && key == "musicBrainzAlbumId") || (kind == Kind::Artist && key == "musicBrainzArtistId");
+                const auto row = kindName(kind) + '/' + key;
+                QTest::newRow(qPrintable(row)) << int(kind) << key << expected;
+            }
+        }
+    }
+    void strongIdsRequireExactEntityScope() {
+        QFETCH(int, entityKind); QFETCH(QString, key); QFETCH(bool, strong);
+        Identity target; target.kind = Kind(entityKind); target.ids.insert(key, "exact-id");
+        auto candidate = target;
+        // Different labels cannot provide accidental title evidence.
+        target.title = "Original"; candidate.title = "Unrelated";
+        QCOMPARE(compare(target, candidate).strong, strong);
+        candidate.ids[key] = "another-id";
+        const auto refused = compare(target, candidate); QVERIFY(refused.conflict); QVERIFY(!refused.strong);
+        candidate = target; candidate.kind = target.kind == Kind::Movie ? Kind::Episode : Kind::Movie;
+        if (target.kind != Kind::Unknown) { QVERIFY(compare(target, candidate).conflict); QVERIFY(!compare(target, candidate).strong); }
+    }
+    void parentSeriesIdNeedsEpisodeEvidence() {
+        Identity target; target.kind = Kind::Episode; target.title = "Parent"; target.ids.insert("seriesTmdb", "42");
+        auto candidate = target; candidate.title = "Other label";
+        QVERIFY(!compare(target, candidate).strong);
+        target.season = candidate.season = 2; target.episodes = candidate.episodes = {3};
+        QVERIFY(compare(target, candidate).strong);
+        candidate.episodes = {4}; QVERIFY(compare(target, candidate).conflict); QVERIFY(!compare(target, candidate).strong);
+    }
+    void podcastEpisodesNeedTheirOwnEvidence() {
+        Identity target; target.kind = Kind::PodcastEpisode; target.title = "Weekly news";
+        target.artist = "Reporter"; target.series = "Daily feed"; target.feedUrl = "https://example.com/feed";
+        auto candidate = target;
+        QVERIFY(!compare(target, candidate).strong); // Feed, title, and artist are shared by many episodes.
+        target.guid = candidate.guid = "episode-42"; QVERIFY(compare(target, candidate).strong);
+        target.feedUrl.clear(); candidate.feedUrl.clear(); QVERIFY(compare(target, candidate).strong); // GUID + series.
+        target.series.clear(); candidate.series.clear(); QVERIFY(!compare(target, candidate).strong); // Unscoped GUID.
+        target.feedUrl = candidate.feedUrl = "https://example.com/feed"; QVERIFY(compare(target, candidate).strong);
+        candidate.guid = "episode-43"; QVERIFY(compare(target, candidate).conflict);
+        target.guid.clear(); candidate.guid.clear(); target.airDate = candidate.airDate = QDate(2026,10,28);
+        QVERIFY(compare(target, candidate).strong);
+        candidate.airDate = QDate(2026,10,29); QVERIFY(compare(target, candidate).conflict);
+        target.airDate = candidate.airDate = {}; target.season = candidate.season = 1; target.episodes = candidate.episodes = {2};
+        QVERIFY(compare(target, candidate).strong);
+        candidate.season = 2; QVERIFY(compare(target, candidate).conflict);
+        target.season = candidate.season = -1; target.episodes.clear(); candidate.episodes.clear();
+        target.absoluteEpisode = candidate.absoluteEpisode = "12.5"; QVERIFY(compare(target, candidate).strong);
+        target.kind = candidate.kind = Kind::Podcast; target.absoluteEpisode.clear(); candidate.absoluteEpisode.clear();
+        QVERIFY(compare(target, candidate).strong); // Feed-level identity remains supported.
+        target.kind = candidate.kind = Kind::Audiobook; target.feedUrl.clear(); candidate.feedUrl.clear();
+        QVERIFY(compare(target, candidate).strong); // Title + author remains supported.
+    }
     void episodeNamesExcludeFilenameReaderTitles() {
         const QUrl url("file://server/share/The%20Walking%20Dead%20-%20S01E03%20-%201080p.mkv");
         for (const auto& title : {QString("The Walking Dead - S01E03 - 1080p.mkv"),

@@ -1,0 +1,11 @@
+{
+  "description": "A row id has a C1 control character.",
+  "valid": false,
+  "value": {
+    "items": [
+      {
+        "id": "item"
+      }
+    ]
+  }
+}

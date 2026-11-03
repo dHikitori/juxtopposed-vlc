@@ -1,0 +1,105 @@
+{
+  "description": "Visualizer contributions with audio analysis only.",
+  "valid": true,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.hakone.example.visual-scenes",
+    "name": "Visual scenes",
+    "version": "1.0.0",
+    "publisher": "Hakone add-on examples",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-visual-scenes.git",
+    "api": {
+      "addon": "^1.0.0",
+      "contracts": {
+        "visualizer": "^1.0.0"
+      }
+    },
+    "files": [
+      "addon.json",
+      "README.md",
+      "LICENSE",
+      "scenes/spectrum.json",
+      "scenes/waveform.json",
+      "scenes/spectrogram.json",
+      "scenes/particles.json"
+    ],
+    "contributions": [
+      {
+        "id": "spectrum",
+        "name": "Spectrum",
+        "type": "visualizer",
+        "contract": "visualizer@1",
+        "scene": "scenes/spectrum.json",
+        "analysisChannels": [
+          "bands",
+          "waveform",
+          "levels"
+        ],
+        "qualityTiers": [
+          "low",
+          "normal"
+        ]
+      },
+      {
+        "id": "waveform",
+        "name": "Waveform",
+        "type": "visualizer",
+        "contract": "visualizer@1",
+        "scene": "scenes/waveform.json",
+        "analysisChannels": [
+          "bands",
+          "waveform",
+          "levels"
+        ],
+        "qualityTiers": [
+          "low",
+          "normal"
+        ]
+      },
+      {
+        "id": "spectrogram",
+        "name": "Spectrogram",
+        "type": "visualizer",
+        "contract": "visualizer@1",
+        "scene": "scenes/spectrogram.json",
+        "analysisChannels": [
+          "bands",
+          "waveform",
+          "levels"
+        ],
+        "qualityTiers": [
+          "low",
+          "normal"
+        ]
+      },
+      {
+        "id": "particles",
+        "name": "Particles",
+        "type": "visualizer",
+        "contract": "visualizer@1",
+        "scene": "scenes/particles.json",
+        "analysisChannels": [
+          "bands",
+          "waveform",
+          "levels"
+        ],
+        "qualityTiers": [
+          "low",
+          "normal"
+        ]
+      }
+    ],
+    "permissions": {
+      "required": {
+        "audio.analysis": {
+          "channels": [
+            "bands",
+            "waveform",
+            "levels"
+          ]
+        }
+      }
+    }
+  }
+}

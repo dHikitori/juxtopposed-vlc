@@ -46,6 +46,7 @@
 #include "../src/input/decoder.h"
 #include "../src/input/source.h"
 #include "../src/clock/clock.h"
+#include "../src/input/metadata_revision.h"
 
 const char vlc_module_name[] = MODULE_STRING;
 
@@ -94,6 +95,14 @@ vlc_input_decoder_New(vlc_object_t *parent,
     dec->started = false;
     vlc_list_append(&dec->node, &opened_decoders);
     return dec;
+}
+
+/* item.c links artwork_policy.c, which can write owned metadata. These tests
+ * set no metadata, so the write refuses and the caller keeps its value. */
+bool vlc_meta_TrySetOwned(vlc_meta_t *meta, vlc_meta_type_t type, char *value)
+{
+    (void)meta; (void)type; (void)value;
+    return false;
 }
 
 void vlc_input_decoder_Delete(vlc_input_decoder_t *owner)
@@ -286,6 +295,11 @@ void input_resource_StopFreeVout(input_resource_t *p_resource);
 void input_resource_StopFreeVout(input_resource_t *p_resource)
 {
     (void)p_resource;
+}
+void input_resource_CloseFreeVout(input_resource_t *p_resource);
+void input_resource_CloseFreeVout(input_resource_t *p_resource)
+{
+    input_resource_StopFreeVout(p_resource);
 }
 
 void input_rate_Add(input_rate_t *counter, uintmax_t val)

@@ -203,7 +203,25 @@ class NetworkDeviceModelPrivate
 public:
     NetworkDeviceModelPrivate(NetworkDeviceModel * pub)
         : LocalListBaseModelPrivate<NetworkDeviceItemPtr>(pub)
-    {}
+    {
+        m_settle.setSingleShot(true);
+        m_settle.setInterval(5000);
+        // pub is not constructed yet: the model creates this before its
+        // QObject base, so the timer is its own context.
+        QObject::connect(&m_settle, &QTimer::timeout, &m_settle, [this] { finishLoading(); });
+    }
+
+    // Service discovery has no end signal. Loading ends with the first item,
+    // a failure, or after a short wait for a source that stays empty, so the
+    // view does not call a source empty while its first answer is on the way.
+    void finishLoading()
+    {
+        m_settle.stop();
+        if (!m_loading)
+            return;
+        endLoading();
+    }
+    QTimer m_settle;
 
     ~NetworkDeviceModelPrivate()
     {
@@ -258,6 +276,7 @@ public:
 
             m_revision += 1;
             invalidateCache();
+            finishLoading();
         });
 
         QObject::connect(m_sourcesProvider.get(), &DeviceSourceProvider::nameUpdated, q,
@@ -309,13 +328,14 @@ public:
 
             m_revision += 1;
             invalidateCache();
+            if (!m_items.empty())
+                finishLoading();
         });
 
-        m_sourcesProvider->init();
-
-        //service discovery don't notify preparse end
-        m_loading = false;
+        m_loading = true;
         emit q->loadingChanged();
+        m_settle.start();
+        m_sourcesProvider->init();
 
         return true;
     }
@@ -346,6 +366,8 @@ public:
             m_revision += 1;
             invalidateCache();
         }
+        // After the cache starts counting the new row.
+        finishLoading();
     }
 
     void onMediaRemoved(const QSharedPointer<MediaSourceModel>& mediaSource, SharedInputItem media)

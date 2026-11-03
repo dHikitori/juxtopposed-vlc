@@ -25,6 +25,7 @@
 #include "medialibrary.h"
 
 #include <vlc_image.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_hash.h>
 #include <vlc_fs.h>
 #include <vlc_preparser.h>
@@ -104,6 +105,7 @@ MetadataExtractor::MetadataExtractor( vlc_object_t* parent )
 
 void MetadataExtractor::populateItem( medialibrary::parser::IItem& item, input_item_t* inputItem )
 {
+    const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(inputItem));
     vlc_mutex_locker lock( &inputItem->lock );
 
     const auto emptyStringWrapper = []( const char* psz ) {
@@ -115,7 +117,6 @@ void MetadataExtractor::populateItem( medialibrary::parser::IItem& item, input_i
     static const std::pair<metadata_t, vlc_meta_type_t> fields[] =
     {
         { metadata_t::Title, vlc_meta_Title },
-        { metadata_t::ArtworkUrl, vlc_meta_ArtworkURL },
         { metadata_t::ShowName, vlc_meta_ShowName },
         { metadata_t::Episode, vlc_meta_Episode },
         { metadata_t::Album, vlc_meta_Album },
@@ -134,6 +135,7 @@ void MetadataExtractor::populateItem( medialibrary::parser::IItem& item, input_i
             item.setMeta( pair.first,
                 emptyStringWrapper( vlc_meta_Get( inputItem->p_meta, pair.second ) ) );
     }
+    item.setMeta(metadata_t::ArtworkUrl, emptyStringWrapper(artwork.get()));
 
     item.setDuration( MS_FROM_VLC_TICK(inputItem->i_duration) );
 
@@ -215,11 +217,12 @@ void MetadataExtractor::onParserSubtreeAdded( vlc_preparser_req *,
     input_item_node_Delete(subtree);
 }
 
-void MetadataExtractor::onAttachmentsAdded( vlc_preparser_req *,
+void MetadataExtractor::onAttachmentsAdded( vlc_preparser_req *req,
                                             input_attachment_t *const *array,
                                             size_t count, void *data )
 {
     auto ctx = static_cast<ParseContext*>( data );
+    if (vlc_artwork_item_IsRestricted(vlc_preparser_req_GetItem(req))) return;
     for ( auto i = 0u; i < count; ++i )
     {
         auto a = array[i];

@@ -1,0 +1,373 @@
+{
+  "contract": "ui@1",
+  "id": "episodes",
+  "root": {
+    "type": "Page",
+    "children": [
+      {
+        "type": "Row",
+        "id": "controls",
+        "children": [
+          {
+            "type": "Button",
+            "id": "seasonsOpen",
+            "grow": true,
+            "visible": {
+              "bind": "state.seasonsClosed"
+            },
+            "text": {
+              "bind": "state.show"
+            },
+            "subtitle": {
+              "bind": "state.headerSubtitle"
+            },
+            "icon": "chevron-left",
+            "action": {
+              "command": "org.videolan.episodes/seasons"
+            }
+          },
+          {
+            "type": "Button",
+            "id": "seasonsClose",
+            "grow": true,
+            "visible": {
+              "bind": "state.showingSeasons"
+            },
+            "text": {
+              "bind": "state.show"
+            },
+            "subtitle": {
+              "bind": "state.headerSubtitle"
+            },
+            "icon": "chevron-down",
+            "action": {
+              "command": "org.videolan.episodes/seasons"
+            }
+          },
+          {
+            "type": "Button",
+            "id": "showTitle",
+            "grow": true,
+            "visible": {
+              "bind": "state.oneSeason"
+            },
+            "text": {
+              "bind": "state.show"
+            },
+            "subtitle": {
+              "bind": "state.headerSubtitle"
+            },
+            "enabled": false,
+            "action": {
+              "command": "org.videolan.episodes/seasons"
+            }
+          },
+          {
+            "type": "Menu",
+            "id": "options",
+            "text": {
+              "message": "menu.options"
+            },
+            "icon": "more",
+            "entries": [
+              {
+                "text": {
+                  "message": "menu.refresh"
+                },
+                "icon": "refresh",
+                "action": {
+                  "command": "org.videolan.episodes/refresh"
+                }
+              },
+              {
+                "text": {
+                  "message": "menu.chooseFolder"
+                },
+                "icon": "folder",
+                "visible": {
+                  "bind": "state.files"
+                },
+                "action": {
+                  "command": "org.videolan.episodes/refresh",
+                  "arguments": {
+                    "folder": true
+                  }
+                }
+              },
+              {
+                "text": {
+                  "message": "menu.chooseSeries"
+                },
+                "icon": "search",
+                "visible": {
+                  "bind": "state.files"
+                },
+                "action": {
+                  "command": "org.videolan.episodes/identify"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Text",
+        "id": "notice",
+        "style": "caption",
+        "visible": {
+          "bind": "state.hasNotice"
+        },
+        "text": {
+          "bind": "state.notice"
+        }
+      },
+      {
+        "type": "List",
+        "id": "seasonList",
+        "visible": {
+          "bind": "state.showingSeasons"
+        },
+        "items": {
+          "bind": "state.seasonRows"
+        },
+        "keyField": "key",
+        "scroll": false,
+        "emptyText": {
+          "message": "seasons.empty"
+        },
+        "itemTemplate": {
+          "type": "MediaRow",
+          "title": {
+            "bind": "item.label"
+          },
+          "selected": {
+            "bind": "item.current"
+          },
+          "icon": {
+            "bind": "item.icon"
+          },
+          "navigates": true,
+          "primaryAction": {
+            "command": "org.videolan.episodes/season",
+            "arguments": {
+              "season": {
+                "bind": "item.key"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Button",
+        "id": "previous",
+        "visible": {
+          "bind": "state.less"
+        },
+        "text": {
+          "message": "episodes.previous"
+        },
+        "icon": "chevron-left",
+        "action": {
+          "command": "org.videolan.episodes/less"
+        }
+      },
+      {
+        "type": "List",
+        "id": "episodes",
+        "visible": {
+          "bind": "state.episodesShown"
+        },
+        "items": {
+          "bind": "state.episodes"
+        },
+        "keyField": "key",
+        "scroll": false,
+        "emptyText": {
+          "message": "episodes.empty"
+        },
+        "more": {
+          "bind": "state.more"
+        },
+        "moreAction": {
+          "command": "org.videolan.episodes/more"
+        },
+        "moreText": {
+          "message": "episodes.next"
+        },
+        "itemTemplate": {
+          "type": "MediaRow",
+          "number": {
+            "bind": "item.number"
+          },
+          "title": {
+            "bind": "item.title"
+          },
+          "selected": {
+            "bind": "item.current"
+          },
+          "subtitle": {
+            "bind": "item.subtitle"
+          },
+          "mark": {
+            "bind": "item.mark"
+          },
+          "progress": {
+            "bind": "item.progress"
+          },
+          "expanded": {
+            "bind": "item.expanded"
+          },
+          "artwork": {
+            "bind": "item.artwork"
+          },
+          "primaryAction": {
+            "command": "org.videolan.episodes/expand",
+            "arguments": {
+              "key": {
+                "bind": "item.key"
+              },
+              "open": {
+                "bind": "item.expanded"
+              }
+            }
+          },
+          "children": [
+            {
+              "type": "Text",
+              "id": "description",
+              "style": "small",
+              "maxLines": 3,
+              "visible": {
+                "bind": "item.hasDescription"
+              },
+              "text": {
+                "bind": "item.description"
+              }
+            },
+            {
+              "type": "Button",
+              "id": "source",
+              "intent": "link",
+              "visible": {
+                "bind": "item.hasSource"
+              },
+              "text": {
+                "message": "episode.source"
+              },
+              "action": {
+                "command": "org.videolan.episodes/source",
+                "arguments": {
+                  "key": {
+                    "bind": "item.sourceKey"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Tabs",
+              "id": "versions",
+              "style": "dropdown",
+              "visible": {
+                "bind": "item.multiple"
+              },
+              "items": {
+                "bind": "item.versions"
+              },
+              "selected": {
+                "bind": "item.version"
+              },
+              "text": {
+                "message": "episode.version"
+              },
+              "action": {
+                "command": "org.videolan.episodes/expand",
+                "arguments": {
+                  "key": {
+                    "bind": "item.key"
+                  },
+                  "version": {
+                    "bind": "item.tab.key"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Text",
+              "id": "file",
+              "style": "caption",
+              "maxLines": 1,
+              "visible": {
+                "bind": "item.hasFile"
+              },
+              "text": {
+                "bind": "item.fileLabel"
+              }
+            },
+            {
+              "type": "Row",
+              "id": "actions",
+              "children": [
+                {
+                  "type": "Button",
+                  "id": "play",
+                  "grow": true,
+                  "text": {
+                    "bind": "item.playLabel"
+                  },
+                  "icon": "play-outline",
+                  "enabled": {
+                    "bind": "item.playEnabled"
+                  },
+                  "action": {
+                    "command": "org.videolan.episodes/play",
+                    "arguments": {
+                      "key": {
+                        "bind": "item.playKey"
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "IconButton",
+                  "id": "restart",
+                  "text": {
+                    "message": "episode.playFromStart"
+                  },
+                  "icon": "replay",
+                  "action": {
+                    "command": "org.videolan.episodes/play",
+                    "arguments": {
+                      "key": {
+                        "bind": "item.playKey"
+                      },
+                      "fromStart": true
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "Button",
+              "id": "video",
+              "visible": {
+                "bind": "item.hasVideo"
+              },
+              "text": {
+                "message": "episode.playVideo"
+              },
+              "icon": "video",
+              "action": {
+                "command": "org.videolan.episodes/play",
+                "arguments": {
+                  "key": {
+                    "bind": "item.videoKey"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

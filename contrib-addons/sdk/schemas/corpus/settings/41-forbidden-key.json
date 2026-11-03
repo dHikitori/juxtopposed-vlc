@@ -1,0 +1,16 @@
+{
+  "description": "A default value has the key constructor.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "string",
+        "default": {
+          "constructor": 1
+        }
+      }
+    }
+  }
+}

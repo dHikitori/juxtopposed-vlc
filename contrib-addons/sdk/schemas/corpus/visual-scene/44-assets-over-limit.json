@@ -1,0 +1,28 @@
+{
+  "description": "The scene has 17 assets.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [],
+    "assets": {
+      "a0": "images/0.png",
+      "a1": "images/1.png",
+      "a2": "images/2.png",
+      "a3": "images/3.png",
+      "a4": "images/4.png",
+      "a5": "images/5.png",
+      "a6": "images/6.png",
+      "a7": "images/7.png",
+      "a8": "images/8.png",
+      "a9": "images/9.png",
+      "a10": "images/10.png",
+      "a11": "images/11.png",
+      "a12": "images/12.png",
+      "a13": "images/13.png",
+      "a14": "images/14.png",
+      "a15": "images/15.png",
+      "a16": "images/16.png"
+    }
+  }
+}

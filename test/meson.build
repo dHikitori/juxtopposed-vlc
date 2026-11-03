@@ -16,6 +16,8 @@ foreach vlc_test: vlc_tests
         'sources',
         'moc_headers',
         'moc_sources',
+        'moc_args',
+        'timeout',
         'suite',
         'link_with',
         'link_args',
@@ -72,10 +74,15 @@ foreach vlc_test: vlc_tests
     endif
 
     moc_sources = []
+    # Qt tests (the ones with moc input) need the Qt header workaround the
+    # Qt module uses (qt_yield_flags in modules/gui/qt/meson.build).
+    qt_test_args = []
     if (vlc_test.has_key('moc_headers') or vlc_test.has_key('moc_sources')) and qt6_dep.found()
+        qt_test_args = get_variable('qt_yield_flags', [])
         moc_sources += qt6.preprocess(
             moc_headers: vlc_test.get('moc_headers', []),
             moc_sources: vlc_test.get('moc_sources', []),
+            moc_extra_arguments: vlc_test.get('moc_args', []),
             include_directories: qt_include_dir,
             dependencies: qt6_dep)
     endif
@@ -90,7 +97,7 @@ foreach vlc_test: vlc_tests
         dependencies: [vlc_test.get('dependencies', []),
             libvlccore_deps, opengl_dep],
         c_args: [vlc_test.get('c_args', []), common_args],
-        cpp_args: [vlc_test.get('cpp_args', []), common_args],
+        cpp_args: [vlc_test.get('cpp_args', []), qt_test_args, common_args],
         objc_args: [vlc_test.get('objc_args', []), common_args])
 
     # Handle optional test wrapper (e.g., xvfb-run for X11 tests)
@@ -102,7 +109,8 @@ foreach vlc_test: vlc_tests
                 test_wrapper,
                 args: [test_exe],
                 env: vlc_test.get('env', []),
-                suite: [vlc_test.get('suite', []), 'test'],
+                timeout: vlc_test.get('timeout', 30),
+                suite: [vlc_test.get('suite', []), 'test', addon_test_labels.get(vlc_test['name'], [])],
                 depends: [test_modules_deps])
         else
             warning('Test \'@0@\' skipped: wrapper not found'.format(
@@ -112,10 +120,55 @@ foreach vlc_test: vlc_tests
         test(vlc_test['name'],
             test_exe,
             env: vlc_test.get('env', []),
-            suite: [vlc_test.get('suite', []), 'test'],
+            timeout: vlc_test.get('timeout', 30),
+            suite: [vlc_test.get('suite', []), 'test', addon_test_labels.get(vlc_test['name'], [])],
             depends: [test_modules_deps])
     endif
 endforeach
+
+test('addon_test_registry', find_program('python3'),
+    args: ['-B', files('check_addon_tests.py')],
+    suite: ['addons'])
+
+# Full app runs. They measure idle CPU, so they do not run in parallel.
+if host_system == 'linux' and get_option('qt').allowed()
+    addon_app_smoke = [files('addon_app_smoke.py'), '--build', meson.project_build_root()]
+    # The app loads the bundled add-ons that the build stages.
+    addon_app_depends = get_variable('bundled_addon_targets', [])
+    test('addon_app_smoke', find_program('python3'),
+        args: ['-B', addon_app_smoke],
+        suite: ['addons', addon_test_labels['addon_app_smoke']],
+        depends: addon_app_depends, is_parallel: false, timeout: 300)
+    test('addon_app_smoke_two_windows', find_program('python3'),
+        args: ['-B', addon_app_smoke, '--windows', '2'],
+        suite: ['addons', addon_test_labels['addon_app_smoke_two_windows']],
+        depends: addon_app_depends, is_parallel: false, timeout: 300)
+    if get_option('addon-test-driver')
+        # The driver runs also fail when the GUI thread opens an add-on store
+        # file (see addon_gui_file_audit.c).
+        addon_gui_file_audit = shared_module('addon_gui_file_audit', 'addon_gui_file_audit.c',
+            dependencies: [dependency('dl', required: false)], build_by_default: false, install: false)
+        addon_app_audit = ['--gui-file-audit', addon_gui_file_audit.full_path()]
+        addon_app_depends += [addon_gui_file_audit]
+        test('addon_app_smoke_driver', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver'] + addon_app_audit,
+            suite: ['addons', addon_test_labels['addon_app_smoke_driver']],
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
+        # Step 2's exit check: an install in one window shows in the other.
+        test('addon_app_smoke_shared_profile', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver', '--windows', '2'] + addon_app_audit,
+            suite: ['addons', addon_test_labels['addon_app_smoke_shared_profile']],
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
+        test('addon_app_smoke_owner', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver', '--owner'] + addon_app_audit,
+            suite: ['addons', addon_test_labels['addon_app_smoke_owner']],
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
+        test('addon_app_smoke_owner_two_windows', find_program('python3'),
+            args: ['-B', addon_app_smoke, '--driver', '--owner', '--windows', '2'] + addon_app_audit,
+            suite: ['addons', addon_test_labels['addon_app_smoke_owner_two_windows']],
+            depends: addon_app_depends, is_parallel: false, timeout: 300)
+    endif
+endif
 
 libvlc_demux_defines = []
 libvlc_demux_deps = []

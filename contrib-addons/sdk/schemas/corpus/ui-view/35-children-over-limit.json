@@ -1,0 +1,273 @@
+{
+  "description": "A column has 65 children.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Column",
+      "children": [
+        {
+          "type": "Text",
+          "text": "0"
+        },
+        {
+          "type": "Text",
+          "text": "1"
+        },
+        {
+          "type": "Text",
+          "text": "2"
+        },
+        {
+          "type": "Text",
+          "text": "3"
+        },
+        {
+          "type": "Text",
+          "text": "4"
+        },
+        {
+          "type": "Text",
+          "text": "5"
+        },
+        {
+          "type": "Text",
+          "text": "6"
+        },
+        {
+          "type": "Text",
+          "text": "7"
+        },
+        {
+          "type": "Text",
+          "text": "8"
+        },
+        {
+          "type": "Text",
+          "text": "9"
+        },
+        {
+          "type": "Text",
+          "text": "10"
+        },
+        {
+          "type": "Text",
+          "text": "11"
+        },
+        {
+          "type": "Text",
+          "text": "12"
+        },
+        {
+          "type": "Text",
+          "text": "13"
+        },
+        {
+          "type": "Text",
+          "text": "14"
+        },
+        {
+          "type": "Text",
+          "text": "15"
+        },
+        {
+          "type": "Text",
+          "text": "16"
+        },
+        {
+          "type": "Text",
+          "text": "17"
+        },
+        {
+          "type": "Text",
+          "text": "18"
+        },
+        {
+          "type": "Text",
+          "text": "19"
+        },
+        {
+          "type": "Text",
+          "text": "20"
+        },
+        {
+          "type": "Text",
+          "text": "21"
+        },
+        {
+          "type": "Text",
+          "text": "22"
+        },
+        {
+          "type": "Text",
+          "text": "23"
+        },
+        {
+          "type": "Text",
+          "text": "24"
+        },
+        {
+          "type": "Text",
+          "text": "25"
+        },
+        {
+          "type": "Text",
+          "text": "26"
+        },
+        {
+          "type": "Text",
+          "text": "27"
+        },
+        {
+          "type": "Text",
+          "text": "28"
+        },
+        {
+          "type": "Text",
+          "text": "29"
+        },
+        {
+          "type": "Text",
+          "text": "30"
+        },
+        {
+          "type": "Text",
+          "text": "31"
+        },
+        {
+          "type": "Text",
+          "text": "32"
+        },
+        {
+          "type": "Text",
+          "text": "33"
+        },
+        {
+          "type": "Text",
+          "text": "34"
+        },
+        {
+          "type": "Text",
+          "text": "35"
+        },
+        {
+          "type": "Text",
+          "text": "36"
+        },
+        {
+          "type": "Text",
+          "text": "37"
+        },
+        {
+          "type": "Text",
+          "text": "38"
+        },
+        {
+          "type": "Text",
+          "text": "39"
+        },
+        {
+          "type": "Text",
+          "text": "40"
+        },
+        {
+          "type": "Text",
+          "text": "41"
+        },
+        {
+          "type": "Text",
+          "text": "42"
+        },
+        {
+          "type": "Text",
+          "text": "43"
+        },
+        {
+          "type": "Text",
+          "text": "44"
+        },
+        {
+          "type": "Text",
+          "text": "45"
+        },
+        {
+          "type": "Text",
+          "text": "46"
+        },
+        {
+          "type": "Text",
+          "text": "47"
+        },
+        {
+          "type": "Text",
+          "text": "48"
+        },
+        {
+          "type": "Text",
+          "text": "49"
+        },
+        {
+          "type": "Text",
+          "text": "50"
+        },
+        {
+          "type": "Text",
+          "text": "51"
+        },
+        {
+          "type": "Text",
+          "text": "52"
+        },
+        {
+          "type": "Text",
+          "text": "53"
+        },
+        {
+          "type": "Text",
+          "text": "54"
+        },
+        {
+          "type": "Text",
+          "text": "55"
+        },
+        {
+          "type": "Text",
+          "text": "56"
+        },
+        {
+          "type": "Text",
+          "text": "57"
+        },
+        {
+          "type": "Text",
+          "text": "58"
+        },
+        {
+          "type": "Text",
+          "text": "59"
+        },
+        {
+          "type": "Text",
+          "text": "60"
+        },
+        {
+          "type": "Text",
+          "text": "61"
+        },
+        {
+          "type": "Text",
+          "text": "62"
+        },
+        {
+          "type": "Text",
+          "text": "63"
+        },
+        {
+          "type": "Text",
+          "text": "64"
+        }
+      ]
+    }
+  }
+}

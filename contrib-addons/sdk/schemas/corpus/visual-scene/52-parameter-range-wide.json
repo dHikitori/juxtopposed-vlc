@@ -1,0 +1,25 @@
+{
+  "description": "A gain parameter maximum is more than the host limit of 8.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "spectrum",
+        "count": 32,
+        "color": "theme.accent",
+        "id": "bars",
+        "gain": 1
+      }
+    ],
+    "parameters": {
+      "gain": {
+        "node": "bars",
+        "property": "gain",
+        "minimum": 0,
+        "maximum": 9
+      }
+    }
+  }
+}

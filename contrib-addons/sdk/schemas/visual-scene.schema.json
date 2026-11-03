@@ -1,0 +1,934 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.invalid/schemas/visual-scene.schema.json",
+  "title": "Visualizer scene (visualizer.scene@1)",
+  "description": "A data-only node graph that the host draws with bounded audio analysis. A scene cannot open a file, request a URL or run code. Validator: AddonVisualScene::validate in modules/gui/qt/addons/addon_visual_scene.cpp and AddonVisualizerParameters::validate. Contract: contrib-addons/sdk/visualizer-scene.md and visualizer-parameters.md.",
+  "$comment": "Host-only rules that this schema cannot express: (1) The complete scene has at most 256 nodes. (2) The sum of particles count values in the complete scene is at most 2048. (3) Each feedback buffer (0 or 1) occurs at most once in the complete scene. (4) Node id values are unique in the complete scene. (5) Gradient stop positions increase strictly. (6) A texture asset is a key in the assets object of the same scene. (7) A parameter node is the id of a node in the scene, and that node type has the property (spectrum count 1-64, particles count 1-2048, group scale 0.1-4, feedback scale 0.5-1.5; gain only on spectrum, waveform and spectrogram). (8) A parameter minimum is not more than its maximum, the target node has the property, and its initial value is in the declared range. (9) Each node and property pair is the target of at most one parameter. (10) The host counts asset path length in UTF-16 code units; JSON Schema maxLength counts code points.",
+  "type": "object",
+  "required": [
+    "contract",
+    "background",
+    "nodes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "visualizer.scene@1"
+    },
+    "background": {
+      "$ref": "#/$defs/color"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/level0"
+      }
+    },
+    "assets": {
+      "description": "At most 16 asset keys that map to declared package image files.",
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/assetPath"
+      }
+    },
+    "parameters": {
+      "description": "At most 64 numeric parameter declarations.",
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/parameter"
+      }
+    }
+  },
+  "$defs": {
+    "color": {
+      "description": "A theme color name, #RRGGBB or #AARRGGBB.",
+      "type": "string",
+      "anyOf": [
+        {
+          "enum": [
+            "theme.background",
+            "theme.foreground",
+            "theme.accent"
+          ]
+        },
+        {
+          "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+        }
+      ]
+    },
+    "identifier": {
+      "description": "An ASCII letter or underscore, then at most 63 letters, digits, underscores or hyphens. Reserved object names are not permitted.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$",
+      "not": {
+        "enum": [
+          "__proto__",
+          "prototype",
+          "constructor"
+        ]
+      }
+    },
+    "assetPath": {
+      "description": "A relative package file path. No empty, '.' or '..' parts, no backslash and no colon.",
+      "type": "string",
+      "maxLength": 240,
+      "pattern": "^[^/\\\\:]+(/[^/\\\\:]+)*$",
+      "not": {
+        "pattern": "(^|/)\\.\\.?(/|$)"
+      }
+    },
+    "rect": {
+      "description": "Normalized x, y, width and height.",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2
+        },
+        {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2
+        },
+        {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 4
+        },
+        {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 4
+        }
+      ]
+    },
+    "stop": {
+      "description": "A gradient stop: a position from zero to one and a color. Positions must increase (host-only check).",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        {
+          "$ref": "#/$defs/color"
+        }
+      ]
+    },
+    "node": {
+      "description": "A scene node. Each type permits type, id, rect, opacity and its own fields.",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "spectrum",
+            "waveform",
+            "spectrogram",
+            "particles",
+            "gradient",
+            "group",
+            "feedback",
+            "texture"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "spectrum"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/spectrum"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "waveform"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/waveform"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "spectrogram"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/spectrogram"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "particles"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/particles"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "gradient"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/gradient"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "group"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/group"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "feedback"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/feedback"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "texture"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/texture"
+          }
+        }
+      ]
+    },
+    "spectrum": {
+      "type": "object",
+      "required": [
+        "type",
+        "count",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "gain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "waveform": {
+      "type": "object",
+      "required": [
+        "type",
+        "points",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "points": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 256
+        },
+        "gain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "lineWidth": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 8
+        }
+      }
+    },
+    "spectrogram": {
+      "type": "object",
+      "required": [
+        "type",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "gain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 8
+        }
+      }
+    },
+    "particles": {
+      "type": "object",
+      "required": [
+        "type",
+        "count",
+        "seed",
+        "speed",
+        "size",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2048
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "speed": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 0.1
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "gradient": {
+      "type": "object",
+      "required": [
+        "type",
+        "stops",
+        "vertical"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "stops": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/stop"
+          }
+        },
+        "vertical": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": [
+        "type",
+        "children"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "rotation": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 4
+        }
+      }
+    },
+    "feedback": {
+      "type": "object",
+      "required": [
+        "type",
+        "buffer",
+        "decay"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "buffer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "decay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.99
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 1.5
+        }
+      }
+    },
+    "texture": {
+      "type": "object",
+      "required": [
+        "type",
+        "asset"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": true,
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "asset": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "level0": {
+      "description": "A node at group nesting level 0.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level1"
+          }
+        }
+      }
+    },
+    "level1": {
+      "description": "A node at group nesting level 1.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level2"
+          }
+        }
+      }
+    },
+    "level2": {
+      "description": "A node at group nesting level 2.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level3"
+          }
+        }
+      }
+    },
+    "level3": {
+      "description": "A node at group nesting level 3.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level4"
+          }
+        }
+      }
+    },
+    "level4": {
+      "description": "A node at group nesting level 4.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level5"
+          }
+        }
+      }
+    },
+    "level5": {
+      "description": "A node at group nesting level 5.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level6"
+          }
+        }
+      }
+    },
+    "level6": {
+      "description": "A node at group nesting level 6.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level7"
+          }
+        }
+      }
+    },
+    "level7": {
+      "description": "A node at group nesting level 7.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/level8"
+          }
+        }
+      }
+    },
+    "level8": {
+      "description": "A node at group nesting level 8. A group is not permitted at this level.",
+      "$ref": "#/$defs/node",
+      "properties": {
+        "type": {
+          "not": {
+            "const": "group"
+          }
+        }
+      }
+    },
+    "parameter": {
+      "description": "A numeric field that a worker can change. The range must be inside the host range of the target property.",
+      "type": "object",
+      "required": [
+        "node",
+        "property",
+        "minimum",
+        "maximum"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/identifier"
+        },
+        "property": {
+          "enum": [
+            "opacity",
+            "gain",
+            "count",
+            "points",
+            "lineWidth",
+            "seed",
+            "speed",
+            "size",
+            "rotation",
+            "scale",
+            "decay"
+          ]
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "opacity"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "gain"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "count"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2048
+              },
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2048
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "points"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 256
+              },
+              "maximum": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 256
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "lineWidth"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 8
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 8
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "seed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "maximum": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "speed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "size"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 0.1
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 0.1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "rotation"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": -360,
+                "maximum": 360
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": -360,
+                "maximum": 360
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "scale"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 4
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "property": {
+                "const": "decay"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "minimum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.99
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.99
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

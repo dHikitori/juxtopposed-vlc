@@ -1,0 +1,27 @@
+{
+  "description": "Progress components with a numeric value, a bound value and no value.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Column",
+      "children": [
+        {
+          "type": "Progress",
+          "value": 0.25,
+          "text": "Loading"
+        },
+        {
+          "type": "Progress",
+          "value": {
+            "bind": "state.download.fraction"
+          }
+        },
+        {
+          "type": "Progress"
+        }
+      ]
+    }
+  }
+}

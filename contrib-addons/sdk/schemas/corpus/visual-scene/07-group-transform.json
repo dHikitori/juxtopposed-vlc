@@ -1,0 +1,34 @@
+{
+  "description": "A group with rotation and scale that contains two nodes.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "group",
+        "id": "g",
+        "rotation": -360,
+        "scale": 4,
+        "rect": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "children": [
+          {
+            "type": "spectrum",
+            "count": 32,
+            "color": "theme.accent"
+          },
+          {
+            "type": "waveform",
+            "points": 128,
+            "color": "theme.accent"
+          }
+        ]
+      }
+    ]
+  }
+}

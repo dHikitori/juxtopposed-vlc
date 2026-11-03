@@ -249,6 +249,50 @@ int main(void)
     vlc_http_msg_destroy(m);
     conn_destroy();
 
+    /* A native completion witness distinguishes all three clean body modes.
+     * The original read returns above remain covered unchanged. */
+    const char *const completed_headers[] = {
+        "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+        "HTTP/1.0 200 OK\r\n\r\n",
+    };
+    const char *const completed_bodies[] = {"empty", "5\r\nempty\r\n0\r\n\r\n", "empty"};
+    for (size_t i = 0; i < ARRAY_SIZE(completed_headers); ++i) {
+        conn_create();
+        s = stream_open(false);
+        assert(s != NULL);
+        conn_send(completed_headers[i]);
+        m = vlc_http_msg_get_initial(s);
+        assert(m != NULL);
+        conn_send(completed_bodies[i]);
+        if (i == 2) conn_shutdown(true);
+        bool complete = true;
+        b = vlc_http_msg_read_outcome(m, &complete);
+        assert(b != NULL && b != vlc_http_error && b->i_buffer == 5 && !complete);
+        block_Release(b);
+        b = vlc_http_msg_read_outcome(m, &complete);
+        assert(b == NULL && complete);
+        vlc_http_msg_destroy(m);
+        conn_destroy();
+    }
+
+    /* Truncated fixed length remains the old error sentinel, with no proof. */
+    conn_create();
+    s = stream_open(false);
+    assert(s != NULL);
+    conn_send("HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nempty");
+    m = vlc_http_msg_get_initial(s);
+    assert(m != NULL);
+    b = vlc_http_msg_read(m);
+    assert(b != NULL && b->i_buffer == 5);
+    block_Release(b);
+    conn_shutdown(true);
+    bool incomplete = true;
+    b = vlc_http_msg_read_outcome(m, &incomplete);
+    assert(b == vlc_http_error && !incomplete);
+    vlc_http_msg_destroy(m);
+    conn_destroy();
+
     /* Test HTTP/1.1 with chunked request payload */
     conn_create();
     s = stream_open(true);

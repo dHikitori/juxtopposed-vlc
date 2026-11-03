@@ -1,0 +1,9 @@
+{
+  "description": "The message has no id.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "status": "match",
+    "data": {}
+  }
+}

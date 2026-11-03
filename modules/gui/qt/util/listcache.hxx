@@ -599,6 +599,7 @@ void ListCache<T>::asyncCountAndLoad()
             {
                 asyncFetchMore();
             }
+            emit countLoaded();
         }
     );
 }

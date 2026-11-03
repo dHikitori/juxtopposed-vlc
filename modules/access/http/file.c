@@ -43,6 +43,7 @@ struct vlc_http_file
 {
     struct vlc_http_resource resource;
     uintmax_t offset;
+    bool evidence_failed;
 };
 
 static int vlc_http_file_req(const struct vlc_http_resource *res,
@@ -126,6 +127,7 @@ struct vlc_http_resource *vlc_http_file_create(struct vlc_http_mgr *mgr,
     }
 
     file->offset = 0;
+    file->evidence_failed = false;
     return &file->resource;
 }
 
@@ -203,11 +205,11 @@ bool vlc_http_file_can_seek(struct vlc_http_resource *res)
 
 int vlc_http_file_seek(struct vlc_http_resource *res, uintmax_t offset)
 {
+    struct vlc_http_file *file = (struct vlc_http_file *)res;
+    if (file->offset != 0 || offset != 0) file->evidence_failed = true;
     struct vlc_http_msg *resp = vlc_http_res_open(res, &offset);
     if (resp == NULL)
         return -1;
-
-    struct vlc_http_file *file = (struct vlc_http_file *)res;
 
     int status = vlc_http_msg_get_status(resp);
     if (res->response != NULL)
@@ -229,27 +231,94 @@ int vlc_http_file_seek(struct vlc_http_resource *res, uintmax_t offset)
     return 0;
 }
 
+static bool file_evidence_number(const char **cursor, uintmax_t *result)
+{
+    const unsigned char *at = (const unsigned char *)*cursor;
+    if (*at < '0' || *at > '9') return false;
+    uintmax_t value = 0;
+    do {
+        const unsigned digit = *at++ - '0';
+        if (value > (UINTMAX_MAX - digit) / 10) return false;
+        value = value * 10 + digit;
+    } while (*at >= '0' && *at <= '9');
+    *cursor = (const char *)at;
+    *result = value;
+    return true;
+}
+
+static bool file_evidence_complete(const struct vlc_http_file *file, bool terminal)
+{
+    const struct vlc_http_msg *response = file->resource.response;
+    if (!terminal || file->evidence_failed || response == NULL) return false;
+    const int status = vlc_http_msg_get_status(response);
+    if (status != 200 && status != 206) return false;
+
+    /* Transfer-Encoding takes precedence over Content-Length. The parser
+     * witness must validate its own framing, including the terminal CRLF. */
+    if (vlc_http_msg_get_header(response, "Transfer-Encoding") == NULL) {
+        const char *length = vlc_http_msg_get_header(response, "Content-Length");
+        if (length != NULL) {
+            uintmax_t expected;
+            if (!file_evidence_number(&length, &expected) || *length != '\0'
+                || expected != file->offset) return false;
+        }
+    }
+    if (status == 206) {
+        const char *range = vlc_http_msg_get_header(response, "Content-Range");
+        uintmax_t start, end, total;
+        if (range == NULL || strncmp(range, "bytes ", 6)) return false;
+        range += 6;
+        if (!file_evidence_number(&range, &start) || *range++ != '-'
+            || !file_evidence_number(&range, &end) || *range++ != '/'
+            || !file_evidence_number(&range, &total) || *range != '\0'
+            || start != 0 || end == UINTMAX_MAX || end + 1 != total
+            || total != file->offset) return false;
+    }
+    return true;
+}
+
 block_t *vlc_http_file_read(struct vlc_http_resource *res)
 {
-    struct vlc_http_file *file = (struct vlc_http_file *)res;
-    block_t *block = vlc_http_res_read(res);
+    return vlc_http_file_read_outcome(res, NULL);
+}
 
-    if (block == vlc_http_error)
+block_t *vlc_http_file_read_outcome(struct vlc_http_resource *res,
+                                   enum vlc_http_file_read_outcome *outcome)
+{
+    struct vlc_http_file *file = (struct vlc_http_file *)res;
+    bool terminal = false;
+    if (outcome != NULL) *outcome = VLC_HTTP_FILE_UNAVAILABLE;
+    block_t *block = vlc_http_res_read_outcome(res, outcome != NULL ? &terminal : NULL);
+
+    if (block == vlc_http_error) {
+        file->evidence_failed = true;
         block = NULL;
+    }
 
     /* Automatically resume on short response or error if possible */
     if (block == NULL && res->response != NULL
      && vlc_http_msg_can_seek(res->response)
-     && file->offset < vlc_http_msg_get_file_size(res->response)
-     && vlc_http_file_seek(res, file->offset) == 0)
+     && file->offset < vlc_http_msg_get_file_size(res->response))
     {
-        block = vlc_http_res_read(res);
+        /* Keep every ordinary retry and returned block. Recovered/combined
+         * representations do not prove an exhaustive negative lookup. */
+        file->evidence_failed = true;
+        if (vlc_http_file_seek(res, file->offset) == 0) {
+            block = vlc_http_res_read_outcome(res, outcome != NULL ? &terminal : NULL);
 
-        if (block == vlc_http_error)
-            block = NULL; /* Non-recovered error */
+            if (block == vlc_http_error)
+                block = NULL; /* Non-recovered error */
+        }
     }
 
-    if (block != NULL)
+    if (block != NULL) {
+        if (block->i_buffer > UINTMAX_MAX - file->offset)
+            file->evidence_failed = true;
         file->offset += block->i_buffer;
+        if (outcome != NULL && !file->evidence_failed) *outcome = VLC_HTTP_FILE_DATA;
+    } else if (outcome != NULL) {
+        if (file_evidence_complete(file, terminal)) *outcome = VLC_HTTP_FILE_COMPLETE;
+        else file->evidence_failed = true;
+    }
     return block;
 }

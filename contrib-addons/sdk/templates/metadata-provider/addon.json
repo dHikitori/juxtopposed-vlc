@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "id": "org.example.metadata",
+  "name": "Example metadata",
+  "version": "0.1.0",
+  "publisher": "Example publisher",
+  "license": "GPL-2.0-or-later",
+  "source": "https://git.example.org/addon-metadata.git",
+  "api": {
+    "addon": ">=1.0.0 <2.0.0",
+    "contracts": {
+      "metadata": "^1.0.0"
+    }
+  },
+  "runtime": {
+    "kind": "wasm-message-v1",
+    "entry": "dist/addon.wasm",
+    "selfTest": true
+  },
+  "files": [
+    "addon.json",
+    "LICENSE",
+    "dist/addon.wasm"
+  ],
+  "contributions": [
+    {
+      "id": "details",
+      "type": "metadata.provider",
+      "contract": "metadata@1",
+      "features": ["video.details"],
+      "mediaKinds": ["movie"],
+      "operations": ["enrich"],
+      "requires": ["metadata.context", "network.http"]
+    }
+  ],
+  "permissions": {
+    "required": {
+      "metadata.context": {"fields": ["kind", "title", "year", "ids"]},
+      "network.http": {"origins": ["https://api.example.org"], "methods": ["GET"]}
+    },
+    "optional": {}
+  }
+}

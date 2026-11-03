@@ -32,6 +32,7 @@
 #include <vlc_common.h>
 #include <vlc_tls.h>
 #include <vlc_block.h>
+#include <vlc_interrupt.h>
 
 #include "conn.h"
 #include "message.h"
@@ -113,6 +114,7 @@ struct vlc_h1_conn
     struct vlc_http_stream stream;
     uintmax_t content_length;
     bool connection_close;
+    bool read_complete;
     bool active;
     bool released;
     bool proxy;
@@ -196,6 +198,7 @@ static struct vlc_http_msg *vlc_h1_stream_wait(struct vlc_http_stream *stream)
     assert(minor >= 0);
 
     conn->content_length = vlc_http_msg_get_size(resp);
+    conn->read_complete = false;
     conn->connection_close = false;
 
     if (minor >= 1)
@@ -257,7 +260,10 @@ static block_t *vlc_h1_stream_read(struct vlc_http_stream *stream)
     if (size > conn->content_length)
         size = conn->content_length;
     if (size == 0)
+    {
+        conn->read_complete = true;
         return NULL;
+    }
 
     block_t *block = block_Alloc(size);
     if (unlikely(block == NULL))
@@ -274,6 +280,7 @@ static block_t *vlc_h1_stream_read(struct vlc_http_stream *stream)
             errno = ECONNRESET;
             return vlc_http_error;
         }
+        conn->read_complete = true;
         return NULL;
     }
 
@@ -308,12 +315,19 @@ static void vlc_h1_stream_close(struct vlc_http_stream *stream, bool abort)
         vlc_h1_conn_destroy(conn);
 }
 
+static bool vlc_h1_stream_is_complete(struct vlc_http_stream *stream)
+{
+    struct vlc_h1_conn *conn = vlc_h1_stream_conn(stream);
+    return conn->read_complete && conn->conn.tls != NULL && !vlc_killed();
+}
+
 static const struct vlc_http_stream_cbs vlc_h1_stream_callbacks =
 {
     vlc_h1_stream_wait,
     vlc_h1_stream_write,
     vlc_h1_stream_read,
     vlc_h1_stream_close,
+    vlc_h1_stream_is_complete,
 };
 
 static void vlc_h1_conn_destroy(struct vlc_h1_conn *conn)
@@ -357,6 +371,7 @@ struct vlc_http_conn *vlc_h1_conn_create(void *ctx, vlc_tls_t *tls, bool proxy)
     conn->stream.cbs = &vlc_h1_stream_callbacks;
     conn->active = false;
     conn->released = false;
+    conn->read_complete = false;
     conn->proxy = proxy;
     conn->opaque = ctx;
 

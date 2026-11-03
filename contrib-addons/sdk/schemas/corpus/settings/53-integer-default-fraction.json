@@ -1,0 +1,18 @@
+{
+  "description": "An integer default must be a whole number.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "language": {
+        "type": "string",
+        "default": "en"
+      },
+      "count": {
+        "type": "integer",
+        "default": 2.5
+      }
+    }
+  }
+}

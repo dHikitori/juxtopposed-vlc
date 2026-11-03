@@ -159,6 +159,12 @@ jobs:
           path: ${{ steps.brew-cache.outputs.path }}
           key: release-brew-downloads-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ steps.brew-cache.outputs.week }}
           restore-keys: release-brew-downloads-v1-${{ matrix.runner }}-${{ matrix.arch }}-
+      - name: Install pinned add-on worker toolchain
+        run: |
+          source extras/package/release/setup-addon-rust.sh
+          vlc_setup_addon_rust
+          echo "RUSTUP_TOOLCHAIN=$RUSTUP_TOOLCHAIN" >> "$GITHUB_ENV"
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
       - name: Install dependencies
         run: |
           # Current Homebrew formulas often have no Intel macOS bottles.

@@ -42,7 +42,19 @@ public:
     //BaseModelPrivateT reimplementation
     virtual bool loading() const override
     {
-        return (m_loading) || BaseModelPrivateT<T>::loading();
+        return (m_loading)
+            || (m_loadEndTask && this->m_cache && this->m_cache->countTask() == m_loadEndTask)
+            || BaseModelPrivateT<T>::loading();
+    }
+
+    // Ends the model's own loading. When the cache is still counting the
+    // rows the model added, loading lasts until that count arrives, so a
+    // view does not call the list empty in between.
+    void endLoading()
+    {
+        m_loading = false;
+        m_loadEndTask = this->m_cache ? this->m_cache->countTask() : 0;
+        emit this->q_ptr->loadingChanged();
     }
 
     virtual bool cachable() const override
@@ -68,6 +80,7 @@ public:
 protected:
     size_t m_revision = 0;
     bool m_loading = true;
+    uint64_t m_loadEndTask = 0;
 };
 
 #endif // LOCALLISTBASEMODEL_HPP

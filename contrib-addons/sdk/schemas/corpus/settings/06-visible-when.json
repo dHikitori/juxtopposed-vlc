@@ -1,0 +1,37 @@
+{
+  "description": "Fields that show only when another field has a value.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "manual"
+        ],
+        "default": "auto"
+      },
+      "server": {
+        "type": "string",
+        "format": "uri",
+        "x-hakone-control": "url",
+        "x-hakone-visibleWhen": {
+          "field": "mode",
+          "equals": "manual"
+        }
+      },
+      "advanced": {
+        "type": "boolean"
+      },
+      "retries": {
+        "type": "integer",
+        "x-hakone-visibleWhen": {
+          "field": "advanced",
+          "equals": true
+        }
+      }
+    }
+  }
+}

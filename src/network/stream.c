@@ -48,6 +48,7 @@
 
 #include <vlc_common.h>
 #include <vlc_tls.h>
+#include <vlc_input_policy.h>
 #include <vlc_interrupt.h>
 
 ssize_t vlc_tls_Read(vlc_tls_t *session, void *buf, size_t len, bool waitall)
@@ -431,6 +432,7 @@ vlc_tls_t *vlc_tls_SocketOpenAddrInfo(const struct addrinfo *restrict info,
 vlc_tls_t *vlc_tls_SocketOpenTCP(vlc_object_t *obj, const char *name,
                                  unsigned port)
 {
+    if (!vlc_input_policy_CheckConnection(obj, name, port, false)) { errno = EACCES; return NULL; }
     struct addrinfo hints =
     {
         .ai_socktype = SOCK_STREAM,

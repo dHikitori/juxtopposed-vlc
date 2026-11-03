@@ -1,0 +1,34 @@
+{
+  "description": "The documented language list and secret example.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "languages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "uniqueItems": true,
+        "maxItems": 8,
+        "default": [
+          "en"
+        ],
+        "x-hakone-control": "language-list",
+        "x-hakone-label": "settings.languages"
+      },
+      "apiKey": {
+        "type": "string",
+        "minLength": 1,
+        "x-hakone-control": "secret",
+        "x-hakone-secret": true,
+        "x-hakone-label": "settings.apiKey"
+      }
+    },
+    "required": [
+      "languages",
+      "apiKey"
+    ]
+  }
+}

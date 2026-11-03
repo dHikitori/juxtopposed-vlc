@@ -1,0 +1,11 @@
+{
+  "description": "An auth_required result with an error text.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "auth_required",
+    "data": {},
+    "error": "Sign in to the service."
+  }
+}

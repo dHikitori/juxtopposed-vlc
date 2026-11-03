@@ -34,6 +34,7 @@ struct preparser {
     struct vlc_preparser_msg req_msg;
     struct vlc_preparser_msg_serdes *serdes;
     bool daemon;
+    int collection_status;
     int status;
 
     struct vlc_tls *tls_in;
@@ -56,6 +57,7 @@ static void parse_OnEnded(struct vlc_preparser_req *req, int status, void *userd
     input_item_t *item = vlc_preparser_req_GetItem(req);
     assert(item != NULL && item == pp->res_msg.res.item);
 
+    if (pp->collection_status != VLC_SUCCESS) status = pp->collection_status;
     pp->res_msg.res.status = status;
     pp->status = status;
     vlc_preparser_msg_serdes_Serialize(pp->serdes, &pp->res_msg, pp->tls_out);
@@ -78,7 +80,9 @@ static void parse_OnAttachmentsAdded(struct vlc_preparser_req *req,
     for (size_t i = 0; i < count; i++) {
         assert(array[i] != NULL);
         input_attachment_t *a = vlc_input_attachment_Hold(array[i]);
-        vlc_vector_push(&pp->res_msg.res.attachments, a);
+        if (!vlc_vector_push(&pp->res_msg.res.attachments, a)) {
+            vlc_input_attachment_Release(a); pp->collection_status = VLC_ENOMEM;
+        }
     }
 }
 
@@ -94,7 +98,10 @@ static void parse_OnSubtreeAdded(struct vlc_preparser_req *req,
     input_item_t *item = vlc_preparser_req_GetItem(req);
     assert(item != NULL && item == pp->res_msg.res.item);
 
-    pp->res_msg.res.subtree = subtree;
+    if (pp->res_msg.res.subtree == NULL) pp->res_msg.res.subtree = subtree;
+    else if (!vlc_vector_push(&pp->res_msg.res.subtrees, subtree)) {
+        input_item_node_Delete(subtree); pp->collection_status = VLC_ENOMEM;
+    }
 }
 
 /****************************************************************************
@@ -168,8 +175,10 @@ preparser_req_BuildParse(vlc_preparser_t *preparser,
         .on_subtree_added = parse_OnSubtreeAdded,
     };
 
-    return vlc_preparser_req_NewParse(preparser, pp->res_msg.res.item,
-                                      pp->req_msg.req.options, &cbs, pp);
+    const int options = pp->daemon ? pp->req_msg.req.options & ~VLC_PREPARSER_TYPE_FETCHMETA_ALL
+        : pp->req_msg.req.options;
+    if (!(options & VLC_PREPARSER_TYPE_PARSE)) return NULL;
+    return vlc_preparser_req_NewParse(preparser, pp->res_msg.res.item, options, &cbs, pp);
 }
 
 static struct vlc_preparser_req *
@@ -213,9 +222,11 @@ preparser_req_Preparse(vlc_preparser_t *preparser, struct preparser *pp)
     assert(pp->req_msg.req.uri != NULL);
 
     int ret = VLC_EGENERIC;
+    pp->collection_status = VLC_SUCCESS;
     vlc_preparser_msg_Init(&pp->res_msg, VLC_PREPARSER_MSG_TYPE_RES,
                            pp->req_msg.req_type);
-    pp->res_msg.res.item = input_item_New(pp->req_msg.req.uri, NULL);
+    pp->res_msg.res.item = pp->req_msg.req.baseline != NULL
+        ? input_item_Hold(pp->req_msg.req.baseline) : input_item_New(pp->req_msg.req.uri, NULL);
     if (pp->res_msg.res.item == NULL) {
         goto end;
     }
@@ -468,7 +479,7 @@ preparser_daemon_Loop(vlc_object_t *obj, vlc_preparser_t *preparser)
         if (status != VLC_SUCCESS) {
             break;
         }
-        if (pp.req_msg.req.uri != NULL) {
+        if (pp.req_msg.type == VLC_PREPARSER_MSG_TYPE_REQ && pp.req_msg.req.uri != NULL) {
             status = preparser_req_Preparse(preparser, &pp);
         } else {
             status = VLC_EGENERIC;
@@ -541,7 +552,7 @@ int main(int argc, char **argv)
     vlc_object_t *obj = VLC_OBJECT(vlc->p_libvlc_int);
 
     const struct vlc_preparser_cfg cfg = {
-        .types = args.types,
+        .types = args.daemon ? args.types & ~VLC_PREPARSER_TYPE_FETCHMETA_ALL : args.types,
         .max_parser_threads = 1,
         .max_thumbnailer_threads = 1,
         .timeout = args.timeout,

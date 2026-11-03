@@ -19,7 +19,7 @@
  *****************************************************************************/
 
 #include "../../libvlc/test.h"
-#include "../lib/libvlc_internal.h"
+#include "../../../lib/libvlc_internal.h"
 #include "vlc_vector.h"
 
 #include <vlc_common.h>
@@ -246,11 +246,13 @@ static void test_preparser_cmp(vlc_object_t *obj, int i)
     assert(i >= 0 && i < (int)ARRAY_SIZE(test_params));
 
     char *mrl = test_create_mock(i);
-    input_item_t *inter = test_preparser(obj, mrl, VLC_TICK_INVALID, false);
-    input_item_t *exter = test_preparser(obj, mrl, VLC_TICK_INVALID, true);
+    input_item_t *inter = test_preparser(obj, mrl, 0, false);
+    input_item_t *exter = test_preparser(obj, mrl, 0, true);
     free(mrl);
 
     assert(cmp_item(inter, exter, i));
+    input_item_Release(inter);
+    input_item_Release(exter);
 }
 
 int main( void )

@@ -1,0 +1,13 @@
+{
+  "description": "A field has the object type.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "object"
+      }
+    }
+  }
+}

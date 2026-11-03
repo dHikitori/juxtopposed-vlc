@@ -29,13 +29,14 @@ inline QDateTime publicationDate(QString value)
     return date.isValid() ? date : QDateTime::fromString(value, Qt::ISODate);
 }
 
-enum class Kind { Unknown, Movie, Episode, MusicTrack, Album, Artist, Podcast, PodcastEpisode, Audiobook };
+enum class Kind { Unknown, Movie, Episode, MusicTrack, Album, Artist, Podcast, PodcastEpisode, Audiobook, Series };
 
 inline QString kindName(Kind kind)
 {
     switch (kind) {
     case Kind::Movie: return QStringLiteral("movie");
     case Kind::Episode: return QStringLiteral("episode");
+    case Kind::Series: return QStringLiteral("series");
     case Kind::MusicTrack: return QStringLiteral("musicTrack");
     case Kind::Album: return QStringLiteral("album");
     case Kind::Artist: return QStringLiteral("artist");
@@ -48,7 +49,7 @@ inline QString kindName(Kind kind)
 inline Kind kindFromName(const QString& name)
 {
     for (auto kind : {Kind::Movie, Kind::Episode, Kind::MusicTrack, Kind::Album, Kind::Artist,
-                      Kind::Podcast, Kind::PodcastEpisode, Kind::Audiobook})
+                      Kind::Podcast, Kind::PodcastEpisode, Kind::Audiobook, Kind::Series})
         if (kindName(kind).compare(name, Qt::CaseInsensitive) == 0) return kind;
     return Kind::Unknown;
 }
@@ -92,8 +93,11 @@ inline QString compact(QString value) { return normalize(value).remove(QLatin1Ch
 
 inline QString displayTitle(QString value)
 {
-    value.replace(QRegularExpression(QStringLiteral("[._]+")), QStringLiteral(" "));
-    value.remove(QRegularExpression(QStringLiteral("^[\\s\\-]+|[\\s\\-\\[(]+$")));
+    // Compiled once: these run for every file name in a series folder.
+    static const QRegularExpression separators(QStringLiteral("[._]+"));
+    static const QRegularExpression edges(QStringLiteral("^[\\s\\-]+|[\\s\\-\\[(]+$"));
+    value.replace(separators, QStringLiteral(" "));
+    value.remove(edges);
     return value.simplified();
 }
 
@@ -130,7 +134,8 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
         result.kind = hint;
         if (audioFile) name = QFileInfo(name).completeBaseName();
         // Only an explicit track prefix is removed; numeric titles remain titles.
-        const auto numbered = QRegularExpression(QStringLiteral("^(\\d{1,3})(?:[ ._-]+)(.+)$")).match(name);
+        static const QRegularExpression numberedName(QStringLiteral("^(\\d{1,3})(?:[ ._-]+)(.+)$"));
+        const auto numbered = numberedName.match(name);
         if (hint == Kind::MusicTrack && numbered.hasMatch()) {
             result.track = numbered.captured(1).toInt(); name = numbered.captured(2);
         }
@@ -139,7 +144,8 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
             result.artist = displayTitle(parts[0]); name = parts[1];
             result.provenance.insert("artist", "filename");
         }
-        if (hint == Kind::MusicTrack && QRegularExpression(QStringLiteral("^\\d{1,3}$")).match(name).hasMatch()) result.track = name.toInt();
+        static const QRegularExpression trackNumber(QStringLiteral("^\\d{1,3}$"));
+        if (hint == Kind::MusicTrack && trackNumber.match(name).hasMatch()) result.track = name.toInt();
         result.title = displayTitle(name);
         if (genericTitle(result.title)) result.title.clear();
         if (!result.title.isEmpty()) result.provenance.insert("title", "filename");
@@ -147,9 +153,10 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
     }
     // Release names need not have extensions. Do not remove arbitrary final dotted words.
     const auto originalName = name;
-    name.remove(QRegularExpression(QStringLiteral(
+    static const QRegularExpression knownExtension(QStringLiteral(
         "\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|srt|ass|ssa|vtt|sub|idx|smi|mp3|m4a|ogg|opus|flac)$"),
-        QRegularExpression::CaseInsensitiveOption));
+        QRegularExpression::CaseInsensitiveOption);
+    name.remove(knownExtension);
     const bool hasExtension = name != originalName;
     const auto insensitive = QRegularExpression::CaseInsensitiveOption;
     qsizetype end = name.size();
@@ -214,20 +221,24 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
         }
     }
 
-    const QList<QPair<QString, QString>> releasePatterns = {
-        {"resolution", "(?:480|576|720|1080|1440|2160|4320)[pi]|[48]k"},
-        {"source", "web[ .-]?(?:dl|rip)|blu[ .-]?ray|b[dr]rip|hdtv|dvdrip|dvd"},
-        {"videoCodec", "[xh][ .-]?26[45]|hevc|avc|av1|xvid|divx"},
-        {"audioCodec", "e?[ .-]?ac[ .-]?3|dts(?:[ .-]?hd)?|aac|flac|truehd|opus"},
-        {"fps", "(?:23[.]976|24|25|29[.]97|30|50|59[.]94|60)[ .-]?fps"},
-    };
+    static const auto releasePatterns = [insensitive] {
+        QList<QPair<QString, QRegularExpression>> patterns;
+        for (const auto& rule : QList<QPair<QString, QString>>{
+                 {"resolution", "(?:480|576|720|1080|1440|2160|4320)[pi]|[48]k"},
+                 {"source", "web[ .-]?(?:dl|rip)|blu[ .-]?ray|b[dr]rip|hdtv|dvdrip|dvd"},
+                 {"videoCodec", "[xh][ .-]?26[45]|hevc|avc|av1|xvid|divx"},
+                 {"audioCodec", "e?[ .-]?ac[ .-]?3|dts(?:[ .-]?hd)?|aac|flac|truehd|opus"},
+                 {"fps", "(?:23[.]976|24|25|29[.]97|30|50|59[.]94|60)[ .-]?fps"}})
+            patterns.append({rule.first, QRegularExpression("(?:^|[ ._\\[(-])(" + rule.second + ")(?=$|[ ._\\[)\\]-])", insensitive)});
+        return patterns;
+    }();
+    static const QRegularExpression fpsSuffix("[ .-]*fps$", insensitive);
     bool technical = false;
     for (const auto& rule : releasePatterns) {
-        const QRegularExpression pattern("(?:^|[ ._\\[(-])(" + rule.second + ")(?=$|[ ._\\[)\\]-])", insensitive);
-        const auto match = pattern.match(name);
+        const auto match = rule.second.match(name);
         if (match.hasMatch()) {
             result.release.insert(rule.first, rule.first == "fps"
-                ? match.captured(1).remove(QRegularExpression("[ .-]*fps$", insensitive)) : compact(match.captured(1)));
+                ? match.captured(1).remove(fpsSuffix) : compact(match.captured(1)));
             cut(match.capturedStart()); technical = true;
         }
     }
@@ -297,6 +308,7 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
     }
     const auto type = text("type");
     if (type == "movie") identity.kind = Kind::Movie;
+    if (type == "series") identity.kind = Kind::Series;
     if (!audio && (type == "episode" || !text("showName").isEmpty())) identity.kind = Kind::Episode;
     for (const auto& field : {qMakePair("artist", &identity.artist), qMakePair("albumArtist", &identity.albumArtist),
              qMakePair("album", &identity.album), qMakePair("series", &identity.series),
@@ -376,14 +388,31 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
     identity.conflicts.removeDuplicates();
 }
 
+inline bool isSourceLocator(const QUrl& url)
+{
+    return url.scheme().compare(QStringLiteral("hakone-addon-source"), Qt::CaseInsensitive) == 0
+        || url.scheme().compare(QStringLiteral("vlc-addon-source"), Qt::CaseInsensitive) == 0;
+}
+
 inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
 {
+    if (isSourceLocator(url)) {
+        // A source locator is private. Only explicit tags may enter identity.
+        auto tags = metadata;
+        for (const auto& key : {QStringLiteral("title"), QStringLiteral("showName")}) {
+            const auto value = tags.value(key).toString().trimmed();
+            const auto payload = compact(url.path());
+            if (isSourceLocator(QUrl(value)) || (!payload.isEmpty() && compact(value) == payload)) tags.remove(key);
+        }
+        Identity result; applyMetadata(result, tags); return result;
+    }
     auto result = parse(url.fileName(), kindFromName(metadata.value("type").toString()));
     auto parent = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
     auto folder = parse(parent.fileName());
     if (result.kind == Kind::MusicTrack) {
         auto albumFolder = parent;
-        const auto disc = QRegularExpression(QStringLiteral("^(?:disc|disk|cd)[ ._-]*(\\d+)$"), QRegularExpression::CaseInsensitiveOption).match(parent.fileName());
+        static const QRegularExpression discFolder(QStringLiteral("^(?:disc|disk|cd)[ ._-]*(\\d+)$"), QRegularExpression::CaseInsensitiveOption);
+        const auto disc = discFolder.match(parent.fileName());
         if (disc.hasMatch()) {
             result.disc = disc.captured(1).toInt();
             albumFolder = parent.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
@@ -437,7 +466,8 @@ inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata, bool u
         const auto series = normalize(identity.title);
         if (!series.isEmpty() && normalized.startsWith(series + QLatin1Char(' '))) {
             auto tail = normalized.mid(series.size() + 1);
-            tail.remove(QRegularExpression(QStringLiteral("^(?:episode|ep) ")));
+            static const QRegularExpression episodeWord(QStringLiteral("^(?:episode|ep) "));
+            tail.remove(episodeWord);
             bool ok = false;
             const int number = tail.toInt(&ok);
             if (ok && identity.episodes.contains(number)) return false;
@@ -452,8 +482,9 @@ inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata, bool u
     // A title after an explicit season/episode marker is useful even when the
     // file has no tags. Do not use a release suffix (1080p, WEB-DL, codecs, etc.).
     auto name = url.fileName();
-    name.remove(QRegularExpression(QStringLiteral("\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|mts|ogv|divx)$"),
-        QRegularExpression::CaseInsensitiveOption));
+    static const QRegularExpression videoExtension(QStringLiteral("\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|mts|ogv|divx)$"),
+        QRegularExpression::CaseInsensitiveOption);
+    name.remove(videoExtension);
     const auto marker = episodePattern().match(name);
     if (!marker.hasMatch()) return {};
     auto title = name.mid(marker.capturedEnd());
@@ -466,6 +497,31 @@ inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata, bool u
     if (technical.hasMatch()) title.truncate(technical.capturedStart());
     title = displayTitle(title);
     return usable(title) ? title.left(1024) : QString();
+}
+
+inline QVariantList externalIds(const Identity& identity)
+{
+    static const QMap<QString, QStringList> known{
+        {"imdb", {"imdb", "movie"}}, {"seriesImdb", {"imdb", "series"}}, {"episodeImdb", {"imdb", "episode"}},
+        {"tmdbMovie", {"tmdb", "movie"}}, {"seriesTmdb", {"tmdb", "series"}}, {"tmdbEpisode", {"tmdb", "episode"}},
+        {"seriesTvdb", {"tvdb", "series"}}, {"tvdbEpisode", {"tvdb", "episode"}},
+        {"tvmazeShow", {"tvmaze", "series"}}, {"tvmazeEpisode", {"tvmaze", "episode"}},
+        {"musicBrainzTrackId", {"musicbrainz", "track"}}, {"musicBrainzAlbumId", {"musicbrainz", "album"}},
+        {"musicBrainzArtistId", {"musicbrainz", "artist"}}};
+    static const QRegularExpression atom(QStringLiteral("^[a-z][a-z0-9._-]{0,31}$"));
+    QVariantList result;
+    for (auto it = identity.ids.cbegin(); it != identity.ids.cend(); ++it) {
+        auto scope = known.value(it.key());
+        if (scope.isEmpty()) {
+            const auto parts = it.key().split(QLatin1Char(':'));
+            if (parts.size() != 3 || parts.first() != QStringLiteral("external")
+                || !atom.match(parts[1]).hasMatch() || !atom.match(parts[2]).hasMatch()) continue;
+            scope = {parts[1], parts[2]};
+        }
+        if (it.value().isEmpty() || it.value().size() > 256) continue;
+        result.append(QVariantMap{{"namespace", scope[0]}, {"scope", scope[1]}, {"value", it.value()}});
+    }
+    return result;
 }
 
 inline QVariantMap toMap(const Identity& identity)
@@ -482,7 +538,7 @@ inline QVariantMap toMap(const Identity& identity)
         {"series", identity.series}, {"guid", identity.guid}, {"feedUrl", identity.feedUrl},
         {"track", identity.track}, {"disc", identity.disc},
         {"season", identity.season}, {"episodes", episodes}, {"absoluteEpisode", identity.absoluteEpisode},
-        {"airDate", identity.airDate.toString(Qt::ISODate)}, {"ids", ids}, {"release", release},
+        {"airDate", identity.airDate.toString(Qt::ISODate)}, {"ids", ids}, {"externalIds", externalIds(identity)}, {"release", release},
         {"provenance", provenance}, {"conflicts", identity.conflicts}};
 }
 
@@ -533,12 +589,24 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     Comparison result;
     const auto reject = [&](const QString& reason) { result.conflict = true; result.conflicts.append(reason); };
     if (target.kind != Kind::Unknown && candidate.kind != Kind::Unknown && target.kind != candidate.kind) reject("type");
-    bool idMatch = false;
+    const auto kind = target.kind != Kind::Unknown ? target.kind : candidate.kind;
     for (auto it = target.ids.cbegin(); it != target.ids.cend(); ++it) {
-        if (!candidate.ids.contains(it.key())) continue;
+        if (!candidate.ids.contains(it.key()) || it.value().isEmpty()) continue;
         if (candidate.ids.value(it.key()) != it.value()) reject(it.key());
-        else { idMatch = true; result.agreements.append(it.key()); }
+        else result.agreements.append(it.key());
     }
+    const auto agrees = [&](const QStringList& keys) {
+        return std::any_of(keys.cbegin(), keys.cend(), [&](const QString& key) { return result.agreements.contains(key); });
+    };
+    const bool movieId = kind == Kind::Movie && agrees({"imdb", "tmdbMovie"});
+    const bool seriesId = (kind == Kind::Series || kind == Kind::Episode)
+        && agrees({"seriesImdb", "seriesTmdb", "seriesTvdb", "tvmazeShow"});
+    const bool episodeId = kind == Kind::Episode
+        && agrees({"episodeImdb", "tmdbEpisode", "tvdbEpisode", "tvmazeEpisode"});
+    const bool musicId = (kind == Kind::MusicTrack && agrees({"musicBrainzTrackId"}))
+        || (kind == Kind::Album && agrees({"musicBrainzAlbumId"}))
+        || (kind == Kind::Artist && agrees({"musicBrainzArtistId"}));
+    const bool idMatch = movieId || seriesId || episodeId;
     if (target.year >= 0 && candidate.year >= 0 && target.year != candidate.year) reject("year");
     if (target.season >= 0 && candidate.season >= 0 && target.season != candidate.season) reject("season");
     if (!target.episodes.isEmpty() && !candidate.episodes.isEmpty() && target.episodes != candidate.episodes) reject("episode");
@@ -561,15 +629,20 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
         const bool series = !target.series.isEmpty() && normalize(target.series) == normalize(candidate.series);
         const bool guid = !target.guid.isEmpty() && target.guid == candidate.guid;
         const bool feed = !target.feedUrl.isEmpty() && target.feedUrl == candidate.feedUrl;
-        const bool episode = (!target.episodes.isEmpty() && target.episodes == candidate.episodes)
+        const bool numbered = !target.episodes.isEmpty() && target.episodes == candidate.episodes
+            && ((target.season < 0 && candidate.season < 0)
+                || (target.season >= 0 && target.season == candidate.season));
+        const bool episode = numbered
+            || (!target.absoluteEpisode.isEmpty() && target.absoluteEpisode == candidate.absoluteEpisode)
             || (target.airDate.isValid() && target.airDate == candidate.airDate);
-        const bool workId = result.agreements.contains("musicBrainzTrackId")
-            || (target.kind == Kind::Album && result.agreements.contains("musicBrainzAlbumId"))
-            || (target.kind == Kind::Artist && result.agreements.contains("musicBrainzArtistId"));
-        result.strong = !result.conflict && (workId || (result.exactTitle && artist)
-            || (target.kind == Kind::Podcast && feed && result.exactTitle)
-            || (target.kind == Kind::PodcastEpisode && ((guid && (feed || series)) || (series && result.exactTitle && episode))));
-        result.score = result.conflict ? 0 : workId || guid ? 120 : result.strong ? 90 : result.exactTitle ? 70 : 0;
+        // A feed or artist describes a parent. An episode also needs its own
+        // GUID, number, or publication date.
+        const bool podcastEpisode = (guid && (feed || series))
+            || ((feed || series) && result.exactTitle && episode);
+        result.strong = !result.conflict && (kind == Kind::PodcastEpisode ? podcastEpisode
+            : musicId || (result.exactTitle && artist) || (kind == Kind::Podcast && feed && result.exactTitle));
+        result.score = result.conflict ? 0 : musicId || (guid && result.strong) ? 120
+            : result.strong ? 90 : result.exactTitle ? 70 : 0;
         if (result.exactTitle) result.agreements.append("title");
         if (artist) result.agreements.append("artist");
         if (series) result.agreements.append("series");
@@ -590,13 +663,11 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     const bool date = target.airDate.isValid() && target.airDate == candidate.airDate;
     if (year) { result.score += 20; result.agreements.append("year"); }
     if (episode || absolute || date) { result.score += 30; result.agreements.append("episode"); }
-    const bool episodic = target.kind == Kind::Episode || candidate.kind == Kind::Episode;
-    // A parent series ID identifies the series, not an episode.
-    const bool workId = result.agreements.contains("imdb") || result.agreements.contains("tmdbMovie")
-        || result.agreements.contains("tmdbEpisode") || result.agreements.contains("tvdbEpisode");
-    result.strong = episodic ? (episode || absolute || date) && (result.exactTitle || idMatch || workId)
-                                && (target.year < 0 || year || idMatch)
-                            : workId || (result.exactTitle && year);
+    // A parent series ID needs episode numbering. An exact episode ID does not.
+    result.strong = kind == Kind::Episode ? episodeId || ((episode || absolute || date)
+                                && (result.exactTitle || seriesId) && (target.year < 0 || year || seriesId))
+                    : kind == Kind::Series ? seriesId || (result.exactTitle && year)
+                    : movieId || (result.exactTitle && year);
     return result;
 }
 }

@@ -10,6 +10,7 @@
 #include "util/asynctask.hpp"
 #include <QSaveFile>
 #include <vlc_preparser.h>
+#include <vlc_artwork_policy.h>
 #include <vlc_input_item.h>
 #include <QDir>
 #include <QFile>
@@ -49,11 +50,16 @@ QString usableImage(const QString& artwork)
 }
 }
 
-MLFileArtwork::MLFileArtwork(QObject* parent) : QObject(parent)
+MLFileArtwork::MLFileArtwork(QObject* parent)
+    : QObject(parent), m_watcher(this, [this](const QString& path) { watchedChanged(path); })
 {
-    const auto invalidate = [this] { clear(); emit invalidated(); };
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, invalidate);
-    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, invalidate);
+}
+void MLFileArtwork::watchedChanged(const QString& path)
+{
+    // A chosen artwork is replaced in the override folder; setSelectedArtwork
+    // already refreshes that one item.
+    if (path.startsWith(ArtworkStore::directory())) return;
+    clear(); emit invalidated();
 }
 
 void MLFileArtwork::runTask(std::function<ArtworkResult()> execute, std::function<void(const ArtworkResult&)> completed, bool persistent)
@@ -78,9 +84,31 @@ void MLFileArtwork::setSelectedArtwork(const QUrl& url, const QUrl& image)
         ArtworkResult result; result.success = ArtworkStore::save(url, image); return result;
     }, [this, url](const ArtworkResult& result) {
         const bool success = result.success;
-        if (success) { clear(); emit invalidated(); }
+        if (success) {
+            const auto mrl = ArtworkDiscovery::normalizeUrl(url).toString(QUrl::FullyEncoded);
+            const bool generate = m_requested.value(mrl, true);
+            const auto parent = QUrl(mrl).adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).toString(QUrl::FullyEncoded);
+            const bool parentRequested = m_requested.contains(parent);
+            const bool parentGenerate = m_requested.value(parent, true);
+            forget(mrl);
+            forget(parent);
+            request(url, generate);
+            if (parentRequested) request(QUrl(parent), parentGenerate);
+        }
         emit selectionFinished(url, success);
     }, true);
+}
+void MLFileArtwork::watch(const QString& path)
+{
+    // The watcher's own lists are copies; this set avoids one per result.
+    if (path.isEmpty() || m_watched.contains(path)) return;
+    m_watched.insert(path);
+    m_watcher.addPath(path);
+}
+void MLFileArtwork::forget(const QString& mrl)
+{
+    m_requested.remove(mrl); m_completed.remove(mrl); m_preferred.remove(mrl);
+    m_cached.remove(mrl); m_attempted.remove(mrl); m_folders.remove(mrl);
 }
 MLFileArtwork::~MLFileArtwork()
 {
@@ -140,8 +168,8 @@ void MLFileArtwork::clear()
         if (!m_persistentTasks.contains(task)) static_cast<ArtworkTask*>(task)->abandon();
     m_tasks = m_persistentTasks;
     m_preferred.clear(); m_completed.clear(); m_fallback.clear(); m_cached.clear(); m_metadata.clear(); m_folders.clear();
-    const auto watched = m_watcher.directories() + m_watcher.files();
-    if (!watched.isEmpty()) m_watcher.removePaths(watched);
+    m_watcher.clear();
+    m_watched.clear();
     if (m_request) {
         vlc_preparser_Cancel(m_preparser, m_request);
         vlc_preparser_req_Release(m_request);
@@ -157,6 +185,10 @@ void MLFileArtwork::clear()
 
 void MLFileArtwork::request(const QUrl& url, bool generateVideo, const QString& fallback)
 {
+    if (url.scheme().compare(QLatin1String("hakone-addon-source"), Qt::CaseInsensitive) == 0
+        || url.scheme().compare(QLatin1String("vlc-addon-source"), Qt::CaseInsensitive) == 0) {
+        emit artworkChanged(url, {}); return;
+    }
     if (!m_store || (url.scheme() != "file" && url.scheme() != "http" && url.scheme() != "https")) return;
     const auto normalized = ArtworkDiscovery::normalizeUrl(url);
     const auto mrl = normalized.toString(QUrl::FullyEncoded);
@@ -207,10 +239,10 @@ void MLFileArtwork::discover(const QString& mrl)
         if (!QUrl(mrl).isLocalFile()) { publish(mrl, result.artwork, result.source); return; }
         const QFileInfo file(QUrl(mrl).toLocalFile());
         const auto watched = result.directory ? file.absoluteFilePath() : file.absolutePath();
-        if (!m_watcher.directories().contains(watched)) m_watcher.addPath(watched);
+        watch(watched);
         if (!result.artwork.isEmpty()) {
             const auto image = QUrl::fromEncoded(result.artwork.toUtf8());
-            if (image.isLocalFile() && !m_watcher.files().contains(image.toLocalFile())) m_watcher.addPath(image.toLocalFile());
+            if (image.isLocalFile()) watch(image.toLocalFile());
             m_preferred.insert(mrl, result.artwork);
             publish(mrl, result.artwork, result.source, result.reason);
             if (!result.directory) m_store->insert(mrl, true);
@@ -338,7 +370,7 @@ void MLFileArtwork::resolveParsed(const QString& mrl, int64_t id, quint64 genera
     }, [this, mrl, id, generation](const ArtworkResult& result) {
         if (!result.artwork.isEmpty()) {
             const auto image = QUrl::fromEncoded(result.artwork.toUtf8());
-            if (image.isLocalFile() && !m_watcher.files().contains(image.toLocalFile())) m_watcher.addPath(image.toLocalFile());
+            if (image.isLocalFile()) watch(image.toLocalFile());
             publish(mrl, result.artwork, result.source, result.reason);
         } else if (m_requested.value(mrl)) generate(mrl, id, generation);
         else publish(mrl, {}, "missing");
@@ -439,7 +471,7 @@ void MLFileArtwork::startNext()
             if (status == VLC_SUCCESS) {
                 const auto item = vlc_preparser_req_GetItem(handle);
                 metadata = MediaIdentity::inputMetadata(item);
-                char* uri = input_item_GetArtURL(item);
+                char* uri = vlc_artwork_item_GetURI(item);
                 const auto url = QUrl::fromEncoded(QByteArray(uri ? uri : ""));
                 free(uri);
                 if (url.isLocalFile()) artwork = url.toString(QUrl::FullyEncoded);

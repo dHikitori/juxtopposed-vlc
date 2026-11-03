@@ -1,0 +1,9 @@
+{
+  "description": "A scene with a background and no nodes.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": []
+  }
+}

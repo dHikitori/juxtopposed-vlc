@@ -1,0 +1,502 @@
+{
+  "formatVersion": 1,
+  "id": "org.videolan.episodes",
+  "name": "Episodes",
+  "version": "1.1.0",
+  "publisher": "Hakone reference add-ons",
+  "license": "GPL-2.0-or-later",
+  "source": "https://github.com/hakone-org/addon-episodes.git",
+  "api": {
+    "addon": ">=1.0.0 <2.0.0",
+    "contracts": {
+      "ui": "^1.0.0"
+    }
+  },
+  "runtime": {
+    "kind": "wasm-message-v1",
+    "entry": "dist/addon.wasm",
+    "selfTest": true
+  },
+  "files": [
+    "addon.json",
+    "LICENSE",
+    "NOTICE.md",
+    "dist/addon.wasm",
+    "views/episodes.json",
+    "icons/episodes.svg",
+    "locales/en.json",
+    "locales/fr.json",
+    "locales/es.json",
+    "locales/ja.json",
+    "locales/zh.json",
+    "locales/ru.json"
+  ],
+  "locales": {
+    "default": "en",
+    "files": {
+      "en": "locales/en.json",
+      "fr": "locales/fr.json",
+      "es": "locales/es.json",
+      "ja": "locales/ja.json",
+      "zh": "locales/zh.json",
+      "ru": "locales/ru.json"
+    }
+  },
+  "contributions": [
+    {
+      "id": "episodes",
+      "type": "ui.panel",
+      "contract": "ui@1",
+      "hook": "player.panels@1",
+      "name": "Episodes",
+      "label": "Show the other episodes of this series",
+      "icon": "icons/episodes.svg",
+      "view": "views/episodes.json",
+      "command": "context",
+      "header": "controls",
+      "stateSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "loading",
+              "ready",
+              "none"
+            ]
+          },
+          "revision": {
+            "type": "number"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "folder",
+              "feed",
+              "none"
+            ]
+          },
+          "files": {
+            "type": "boolean"
+          },
+          "show": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "notice": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "hasNotice": {
+            "type": "boolean"
+          },
+          "season": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 9999
+          },
+          "seasonLabel": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "expanded": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "versionEpisode": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "episodes": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "number": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "mark": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "progress": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "expanded": {
+                  "type": "boolean"
+                },
+                "artwork": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "hasDescription": {
+                  "type": "boolean"
+                },
+                "versions": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "key",
+                      "label"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      "label": {
+                        "type": "string",
+                        "maxLength": 512
+                      }
+                    }
+                  }
+                },
+                "version": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "multiple": {
+                  "type": "boolean"
+                },
+                "fileLabel": {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                "hasFile": {
+                  "type": "boolean"
+                },
+                "playKey": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "playLabel": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "playEnabled": {
+                  "type": "boolean"
+                },
+                "videoKey": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "hasVideo": {
+                  "type": "boolean"
+                },
+                "sourceKey": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "hasSource": {
+                  "type": "boolean"
+                },
+                "subtitle": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "current": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 250
+          },
+          "less": {
+            "type": "boolean"
+          },
+          "showingSeasons": {
+            "type": "boolean"
+          },
+          "seasonsClosed": {
+            "type": "boolean"
+          },
+          "oneSeason": {
+            "type": "boolean"
+          },
+          "episodesShown": {
+            "type": "boolean"
+          },
+          "headerSubtitle": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "seasonRows": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "label",
+                "icon",
+                "current"
+              ],
+              "properties": {
+                "key": {
+                  "type": "integer",
+                  "minimum": -1,
+                  "maximum": 9999
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "icon": {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                "current": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "state": {
+        "status": "loading",
+        "revision": -1,
+        "kind": "none",
+        "files": false,
+        "show": "Episodes",
+        "notice": "Finding episodes…",
+        "hasNotice": true,
+        "season": -1,
+        "seasonLabel": "",
+        "more": false,
+        "expanded": "",
+        "versionEpisode": "",
+        "version": "",
+        "episodes": [],
+        "page": 0,
+        "less": false,
+        "showingSeasons": false,
+        "seasonsClosed": false,
+        "oneSeason": true,
+        "episodesShown": false,
+        "headerSubtitle": "",
+        "seasonRows": []
+      }
+    },
+    {
+      "id": "context",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Update the episode list",
+      "command": "context",
+      "operations": [
+        "context"
+      ]
+    },
+    {
+      "id": "seasons",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Show the seasons",
+      "command": "seasons",
+      "operations": [
+        "seasons"
+      ]
+    },
+    {
+      "id": "season",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Show a season",
+      "command": "season",
+      "operations": [
+        "season"
+      ],
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "season": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 9999
+          }
+        },
+        "required": [
+          "season"
+        ]
+      }
+    },
+    {
+      "id": "expand",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Open or close an episode",
+      "command": "expand",
+      "operations": [
+        "expand"
+      ],
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "open": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    {
+      "id": "more",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Show the next episodes",
+      "command": "more",
+      "operations": [
+        "more"
+      ]
+    },
+    {
+      "id": "less",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Show the previous episodes",
+      "command": "less",
+      "operations": [
+        "less"
+      ]
+    },
+    {
+      "id": "play",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Play an episode",
+      "command": "play",
+      "operations": [
+        "play"
+      ],
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "fromStart": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    {
+      "id": "source",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Open the episode source",
+      "command": "source",
+      "operations": [
+        "source"
+      ],
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    {
+      "id": "refresh",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Look for episodes again",
+      "command": "refresh",
+      "operations": [
+        "refresh"
+      ],
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "folder": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "id": "identify",
+      "type": "ui.command",
+      "contract": "ui@1",
+      "label": "Choose the series",
+      "command": "identify",
+      "operations": [
+        "identify"
+      ]
+    }
+  ],
+  "permissions": {
+    "required": {
+      "ui.contribute": {
+        "hooks": [
+          "player.panels@1"
+        ]
+      },
+      "media.siblings": {
+        "sources": [
+          "folder",
+          "feed"
+        ]
+      }
+    }
+  }
+}

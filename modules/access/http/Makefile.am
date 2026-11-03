@@ -55,3 +55,9 @@ check_PROGRAMS += hpack_test hpackenc_test \
 TESTS += hpack_test hpackenc_test \
 	h2frame_test h2output_test h2conn_test h1conn_test h1chunked_test \
 	http_msg_test http_file_test http_tunnel_test http_connmgr_test
+
+
+http_chunked_witness_test_SOURCES = access/http/chunked_witness_test.c
+http_chunked_witness_test_LDADD = libvlc_http.la
+check_PROGRAMS += http_chunked_witness_test
+TESTS += http_chunked_witness_test

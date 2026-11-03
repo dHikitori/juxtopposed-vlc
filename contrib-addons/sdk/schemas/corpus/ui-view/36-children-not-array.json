@@ -1,0 +1,14 @@
+{
+  "description": "The children value is an object.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Column",
+      "children": {
+        "type": "Text"
+      }
+    }
+  }
+}

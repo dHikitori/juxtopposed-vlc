@@ -1,0 +1,52 @@
+{
+  "description": "Boolean, integer, number and string fields with bounds, defaults and choices.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "x-hakone-restartRequired": true,
+        "title": "Enable"
+      },
+      "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50,
+        "default": 10,
+        "description": "Number of results."
+      },
+      "ratio": {
+        "type": "number",
+        "minimum": -1.5,
+        "maximum": 2.25,
+        "default": 0.5
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "fast",
+          "exact"
+        ],
+        "default": "fast",
+        "x-hakone-help": "settings.mode.help"
+      },
+      "level": {
+        "type": "integer",
+        "enum": [
+          1,
+          2,
+          3
+        ]
+      },
+      "flag": {
+        "type": "boolean",
+        "enum": [
+          true
+        ]
+      }
+    }
+  }
+}

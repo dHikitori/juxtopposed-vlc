@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "id": "org.example.discovery",
+  "name": "Example discovery",
+  "version": "0.1.0",
+  "publisher": "Example publisher",
+  "license": "GPL-2.0-or-later",
+  "source": "https://git.example.org/addon-discovery.git",
+  "api": {
+    "addon": ">=1.0.0 <2.0.0",
+    "contracts": {
+      "discovery": "^1.0.0"
+    }
+  },
+  "runtime": {
+    "kind": "wasm-message-v1",
+    "entry": "dist/addon.wasm",
+    "selfTest": true
+  },
+  "files": [
+    "addon.json",
+    "LICENSE",
+    "dist/addon.wasm"
+  ],
+  "contributions": [
+    {
+      "id": "catalogue",
+      "name": "Example catalogue",
+      "type": "discovery.source",
+      "contract": "discovery@1",
+      "mediaKinds": ["audio"],
+      "operations": ["roots", "browse", "search", "suggest", "subscribe"]
+    }
+  ],
+  "permissions": {}
+}

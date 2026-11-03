@@ -1,0 +1,10 @@
+{
+  "description": "An offline result.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "offline",
+    "data": {}
+  }
+}

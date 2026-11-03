@@ -67,6 +67,8 @@
 
 #include "libvlc.h"
 #include "instance_policy.h"
+#include "input/source_owner.h"
+#include "preparser/metadata_owner.h"
 
 #include <vlc_vlm.h>
 
@@ -93,6 +95,8 @@ libvlc_int_t * libvlc_InternalCreate( void )
 
     priv = libvlc_priv (p_libvlc);
     vlc_mutex_init(&priv->lock);
+    priv->source_owner_retiring = false;
+    priv->metadata_owner_retiring = false;
     priv->interfaces = NULL;
     priv->main_playlist = NULL;
     priv->p_vlm = NULL;
@@ -356,6 +360,9 @@ void libvlc_InternalCleanup( libvlc_int_t *p_libvlc )
 {
     libvlc_priv_t *priv = libvlc_priv (p_libvlc);
 
+    vlc_source_owner_Close(VLC_OBJECT(p_libvlc));
+    vlc_metadata_owner_Close(VLC_OBJECT(p_libvlc));
+
     /* Ask the interfaces to stop and destroy them */
     msg_Dbg( p_libvlc, "removing all interfaces" );
     intf_DestroyAll( p_libvlc );
@@ -389,6 +396,9 @@ void libvlc_InternalCleanup( libvlc_int_t *p_libvlc )
     if( priv->media_source_provider )
         vlc_media_source_provider_Delete( priv->media_source_provider );
 
+    vlc_source_owner_Forget(VLC_OBJECT(p_libvlc));
+    vlc_metadata_owner_Forget(VLC_OBJECT(p_libvlc));
+
     libvlc_InternalDialogClean( p_libvlc );
     libvlc_InternalKeystoreClean( p_libvlc );
     libvlc_InternalActionsClean( p_libvlc );
@@ -413,6 +423,10 @@ void libvlc_InternalCleanup( libvlc_int_t *p_libvlc )
  */
 void libvlc_InternalDestroy( libvlc_int_t *p_libvlc )
 {
+    vlc_source_owner_Close(VLC_OBJECT(p_libvlc));
+    vlc_metadata_owner_Close(VLC_OBJECT(p_libvlc));
+    vlc_source_owner_Forget(VLC_OBJECT(p_libvlc));
+    vlc_metadata_owner_Forget(VLC_OBJECT(p_libvlc));
     vlc_object_delete(p_libvlc);
 }
 

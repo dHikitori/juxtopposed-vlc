@@ -33,6 +33,7 @@
 #include "podcast_metadata.hpp"
 #include <cmath>
 #include "history_filter.hpp"
+#include "addon_playlist.hpp"
 #include "fs/fs.h"
 #include "fs/devicelister.h"
 
@@ -627,6 +628,11 @@ int MediaLibrary::Control( int query, va_list args )
         case VLC_ML_SET_FOLDER_PUBLIC:
         case VLC_ML_SET_FOLDER_PRIVATE:
         case VLC_ML_RESUME_BACKGROUND:
+#ifdef VLC_ML_HAS_ADDON_PLAYLIST_CAS
+        case VLC_ML_ADDON_PLAYLIST_SNAPSHOT:
+        case VLC_ML_ADDON_PLAYLIST_APPEND:
+        case VLC_ML_ADDON_SOURCE_MEDIA_PREPARE:
+#endif
         case VLC_ML_NEW_EXTERNAL_MEDIA:
         case VLC_ML_REGISTER_PODCAST:
         case VLC_ML_NEW_STREAM:
@@ -872,6 +878,11 @@ int MediaLibrary::Control( int query, va_list args )
                 return VLC_EGENERIC;
             return VLC_SUCCESS;
         }
+        case VLC_ML_ADDON_PLAYLIST_CAS_AVAILABLE:
+        case VLC_ML_ADDON_PLAYLIST_SNAPSHOT:
+        case VLC_ML_ADDON_PLAYLIST_APPEND:
+        case VLC_ML_ADDON_SOURCE_MEDIA_PREPARE:
+            return vlc::medialibrary::addonplaylist::control(*m_ml, query, args);
         case VLC_ML_PLAYLIST_INSERT:
         {
             auto priorityAccess = m_ml->acquirePriorityAccess();

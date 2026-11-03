@@ -1,0 +1,25 @@
+{
+  "description": "A waveform with gain, line width, rectangle, opacity and ID.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "waveform",
+        "points": 256,
+        "color": "theme.accent",
+        "id": "wave",
+        "gain": 1.5,
+        "lineWidth": 2,
+        "rect": [
+          0.05,
+          0.1,
+          0.9,
+          0.8
+        ],
+        "opacity": 0.75
+      }
+    ]
+  }
+}

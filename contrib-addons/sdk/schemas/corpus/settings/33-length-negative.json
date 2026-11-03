@@ -1,0 +1,14 @@
+{
+  "description": "A length limit is negative.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "string",
+        "minLength": -1
+      }
+    }
+  }
+}

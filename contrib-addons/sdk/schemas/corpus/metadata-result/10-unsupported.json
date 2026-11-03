@@ -1,0 +1,10 @@
+{
+  "description": "An unsupported result.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "unsupported",
+    "data": {}
+  }
+}

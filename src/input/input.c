@@ -58,6 +58,7 @@
 #include <vlc_renderer_discovery.h>
 #include <vlc_hash.h>
 #include <vlc_media_library.h>
+#include <vlc_input_policy.h>
 
 /*****************************************************************************
  * Local prototypes
@@ -70,12 +71,15 @@ static  int             Init    ( input_thread_t *p_input );
 static void             End     ( input_thread_t *p_input );
 static void             MainLoop( input_thread_t *p_input, bool b_interactive );
 
-static inline int ControlPop( input_thread_t *, int *, input_control_param_t *, vlc_tick_t i_deadline, bool b_postpone_seek );
+static inline int ControlPop(input_thread_t *, input_control_t *, vlc_tick_t, bool);
 static int ControlPopEarly(input_thread_t *input, int *type,
                            input_control_param_t *param);
 static void       ControlRelease( int i_type, const input_control_param_t *p_param );
 static bool       ControlIsSeekRequest( int i_type );
-static bool       Control( input_thread_t *, int, input_control_param_t );
+static bool Control(input_thread_t *, int, input_control_param_t, bool, bool *);
+static bool SessionExecute(input_thread_t *, input_control_t *);
+static void SessionRestore(input_thread_t *);
+static void QueuedControlRelease(input_control_t *);
 static void       ControlPause(input_thread_t *, vlc_tick_t, bool);
 
 static int  UpdateTitleSeekpointFromDemux( input_thread_t * );
@@ -155,12 +159,13 @@ void input_Stop( input_thread_t *p_input )
     for( size_t i = 0; i < sys->i_control; i++ )
     {
         input_control_t *ctrl = &sys->control[i];
-        ControlRelease( ctrl->i_type, &ctrl->param );
+        QueuedControlRelease(ctrl);
     }
     sys->i_control = 0;
     sys->is_stopped = true;
     vlc_cond_signal( &sys->wait_control );
     vlc_mutex_unlock( &sys->lock_control );
+    input_addon_source_Close(&sys->addon_source);
     vlc_interrupt_kill( &sys->interrupt );
 }
 
@@ -208,6 +213,20 @@ input_item_t *input_GetItem( input_thread_t *p_input )
 }
 
 #undef input_Create
+static bool InputAttachItemPolicy(input_thread_t *input, input_item_t *item, bool *admitted)
+{
+    *admitted = false;
+    char *uri = input_item_GetURI(item);
+    if (uri == NULL) return false;
+    const bool source = input_addon_source_IsURI(uri);
+    vlc_input_policy_t *policy = source ? vlc_input_policy_HoldSourceItem(item, uri)
+                                       : vlc_input_policy_HoldItem(item);
+    free(uri);
+    if (source && policy == NULL) return false;
+    const int status = policy != NULL ? vlc_input_policy_AttachObject(VLC_OBJECT(input), policy) : VLC_SUCCESS;
+    *admitted = source && status == VLC_SUCCESS;
+    vlc_input_policy_Release(policy); return status == VLC_SUCCESS;
+}
 input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
                                const struct vlc_input_thread_cfg *cfg )
 {
@@ -228,6 +247,13 @@ input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
     }
 
     input_thread_t *p_input = &priv->input;
+    input_addon_source_Init(&priv->addon_source);
+    if (!InputAttachItemPolicy(p_input, p_item, &priv->addon_source_admitted)) {
+        input_addon_source_Clean(&priv->addon_source);
+        input_source_Release(priv->master);
+        vlc_object_delete(VLC_OBJECT(p_input));
+        return NULL;
+    }
 
     char * psz_name = input_item_GetName( p_item );
     const char *type_str;
@@ -278,6 +304,13 @@ input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
     priv->b_recording = false;
     priv->b_pause_after_buffering = false;
     priv->rate = 1.f;
+    priv->session_rate = NULL;
+    priv->session_scope = (struct vlc_addon_session_input_scope) { 0 };
+    if (cfg->type == INPUT_TYPE_PLAYBACK && cfg->session_scope != NULL
+     && cfg->session_scope->state != NULL) {
+        priv->session_scope = *cfg->session_scope;
+        vlc_addon_session_state_Hold(priv->session_scope.state);
+    }
     TAB_INIT( priv->i_attachment, priv->attachment );
     priv->p_sout   = NULL;
     priv->b_out_pace_control = priv->type == INPUT_TYPE_THUMBNAILING;
@@ -369,6 +402,7 @@ input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
 static void Destroy(input_thread_t *input)
 {
     input_thread_private_t *priv = input_priv(input);
+    input_addon_source_Clean(&priv->addon_source);
 
 #ifndef NDEBUG
     char *name = input_item_GetName(priv->p_item);
@@ -394,9 +428,11 @@ static void Destroy(input_thread_t *input)
     {
         input_control_t *ctrl = &priv->control[i];
 
-        ControlRelease(ctrl->i_type, &ctrl->param);
+        QueuedControlRelease(ctrl);
     }
 
+    vlc_addon_session_token_Release(priv->session_rate);
+    vlc_addon_session_scope_Release(&priv->session_scope);
     vlc_object_delete(VLC_OBJECT(input));
 }
 
@@ -658,10 +694,9 @@ static void MainLoop( input_thread_t *p_input, bool b_interactive )
     {
         /* A thumbnail input stops at its first decoded picture. Apply its
          * queued seek before demuxing, so that picture is from the target. */
-        int type;
-        input_control_param_t param;
-        while (ControlPop(p_input, &type, &param, vlc_tick_now(), false) == VLC_SUCCESS)
-            Control(p_input, type, param);
+        input_control_t control;
+        while (ControlPop(p_input, &control, vlc_tick_now(), false) == VLC_SUCCESS)
+            SessionExecute(p_input, &control);
     }
     else if( b_interactive && var_InheritBool( p_input, "start-paused" ) )
         ControlPause(p_input, vlc_tick_now(), true);
@@ -740,7 +775,15 @@ static void MainLoop( input_thread_t *p_input, bool b_interactive )
         /* Handle control */
         for( ;; )
         {
+            SessionRestore(p_input);
             vlc_tick_t i_deadline = i_wakeup;
+            input_thread_private_t *session_priv = input_priv(p_input);
+            if (session_priv->session_rate != NULL) {
+                vlc_tick_t rate_deadline = vlc_addon_session_token_NextDeadline(
+                    session_priv->session_rate, &session_priv->session_scope, vlc_tick_now());
+                if (rate_deadline != VLC_TICK_MAX && (i_deadline < 0 || rate_deadline < i_deadline))
+                    i_deadline = rate_deadline;
+            }
 
             /* Postpone seeking until ES buffering is complete or at most
              * 125 ms. */
@@ -758,19 +801,18 @@ static void MainLoop( input_thread_t *p_input, bool b_interactive )
                     b_postpone = false;
             }
 
-            int i_type;
-            input_control_param_t param;
-
-            if( ControlPop( p_input, &i_type, &param, i_deadline, b_postpone ) )
+            input_control_t control;
+            if (ControlPop(p_input, &control, i_deadline, b_postpone))
             {
+                SessionRestore(p_input);
                 if( b_postpone )
                     continue;
                 break; /* Wake-up time reached */
             }
 
-            if( Control( p_input, i_type, param ) )
+            if (SessionExecute(p_input, &control))
             {
-                if( ControlIsSeekRequest( i_type ) )
+                if (ControlIsSeekRequest(control.i_type))
                     i_last_seek_mdate = vlc_tick_now();
                 i_intf_update = 0;
             }
@@ -866,6 +908,7 @@ static void InitProperties( input_thread_t *input )
     {
         vlc_mutex_lock( &priv->p_item->lock );
         priv->p_item->i_type = input_type;
+        vlc_item_parse_TouchLocked(priv->p_item, VLC_ITEM_PARSE_TYPE);
         vlc_mutex_unlock( &priv->p_item->lock );
     }
 }
@@ -1113,6 +1156,7 @@ static void LoadSlaves( input_thread_t *p_input )
     {
         if (p_item->pp_slaves[i]->i_priority == SLAVE_PRIORITY_FOLDER_RULE)
         {
+            vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_SLAVES);
             input_item_slave_Delete(p_item->pp_slaves[i]);
             TAB_ERASE(p_item->i_slaves, p_item->pp_slaves, i);
         }
@@ -1175,6 +1219,7 @@ static void LoadSlaves( input_thread_t *p_input )
     vlc_mutex_lock( &p_item->lock );
 
     /* Move item slaves to local pp_slaves */
+    if (p_item->i_slaves != 0) vlc_item_parse_TouchLocked(p_item, VLC_ITEM_PARSE_SLAVES);
     for( int i = 0; i < p_item->i_slaves; i++ )
     {
         input_item_slave_t *p_slave = p_item->pp_slaves[i];
@@ -1379,15 +1424,16 @@ static int Init( input_thread_t * p_input )
         input_control_param_t param;
         if (ControlPopEarly(p_input, &type, &param))
             break;
-        Control(p_input, type, param);
+        Control(p_input, type, param, false, NULL);
     }
 
     /* */
     master = priv->master;
     if( master == NULL )
         goto error;
-    int ret = InputSourceInit( master, p_input, priv->p_item->psz_uri,
-                               NULL, false );
+    char *master_uri = input_item_GetURI(priv->p_item);
+    int ret = master_uri != NULL ? InputSourceInit(master, p_input, master_uri, NULL, false) : VLC_ENOMEM;
+    free(master_uri);
     if( ret != VLC_SUCCESS )
     {
         InputSourceDestroy( master );
@@ -1455,6 +1501,7 @@ static int Init( input_thread_t * p_input )
     return VLC_SUCCESS;
 
 error:
+    input_addon_source_Close(&priv->addon_source);
     input_ChangeState( p_input, ERROR_S, VLC_TICK_INVALID );
 
     if( input_priv(p_input)->p_es_out )
@@ -1486,6 +1533,7 @@ error:
 static void End( input_thread_t * p_input )
 {
     input_thread_private_t *priv = input_priv(p_input);
+    input_addon_source_Close(&priv->addon_source);
 
     /* We are at the end */
     input_ChangeState( p_input, END_S, VLC_TICK_INVALID );
@@ -1590,17 +1638,11 @@ static size_t ControlGetReducedIndexLocked( input_thread_t *p_input,
 /*****************************************************************************
  * Control
  *****************************************************************************/
-int input_ControlPush( input_thread_t *p_input,
-                       int i_type, const input_control_param_t *p_param )
+static int ControlPush(input_thread_t *p_input, input_control_t c)
 {
     input_thread_private_t *sys = input_priv(p_input);
-
-    vlc_mutex_lock( &sys->lock_control );
-    input_control_t c = {
-        .i_type = i_type,
-    };
-    if( p_param )
-        c.param = *p_param;
+    vlc_mutex_lock(&sys->lock_control);
+    const int i_type = c.i_type;
 
     size_t i_next_control_idx = ControlGetReducedIndexLocked( p_input, &c );
 
@@ -1612,12 +1654,13 @@ int input_ControlPush( input_thread_t *p_input,
         else
             msg_Err( p_input, "input control fifo overflow, trashing type=%d",
                      i_type );
-        if( p_param )
-            ControlRelease( i_type, p_param );
+        QueuedControlRelease(&c);
         vlc_mutex_unlock( &sys->lock_control );
         return VLC_EGENERIC;
     }
 
+    if (i_next_control_idx < sys->i_control)
+        QueuedControlRelease(&sys->control[i_next_control_idx]);
     sys->control[i_next_control_idx] = c;
     sys->i_control = i_next_control_idx + 1;
 
@@ -1626,45 +1669,93 @@ int input_ControlPush( input_thread_t *p_input,
     return VLC_SUCCESS;
 }
 
-static inline int ControlPop( input_thread_t *p_input,
-                              int *pi_type, input_control_param_t *p_param,
-                              vlc_tick_t i_deadline, bool b_postpone_seek )
+int input_ControlPush(input_thread_t *input, int type, const input_control_param_t *param)
 {
-    input_thread_private_t *p_sys = input_priv(p_input);
+    input_control_t control = { .i_type = type };
+    if (param != NULL)
+        control.param = *param;
+    return ControlPush(input, control);
+}
 
-    vlc_mutex_lock( &p_sys->lock_control );
-    while( p_sys->i_control <= 0 ||
-           ( b_postpone_seek && ControlIsSeekRequest( p_sys->control[0].i_type ) ) )
-    {
-        if( p_sys->is_stopped )
-        {
-            vlc_mutex_unlock( &p_sys->lock_control );
+void input_SessionWake(input_thread_t *input)
+{
+    input_thread_private_t *priv = input_priv(input);
+    vlc_mutex_lock(&priv->lock_control);
+    vlc_cond_signal(&priv->wait_control);
+    vlc_mutex_unlock(&priv->lock_control);
+}
+
+int input_ControlPushSession(input_thread_t *input,
+    const struct vlc_addon_session_action *action, vlc_addon_session_token *token)
+{
+    input_control_t control = { .session = token, .session_action = *action };
+    switch (action->operation) {
+        case VLC_ADDON_SESSION_PLAY:
+        case VLC_ADDON_SESSION_PAUSE:
+            control.i_type = INPUT_CONTROL_SET_STATE;
+            control.param.val.i_int = action->operation == VLC_ADDON_SESSION_PLAY ? PLAYING_S : PAUSE_S;
+            break;
+        case VLC_ADDON_SESSION_SEEK:
+            control.i_type = INPUT_CONTROL_SET_TIME;
+            control.param.time.i_val = action->parameters.seek_time;
+            control.param.time.b_fast_seek = false;
+            break;
+        case VLC_ADDON_SESSION_TEMPORARY_RATE:
+            control.i_type = INPUT_CONTROL_SET_RATE;
+            control.param.val.f_float = action->parameters.rate.value;
+            break;
+        default:
+            vlc_addon_session_token_Release(token);
+            return VLC_EINVAL;
+    }
+    return ControlPush(input, control);
+}
+
+static void QueuedControlRelease(input_control_t *control)
+{
+    ControlRelease(control->i_type, &control->param);
+    vlc_addon_session_token_Release(control->session);
+}
+
+static inline int ControlPop(input_thread_t *input, input_control_t *control,
+                             vlc_tick_t deadline, bool postpone_seek)
+{
+    input_thread_private_t *priv = input_priv(input);
+    vlc_mutex_lock(&priv->lock_control);
+    for (;;) {
+        if (priv->is_stopped) {
+            vlc_mutex_unlock(&priv->lock_control);
             return VLC_EGENERIC;
         }
-
-        if( i_deadline >= 0 )
-        {
-            if( vlc_cond_timedwait( &p_sys->wait_control, &p_sys->lock_control,
-                                    i_deadline ) )
-            {
-                vlc_mutex_unlock( &p_sys->lock_control );
+        // Prune stale remote seeks before they can postpone later local input.
+        while (priv->i_control > 0 && priv->control[0].session != NULL
+            && !vlc_addon_session_token_Valid(priv->control[0].session,
+                                             &priv->session_scope, vlc_tick_now())) {
+            QueuedControlRelease(&priv->control[0]);
+            --priv->i_control;
+            memmove(&priv->control[0], &priv->control[1], sizeof(*priv->control) * priv->i_control);
+        }
+        if (priv->i_control > 0 && !(postpone_seek && ControlIsSeekRequest(priv->control[0].i_type)))
+            break;
+        // A wake can request rate cleanup without a spare FIFO slot.
+        if (priv->session_rate != NULL
+         && vlc_addon_session_token_NextDeadline(priv->session_rate,
+             &priv->session_scope, vlc_tick_now()) <= vlc_tick_now()) {
+            vlc_mutex_unlock(&priv->lock_control);
+            return VLC_EGENERIC;
+        }
+        if (deadline >= 0) {
+            if (vlc_cond_timedwait(&priv->wait_control, &priv->lock_control, deadline)) {
+                vlc_mutex_unlock(&priv->lock_control);
                 return VLC_EGENERIC;
             }
-        }
-        else
-            vlc_cond_wait( &p_sys->wait_control, &p_sys->lock_control );
+        } else
+            vlc_cond_wait(&priv->wait_control, &priv->lock_control);
     }
-
-    /* */
-    *pi_type = p_sys->control[0].i_type;
-    *p_param   = p_sys->control[0].param;
-
-    p_sys->i_control --;
-    if( p_sys->i_control > 0 )
-        memmove( &p_sys->control[0], &p_sys->control[1],
-                 sizeof(*p_sys->control) * p_sys->i_control );
-    vlc_mutex_unlock( &p_sys->lock_control );
-
+    *control = priv->control[0];
+    --priv->i_control;
+    memmove(&priv->control[0], &priv->control[1], sizeof(*priv->control) * priv->i_control);
+    vlc_mutex_unlock(&priv->lock_control);
     return VLC_SUCCESS;
 }
 static bool ControlIsSeekRequest( int i_type )
@@ -1720,6 +1811,7 @@ static int ControlPopEarly(input_thread_t *input, int *type,
     {
         if (ControlTypeIsEarly(sys->control[i].i_type))
         {
+            assert(sys->control[i].session == NULL);
             *type = sys->control[i].i_type;
             *param = sys->control[i].param;
 
@@ -2142,13 +2234,95 @@ static void SeekFramePrevious(input_thread_t *input, vlc_tick_t pts,
     });
 }
 
-static bool Control( input_thread_t *p_input,
-                     int i_type, input_control_param_t param )
+static void SessionCompleted(input_thread_t *input)
+{
+    input_thread_private_t *priv = input_priv(input);
+    struct vlc_input_event event = { .type = INPUT_EVENT_ADDON_SESSION };
+    vlc_addon_session_state_Snapshot(priv->session_scope.state, &event.addon_session);
+    const struct vlc_addon_session_stamp *stamp = &event.addon_session.stamp;
+    if (stamp->owner.high == priv->session_scope.owner.high
+     && stamp->owner.low == priv->session_scope.owner.low
+     && stamp->media_generation == priv->session_scope.media_generation
+     && stamp->input_generation == priv->session_scope.input_generation
+     && event.addon_session.input)
+        input_SendEvent(input, &event);
+}
+
+static bool SessionExecute(input_thread_t *input, input_control_t *control)
+{
+    input_thread_private_t *priv = input_priv(input);
+    vlc_addon_session_token *token = control->session;
+    if (token == NULL)
+        return Control(input, control->i_type, control->param, false, NULL);
+
+    struct vlc_addon_session_action actual = { .operation = VLC_ADDON_SESSION_OTHER };
+    switch (control->i_type) {
+        case INPUT_CONTROL_SET_STATE:
+            if (control->param.val.i_int == PLAYING_S)
+                actual.operation = VLC_ADDON_SESSION_PLAY;
+            else if (control->param.val.i_int == PAUSE_S)
+                actual.operation = VLC_ADDON_SESSION_PAUSE;
+            break;
+        case INPUT_CONTROL_SET_TIME:
+            actual.operation = VLC_ADDON_SESSION_SEEK;
+            actual.parameters.seek_time = control->param.time.i_val;
+            break;
+        case INPUT_CONTROL_SET_RATE:
+            actual.operation = VLC_ADDON_SESSION_TEMPORARY_RATE;
+            actual.parameters.rate.value = control->param.val.f_float;
+            actual.parameters.rate.duration = control->session_action.parameters.rate.duration;
+            break;
+    }
+    if ((actual.operation == VLC_ADDON_SESSION_SEEK && (!priv->master->b_can_seek || priv->b_recording))
+     || (actual.operation == VLC_ADDON_SESSION_PAUSE
+      && !priv->master->b_can_pause && priv->master->b_can_pace_control)
+     || !vlc_addon_session_token_Begin(token, &priv->session_scope, &actual, vlc_tick_now())) {
+        QueuedControlRelease(control);
+        return false;
+    }
+    bool success = false;
+    const bool changed = Control(input, control->i_type, control->param, true, &success);
+    if (actual.operation == VLC_ADDON_SESSION_TEMPORARY_RATE) {
+        vlc_addon_session_token_CompleteRate(token, success, priv->rate);
+        if (vlc_addon_session_token_RateOwned(token, &priv->session_scope)) {
+            vlc_addon_session_token_Hold(token);
+            vlc_addon_session_token_Release(priv->session_rate);
+            priv->session_rate = token;
+        }
+    } else
+        vlc_addon_session_token_Complete(token, success);
+    SessionCompleted(input);
+    vlc_addon_session_token_Release(token);
+    return changed;
+}
+
+static void SessionRestore(input_thread_t *input)
+{
+    input_thread_private_t *priv = input_priv(input);
+    vlc_addon_session_token *token = priv->session_rate;
+    if (token == NULL)
+        return;
+    float base;
+    if (vlc_addon_session_token_BeginRateRestore(token, &priv->session_scope, vlc_tick_now(), &base)) {
+        input_control_param_t param = { .val.f_float = base };
+        Control(input, INPUT_CONTROL_SET_RATE, param, false, NULL);
+        vlc_addon_session_token_CompleteRateRestore(token, priv->rate == base, vlc_tick_now());
+        SessionCompleted(input);
+    }
+    if (!vlc_addon_session_token_RateOwned(token, &priv->session_scope)) {
+        priv->session_rate = NULL;
+        vlc_addon_session_token_Release(token);
+    }
+}
+
+static bool Control(input_thread_t *p_input, int i_type, input_control_param_t param,
+                    bool remote, bool *success)
 {
     input_thread_private_t *priv = input_priv(p_input);
     const vlc_tick_t i_control_date = vlc_tick_now();
     /* FIXME b_force_update is abused, it should be carefully checked */
     bool b_force_update = false;
+    bool action_success = false;
 
 #ifndef NDEBUG
     msg_Dbg( p_input, "control type=%d", i_type );
@@ -2196,6 +2370,7 @@ static bool Control( input_thread_t *p_input,
             int i_ret = ControlSetTime( p_input, param.time.i_val,
                                         param.time.b_fast_seek );
 
+            action_success = i_ret == VLC_SUCCESS;
             if( i_ret )
                 msg_Warn( p_input, "INPUT_CONTROL_SET_TIME @%"PRId64
                           " failed or not possible", param.time.i_val );
@@ -2208,7 +2383,7 @@ static bool Control( input_thread_t *p_input,
             switch( param.val.i_int )
             {
                 case PLAYING_S:
-                    if( priv->i_state == PAUSE_S )
+                    if (priv->i_state == PAUSE_S || (remote && priv->b_pause_after_buffering))
                     {
                         ResetFramePrevious( p_input );
                         priv->next_frame_need_data = false;
@@ -2219,13 +2394,21 @@ static bool Control( input_thread_t *p_input,
                 case PAUSE_S:
                     if( priv->i_state == PLAYING_S )
                     {
+                        // A remote token cannot own a deferred pause after it
+                        // completes. Keep the native buffer/clock rule.
+                        if (remote && priv->master->b_can_pause
+                         && es_out_GetBuffering(priv->p_es_out))
+                            break;
                         ControlPause(p_input, i_control_date, true);
+                        if (remote && priv->i_state != PAUSE_S)
+                            ControlUnpause(p_input, i_control_date);
                         b_force_update = true;
                     }
                     break;
                 default:
                     msg_Err( p_input, "invalid INPUT_CONTROL_SET_STATE" );
             }
+            action_success = priv->i_state == param.val.i_int;
             break;
 
         case INPUT_CONTROL_SET_RATE:
@@ -2297,6 +2480,7 @@ static bool Control( input_thread_t *p_input,
 
                 b_force_update = true;
             }
+            action_success = priv->rate == param.val.f_float;
             break;
         }
 
@@ -2678,7 +2862,9 @@ static bool Control( input_thread_t *p_input,
             break;
     }
 
-    ControlRelease( i_type, &param );
+    ControlRelease(i_type, &param);
+    if (success != NULL)
+        *success = action_success;
     return b_force_update;
 }
 
@@ -2900,7 +3086,26 @@ static input_source_t *InputSourceNew( const char *psz_mrl )
     return in;
 }
 
+static int InputSourceInitResolved( input_source_t *in, input_thread_t *p_input,
+                            const char *psz_mrl,
+                            const char *psz_forced_demux, bool b_in_can_fail );
 static int InputSourceInit( input_source_t *in, input_thread_t *p_input,
+                            const char *psz_mrl,
+                            const char *psz_forced_demux, bool b_in_can_fail )
+{
+    if (!input_addon_source_IsURI(psz_mrl))
+        return InputSourceInitResolved(in, p_input, psz_mrl, psz_forced_demux, b_in_can_fail);
+    input_thread_private_t *priv = input_priv(p_input);
+    const bool primary_playback = in == priv->master && priv->type == INPUT_TYPE_PLAYBACK
+        && priv->addon_source_admitted;
+    char *proxy = NULL;
+    int status = input_addon_source_Resolve(&priv->addon_source, VLC_OBJECT(p_input), priv->p_item,
+        psz_mrl, primary_playback, VLC_TICK_FROM_SEC(10), &proxy);
+    if (status != VLC_SUCCESS) return status;
+    status = InputSourceInitResolved(in, p_input, proxy, psz_forced_demux, b_in_can_fail);
+    free(proxy); return status;
+}
+static int InputSourceInitResolved( input_source_t *in, input_thread_t *p_input,
                             const char *psz_mrl,
                             const char *psz_forced_demux, bool b_in_can_fail )
 {
@@ -2927,8 +3132,11 @@ static int InputSourceInit( input_source_t *in, input_thread_t *p_input,
     if( psz_demux == NULL )
         psz_demux = "any";
 
-    msg_Dbg( p_input, "`%s' gives access `%s' demux `%s' path `%s'",
-             psz_mrl, psz_access, psz_demux, psz_path );
+    if (vlc_input_policy_Has(VLC_OBJECT(p_input)))
+        msg_Dbg(p_input, "The input uses a source policy.");
+    else
+        msg_Dbg( p_input, "`%s' gives access `%s' demux `%s' path `%s'",
+                 psz_mrl, psz_access, psz_demux, psz_path );
 
     if( master /* XXX ugly */)
     {   /* On master stream only, use input-list */

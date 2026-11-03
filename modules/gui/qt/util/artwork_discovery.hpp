@@ -7,11 +7,16 @@
 
 // Filesystem conventions and ownership, independent of playback, UI and providers.
 namespace ArtworkDiscovery {
+inline const QRegularExpression& driveRoot()
+{
+    static const QRegularExpression pattern(QStringLiteral("^/[A-Za-z]:/$"));
+    return pattern;
+}
 inline QUrl normalizeUrl(const QUrl& url)
 {
     auto result = url.adjusted(QUrl::NormalizePathSegments);
     if (result.isLocalFile() && result.path() != "/"
-        && !QRegularExpression(QStringLiteral("^/[A-Za-z]:/$")).match(result.path()).hasMatch())
+        && !driveRoot().match(result.path()).hasMatch())
         result = result.adjusted(QUrl::StripTrailingSlash);
     return result;
 }

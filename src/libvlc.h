@@ -178,6 +178,8 @@ typedef struct libvlc_priv_t
 
     /* Singleton objects */
     vlc_mutex_t lock; ///< protect playlist and interfaces
+    bool source_owner_retiring; ///< source owner_lock protects this flag
+    bool metadata_owner_retiring; ///< metadata owner_lock protects this flag
     vlm_t             *p_vlm;  ///< the VLM singleton (or NULL)
     vlc_dialog_provider *p_dialog_provider; ///< dialog provider
     vlc_keystore      *p_memory_keystore; ///< memory keystore

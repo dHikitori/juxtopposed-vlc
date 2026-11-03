@@ -39,6 +39,7 @@
 #include <cstdlib>
 
 #include <vlc_common.h>
+#include <vlc_input_policy.h>
 #include <vlc_arrays.h>
 #include <vlc_plugin.h>
 #include <vlc_input.h>
@@ -340,6 +341,7 @@ static bool copyExtradata( const void *p_extra, size_t i_extra, es_format_t *dst
  *****************************************************************************/
 static int  Open ( vlc_object_t *p_this )
 {
+    if (vlc_input_policy_Has(p_this)) return VLC_EGENERIC;
     demux_t     *p_demux = (demux_t*)p_this;
     demux_sys_t *p_sys = NULL;
 

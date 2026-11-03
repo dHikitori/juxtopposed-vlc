@@ -212,6 +212,7 @@ TestCase {
         trackPicker.parent = testCase
         trackPicker.x = 20; trackPicker.y = 20
         trackPicker.page = "subtitles"
+        trackPicker.deviceRefreshInterval = 2000
         tracks.clear()
         tracks.append({display:"English", displayLabel:"", checked:true, external:false, sourceName:"", sourceUri:""})
         tracks.append({display:"Japanese", displayLabel:"", checked:false, external:false, sourceName:"", sourceUri:""})
@@ -522,18 +523,19 @@ TestCase {
         compare(settingSpy.count, 0)
     }
     function test_deviceListRefreshesOnlyWhileAudioIsOpen() {
+        trackPicker.deviceRefreshInterval = 100
         trackPicker.page = "audio"
         trackPicker.open()
         tryCompare(trackPicker, "opened", true)
         compare(tracks.refreshCount, 1)
-        tryVerify(() => tracks.refreshCount >= 2, 2500)
+        tryVerify(() => tracks.refreshCount >= 3, 1000)
         trackPicker.page = "subtitles"
         const before = tracks.refreshCount
-        wait(2100)
+        wait(350)
         compare(tracks.refreshCount, before)
         trackPicker.close()
         trackPicker.page = "audio"
-        wait(2100)
+        wait(350)
         compare(tracks.refreshCount, before)
     }
     function test_externalTracksKeepTheirOriginalSelectionIndex() {
@@ -1223,12 +1225,13 @@ TestCase {
         mouseRelease(testCase, 600, 400)
     }
     function test_audioAfterVideoRestoresHiddenControls() {
+        player.controlsHideTimeout = 50
         player.fullscreen = true
         player.autoHideMode = 2
         player.forceActiveFocus()
         mouseMove(player, player.width / 2, player.height / 2)
-        wait(1900)
-        verify(!player.bottomVisible)
+        tryCompare(player, "bottomVisible", false)
+        player.controlsHideTimeout = 1800
         player.hasVideo = false
         tryCompare(player, "bottomVisible", true)
         player.hasVideo = true
@@ -1293,12 +1296,13 @@ TestCase {
         player.resumeAvailable = false
     }
     function test_fullscreenUsesIndependentEdges() {
+        player.controlsHideTimeout = 50
         player.fullscreen = true
         player.forceActiveFocus()
         mouseMove(player, player.width / 2, player.height / 2)
-        wait(1900)
+        tryCompare(player, "bottomVisible", false)
         verify(!player.topVisible)
-        verify(!player.bottomVisible)
+        player.controlsHideTimeout = 1800
         mouseMove(player, player.width / 2, 2)
         tryCompare(player, "topVisible", true)
         verify(!player.bottomVisible)
@@ -1344,11 +1348,12 @@ TestCase {
     }
     function test_fullscreenTimelineBoundaryDoesNotFlicker(data) {
         consumeVideoHover = data.videoHover
+        player.controlsHideTimeout = 50
         player.fullscreen = true
         player.forceActiveFocus()
         mouseMove(player, player.width / 2, player.height / 2)
-        wait(1900)
-        verify(!player.bottomVisible)
+        tryCompare(player, "bottomVisible", false)
+        player.controlsHideTimeout = 1800
         const seek = findChild(player, "seekBar")
         verify(seek)
         mouseMove(player, player.width / 2, player.height - 2)
@@ -1366,6 +1371,7 @@ TestCase {
         }
         compare(toolbarVisibilitySpy.count, 0)
         verify(player.bottomVisible)
+        player.controlsHideTimeout = 50
         mouseClick(findChild(player, "playButton"))
         verify(player.playing)
         player.forceActiveFocus()

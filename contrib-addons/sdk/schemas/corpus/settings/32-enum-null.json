@@ -1,0 +1,17 @@
+{
+  "description": "A field choice is null.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "string",
+        "enum": [
+          "a",
+          null
+        ]
+      }
+    }
+  }
+}

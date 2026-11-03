@@ -23,6 +23,7 @@
 
 #include "qt.hpp"
 #include "mlthreadpool.hpp"
+#include "mljoinedthreadrunner.hpp"
 #include "mlqmltypes.hpp"
 
 namespace vlc {
@@ -218,6 +219,9 @@ signals:
     void idleChanged();
 
 private:
+    struct NativeTask;
+    std::shared_ptr<NativeTask> nativeTask() const;
+    static void invokeNativeTask(const std::shared_ptr<NativeTask>&, const std::function<void(vlc_medialibrary_t*)>&);
     void saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles,
                                  const QVariantMap& rule, QJSValue callback);
     enum class MediaStateAction { Read, Ensure, Played, Favorite };
@@ -239,6 +243,7 @@ private:
     vlc_medialibrary_t* m_ml;
     std::unique_ptr<vlc_ml_event_callback_t, std::function<void(vlc_ml_event_callback_t*)>> m_event_cb;
     ThreadRunner* m_runner = nullptr;
+    MLJoinedThreadRunner* m_addonRunner = nullptr;
 
     quint64 m_trackMatchTask = 0;
     std::shared_ptr<std::atomic_bool> m_trackMatchCancelled;
@@ -251,5 +256,11 @@ quint64 MediaLib::runOnMLThread(const QObject* obj,
                                     std::function<void (quint64 taskId, Ctx&)> uiFun,
                                     const char* queue)
 {
-    return m_runner->runOnThread<Ctx>(obj, [ml = m_ml, mlFun](Ctx& ctx){mlFun(ml,ctx);}, uiFun, queue);
+    const auto task=nativeTask(); if (!task) return 0;
+    auto work=[task,mlFun](Ctx& ctx) {
+        invokeNativeTask(task,[&](vlc_medialibrary_t* ml) { mlFun(ml,ctx); });
+    };
+    if (queue && qstrcmp(queue,"addon-native-library")==0)
+        return m_addonRunner->runOnThread<Ctx>(obj,std::move(work),std::move(uiFun));
+    return m_runner->runOnThread<Ctx>(obj,std::move(work),std::move(uiFun),queue);
 }

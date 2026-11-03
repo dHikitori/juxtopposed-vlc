@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
-#include <QAbstractListModel>
-#include <QFileSystemWatcher>
+#include <QObject>
+#include <QDateTime>
+#include <QSet>
+#include "util/background_watcher.hpp"
 #include <QTimer>
 #include <memory>
 #include "util/series_discovery.hpp"
@@ -16,9 +18,10 @@ signals:
     void ready(quint64 serial, const SeriesDiscovery::Result& result, bool complete);
 };
 
-// A common season projection for local files and already-parsed RSS episodes.
-// Playback, RSS parsing and artwork stay in the existing application adapters.
-class SeriesModel : public QAbstractListModel
+// The other episodes of the playing media, from local files or already-parsed
+// RSS episodes, for the media.siblings projection. Playback, RSS parsing and
+// artwork stay in the existing application adapters.
+class SeriesModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool available READ available NOTIFY contextChanged FINAL)
@@ -28,12 +31,7 @@ class SeriesModel : public QAbstractListModel
     Q_PROPERTY(QString showTitle READ showTitle NOTIFY contextChanged FINAL)
     Q_PROPERTY(QUrl feed READ feed NOTIFY contextChanged FINAL)
     Q_PROPERTY(QUrl folder READ folder NOTIFY statusChanged FINAL)
-    Q_PROPERTY(QVariantList seasons READ seasons NOTIFY seasonsChanged FINAL)
-    Q_PROPERTY(int selectedSeason READ selectedSeason WRITE setSelectedSeason NOTIFY selectedSeasonChanged FINAL)
-    Q_PROPERTY(int currentSeason READ currentSeason NOTIFY contextChanged FINAL)
-    Q_PROPERTY(int count READ rowCount NOTIFY countChanged FINAL)
 public:
-    enum Role { Title = Qt::UserRole + 1, Number, Description, Thumbnail, Urls, Current, CurrentVersion, Progress, Played, FeedIndex, VideoEpisode, TitleSource };
     explicit SeriesModel(QObject* parent = nullptr);
     ~SeriesModel() override;
     bool available() const;
@@ -43,13 +41,6 @@ public:
     QString showTitle() const;
     QUrl feed() const { return QUrl(m_target.feedUrl); }
     QUrl folder() const { return m_root; }
-    QVariantList seasons() const { return m_seasons; }
-    int selectedSeason() const { return m_selectedSeason; }
-    int currentSeason() const { return m_target.season; }
-    void setSelectedSeason(int season);
-    int rowCount(const QModelIndex& parent = {}) const override;
-    QVariant data(const QModelIndex& index, int role) const override;
-    QHash<int, QByteArray> roleNames() const override;
     Q_INVOKABLE void setCurrent(const QUrl& url, const QVariantMap& metadata);
     Q_INVOKABLE void refresh(const QUrl& folder = {});
     Q_INVOKABLE void setFeedEpisodes(const QUrl& feed, const QVariantList& episodes);
@@ -57,16 +48,30 @@ public:
     Q_INVOKABLE void setProgress(const QUrl& url, qreal progress);
     Q_INVOKABLE void setPlayed(const QUrl& url, bool played);
     Q_INVOKABLE void setArtwork(const QUrl& url, const QString& artwork);
-    Q_INVOKABLE void requestDetails(int row);
     Q_INVOKABLE void setEpisodeTitle(const QUrl& url, const QString& title, const QUrl& source = {});
     Q_INVOKABLE void loadStates();
-    Q_INVOKABLE QVariantMap get(int row) const;
+    // Every known file or feed entry of the series, one item for each
+    // version, in episode order: the source of the media.siblings
+    // projection for add-on panels. Memory only.
+    struct Sibling {
+        QUrl url;
+        int feedIndex = -1, version = 0;
+        SeriesDiscovery::Identity identity;
+        QString title, description, artwork;
+        QUrl titleSource;
+        QDateTime published;
+        qreal progress = 0;
+        bool played = false, current = false, video = true;
+    };
+    QList<Sibling> siblings() const;
+    // Artwork for one file, as a panel asks for it.
+    Q_INVOKABLE void requestArtwork(const QUrl& url);
 signals:
+    // A sibling, its state or the scan status changed. Not for the progress
+    // of the playing media, which changes all the time.
+    void siblingsChanged();
     void contextChanged();
     void statusChanged();
-    void seasonsChanged();
-    void selectedSeasonChanged();
-    void countChanged();
     void artworkRequested(const QUrl& url);
     void watchStatesRequested(const QList<QUrl>& urls, quint64 serial);
     void resetRequested();
@@ -81,25 +86,21 @@ private:
     struct State { qreal progress = 0; bool played = false; QString artwork, title; QUrl titleSource; };
     void cancel();
     void scan(const QUrl& folder = {});
-    void project(bool resetting = false);
     void publish(const SeriesDiscovery::Result& result, bool complete);
     void requestStates();
-    void update(const QUrl& url, int role);
     bool isCurrent(const Row& row) const;
     QList<Row> m_rows;
-    QList<int> m_visible;
     QHash<QUrl, State> m_states;
     QSet<QUrl> m_requestedStates, m_requestedArtwork;
-    QVariantList m_seasons;
     QVariantMap m_metadata;
     QUrl m_current, m_root;
     SeriesDiscovery::Identity m_target;
     std::shared_ptr<SeriesScanResult> m_results;
     std::shared_ptr<std::atomic_bool> m_cancelled;
-    QFileSystemWatcher m_watcher;
+    // Off the GUI thread: watching a network folder can take seconds.
+    BackgroundWatcher m_watcher;
     QTimer m_refreshTimer;
     quint64 m_serial = 0;
-    int m_selectedSeason = -1;
     bool m_loading = false, m_limited = false, m_extended = false;
     QString m_message;
 };

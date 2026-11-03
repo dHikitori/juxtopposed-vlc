@@ -1,0 +1,27 @@
+{
+  "description": "The button intent is not primary, secondary or destructive.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play"
+          },
+          "intent": "danger"
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

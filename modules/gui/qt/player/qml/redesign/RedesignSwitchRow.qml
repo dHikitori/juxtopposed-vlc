@@ -37,7 +37,10 @@ RowLayout {
         Accessible.name: root.accessibleName
         Accessible.role: Accessible.CheckBox
         Accessible.checkable: true; Accessible.checked: checked
-        onClicked: root.toggled(checked)
+        onClicked: {
+            root.toggled(checked)
+            checked = Qt.binding(() => root.checked)
+        }
         TextMetrics { id: onMetrics; font: stateText.font; text: qsTr("ON") }
         TextMetrics { id: offMetrics; font: stateText.font; text: qsTr("OFF") }
         background: Rectangle {

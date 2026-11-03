@@ -97,6 +97,8 @@
 #include <QLabel>
 #include <QTimer>
 #include <QStyle>
+#include <QGuiApplication>
+#include <QWindow>
 #include <algorithm>
 #include <utility>
 
@@ -638,7 +640,42 @@ void DialogsProvider::quit()
         return;
     b_isDying = true;
     assert(qApp);
+    const QPointer<DialogsProvider> alive(this);
+    // The rest of the quit can wait for playback, a network read or add-on
+    // work to stop. Do not show a frozen window meanwhile.
+    for (QWindow* window : QGuiApplication::topLevelWindows())
+        window->hide();
+    // A real quit stops playback before joined add-on cleanup. Window-close
+    // to the system tray does not call this path.
+    if(p_intf->p_mi) p_intf->p_mi->addonStreamLifetime().close();
+    if(p_intf->p_mainPlaylistController) p_intf->p_mainPlaylistController->stop();
+    if(!alive) return;
     qApp->setProperty("isDying", true);
+    if(!alive) return;
+    if(p_intf->p_mi)
+    {
+        const bool accepted=p_intf->p_mi->requestAddonRetirement([intf=p_intf] {
+            libvlc_Quit(vlc_object_instance(intf));
+        });
+        if(!alive) return;
+        if(!accepted)
+        {
+            if(!m_quitRetryReported)
+            {
+                m_quitRetryReported=true;
+                msg_Err(p_intf, "The app cannot stop add-on work.");
+            }
+            b_isDying=false;
+            qApp->setProperty("isDying",false);
+            if(!alive) return;
+            if(!m_quitRetryScheduled)
+            {
+                m_quitRetryScheduled=true;
+                QTimer::singleShot(100,this,[this] { m_quitRetryScheduled=false; quit(); });
+            }
+        }
+        return;
+    }
     libvlc_Quit( vlc_object_instance(p_intf) );
 }
 

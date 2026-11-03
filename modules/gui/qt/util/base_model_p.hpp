@@ -58,6 +58,8 @@ protected:
 
         QObject::connect(cache, &T::localSizeChanged,
                 q, &BaseModel::onLocalSizeChanged);
+        QObject::connect(cache, &T::countLoaded,
+                q, &BaseModel::loadingChanged);
 
         QObject::connect(cache, &T::localDataChanged,
                 q, &BaseModel::onCacheDataChanged);

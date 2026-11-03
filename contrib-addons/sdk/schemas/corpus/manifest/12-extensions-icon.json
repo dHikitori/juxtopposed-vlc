@@ -1,0 +1,56 @@
+{
+  "description": "Prerelease version, optional contracts, extension data and icons.",
+  "valid": true,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.hakone.example.midnight",
+    "name": "Midnight",
+    "version": "2.0.0-beta.1+build.007",
+    "publisher": "Hakone add-on examples",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-midnight.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "theme": "^1.0.0"
+      },
+      "optionalContracts": {
+        "visualizer": "^1.0.0",
+        "future": "^9.0.0"
+      }
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "README.md",
+      "themes/midnight.json",
+      "icon.png",
+      ".github/notes.txt",
+      "docs/Con-cert.md"
+    ],
+    "contributions": [
+      {
+        "id": "midnight",
+        "type": "theme",
+        "contract": "theme@1",
+        "name": "Midnight",
+        "resource": "themes/midnight.json",
+        "icon": "icon.png",
+        "extensions": {
+          "x": 1
+        },
+        "label": "Midnight theme"
+      }
+    ],
+    "permissions": {},
+    "icon": "icon.png",
+    "extensions": {
+      "org.example": {
+        "anything": [
+          1,
+          2
+        ]
+      }
+    }
+  }
+}

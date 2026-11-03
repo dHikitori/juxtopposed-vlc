@@ -1,0 +1,27 @@
+{
+  "description": "An account recipe without scopes; the token URL has a port and a query.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "account": {
+        "type": "string",
+        "x-hakone-secret": true,
+        "x-hakone-control": "account",
+        "x-hakone-label": "settings.account",
+        "x-hakone-account": {
+          "recipe": "oauth-device",
+          "deviceAuthorizationUrl": "https://auth.example.org/device",
+          "tokenUrl": "https://auth.example.org:443/oauth/token?version=2",
+          "clientId": "my-public-client"
+        }
+      }
+    }
+  },
+  "context": {
+    "networkOrigins": [
+      "https://auth.example.org"
+    ]
+  }
+}

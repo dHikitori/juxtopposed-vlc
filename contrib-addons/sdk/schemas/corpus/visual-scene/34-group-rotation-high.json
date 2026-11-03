@@ -1,0 +1,15 @@
+{
+  "description": "A group rotation is more than 360 degrees.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "group",
+        "rotation": 400,
+        "children": []
+      }
+    ]
+  }
+}

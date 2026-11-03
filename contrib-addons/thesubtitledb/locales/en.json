@@ -1,0 +1,6 @@
+{
+  "name": "TheSubtitleDB",
+  "summary": "Search movie and episode subtitles through TheSubtitleDB.",
+  "setupRequired": "Add your TheSubtitleDB API key in Add-on settings to search.",
+  "noMatch": "No subtitles matched this movie or episode."
+}

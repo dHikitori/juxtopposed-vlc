@@ -1,0 +1,38 @@
+{
+  "description": "Color, folder, file, duration and language editors with top-level labels.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accent": {
+        "type": "string",
+        "format": "color",
+        "x-hakone-control": "color",
+        "default": "#224488"
+      },
+      "library": {
+        "type": "string",
+        "x-hakone-control": "folder"
+      },
+      "playlist": {
+        "type": "string",
+        "x-hakone-control": "file"
+      },
+      "timeout": {
+        "type": "integer",
+        "x-hakone-control": "duration",
+        "minimum": 0,
+        "maximum": 3600
+      },
+      "language": {
+        "type": "string",
+        "format": "language",
+        "maxLength": 35
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Example settings",
+    "description": "All editors."
+  }
+}

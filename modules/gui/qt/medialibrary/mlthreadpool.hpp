@@ -27,6 +27,7 @@
 #include <QMutex>
 #include <atomic>
 #include <memory>
+#include "mltaskid.hpp"
 
 class RunOnThreadBaseRunner;
 
@@ -67,7 +68,7 @@ private:
      * ran sequentially, if queue is null, task will be run without additional specific
      * constraint (like on QThreadPool)
      */
-    void start(RunOnThreadBaseRunner* task, const char* queue = nullptr);
+    bool start(RunOnThreadBaseRunner* task, const char* queue = nullptr);
 
     /**
      * @brief tryTake atempt to the specified task from the queue if the task has not started
@@ -76,7 +77,7 @@ private:
     bool tryTake(RunOnThreadBaseRunner* task);
 
     RunOnThreadBaseRunner* getNextTaskFromQueue(const QString& queueName);
-    void processQueueLocked(const QString& queueName);
+    bool processQueueLocked(const QString& queueName);
 
 private:
     QThreadPool m_threadPool;
@@ -87,7 +88,6 @@ private:
     QMap<QString, QQueue<RunOnThreadBaseRunner*>> m_serialTasks;
 
     bool m_shuttingDown = false;
-    quint64 m_taskId = 1;
     QMap<quint64, RunOnThreadBaseRunner*> m_runningTasks;
     QMultiMap<const QObject*, quint64> m_objectTasks;
     QMutex m_lock;
@@ -172,13 +172,21 @@ quint64 ThreadRunner::runOnThread(const QObject* obj,
     if (m_shuttingDown)
         return 0;
 
-    auto taskId = m_taskId++;
+    const auto taskId = nextMLTaskId();
+    if (!taskId) return 0;
     auto runnable = new RunOnThreadRunner<Ctx>(taskId, obj, mlFun, uiFun);
     connect(runnable, &RunOnThreadBaseRunner::done, this, &ThreadRunner::runOnThreadDone);
     connect(obj, &QObject::destroyed, this, &ThreadRunner::runOnThreadTargetDestroyed, Qt::DirectConnection);
     m_runningTasks.insert(taskId, runnable);
     m_objectTasks.insert(obj, taskId);
-    start(runnable, queue);
+    if (!start(runnable, queue)) {
+        m_runningTasks.remove(taskId);
+        m_objectTasks.remove(obj,taskId);
+        if (m_objectTasks.count(obj)==0)
+            disconnect(obj,&QObject::destroyed,this,&ThreadRunner::runOnThreadTargetDestroyed);
+        runnable->release();
+        return 0;
+    }
     return taskId;
 }
 

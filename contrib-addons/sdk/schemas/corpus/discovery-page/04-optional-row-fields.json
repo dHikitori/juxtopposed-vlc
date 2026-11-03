@@ -1,0 +1,26 @@
+{
+  "description": "A row with identity, available, mediaKind and extra keys that the host removes.",
+  "valid": true,
+  "value": {
+    "items": [
+      {
+        "id": "ep-7",
+        "title": "Episode 7",
+        "mediaKind": "video",
+        "available": false,
+        "identity": {
+          "kind": "episode",
+          "title": "Show",
+          "season": 1,
+          "episodes": [
+            7
+          ]
+        },
+        "url": "https://media.example/ep-7.m3u8",
+        "artwork": {
+          "role": "thumbnail"
+        }
+      }
+    ]
+  }
+}

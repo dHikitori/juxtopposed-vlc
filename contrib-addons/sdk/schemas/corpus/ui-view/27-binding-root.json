@@ -1,0 +1,20 @@
+{
+  "description": "A binding path starts with context instead of state or item.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Text",
+          "text": {
+            "bind": "context.title"
+          }
+        }
+      ]
+    }
+  }
+}

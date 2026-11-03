@@ -1,0 +1,12 @@
+{
+  "description": "An asset path starts with a slash.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [],
+    "assets": {
+      "tile": "/images/tile.png"
+    }
+  }
+}

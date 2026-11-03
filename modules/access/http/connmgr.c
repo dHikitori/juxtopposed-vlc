@@ -27,6 +27,7 @@
 #include <vlc_network.h>
 #include <vlc_tls.h>
 #include <vlc_url.h>
+#include <vlc_input_policy.h>
 #include "transport.h"
 #include "conn.h"
 #include "connmgr.h"
@@ -78,6 +79,7 @@ vlc_tls_t *vlc_https_connect(vlc_tls_client_t *creds, const char *name,
 
 static char *vlc_http_proxy_find(vlc_object_t *obj, const struct vlc_http_msg *request)
 {
+    if (vlc_input_policy_Has(obj)) return NULL;
     char *url = vlc_http_msg_get_url(request);
     if (unlikely(url == NULL))
         return NULL;
@@ -266,6 +268,12 @@ struct vlc_http_msg *vlc_http_mgr_request(struct vlc_http_mgr *mgr, bool https,
                                           const struct vlc_http_msg *m,
                                           bool idempotent, bool payload)
 {
+    if (vlc_input_policy_Has(mgr->obj)) {
+        char *url = vlc_http_msg_get_url(m);
+        const bool allowed = url != NULL && vlc_input_policy_CheckURL(mgr->obj, url)
+            && vlc_input_policy_CheckConnection(mgr->obj, host, port ? port : (https ? 443 : 80), false);
+        free(url); if (!allowed) return NULL;
+    }
     if (port && vlc_http_port_blocked(port))
         return NULL;
 
@@ -288,7 +296,7 @@ struct vlc_http_mgr *vlc_http_mgr_create(vlc_object_t *obj,
     mgr->logger = obj->logger;
     mgr->obj = obj;
     mgr->creds = NULL;
-    mgr->jar = jar;
+    mgr->jar = vlc_input_policy_Has(obj) ? NULL : jar;
     mgr->conn = NULL;
     return mgr;
 }

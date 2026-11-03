@@ -1,0 +1,26 @@
+{
+  "description": "Only a list field can have items.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "language": {
+        "type": "string",
+        "default": "en"
+      },
+      "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9,
+        "default": 3
+      },
+      "name": {
+        "type": "string",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

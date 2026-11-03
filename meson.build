@@ -140,6 +140,15 @@ endforeach
 
 vlc_tests = []
 
+# Add-on tests carry their label from test/addon-tests.txt as a meson suite.
+addon_test_labels = {}
+foreach row : import('fs').read('test/addon-tests.txt').split('\n')
+    fields = row.split('#')[0].split()
+    if fields.length() == 3
+        addon_test_labels += {fields[0]: fields[1]}
+    endif
+endforeach
+
 #
 # SIMD support
 #

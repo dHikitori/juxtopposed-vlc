@@ -107,7 +107,15 @@ C.Dialog {
             }
         }
     }
-    footer: Item {
+    footer: Column {
+        RedesignAddonSections {
+            width: parent.width
+            hook: "media.details.sections@1"
+            hostContext: ({surface: "media.details.sections@1", identity: {title: root.info.name || ""}})
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+        }
+        Item {
+        width: parent.width
         implicitHeight: root.theme.dp(70) + (error.visible ? error.implicitHeight + root.theme.dp(12) : 0)
         Text {
             id: error
@@ -124,6 +132,7 @@ C.Dialog {
             implicitWidth: root.theme.dp(100); implicitHeight: root.theme.dp(32)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             caption: qsTr("Close"); text: caption; onClicked: root.reject()
+        }
         }
     }
 }

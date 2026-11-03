@@ -32,6 +32,7 @@
 #include <assert.h>
 
 #include "stream.h"
+#include "stream_observer.h"
 
 struct vlc_stream_filter_private
 {
@@ -80,7 +81,24 @@ stream_t *vlc_stream_FilterNew( stream_t *p_source,
     s->s = p_source;
 
     /* */
+    vlc_stream_observer_t *observer = vlc_stream_observer_HoldObject(VLC_OBJECT(s));
+    const uint64_t source_offset = vlc_stream_Tell(p_source);
     priv->module = module_need(s, "stream_filter", psz_stream_filter, true);
+    if (observer != NULL)
+    {
+        const char *name = priv->module != NULL ? module_get_object(priv->module) : NULL;
+        const bool cache = name != NULL
+            && (!strcmp(name, "prefetch") || !strcmp(name, "cache_read"));
+        const bool inflate = name != NULL && !strcmp(name, "inflate");
+        /* Preserve module choice and output. Only the negative evidence has
+         * a closed filter profile. Cache Open may consume into its own buffer.
+         * Inflate Open and declined Peek probes must leave the source offset.
+         */
+        if ((priv->module != NULL && !cache && !inflate)
+            || (!cache && vlc_stream_Tell(p_source) != source_offset))
+            vlc_stream_observer_Fail(observer);
+    }
+    vlc_stream_observer_Release(observer);
     if (priv->module == NULL)
         goto error;
 

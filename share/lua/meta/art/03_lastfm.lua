@@ -24,17 +24,17 @@ end
 
 -- Return the artwork
 function fetch_art()
-    if vlc.item == nil then return nil end
+    if vlc.item == nil then return nil, "not_applicable" end
     local meta = vlc.item:metas()
 
     if meta["Listing Type"] == "radio"
     or meta["Listing Type"] == "tv"
-    then return nil end
+    then return nil, "not_applicable" end
 
     if meta["artist"] and meta["album"] then
         title = vlc.strings.encode_uri_component(meta["artist"]).."/"..vlc.strings.encode_uri_component(meta["album"])
     else
-        return nil
+        return nil, "not_applicable"
     end
     -- remove -.* from string
     title = string.gsub( title, " ?%-.*", "" )
@@ -45,13 +45,19 @@ function fetch_art()
     -- remove Disc \w+ from string
     title = string.gsub( title, "Disc %w+", "" )
     fd = vlc.stream( "http://www.last.fm/music/" .. title )
-    if not fd then return nil end
+    if not fd then return nil, "unavailable" end
     page = fd:read( 65653 )
     fd = nil
+    if type(page) ~= "string" or #page == 0 then return nil, "unavailable" end
     _, _, arturl = string.find( page, "<meta property=\"og:image\" content=\"([^\"]+)\" />" )
     -- Don't use default album-art (not found one)
-    if not arturl or string.find( arturl, "default_album_mega.png") then
-       return nil
+    if not arturl then return nil, "unavailable" end
+    if string.find( arturl, "default_album_mega.png") then
+        local complete = #page < 65653 and page:gsub('>%s+<', '><'):match('^%s*(.-)%s*$')
+        if not arturl:find('[<>&%c]') and complete == '<html><meta property="og:image" content="' .. arturl .. '" /></html>' then
+            return nil, "no_match"
+        end
+        return nil, "unavailable"
     end
-    return arturl
+    return arturl, "match"
 end

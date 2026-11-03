@@ -91,6 +91,8 @@ class ListCacheBase : public QObject
     Q_OBJECT
 signals:
     void localSizeChanged(size_t querySize, size_t maximumSize);
+    // A count task answered, whether or not the size changed.
+    void countLoaded();
 
     void localDataChanged(int sourceFirst, int sourceLast);
 
@@ -229,6 +231,11 @@ public:
      * This may be usefull to know loaded size
      */
     ssize_t loadedCount() const;
+
+    /**
+     * @return the count task in flight, or 0 when the count is current
+     */
+    uint64_t countTask() const { return m_countTask; }
 
     /**
      * Init the list size

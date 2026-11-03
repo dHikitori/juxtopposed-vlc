@@ -29,6 +29,8 @@
 #include "input_interface.h"
 #include "../misc/interrupt.h"
 #include "./source.h"
+#include "addon_source.h"
+#include "../player/addon_session_state.h"
 
 struct input_stats;
 
@@ -164,6 +166,7 @@ typedef enum input_event_type_e
     INPUT_EVENT_FRAME_NEXT_STATUS,
     /* frame-previous status */
     INPUT_EVENT_FRAME_PREVIOUS_STATUS,
+    INPUT_EVENT_ADDON_SESSION,
 } input_event_type_e;
 
 /**
@@ -318,6 +321,7 @@ struct vlc_input_event
     union {
         /* INPUT_EVENT_STATE */
         struct vlc_input_event_state state;
+        struct vlc_addon_session_snapshot addon_session;
         /* INPUT_EVENT_RATE */
         float rate;
         /* INPUT_EVENT_CAPABILITIES */
@@ -375,6 +379,7 @@ struct vlc_input_thread_callbacks
 
 struct vlc_input_thread_cfg
 {
+    const struct vlc_addon_session_input_scope *session_scope;
     enum input_type type;
     enum
     {
@@ -495,6 +500,8 @@ typedef struct
 {
     int         i_type;
     input_control_param_t param;
+    vlc_addon_session_token *session;
+    struct vlc_addon_session_action session_action;
 } input_control_t;
 
 /** Private input fields */
@@ -516,6 +523,8 @@ typedef struct input_thread_private_t
     bool        b_recording;
     bool        b_pause_after_buffering; /* Defer pause until after buffering */
     float       rate;
+    struct vlc_addon_session_input_scope session_scope;
+    vlc_addon_session_token *session_rate;
 
     /* Playtime configuration and state */
     vlc_tick_t  i_start;    /* :start-time,0 by default */
@@ -546,6 +555,8 @@ typedef struct input_thread_private_t
 
     /* Input item */
     input_item_t   *p_item;
+    input_addon_source_t addon_source;
+    bool addon_source_admitted;
 
     /* Main source */
     input_source_t *master;
@@ -577,6 +588,10 @@ typedef struct input_thread_private_t
 
     bool next_frame_need_data;
 } input_thread_private_t;
+
+int input_ControlPushSession(input_thread_t *, const struct vlc_addon_session_action *,
+                             vlc_addon_session_token *);
+void input_SessionWake(input_thread_t *);
 
 static inline input_thread_private_t *input_priv(input_thread_t *input)
 {

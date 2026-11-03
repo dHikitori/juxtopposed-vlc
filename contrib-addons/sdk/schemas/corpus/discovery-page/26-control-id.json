@@ -1,0 +1,11 @@
+{
+  "description": "A row id has a control character.",
+  "valid": false,
+  "value": {
+    "items": [
+      {
+        "id": "item\u0001"
+      }
+    ]
+  }
+}

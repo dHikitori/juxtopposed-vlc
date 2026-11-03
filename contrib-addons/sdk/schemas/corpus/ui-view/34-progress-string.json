@@ -1,0 +1,18 @@
+{
+  "description": "A progress value is a string.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Progress",
+          "value": "0.5"
+        }
+      ]
+    }
+  }
+}

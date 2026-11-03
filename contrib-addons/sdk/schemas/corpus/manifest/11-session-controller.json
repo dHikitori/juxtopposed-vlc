@@ -1,0 +1,87 @@
+{
+  "description": "A session controller with settings migrations, account fields, a port origin and two locales.",
+  "valid": true,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.example.remote-session",
+    "name": "Midnight",
+    "version": "1.0.0",
+    "publisher": "Hakone add-on examples",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-midnight.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "session": "^1.0.0",
+        "settings": ">=1.0.0 <2.0.0 || ^1.0.0"
+      }
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "dist/addon.wasm",
+      "settings/schema.json",
+      "settings/ui.json",
+      "settings/1-2.json",
+      "locales/en.json",
+      "locales/fr.json"
+    ],
+    "contributions": [
+      {
+        "id": "remote",
+        "type": "session.controller",
+        "contract": "session@1",
+        "requires": [
+          "network.http",
+          "session.background"
+        ]
+      }
+    ],
+    "permissions": {
+      "required": {
+        "network.http": {
+          "origins": [
+            "https://api.example.org:8443/",
+            "HTTPS://Media.Example.org"
+          ],
+          "methods": [
+            "GET",
+            "POST"
+          ],
+          "minimumIntervalMs": 0,
+          "assetRedirectProfiles": [
+            "internet-archive-images@1"
+          ]
+        },
+        "session.background": {}
+      }
+    },
+    "runtime": {
+      "kind": "wasm-message-v1",
+      "entry": "dist/addon.wasm"
+    },
+    "settings": {
+      "version": 2,
+      "schema": "settings/schema.json",
+      "ui": "settings/ui.json",
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "resource": "settings/1-2.json"
+        }
+      ],
+      "accountFields": [
+        "userName",
+        "region_2"
+      ]
+    },
+    "locales": {
+      "default": "en",
+      "files": {
+        "en": "locales/en.json",
+        "fr": "locales/fr.json"
+      }
+    }
+  }
+}

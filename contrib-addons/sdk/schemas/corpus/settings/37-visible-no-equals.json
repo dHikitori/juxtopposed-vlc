@@ -1,0 +1,19 @@
+{
+  "description": "A visibility condition has no equals value.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "a": {
+        "type": "boolean"
+      },
+      "b": {
+        "type": "string",
+        "x-hakone-visibleWhen": {
+          "field": "a"
+        }
+      }
+    }
+  }
+}

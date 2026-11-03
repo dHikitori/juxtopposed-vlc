@@ -1,0 +1,32 @@
+{
+  "description": "An ambiguous identify result with two candidates.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "ambiguous",
+    "data": {
+      "candidates": [
+        {
+          "identity": {
+            "kind": "movie",
+            "title": "Example",
+            "year": 1999
+          }
+        },
+        {
+          "identity": {
+            "kind": "Movie",
+            "title": "Example",
+            "year": 2004
+          },
+          "attribution": {
+            "name": "Example Data",
+            "license": "CC BY 4.0",
+            "url": "https://data.example/terms"
+          }
+        }
+      ]
+    }
+  }
+}

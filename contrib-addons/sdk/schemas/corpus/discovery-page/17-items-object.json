@@ -1,0 +1,9 @@
+{
+  "description": "items is an object.",
+  "valid": false,
+  "value": {
+    "items": {
+      "id": "a"
+    }
+  }
+}

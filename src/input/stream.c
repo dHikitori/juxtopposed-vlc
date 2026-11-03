@@ -37,12 +37,14 @@
 #include <vlc_block.h>
 #include <vlc_access.h>
 #include <vlc_interrupt.h>
+#include <vlc_threads.h>
 #include <vlc_charset.h>
 #include <vlc_stream_extractor.h>
 
 #include "../libvlc.h"
 #include "stream.h"
 #include "mrl_helpers.h"
+#include "stream_observer.h"
 
 typedef struct stream_priv_t
 {
@@ -52,6 +54,7 @@ typedef struct stream_priv_t
     block_t *peek;
     uint64_t offset;
     bool eof;
+    struct vlc_stream_observer_stream observer;
 
     /* UTF-16 and UTF-32 file reading */
     struct {
@@ -105,6 +108,12 @@ stream_t *vlc_stream_CustomNew(vlc_object_t *parent,
     priv->text.char_width = 1;
     priv->text.little_endian = false;
 
+    if (vlc_stream_observer_StreamInit(&priv->observer, VLC_OBJECT(s)) != VLC_SUCCESS)
+    {
+        vlc_object_delete(s);
+        return NULL;
+    }
+
     return &priv->stream;
 }
 
@@ -134,6 +143,7 @@ void stream_CommonDelete(stream_t *s)
         block_Release(priv->block);
 
     free(s->psz_url);
+    vlc_stream_observer_StreamDestroy(&priv->observer);
     vlc_object_delete(s);
 }
 
@@ -440,7 +450,7 @@ static ssize_t vlc_stream_CopyBlock(block_t **restrict pp,
     return likely(len > 0) ? (ssize_t)len : -1;
 }
 
-static ssize_t vlc_stream_ReadRaw(stream_t *s, void *buf, size_t len)
+static ssize_t vlc_stream_ReadRawUnchecked(stream_t *s, void *buf, size_t len)
 {
     stream_priv_t *priv = stream_priv(s);
     ssize_t ret;
@@ -482,6 +492,27 @@ static ssize_t vlc_stream_ReadRaw(stream_t *s, void *buf, size_t len)
     }
 
     return 0;
+}
+
+static void vlc_stream_ObserverReadCancelled(void *opaque)
+{
+    vlc_stream_observer_ReadEnd(opaque, true, false);
+}
+
+static ssize_t vlc_stream_ReadRaw(stream_t *s, void *buf, size_t len)
+{
+    stream_priv_t *priv = stream_priv(s);
+    if (len == 0 || priv->observer.observer == NULL)
+        return vlc_stream_ReadRawUnchecked(s, buf, len);
+    if (!vlc_stream_observer_ReadBegin(&priv->observer)) return 0;
+    ssize_t result;
+    vlc_cleanup_push(vlc_stream_ObserverReadCancelled, &priv->observer);
+    result = vlc_stream_ReadRawUnchecked(s, buf, len);
+    vlc_cleanup_pop();
+    const bool interrupted = vlc_killed();
+    vlc_stream_observer_ReadEnd(&priv->observer,
+                               result < 0 || interrupted, result == 0);
+    return result;
 }
 
 ssize_t vlc_stream_ReadPartial(stream_t *s, void *buf, size_t len)
@@ -582,7 +613,7 @@ ssize_t vlc_stream_Peek(stream_t *s, const uint8_t **restrict bufp, size_t len)
     return len;
 }
 
-block_t *vlc_stream_ReadBlock(stream_t *s)
+static block_t *vlc_stream_ReadBlockUnchecked(stream_t *s)
 {
     stream_priv_t *priv = stream_priv(s);
     block_t *block;
@@ -632,6 +663,26 @@ block_t *vlc_stream_ReadBlock(stream_t *s)
     return block;
 }
 
+block_t *vlc_stream_ReadBlock(stream_t *s)
+{
+    stream_priv_t *priv = stream_priv(s);
+    if (priv->observer.observer == NULL)
+        return vlc_stream_ReadBlockUnchecked(s);
+    if (!vlc_stream_observer_ReadBegin(&priv->observer))
+    {
+        priv->eof = true;
+        return NULL;
+    }
+    block_t *block;
+    vlc_cleanup_push(vlc_stream_ObserverReadCancelled, &priv->observer);
+    block = vlc_stream_ReadBlockUnchecked(s);
+    vlc_cleanup_pop();
+    const bool interrupted = vlc_killed();
+    vlc_stream_observer_ReadEnd(&priv->observer,
+        interrupted || (block == NULL && !priv->eof), block == NULL && priv->eof);
+    return block;
+}
+
 uint64_t vlc_stream_Tell(const stream_t *s)
 {
     const stream_priv_t *priv = stream_priv(s);
@@ -649,6 +700,10 @@ bool vlc_stream_Eof(const stream_t *s)
 int vlc_stream_Seek(stream_t *s, uint64_t offset)
 {
     stream_priv_t *priv = stream_priv(s);
+
+    /* A skipped response cannot supply complete negative lookup evidence.
+     * Preserve the ordinary seek result for every caller. */
+    vlc_stream_observer_StreamFailure(&priv->observer);
 
     priv->eof = false;
 

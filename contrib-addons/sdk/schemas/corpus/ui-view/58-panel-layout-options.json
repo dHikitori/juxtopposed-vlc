@@ -1,0 +1,102 @@
+{
+  "description": "A panel header row with a growing two-line button, text styles, a quiet link, a drop-down and season rows.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "panel",
+    "root": {
+      "type": "Page",
+      "children": [
+        {
+          "type": "Row",
+          "id": "controls",
+          "children": [
+            {
+              "type": "Button",
+              "id": "heading",
+              "grow": true,
+              "text": {
+                "bind": "state.show"
+              },
+              "subtitle": {
+                "bind": "state.season"
+              },
+              "icon": "chevron-down",
+              "action": {
+                "command": "org.hakone.example.panels/seasons"
+              }
+            },
+            {
+              "type": "IconButton",
+              "id": "more",
+              "text": "More",
+              "icon": "more",
+              "action": {
+                "command": "org.hakone.example.panels/seasons"
+              }
+            }
+          ]
+        },
+        {
+          "type": "Text",
+          "id": "file",
+          "style": "caption",
+          "maxLines": 1,
+          "text": {
+            "bind": "state.file"
+          }
+        },
+        {
+          "type": "Button",
+          "id": "source",
+          "intent": "link",
+          "text": "Episode source",
+          "action": {
+            "command": "org.hakone.example.panels/seasons"
+          }
+        },
+        {
+          "type": "Tabs",
+          "id": "versions",
+          "style": "dropdown",
+          "items": {
+            "bind": "state.versions"
+          },
+          "text": "Version",
+          "action": {
+            "command": "org.hakone.example.panels/seasons"
+          }
+        },
+        {
+          "type": "List",
+          "id": "seasons",
+          "items": {
+            "bind": "state.seasons"
+          },
+          "keyField": "key",
+          "itemTemplate": {
+            "type": "MediaRow",
+            "title": {
+              "bind": "item.label"
+            },
+            "icon": {
+              "bind": "item.icon"
+            },
+            "navigates": true,
+            "selected": {
+              "bind": "item.current"
+            },
+            "primaryAction": {
+              "command": "org.hakone.example.panels/seasons"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.hakone.example.panels/seasons"
+    ]
+  }
+}

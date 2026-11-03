@@ -309,11 +309,17 @@ char *vlc_http_res_get_type(struct vlc_http_resource *res)
 
 block_t *vlc_http_res_read(struct vlc_http_resource *res)
 {
+    return vlc_http_res_read_outcome(res, NULL);
+}
+
+block_t *vlc_http_res_read_outcome(struct vlc_http_resource *res, bool *complete)
+{
+    if (complete != NULL) *complete = false;
     int status = vlc_http_res_get_status(res);
     if (status < 200 || status >= 300)
         return NULL; /* do not "read" redirect or error message */
 
-    return vlc_http_msg_read(res->response);
+    return vlc_http_msg_read_outcome(res->response, complete);
 }
 
 int vlc_http_res_set_login(struct vlc_http_resource *res,

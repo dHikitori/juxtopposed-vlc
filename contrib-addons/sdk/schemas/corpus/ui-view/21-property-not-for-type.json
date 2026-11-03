@@ -1,0 +1,18 @@
+{
+  "description": "A Text component has a title property, which only Page and Section permit.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Text",
+          "title": "x"
+        }
+      ]
+    }
+  }
+}

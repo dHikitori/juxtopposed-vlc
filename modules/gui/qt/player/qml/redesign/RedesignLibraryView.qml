@@ -95,6 +95,7 @@ Item {
     signal homeEnqueueRequested(string section, int index)
     signal homeSectionRequested(string section)
     signal categoryRequested(int category)
+    signal discoveryRequested(string source)
     signal activated(int index)
     signal enqueueRequested(int index)
     signal addRequested()
@@ -292,6 +293,7 @@ Item {
         atCategoryRoot: root.breadcrumbs.length <= 1
         pins: root.pins; selectedPinId: root.selectedPinId
         onCategoryRequested: category => root.categoryRequested(category)
+        onDiscoveryRequested: source => root.discoveryRequested(source)
         onAddRequested: root.addRequested()
         onPinActivated: pin => root.pinActivated(pin)
         onPinRemoved: pin => root.pinRemoved(pin)
@@ -348,7 +350,9 @@ Item {
         onClicked: viewMenu.toggleFrom(button)
     }
     component ItemCount: Text {
-        text: root.loading ? qsTr("Loading…") : qsTr("%n item", "%n items", root.itemCount)
+        objectName: "libraryItemCount"
+        // An empty list says it is loading in the content area instead.
+        text: root.loading ? root.itemCount > 0 ? qsTr("Loading…") : "" : qsTr("%n item", "%n items", root.itemCount)
         color: root.theme.playerLabel
         font.pixelSize: root.theme.dp(14)
     }
@@ -484,13 +488,18 @@ Item {
                 Text { anchors.verticalCenter: parent.verticalCenter; anchors.verticalCenterOffset: theme.dp(1); text: root.addLabel; color: theme.playerLabel; font.pixelSize: theme.dp(14) }
             }
         }
-        RedesignHomeView {
+        RedesignAddonSurface {
+            hook: "home.content@1"
+            hostContext: ({surface: "home.content@1", search: root.searchText, layout: root.expanded ? "expanded" : "compact"})
+            visible: root.homeSectionsVisible
+            Layout.topMargin: theme.dp(root.expanded ? 25 : 10)
+            Layout.fillWidth: true; Layout.fillHeight: true
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            builtIn: Component { RedesignHomeView {
             singleClickActivate: root.singleClickActivate
             artworkForItem: root.artworkForItem
             objectName: "libraryHomeView"
             visible: root.homeSectionsVisible
-            Layout.topMargin: theme.dp(root.expanded ? 25 : 10)
-            Layout.fillWidth: true; Layout.fillHeight: true
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             expanded: root.expanded
             searchText: root.searchText
@@ -499,6 +508,7 @@ Item {
             onEnqueueRequested: (section, index) => root.homeEnqueueRequested(section, index)
             onSectionRequested: section => root.homeSectionRequested(section)
             onContextRequested: (section, index, anchor, point) => root.openItemMenu(anchor, index, point, section)
+            } }
         }
         GridView {
             id: mediaView
@@ -508,6 +518,9 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
             model: root.mediaModel
+            // Keep a screen of tiles built beyond the view, so scrolling back
+            // shows their artwork at once instead of loading it again.
+            cacheBuffer: Math.max(0, height)
             visible: !root.homeSectionsVisible && root.itemCount > 0
             cellWidth: root.expanded ? Math.min(width, theme.dp(root.grid ? root.squareCards ? 220 : 336 : 416)) : root.grid ? width / Math.max(1, Math.floor(width / theme.dp(130))) : width
             cellHeight: root.grid ? root.expanded ? (cellWidth - theme.dp(20)) * (root.squareCards ? 1 : 9 / 16) + theme.dp(root.category === 2 ? 88 : 79) : theme.dp(142) : theme.dp(root.podcastView ? 62 : 42)
@@ -583,6 +596,7 @@ Item {
                     anchors.leftMargin: root.playlistEditing && !root.grid ? theme.dp(28) : 0
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     text: delegate.displayTitle
+                    tooltipTextFormat: Text.PlainText
                     // Mouse focus left after navigation is not a keyboard selection.
                     selected: mediaView.currentIndex === delegate.index && (root.pointerSelection || root.playlistEditing || mediaButton.visualFocus)
                     onActiveFocusChanged: if (activeFocus) mediaView.currentIndex = delegate.index
@@ -680,11 +694,15 @@ Item {
         Text {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // Takes the spare height, so the toolbar stays at the top. While
+            // the list loads it says so in the middle of the content area.
             visible: !root.homeSectionsVisible && root.itemCount === 0
             objectName: "libraryEmptyMessage"
-            text: root.searchText.length > 0 ? qsTr("No media matches your search.") : root.emptyText
-            wrapMode: Text.WordWrap; color: theme.foreground; font.pixelSize: theme.dp(14)
-            verticalAlignment: Text.AlignTop
+            text: root.loading ? qsTr("Loading…") : root.searchText.length > 0 ? qsTr("No media matches your search.") : root.emptyText
+            wrapMode: Text.WordWrap; color: root.loading ? root.theme.playerLabel : theme.foreground
+            font.pixelSize: theme.dp(root.loading ? 16 : 14)
+            horizontalAlignment: root.loading ? Text.AlignHCenter : Text.AlignLeft
+            verticalAlignment: root.loading ? Text.AlignVCenter : Text.AlignTop
         }
     }
 }

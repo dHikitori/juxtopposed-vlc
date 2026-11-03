@@ -1,0 +1,21 @@
+[package]
+name = "example-addon-discovery"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Point this at your copy of the SDK.
+hakone-addon-message-v1 = { path = "../../message-v1" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true

@@ -110,7 +110,7 @@ TestCase {
         verify(item("addonsAdd").y > item("addonsFindMore").y)
     }
     function test_asyncFailureNamesItsAddonAndUsesPlainText() {
-        store.errorMessage = "VLC cannot add <Fixture>."
+        store.errorMessage = "The app cannot add <Fixture>."
         const message = item("addonsError")
         compare(message.text, store.errorMessage)
         compare(message.textFormat, Text.PlainText)
@@ -119,7 +119,7 @@ TestCase {
     function test_failedDiscoveryDoesNotLookLikeAnEmptyResult() {
         store.records = []; store.rebuild(); page.discoveryRequested = true; wait(20)
         verify(item("addonsEmptyState").visible)
-        store.errorMessage = "VLC cannot load the add-on list. Try again."; wait(20)
+        store.errorMessage = "The app cannot load the add-on list. Try again."; wait(20)
         verify(item("addonsError").visible); verify(!item("addonsEmptyState").visible)
         store.errorMessage = ""; store.loading = true; wait(20)
         verify(item("addonsEmptyState").visible)

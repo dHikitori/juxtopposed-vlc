@@ -25,6 +25,7 @@
 #define QVLC_MAIN_INTERFACE_H_
 
 #include "qt.hpp"
+#include "addons/addon_stream_lifetime.hpp"
 
 #include <QVariantMap>
 #include <QtQuick/QQuickView>
@@ -76,6 +77,7 @@ struct vlc_preparser_t;
 class ThreadRunner;
 
 namespace vlc {
+namespace addons { class AddonAppShutdown; }
 namespace playlist {
 }
 }
@@ -182,6 +184,13 @@ public:
 public:
     /* Getters */
     inline qt_intf_t* getIntf() const { return p_intf; }
+    // Host C++ only. The app owns this service until all Qt work has joined.
+    // Call the getter on the app thread. Its returned handle is thread-safe.
+    void setAddonAppShutdown(vlc::addons::AddonAppShutdown*);
+    vlc::addons::AddonStreamLifetime::Handle addonStreamLifetime() const noexcept;
+    bool requestAddonRetirement(std::function<void()> afterJoined);
+    void retireAddonWork();
+    void completeAddonRetirement();
     inline vlc_preparser_t *getNetworkPreparser() const { return m_network_preparser; };
     bool smoothScroll() const { return m_smoothScroll; }
 
@@ -441,6 +450,8 @@ public:
 #endif
 
 protected:
+    QPointer<vlc::addons::AddonAppShutdown> m_addonAppShutdown;
+    bool m_addonRetiring=false,m_addonJoined=false;
     /* Systray */
     void initSystray();
     void setSystrayVisible(bool visible);
@@ -584,6 +595,10 @@ protected slots:
     void onVOutChanged( bool );
 
 signals:
+    // Close native and Qt posting gates before the app waits for joined work.
+    void addonWorkRetiring();
+    // Release closed resolvers, queued payloads, and consent after that join.
+    void addonWorkJoined();
     void fullscreenInterfaceToggled( bool );
     void setInterfaceVisibible(bool, bool requestActivate = false);
     void setInterfaceFullScreen( bool );

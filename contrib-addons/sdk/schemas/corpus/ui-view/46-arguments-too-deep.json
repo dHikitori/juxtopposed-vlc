@@ -1,0 +1,45 @@
+{
+  "description": "Command arguments have nine nested levels.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play",
+            "arguments": {
+              "next": {
+                "next": {
+                  "next": {
+                    "next": {
+                      "next": {
+                        "next": {
+                          "next": {
+                            "next": {
+                              "next": "leaf"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

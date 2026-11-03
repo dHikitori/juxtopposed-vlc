@@ -26,6 +26,7 @@
 #include <assert.h>
 
 #include <vlc_common.h>
+#include <vlc_input_policy.h>
 #include <vlc_configuration.h>
 #include <vlc_plugin.h>
 #include <vlc_access.h>
@@ -83,6 +84,7 @@ typedef struct
 
 int OpenAvio(vlc_object_t *object)
 {
+    if (vlc_input_policy_Has(object)) return VLC_EGENERIC;
     stream_t *access = (stream_t*)object;
     access_sys_t *sys = vlc_obj_malloc(object, sizeof(*sys));
     if (!sys)

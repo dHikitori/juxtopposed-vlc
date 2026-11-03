@@ -35,6 +35,7 @@
 #include <vlc_stream.h>
 #include <vlc_meta.h>
 #include <vlc_input.h>
+#include <vlc_input_policy.h>
 #include <vlc_charset.h>
 #include <vlc_avcodec.h>
 
@@ -367,6 +368,13 @@ static int avformat_ProbeDemux( vlc_object_t *p_this,
     return VLC_SUCCESS;
 }
 
+static int PolicyDenyIO(AVFormatContext *context, AVIOContext **io,
+                       const char *url, int flags, AVDictionary **options)
+{
+    VLC_UNUSED(context); VLC_UNUSED(io); VLC_UNUSED(url); VLC_UNUSED(flags); VLC_UNUSED(options);
+    return AVERROR(EACCES);
+}
+
 int avformat_OpenDemux( vlc_object_t *p_this )
 {
     demux_t       *p_demux = (demux_t*)p_this;
@@ -384,6 +392,8 @@ int avformat_OpenDemux( vlc_object_t *p_this )
 
     if( avformat_ProbeDemux( p_this, &fmt, psz_url ) != VLC_SUCCESS )
         return VLC_EGENERIC;
+
+    if (vlc_input_policy_Has(p_this) && (fmt->flags & AVFMT_NOFILE)) return VLC_EGENERIC;
 
     vlc_stream_Control( p_demux->s, STREAM_CAN_SEEK, &b_can_seek );
 
@@ -419,6 +429,8 @@ int avformat_OpenDemux( vlc_object_t *p_this )
         avformat_CloseDemux( p_this );
         return VLC_ENOMEM;
     }
+
+    if (vlc_input_policy_Has(p_this)) p_sys->ic->io_open = PolicyDenyIO;
 
     AVIOContext *pb = p_sys->ic->pb = avio_alloc_context( p_io_buffer,
         AVFORMAT_IOBUFFER_SIZE, 0, p_demux, IORead, NULL, IOSeek );

@@ -42,10 +42,12 @@
 #include <vlc_charset.h>
 
 #include "smb_common.h"
+#include "win_file_interrupt.h"
 
 typedef struct
 {
     HANDLE h;
+    vlc_win_file_interrupt_t *interrupt;
     LARGE_INTEGER size;
     vlc_url_t url;
 } access_sys_t;
@@ -136,18 +138,28 @@ static int Seek( stream_t *p_access, uint64_t i_pos )
     return VLC_SUCCESS;
 }
 
-static ssize_t Read( stream_t *p_access, void *p_buffer, size_t i_len )
+static ssize_t ReadNative(void *opaque, void *buffer, size_t length)
 {
-    access_sys_t *p_sys = p_access->p_sys;
-    DWORD i_read;
-
-    if( !ReadFile(p_sys->h, p_buffer, i_len, &i_read, NULL) )
-    {
-        msg_Err( p_access, "read failed (%lu)", GetLastError() );
+    access_sys_t *sys = opaque;
+    DWORD count;
+    DWORD requested = length > INT_MAX ? INT_MAX : (DWORD)length;
+    if (!ReadFile(sys->h, buffer, requested, &count, NULL)) {
+        DWORD error = GetLastError();
+        errno = EIO; SetLastError(error);
         return -1;
     }
+    return count;
+}
 
-    return i_read;
+static ssize_t Read(stream_t *access, void *buffer, size_t length)
+{
+    access_sys_t *sys = access->p_sys;
+    ssize_t value = sys->interrupt
+        ? vlc_win_file_interrupt_read(sys->interrupt, ReadNative, sys, buffer, length)
+        : ReadNative(sys, buffer, length);
+    if (value < 0 && errno != EINTR)
+        msg_Err(access, "read failed (%lu)", GetLastError());
+    return value;
 }
 
 static int DirRead(stream_t *p_access, input_item_node_t *p_node)
@@ -384,6 +396,13 @@ static int Open(vlc_object_t *obj)
             return VLC_EACCES;
         }
 
+        if (GetFileType(h) == FILE_TYPE_DISK) {
+            sys->interrupt = vlc_win_file_interrupt_new();
+            if (!sys->interrupt) {
+                CloseHandle(h); free(w_uri);
+                return VLC_ENOMEM;
+            }
+        }
         access->pf_read = Read;
         access->pf_control = Control;
         access->pf_seek = Seek;
@@ -403,6 +422,7 @@ static void Close(vlc_object_t *obj)
     stream_t *access = (stream_t *)obj;
     access_sys_t *sys = access->p_sys;
 
+    vlc_win_file_interrupt_delete(sys->interrupt);
     vlc_UrlClean(&sys->url);
     CloseHandle(sys->h);
 }

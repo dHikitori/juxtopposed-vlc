@@ -1,0 +1,39 @@
+{
+  "description": "A list item template contains another list.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "List",
+          "items": {
+            "bind": "state.groups"
+          },
+          "keyField": "id",
+          "itemTemplate": {
+            "type": "Column",
+            "children": [
+              {
+                "type": "List",
+                "items": {
+                  "bind": "item.tracks"
+                },
+                "keyField": "id",
+                "itemTemplate": {
+                  "type": "Text",
+                  "text": {
+                    "bind": "item.title"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

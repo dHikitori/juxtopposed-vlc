@@ -30,6 +30,7 @@
 #endif
 
 #include "util/shared_input_item.hpp"
+#include "util/artwork_selection.hpp"
 
 #include <QLabel>
 #include <QPixmap>
@@ -48,6 +49,11 @@ public:
     CoverArtLabel( QWidget *parent, qt_intf_t * );
     void setItem( const SharedInputItem & );
     virtual ~CoverArtLabel();
+    bool artworkPending() const noexcept { return preparingArt; }
+    std::shared_ptr<ArtworkSelection::Receipt> selectedReceipt() const { return preparedArt; }
+    void chooseArtFile(const QUrl&);
+    void discardArtSelection();
+    void setArtworkSelectionLifetime(vlc::addons::AddonStreamLifetime::Handle, QString cacheDirectory = {});
 
 protected:
     void mouseDoubleClickEvent( QMouseEvent *event ) override;
@@ -58,6 +64,14 @@ private:
     SharedInputItem p_item;
     QPixmap artwork;
     QString selectedArtPath;
+    ArtworkSelection* selection = nullptr;
+    ArtworkNativePreview* preview = nullptr;
+    std::shared_ptr<ArtworkSelection::Receipt> preparedArt;
+    bool preparingArt = false;
+    quint64 artworkChoiceEpoch = 0;
+    vlc::addons::AddonStreamLifetime::Handle artworkLifetime;
+    QString artworkDirectory;
+    bool ensureArtworkHelpers();
 
     void showArtUpdate( const QString& );
     void showArtUpdate( );
@@ -70,6 +84,8 @@ public slots:
 signals:
     void editing();
     void artSelected( const QString& );
+    void artSelectionReset();
+    void artworkPreparationChanged(bool);
 };
 
 #endif

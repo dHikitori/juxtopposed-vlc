@@ -2,7 +2,7 @@
 
 This fork adapts [Juxtopposed’s VLC redesign](https://www.figma.com/community/file/1691465999134370980/vlc-redesign)
 for VLC’s native interface. The interface and settings workflow are in active development.
-See the [Releases page](https://github.com/dsojevic/juxtopposed-vlc/releases) for available builds.
+See the [Releases page](https://github.com/hakone-org/hakone/releases) for available builds.
 Release tooling and the `4.0.0-beta.N` version scheme are documented in [doc/RELEASING.md](doc/RELEASING.md).
 For building on Linux from source, see [doc/BUILD-linux.md](doc/BUILD-linux.md).
 For building on macOS from source, see [doc/BUILD-macos.md](doc/BUILD-macos.md).

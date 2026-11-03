@@ -1,0 +1,24 @@
+{
+  "description": "A gradient stop position is more than one.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "gradient",
+        "vertical": true,
+        "stops": [
+          [
+            0,
+            "#000000"
+          ],
+          [
+            1.5,
+            "#ffffff"
+          ]
+        ]
+      }
+    ]
+  }
+}

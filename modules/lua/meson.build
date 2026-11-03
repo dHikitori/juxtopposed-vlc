@@ -18,6 +18,8 @@ lua_sources = files(
     'extension_thread.c',
     'intf.c',
     'meta.c',
+    'meta_selector.h',
+    'meta_outcome.h',
     'stream_filter.c',
     'services_discovery.c',
     'vlc.c',
@@ -66,6 +68,7 @@ vlc_modules += {
   'enabled' : lua_dep.found() and get_option('lua').allowed(),
 }
 
+lua_filename_reader = []
 if lua_dep.found() and get_option('lua').allowed()
   if host_system == 'windows'
     # VLC looks for everything next to the executable on Windows
@@ -127,7 +130,7 @@ if lua_dep.found() and get_option('lua').allowed()
     splitpath = module_path.split('/')
     output = splitpath.get(splitpath.length() - 1).replace('.lua', '.luac')
     subdir = '/'.join(splitpath.slice(0, splitpath.length() - 1))
-    custom_target(build_name,
+    compiled_module = custom_target(build_name,
                   input:   [m],
                   output:  [output],
                   build_by_default: true,
@@ -135,6 +138,9 @@ if lua_dep.found() and get_option('lua').allowed()
                   install: true,
                   install_dir: luac_install_dir / subdir,
                   command: [luac, '-o', '@OUTPUT@', '@INPUT0@'])
+    if module_path == 'meta/reader/filename.lua'
+      lua_filename_reader += [compiled_module]
+    endif
   endforeach
 
   lua_pkgdata = files(

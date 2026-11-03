@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#pragma once
+
+#include <QObject>
+#include <QElapsedTimer>
+#include <QHash>
+#include <QSet>
+#include <QStringList>
+#include <QVariantMap>
+#include <functional>
+#include <optional>
+
+/** The host controls provider requests and validates results. This class
+ * does not change live media. Backend callbacks run on this object's thread.
+ * Connect the manager's operationFinished signal to the slot of that name.
+ */
+class AddonMetadataCoordinator : public QObject
+{
+    Q_OBJECT
+public:
+    struct NativeArtwork {
+        QVariant descriptor;
+        QString family;
+        QVariantMap attribution;
+    };
+    struct ProviderSelection {
+        QVariantList providers;
+        // Native/memory checks only. Selection is never execution authority.
+        std::function<bool()> current;
+        QString error;
+    };
+    using SelectionComplete = std::function<void(ProviderSelection)>;
+    using SelectionCancel = std::function<void()>;
+    struct Backend {
+        std::function<QVariantList(const QString&)> providersForFeature;
+        std::function<QString(const QString&, const QString&, const QVariantMap&)> invoke;
+        std::function<void(const QString&)> cancel;
+        // Only the native host can select this path. Its scope never enters
+        // provider context or a portable request key.
+        std::function<bool(const QString&)> requiresNativeScope;
+        std::function<QString(const QString&, const QString&, const QVariantMap&, const QString&)> invokeNative;
+        std::function<QVariantList(const QString&, const QString&, const QVariantList&, const QString&)> planProviders;
+        // A native query only: no I/O, callback, target write, or Qt mutation.
+        std::function<std::optional<NativeArtwork>(const QString&, const QVariantMap&, const QString&)> validateNativeArtwork;
+        // The factory and completion run on the owner thread. Package and key
+        // reads run on joined work. A backend must complete asynchronously.
+        std::function<SelectionCancel(const QString&, SelectionComplete)> selectProviders;
+    };
+
+    explicit AddonMetadataCoordinator(Backend backend, QObject* parent = nullptr);
+    ~AddonMetadataCoordinator() override;
+
+    // Identification returns explicit choices. It does not change identity.
+    Q_INVOKABLE QString identify(const QString& feature, const QVariantMap& context);
+    Q_INVOKABLE QString searchAssets(const QString& feature, const QVariantMap& context,
+                                     bool aggregate = false);
+    Q_INVOKABLE QString enrich(const QString& feature, const QVariantMap& context,
+                              const QStringList& requiredFields);
+    QString enrichNative(const QString& feature, const QVariantMap& context,
+                         const QStringList& requiredFields, const QString& privateScope);
+    Q_INVOKABLE void cancel(const QString& consumer);
+    Q_INVOKABLE void setProviderOrder(const QString& feature, const QStringList& providers);
+    Q_INVOKABLE void invalidate();
+
+public slots:
+    void operationFinished(const QString& invocation, const QString& contribution,
+                           const QString& status, const QVariantMap& data,
+                           const QString& error);
+
+signals:
+    /** data carries contextGeneration/targetRevision and expectedFieldRevisions.
+     * A consumer must compare them before it writes an enrichment patch.
+     * data.stale is true when an expired answer is shown while a provider is
+     * offline. Field provenance carries retention.keep: only "library"
+     * fields can be saved outside memory (see addon_result_retention.hpp).
+     */
+    void finished(const QString& consumer, const QString& status,
+                  const QVariantMap& data, const QString& error);
+    void canceled(const QString& consumer);
+
+private:
+    struct Consumer {
+        QString feature;
+        QString operation;
+        QString privateScope;
+        QVariantMap context;
+        QVariantList providers;
+        QStringList required;
+        QVariantList candidates;
+        QVariantMap fields;
+        QVariantMap provenance;
+        QVariantList labelArtwork;
+        QVariantList ambiguousArtwork;
+        QSet<QString> pending;
+        QString status = QStringLiteral("no_match");
+        QString error;
+        int next = 0;
+        int outstanding = 0;
+        SelectionCancel cancelSelection;
+        std::function<bool()> selectionCurrent;
+        bool selecting = false;
+        bool aggregate = false;
+        bool stale = false;
+        bool ambiguous = false;
+        bool entityAmbiguous = false;
+    };
+    struct Job {
+        QString invocation;
+        QString provider;
+        QString operation;
+        QString privateScope;
+        QVariantMap context;
+        QVariantMap registration;
+        QSet<QString> waiters;
+    };
+    struct Cached {
+        QString status;
+        QVariantMap data;
+        QString error;
+        qint64 expires = 0;
+        // An expired answer can still be shown, labeled, while the
+        // provider is offline when its retention record permits it.
+        qint64 offlineUntil = 0;
+    };
+
+    QString start(const QString& feature, const QString& operation,
+                  const QVariantMap& context, const QStringList& fields, bool aggregate,
+                  const QString& privateScope = {});
+    void selected(const QString& consumer, ProviderSelection);
+    void advance(const QString& consumer);
+    void subscribe(const QString& consumer, const QVariantMap& registration);
+    void complete(const QString& invocation, const QString& contribution,
+                  const QString& status, const QVariantMap& data, const QString& error);
+    void consume(const QString& consumer, const QVariantMap& registration,
+                 const QString& status, const QVariantMap& data, const QString& error, bool stale = false);
+    const Cached* offlineAnswer(const QString& key) const;
+    void remember(const QString& key, const QString& status, const QVariantMap& data);
+    void finish(const QString& consumer);
+    QStringList missing(const Consumer& consumer) const;
+    void detach(const QString& consumer, const QSet<QString>& keys);
+    QVariantMap providerContext(const Consumer& consumer) const;
+
+    Backend m_backend;
+    QHash<QString, Consumer> m_consumers;
+    QHash<QString, Job> m_jobs;
+    QHash<QString, QString> m_invocations;
+    QHash<QString, Cached> m_cache;
+    QHash<QString, Cached> m_backoff;
+    QHash<QString, QStringList> m_order;
+    QElapsedTimer m_clock;
+    quint64 m_sequence = 0;
+    quint64 m_policy = 0;
+};

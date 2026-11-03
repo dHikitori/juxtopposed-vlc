@@ -1,0 +1,28 @@
+{
+  "description": "An icon button without an icon. Its label is a message, and the command has no arguments.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "IconButton",
+          "text": {
+            "message": "play.label"
+          },
+          "action": {
+            "command": "org.example.radio/play"
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      "org.example.radio/play"
+    ]
+  }
+}

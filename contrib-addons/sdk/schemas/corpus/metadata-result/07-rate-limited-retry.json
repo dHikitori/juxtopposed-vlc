@@ -1,0 +1,13 @@
+{
+  "description": "A rate_limited result with a retry time and an error text.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "rate_limited",
+    "data": {
+      "retryAfterSeconds": 120
+    },
+    "error": "The service limit is reached."
+  }
+}

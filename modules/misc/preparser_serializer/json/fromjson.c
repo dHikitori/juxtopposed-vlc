@@ -969,7 +969,7 @@ static void fromJSON_input_item_slave(struct serdes_sys *sys,
                         SLAVE_TYPE_GENERIC);
     enum slave_priority i_priority = SLAVE_PRIORITY_MATCH_NONE;
     json_object_to_enum(obj, "i_priority", &i_priority, &err,
-                        SLAVE_PRIORITY_MATCH_NONE, SLAVE_PRIORITY_USER);
+                        SLAVE_PRIORITY_MATCH_NONE, SLAVE_PRIORITY_ML_AUTO);
     bool b_forced = false;
     json_object_to_boolean(obj, "b_forced", &b_forced, &err);
 
@@ -984,6 +984,8 @@ static void fromJSON_input_item_slave(struct serdes_sys *sys,
 
     *error |= err;
 }
+
+#include "native_facts_fromjson.h"
 
 static void fromJSON_input_item(struct serdes_sys *sys,
                                 const struct json_object *obj,
@@ -1052,6 +1054,7 @@ static void fromJSON_input_item(struct serdes_sys *sys,
                         ITEM_TYPE_NUMBER - 1);
     json_object_to_boolean(obj, "b_net", &i->b_net, &err);
 
+    native_read_facts(obj, i, &err);
     *error |= err;
     if (!err) {
         *item = i;
@@ -1069,61 +1072,35 @@ fromJSON_input_attachment(struct serdes_sys *sys,
     assert(a != NULL);
     assert(error != NULL);
 
+    *a = NULL;
     bool err = false;
-
-    char *name = NULL;
-    json_object_to_string(obj, "psz_name", &name, &err);
-    char *mime = NULL;
-    json_object_to_string(obj, "psz_mime", &mime, &err);
-    char *description = NULL;
-    json_object_to_string(obj, "psz_description", &description, &err);
-    size_t i_data = 0;
-    json_object_to_uint(obj, "i_data", &i_data, &err);
-    char *p_data = NULL;
-    json_object_to_string(obj, "p_data", &p_data, &err);
-    if (p_data != NULL) {
-        err = true;
-    }
-
-    if (!err) {
-        *a = vlc_input_attachment_New(name, mime, description, NULL, 0);
-        if (*a == NULL) {
-            err = true;
+    struct native_decode_limit limit = {.bytes=NATIVE_MAX_BYTES - sys->attachment_bytes};
+    char *name = NULL, *mime = NULL, *description = NULL;
+    native_string(&limit, obj, "psz_name", &name, &err);
+    native_string(&limit, obj, "psz_mime", &mime, &err);
+    native_string(&limit, obj, "psz_description", &description, &err);
+    uint64_t size = 0; native_integer(obj, "i_data", false, &size, &err);
+    if (size > limit.bytes) err = true;
+    const struct json_value *payload = json_get(obj, "p_data");
+    if (payload == NULL || payload->type != JSON_NULL) err = true;
+    if (!err) { *a = vlc_input_attachment_New(name, mime, description, NULL, 0); err = *a == NULL; }
+    free(name); free(mime); free(description);
+    if (!err && size != 0) {
+        void *data = malloc(size);
+        if (data == NULL) err = true;
+        else {
+            const ssize_t read = serdes_buf_read(sys, data, size, false);
+            if (read < 0) sys->error = read;
+            if (read != (ssize_t)size) { err = true; free(data); }
+            else { free((*a)->p_data); (*a)->p_data = data; (*a)->i_data = size; }
         }
     }
-    free(name);
-    free(mime);
-    free(description);
-    free(p_data);
-
     if (err) {
-        *error |= err;
-        return;
+        if (*a != NULL) vlc_input_attachment_Release(*a);
+        *a = NULL; *error = true; return;
     }
+    sys->attachment_bytes = NATIVE_MAX_BYTES - limit.bytes + size;
 
-    if (i_data == 0) {
-        return;
-    }
-
-    void *data = malloc(i_data);
-    if (data == NULL) {
-        *error = true;
-        return;
-    }
-    ssize_t ret = 0;
-    ret = serdes_buf_read(sys, data, i_data, false);
-    if ((size_t)ret == i_data) {
-        (*a)->i_data = i_data;
-        free((*a)->p_data);
-        (*a)->p_data = data;
-        return;
-    }
-    if (ret < 0) {
-        sys->error = ret;
-    }
-    *error = true;
-    free(data);
-    vlc_input_attachment_Release(*a);
 }
 
 static void
@@ -1135,6 +1112,8 @@ fromJSON_input_item_node(struct serdes_sys *sys,
     assert(node != NULL);
     assert(error != NULL);
 
+    if (sys->tree_depth >= 32 || sys->tree_nodes >= 4096) { *error = true; return; }
+    ++sys->tree_depth; ++sys->tree_nodes;
     bool err = false;
     input_item_node_t *nd = NULL;
     input_item_t *item = NULL;
@@ -1142,35 +1121,34 @@ fromJSON_input_item_node(struct serdes_sys *sys,
     json_object_from_name(sys, obj, "p_item", &item, err, true,
                           fromJSON_input_item);
     if (err || item == NULL) {
-        *error = true;
+        *error = true; --sys->tree_depth;
         return;
     }
 
     nd = input_item_node_Create(item);
     input_item_Release(item);
     if (nd == NULL) {
-        *error = true;
+        *error = true; --sys->tree_depth;
         return;
     }
     int children = 0;
     json_object_to_int(obj, "i_children", &children, &err);
-
-    const struct json_value *v = NULL;
-    json_array_foreach_ref(obj, "pp_children", v, &err) {
-        if (v->type != JSON_OBJECT) {
-            continue;
-        }
-        input_item_node_t *n = NULL;
-        fromJSON_input_item_node(sys, &v->object, &n, &err);
-        if (err) {
-            break;
-        }
-        input_item_node_AppendNode(nd, n);
+    const struct json_array *array = json_get_array(obj, "pp_children");
+    if (array == NULL || children < 0 || (size_t)children > 4096 - sys->tree_nodes
+        || array->size != (size_t)children) err = true;
+    if (!err && children != 0) {
+        nd->pp_children = vlc_alloc(children, sizeof(*nd->pp_children));
+        if (nd->pp_children == NULL) err = true;
     }
-    if (children != nd->i_children) {
-        err = true;
+    for (size_t i = 0; !err && i < array->size; ++i) {
+        const struct json_value *value = &array->entries[i];
+        if (value->type != JSON_OBJECT) { err = true; break; }
+        input_item_node_t *child = NULL;
+        fromJSON_input_item_node(sys, &value->object, &child, &err);
+        if (!err) nd->pp_children[nd->i_children++] = child;
     }
 
+    --sys->tree_depth;
     *error |= err;
     if (!err) {
         *node = nd;
@@ -1390,6 +1368,13 @@ fromJSON_vlc_preparser_msg_req(struct serdes_sys *sys,
         json_object_to_boolean(obj, "hw_dec", &req->arg.hw_dec, &err);
     }
     json_object_to_string(obj, "uri", &req->uri, &err);
+    const struct json_value *baseline = json_get(obj, "baseline");
+    if (!err && baseline != NULL && baseline->type != JSON_NULL) {
+        if (baseline->type != JSON_OBJECT || req->type != VLC_PREPARSER_MSG_REQ_TYPE_PARSE) err = true;
+        else fromJSON_input_item(sys, &baseline->object, &req->baseline, &err);
+        if (!err && (req->baseline == NULL || req->baseline->psz_uri == NULL || req->uri == NULL
+            || strcmp(req->baseline->psz_uri, req->uri))) err = true;
+    }
 
     /* Accept requests made before input options were added to the protocol. */
     if (json_get(obj, "input_options") != NULL) {
@@ -1439,14 +1424,23 @@ fromJSON_vlc_preparser_msg_res(struct serdes_sys *sys,
                     err = true;
                     break;
                 }
-                input_attachment_t *a;
+                if (res->attachments.size >= 4096) { err = true; break; }
+                input_attachment_t *a = NULL;
                 fromJSON_input_attachment(sys, &v->object, &a, &err);
-                if (!err) {
-                    vlc_vector_push(&res->attachments, a);
-                }
+                if (!err && !vlc_vector_push(&res->attachments, a)) { vlc_input_attachment_Release(a); err = true; }
             }
             json_object_from_name(sys, obj, "subtree", &res->subtree, err,
                                   true, fromJSON_input_item_node);
+            if (json_get(obj, "subtrees") != NULL) {
+                const struct json_array *trees = native_array(obj, "subtrees", &err);
+                for (size_t i = 0; !err && i < trees->size; ++i) {
+                    const struct json_value *value = &trees->entries[i];
+                    if (value->type != JSON_OBJECT) { err = true; break; }
+                    input_item_node_t *tree = NULL;
+                    fromJSON_input_item_node(sys, &value->object, &tree, &err);
+                    if (!err && !vlc_vector_push(&res->subtrees, tree)) { input_item_node_Delete(tree); err = true; }
+                }
+            }
             break;
         case VLC_PREPARSER_MSG_REQ_TYPE_THUMBNAIL:
             json_object_from_name(sys, obj, "pic", &res->pic, err, true,
@@ -1504,6 +1498,7 @@ fromJSON_vlc_preparser_msg(struct serdes_sys *sys,
                               fromJSON_vlc_preparser_msg_res);
     }
 
+    if (!err && (int)(msg_type == VLC_PREPARSER_MSG_TYPE_REQ ? msg->req.type : msg->res.type) != req_type) err = true;
     if (err) {
         vlc_preparser_msg_Clean(msg);
     }

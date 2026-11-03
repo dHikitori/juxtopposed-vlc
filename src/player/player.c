@@ -33,6 +33,7 @@
 #include <vlc_memstream.h>
 #include <vlc_http.h>
 #include <vlc_vout_osd.h>
+#include <vlc_rand.h>
 
 #include "../libvlc.h"
 #include "input/resource.h"
@@ -71,6 +72,7 @@ vlc_player_OpenNextMedia(vlc_player_t *player)
         input_item_Release(player->media);
         player->media = NULL;
         player->releasing_media = false;
+        vlc_addon_session_state_Media(player->addon_session, false);
     }
     else
     {
@@ -82,6 +84,7 @@ vlc_player_OpenNextMedia(vlc_player_t *player)
         player->media = player->next_media;
         player->next_media = NULL;
 
+        vlc_addon_session_state_Media(player->addon_session, true);
         struct vlc_player_input *input = player->input =
             vlc_player_input_New(player, player->media);
         if (!input)
@@ -311,7 +314,7 @@ vlc_player_mainloop_Thread(void *data)
                 {
                     /* Apply the normal start options, including start-paused. */
                     player->started = false;
-                    vlc_player_Start(player);
+                    vlc_player_StartInternal(player, VLC_ADDON_SESSION_CORE);
                 }
                 if (!player->input)
                     player->started = false;
@@ -915,8 +918,9 @@ vlc_player_GetTitleIdx(vlc_player_t *player,
 }
 
 void
-vlc_player_SelectTitleIdx(vlc_player_t *player, size_t index)
+vlc_player_SelectTitleIdxInternal(vlc_player_t *player, size_t index, enum vlc_addon_session_origin origin)
 {
+    vlc_player_session_Record(player, origin, VLC_ADDON_SESSION_SEEK);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (input)
         input_ControlPushHelper(input->thread, INPUT_CONTROL_SET_TITLE,
@@ -945,6 +949,7 @@ vlc_player_SelectChapter(vlc_player_t *player,
 void
 vlc_player_SelectNextTitle(vlc_player_t *player)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (!input)
         return;
@@ -957,6 +962,7 @@ vlc_player_SelectNextTitle(vlc_player_t *player)
 void
 vlc_player_SelectPrevTitle(vlc_player_t *player)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (!input)
         return;
@@ -1003,6 +1009,7 @@ vlc_player_UpdateChapterSeekState(struct vlc_player_input *input, size_t index)
 void
 vlc_player_SelectChapterIdx(vlc_player_t *player, size_t index)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (!input)
         return;
@@ -1016,6 +1023,7 @@ vlc_player_SelectChapterIdx(vlc_player_t *player, size_t index)
 void
 vlc_player_SelectNextChapter(vlc_player_t *player)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (!input)
         return;
@@ -1029,6 +1037,7 @@ vlc_player_SelectNextChapter(vlc_player_t *player)
 void
 vlc_player_SelectPrevChapter(vlc_player_t *player)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (!input)
         return;
@@ -1119,6 +1128,8 @@ vlc_player_InvalidateNextMedia(vlc_player_t *player)
 int
 vlc_player_SetCurrentMedia(vlc_player_t *player, input_item_t *media)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
+    vlc_addon_session_state_Media(player->addon_session, false);
     vlc_player_assert_locked(player);
 
     vlc_player_CancelWaitError(player);
@@ -1158,8 +1169,12 @@ vlc_player_SetCurrentMedia(vlc_player_t *player, input_item_t *media)
 }
 
 void
-vlc_player_SetNextMedia(vlc_player_t *player, input_item_t *media)
+vlc_player_SetNextMediaInternal(vlc_player_t *player, input_item_t *media,
+                              enum vlc_addon_session_origin origin)
 {
+    // Automatic next-item maintenance does not change current playback.
+    if (origin == VLC_ADDON_SESSION_LOCAL)
+        vlc_player_session_Record(player, origin, VLC_ADDON_SESSION_OTHER);
     vlc_player_assert_locked(player);
 
     /* Order is important, hold the new media before releasing the old one */
@@ -1260,8 +1275,9 @@ vlc_player_GetAssociatedSubsFPS(vlc_player_t *player)
 }
 
 int
-vlc_player_Start(vlc_player_t *player)
+vlc_player_StartInternal(vlc_player_t *player, enum vlc_addon_session_origin origin)
 {
+    vlc_player_session_Record(player, origin, VLC_ADDON_SESSION_PLAY);
     vlc_player_assert_locked(player);
 
     vlc_player_CancelWaitError(player);
@@ -1332,6 +1348,7 @@ vlc_player_Start(vlc_player_t *player)
 int
 vlc_player_Stop(vlc_player_t *player)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
 
     vlc_player_CancelWaitError(player);
@@ -1342,6 +1359,7 @@ vlc_player_Stop(vlc_player_t *player)
         return VLC_EGENERIC;
     player->started = false;
 
+    vlc_addon_session_state_Input(player->addon_session, false);
     vlc_player_destructor_AddInput(player, input);
     player->input = NULL;
     return VLC_SUCCESS;
@@ -1364,13 +1382,15 @@ vlc_player_SetPlayAndPause(vlc_player_t *player, bool play_and_pause)
 void
 vlc_player_SetRepeatCount(vlc_player_t *player, unsigned repeat_count)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     vlc_player_assert_locked(player);
     player->repeat = repeat_count;
 }
 
-static void
-vlc_player_SetPause(vlc_player_t *player, bool pause)
+void
+vlc_player_SetPauseInternal(vlc_player_t *player, bool pause, enum vlc_addon_session_origin origin)
 {
+    vlc_player_session_Record(player, origin, pause ? VLC_ADDON_SESSION_PAUSE : VLC_ADDON_SESSION_PLAY);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
 
     if (!input || !input->started)
@@ -1387,18 +1407,19 @@ vlc_player_SetPause(vlc_player_t *player, bool pause)
 void
 vlc_player_Pause(vlc_player_t *player)
 {
-    vlc_player_SetPause(player, true);
+    vlc_player_SetPauseInternal(player, true, VLC_ADDON_SESSION_LOCAL);
 }
 
 void
 vlc_player_Resume(vlc_player_t *player)
 {
-    vlc_player_SetPause(player, false);
+    vlc_player_SetPauseInternal(player, false, VLC_ADDON_SESSION_LOCAL);
 }
 
 void
 vlc_player_NextVideoFrame(vlc_player_t *player)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (!input)
         return;
@@ -1409,6 +1430,7 @@ vlc_player_NextVideoFrame(vlc_player_t *player)
 void
 vlc_player_PreviousVideoFrame(vlc_player_t *player)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (!input)
         return;
@@ -1448,8 +1470,9 @@ vlc_player_GetRate(vlc_player_t *player)
 }
 
 void
-vlc_player_ChangeRate(vlc_player_t *player, float rate)
+vlc_player_ChangeRateInternal(vlc_player_t *player, float rate, enum vlc_addon_session_origin origin)
 {
+    vlc_player_session_Record(player, origin, VLC_ADDON_SESSION_USER_RATE);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
 
     if (rate == 0.0)
@@ -1544,20 +1567,22 @@ vlc_player_DisplayPosition(vlc_player_t *player)
 }
 
 void
-vlc_player_SeekByPos(vlc_player_t *player, double position,
+vlc_player_SeekByPosInternal(vlc_player_t *player, double position,
                      enum vlc_player_seek_speed speed,
-                     enum vlc_player_whence whence)
+                     enum vlc_player_whence whence, enum vlc_addon_session_origin origin)
 {
+    vlc_player_session_Record(player, origin, VLC_ADDON_SESSION_SEEK);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (input != NULL)
         vlc_player_input_SeekByPos(input, position, speed, whence);
 }
 
 void
-vlc_player_SeekByTime(vlc_player_t *player, vlc_tick_t time,
+vlc_player_SeekByTimeInternal(vlc_player_t *player, vlc_tick_t time,
                       enum vlc_player_seek_speed speed,
-                      enum vlc_player_whence whence)
+                      enum vlc_player_whence whence, enum vlc_addon_session_origin origin)
 {
+    vlc_player_session_Record(player, origin, VLC_ADDON_SESSION_SEEK);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
     if (input != NULL)
         vlc_player_input_SeekByTime(input, time, speed, whence);
@@ -1593,6 +1618,7 @@ vlc_player_GetRenderer(vlc_player_t *player)
 int
 vlc_player_SetAtoBLoop(vlc_player_t *player, enum vlc_player_abloop abloop)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
 
     if (!input )
@@ -1627,13 +1653,13 @@ vlc_player_SetAtoBLoop(vlc_player_t *player, enum vlc_player_abloop abloop)
             {
                 if (time > input->abloop_state[0].time)
                 {
-                    vlc_player_SetTime(player, input->abloop_state[0].time);
+                    vlc_player_input_SeekByTime(input, input->abloop_state[0].time, VLC_PLAYER_SEEK_PRECISE, VLC_PLAYER_WHENCE_ABSOLUTE);
                     break;
                 }
             }
             else if (pos > input->abloop_state[0].pos)
             {
-                vlc_player_SetPosition(player, input->abloop_state[0].pos);
+                vlc_player_input_SeekByPos(input, input->abloop_state[0].pos, VLC_PLAYER_SEEK_PRECISE, VLC_PLAYER_WHENCE_ABSOLUTE);
                 break;
             }
 
@@ -1656,6 +1682,7 @@ vlc_player_SetAtoBLoop(vlc_player_t *player, enum vlc_player_abloop abloop)
 int
 vlc_player_SetAtoBLoopTime(vlc_player_t *player, vlc_tick_t a_time, vlc_tick_t b_time)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     if (a_time < 0 || b_time < 0)
         return VLC_EINVAL;
 
@@ -1679,7 +1706,7 @@ vlc_player_SetAtoBLoopTime(vlc_player_t *player, vlc_tick_t a_time, vlc_tick_t b
 
     vlc_tick_t current = vlc_player_input_GetTime(input, false, vlc_tick_now());
     if (current == VLC_TICK_INVALID || current < a_time || current > b_time)
-        vlc_player_SetTime(player, a_time);
+        vlc_player_input_SeekByTime(input, a_time, VLC_PLAYER_SEEK_PRECISE, VLC_PLAYER_WHENCE_ABSOLUTE);
 
     vlc_player_SendEvent(player, on_atobloop_changed, VLC_PLAYER_ABLOOP_A, a_time, 0);
     vlc_player_SendEvent(player, on_atobloop_changed, VLC_PLAYER_ABLOOP_B, b_time, 0);
@@ -1689,6 +1716,7 @@ vlc_player_SetAtoBLoopTime(vlc_player_t *player, vlc_tick_t a_time, vlc_tick_t b
 int
 vlc_player_SetAtoBLoopPosition(vlc_player_t *player, double a_pos, double b_pos)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     if (a_pos < 0 || a_pos > 1.0 || b_pos < 0 || b_pos > 1.0)
         return VLC_EINVAL;
 
@@ -1709,7 +1737,7 @@ vlc_player_SetAtoBLoopPosition(vlc_player_t *player, double a_pos, double b_pos)
 
     double current = vlc_player_input_GetPos(input, false, vlc_tick_now());
     if (current < a_pos || current > b_pos)
-        vlc_player_SetPosition(player, a_pos);
+        vlc_player_input_SeekByPos(input, a_pos, VLC_PLAYER_SEEK_PRECISE, VLC_PLAYER_WHENCE_ABSOLUTE);
 
     vlc_player_SendEvent(player, on_atobloop_changed, VLC_PLAYER_ABLOOP_A, VLC_TICK_INVALID, a_pos);
     vlc_player_SendEvent(player, on_atobloop_changed, VLC_PLAYER_ABLOOP_B, VLC_TICK_INVALID, b_pos);
@@ -1718,6 +1746,7 @@ vlc_player_SetAtoBLoopPosition(vlc_player_t *player, double a_pos, double b_pos)
 
 int
 vlc_player_ResetAtoBLoop(vlc_player_t *player) {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
 
     if (!input || !vlc_player_CanSeek(player))
@@ -1760,6 +1789,7 @@ vlc_player_GetAtoBLoop(vlc_player_t *player, vlc_tick_t *a_time, double *a_pos,
 void
 vlc_player_Navigate(vlc_player_t *player, enum vlc_player_nav nav)
 {
+    vlc_player_session_Record(player, VLC_ADDON_SESSION_LOCAL, VLC_ADDON_SESSION_OTHER);
     struct vlc_player_input *input = vlc_player_get_input_locked(player);
 
     if (!input)
@@ -2065,17 +2095,19 @@ vlc_player_CorkCallback(vlc_object_t *this, const char *var,
     if (player->pause_on_cork)
     {
         if (newval.i_int)
+            vlc_player_session_Record(player, VLC_ADDON_SESSION_CORE, VLC_ADDON_SESSION_OTHER);
+        if (newval.i_int)
         {
             player->corked = player->global_state == VLC_PLAYER_STATE_PLAYING
                           || player->global_state == VLC_PLAYER_STATE_STARTED;
             if (player->corked)
-                vlc_player_Pause(player);
+                vlc_player_SetPauseInternal(player, true, VLC_ADDON_SESSION_CORE);
         }
         else
         {
             if (player->corked)
             {
-                vlc_player_Resume(player);
+                vlc_player_SetPauseInternal(player, false, VLC_ADDON_SESSION_CORE);
                 player->corked = false;
             }
         }
@@ -2116,6 +2148,7 @@ void
 vlc_player_Delete(vlc_player_t *player)
 {
     vlc_mutex_lock(&player->lock);
+    vlc_addon_session_state_Close(player->addon_session);
 
     if (player->input)
     {
@@ -2130,6 +2163,7 @@ vlc_player_Delete(vlc_player_t *player)
     assert(vlc_list_is_empty(&player->metadata_listeners));
     assert(vlc_list_is_empty(&player->vout_listeners));
     assert(vlc_list_is_empty(&player->aout_listeners));
+    assert(vlc_list_is_empty(&player->addon_session_listeners));
 
     vlc_mutex_unlock(&player->lock);
 
@@ -2162,6 +2196,7 @@ vlc_player_Delete(vlc_player_t *player)
 
     assert(!vlc_mutex_held(&player->lock));
 
+    vlc_addon_session_state_Release(player->addon_session);
     vlc_object_delete(player);
 }
 
@@ -2177,6 +2212,9 @@ vlc_player_New(vlc_object_t *parent, enum vlc_player_lock_type lock_type)
     vlc_list_init(&player->metadata_listeners);
     vlc_list_init(&player->vout_listeners);
     vlc_list_init(&player->aout_listeners);
+    vlc_list_init(&player->addon_session_listeners);
+    player->addon_session_listener_count = 0;
+    player->addon_session_notifying = false;
     vlc_list_init(&player->mainloop.stop_inputs);
     vlc_list_init(&player->mainloop.stopping_inputs);
     vlc_list_init(&player->mainloop.joinable_inputs);
@@ -2202,6 +2240,12 @@ vlc_player_New(vlc_object_t *parent, enum vlc_player_lock_type lock_type)
 
     player->play_and_pause = false;
     player->repeat = 0;
+    player->resource = NULL;
+    vlc_addon_session_id session_owner;
+    vlc_rand_bytes(&session_owner, sizeof(session_owner));
+    player->addon_session = vlc_addon_session_state_New(session_owner, NULL);
+    if (player->addon_session == NULL)
+        goto error;
 
 #define VAR_CREATE(var, flag) do { \
     if (var_Create(player, var, flag) != VLC_SUCCESS) \
@@ -2275,9 +2319,26 @@ error:
     if (player->resource)
         input_resource_Release(player->resource);
 
+    vlc_addon_session_state_Release(player->addon_session);
     vlc_object_delete(player);
     return NULL;
 }
+
+
+void vlc_player_SelectTitleIdx(vlc_player_t *player, size_t index)
+{ vlc_player_SelectTitleIdxInternal(player, index, VLC_ADDON_SESSION_LOCAL); }
+void vlc_player_SetNextMedia(vlc_player_t *player, input_item_t *media)
+{ vlc_player_SetNextMediaInternal(player, media, VLC_ADDON_SESSION_LOCAL); }
+int vlc_player_Start(vlc_player_t *player)
+{ return vlc_player_StartInternal(player, VLC_ADDON_SESSION_LOCAL); }
+void vlc_player_ChangeRate(vlc_player_t *player, float rate)
+{ vlc_player_ChangeRateInternal(player, rate, VLC_ADDON_SESSION_LOCAL); }
+void vlc_player_SeekByPos(vlc_player_t *player, double position,
+    enum vlc_player_seek_speed speed, enum vlc_player_whence whence)
+{ vlc_player_SeekByPosInternal(player, position, speed, whence, VLC_ADDON_SESSION_LOCAL); }
+void vlc_player_SeekByTime(vlc_player_t *player, vlc_tick_t time,
+    enum vlc_player_seek_speed speed, enum vlc_player_whence whence)
+{ vlc_player_SeekByTimeInternal(player, time, speed, whence, VLC_ADDON_SESSION_LOCAL); }
 
 vlc_object_t *
 vlc_player_GetObject(vlc_player_t *player)

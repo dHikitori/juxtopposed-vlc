@@ -25,6 +25,9 @@ struct serdes_sys {
 
     int current_type;
     int error;
+    unsigned json_depth, tree_depth, tree_nodes;
+    size_t attachment_bytes;
+    bool json_string, json_escape;
 
     struct VLC_VECTOR(uint8_t) attach_data;
 

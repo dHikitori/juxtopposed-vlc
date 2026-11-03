@@ -13,10 +13,20 @@
 #include <QHash>
 #include <functional>
 
+namespace vlc::addons { class AddonManager; class AddonCatalogueView; }
+class AddonMetadataCoordinator;
+class AddonMetadataService;
+
 class SubtitleSourceService : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool configured READ configured NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool configurationKnown READ configurationKnown NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool providerDisplayAttached READ providerDisplayAttached NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool providerDisplayCurrent READ providerDisplayCurrent NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(bool providerDisplayLoading READ providerDisplayLoading NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(QString providerDisplayError READ providerDisplayError NOTIFY configurationChanged FINAL)
+    Q_PROPERTY(QVariantList displayProviders READ displayProviders NOTIFY configurationChanged FINAL)
     Q_PROPERTY(bool hasCustomKey READ hasCustomKey NOTIFY configurationChanged FINAL)
     Q_PROPERTY(bool hasConsumerKey READ hasConsumerKey CONSTANT FINAL)
     Q_PROPERTY(QVariantList languages READ languages NOTIFY languagesChanged FINAL)
@@ -29,13 +39,23 @@ public:
         int timeoutMs = 20000;
         qint64 maxJsonBytes = 2 * 1024 * 1024;
         qint64 maxFileBytes = 16 * 1024 * 1024;
+        int maxAddonRecords = 8192;
         QByteArray consumerApiKey;
     };
     explicit SubtitleSourceService(QObject* parent = nullptr);
     explicit SubtitleSourceService(const Options& options, QObject* parent = nullptr);
     ~SubtitleSourceService() override;
+    void setAddonManager(vlc::addons::AddonManager* manager);
+    void setMetadataService(AddonMetadataService* service);
     void setStorageDirectory(const QString& directory);
-    bool configured() const { return !m_apiKey.isEmpty(); }
+    bool configured() const;
+    bool configurationKnown() const;
+    bool providerDisplayAttached() const { return m_providerDisplayMode; }
+    bool providerDisplayCurrent() const;
+    bool providerDisplayLoading() const;
+    QString providerDisplayError() const;
+    QVariantList displayProviders() const;
+    Q_INVOKABLE bool providerDisplayIsCurrent() const { return m_providerDisplayMode ? providerDisplayCurrent() : !m_addonManagerRetired; }
     bool hasCustomKey() const { return m_customKey; }
     bool hasConsumerKey() const { return !m_options.consumerApiKey.isEmpty(); }
     QVariantList languages() const;
@@ -66,6 +86,17 @@ signals:
 protected:
     bool eventFilter(QObject* object, QEvent* event) override;
 private:
+    bool providerDisplayBound() const;
+    bool configuredForExecution() const;
+    void retireAddonManager();
+    struct AddonRecord { QString contribution; QVariantMap candidate; QString nativeUrl; QString partition; };
+    void refreshBuiltinRegistration();
+    void beginProviderSearch(quint64 generation);
+    void finishProviderSearch(const QString& consumer, const QString& status,
+                              const QVariantMap& data, const QString& error);
+    void downloadAddon(quint64 generation, const QString& source, const AddonRecord& record);
+    QString addonCachePath(const AddonRecord& record, const QString& format) const;
+    bool providerAvailable(const QString& contribution) const;
     struct SearchTarget { MediaIdentity::Identity identity; QUrl url; bool useHash = true; };
     void beginSearchTarget(quint64 generation);
     void requestSearchPage(quint64 generation);
@@ -89,12 +120,33 @@ private:
     void downloadLink(quint64 request, const QString& source, const Link& link);
     bool writeSubtitle(const QString& path, const QByteArray& bytes);
     Options m_options;
+    QPointer<vlc::addons::AddonManager> m_addonManager;
+    QPointer<vlc::addons::AddonCatalogueView> m_providerDisplay;
+    bool m_providerDisplayMode = false;
+    bool m_addonManagerRetired = false;
+    quint64 m_addonBindingEpoch = 0;
+    QPointer<AddonMetadataCoordinator> m_metadata;
+    QPointer<AddonMetadataService> m_sharedMetadata;
+    bool m_ownedMetadataProfile = false;
+    QHash<QString, QPointer<SubtitleSourceService>> m_nativeSearches;
+    QPointer<SubtitleSourceService> m_builtin;
+    QHash<quint64, QString> m_builtinSearches;
+    quint64 m_builtinPreparation = 0;
+    quint64 m_builtinPrepareGeneration = 0;
+    QString m_builtinPrepareSource;
+    quint64 m_nativeRevision = 0;
+    QString m_providerSearch;
+    QString m_providerResolve;
+    quint64 m_providerAsset = 0;
+    QString m_providerResolveSource;
+    quint64 m_providerResolveGeneration = 0;
+    QHash<QString, AddonRecord> m_addonRecords;
     QNetworkAccessManager m_network;
     QString m_storageDirectory;
     QByteArray m_apiKey;
     bool m_customKey = false;
     QVariantList m_languages;
-    bool m_languagesLoaded = false;
+    bool m_languagesLoaded = false, m_languagesWanted = false;
     quint64 m_languagesGeneration = 0;
     QPointer<QNetworkReply> m_languagesReply;
     QPointer<QNetworkReply> m_searchReply;
@@ -104,6 +156,7 @@ private:
     QVariantList m_targetSources;
     QVariantMap m_searchIdentities;
     QString m_searchLanguage;
+    bool m_searchAllProviders = false;
     QString m_searchWarning;
     int m_targetIndex = 0;
     int m_searchPhase = 0; // hash, structured identity, uncertain-year fallback

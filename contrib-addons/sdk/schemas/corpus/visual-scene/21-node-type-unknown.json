@@ -1,0 +1,14 @@
+{
+  "description": "The node type shader is not available.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "shader",
+        "source": "x"
+      }
+    ]
+  }
+}

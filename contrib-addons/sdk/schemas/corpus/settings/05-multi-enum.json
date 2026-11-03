@@ -1,0 +1,28 @@
+{
+  "description": "A string list with fixed choices and size limits.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "kinds": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "movie",
+            "episode",
+            "music"
+          ]
+        },
+        "uniqueItems": true,
+        "minItems": 1,
+        "maxItems": 3,
+        "x-hakone-control": "multi-enum",
+        "default": [
+          "movie"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Two identical node rows.",
+  "valid": false,
+  "value": {
+    "nodes": [
+      {
+        "id": "n1"
+      },
+      {
+        "id": "n1"
+      }
+    ]
+  }
+}

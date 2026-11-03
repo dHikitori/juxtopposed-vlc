@@ -1,0 +1,20 @@
+{
+  "description": "A binding path contains a reserved object name.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Text",
+          "text": {
+            "bind": "state.constructor.name"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "description": "The document ID starts with a digit.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "1view",
+    "root": {
+      "type": "Page",
+      "title": "Stations"
+    }
+  }
+}

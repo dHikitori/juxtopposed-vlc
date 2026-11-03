@@ -65,11 +65,17 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_inhibit.h \
 	../include/vlc_input.h \
 	../include/vlc_input_item.h \
+	../include/vlc_input_policy.h \
+	../include/vlc_addon_player.h \
+	../include/vlc_artwork_policy.h \
+	../include/vlc_source_backend.h \
+	../include/vlc_source_owner.h \
 	../include/vlc_interface.h \
 	../include/vlc_interrupt.h \
 	../include/vlc_keystore.h \
 	../include/vlc_list.h \
 	../include/vlc_media_library.h \
+	../include/vlc_addon_medialibrary.h \
 	../include/vlc_media_source.h \
 	../include/vlc_memstream.h \
 	../include/vlc_messages.h \
@@ -77,6 +83,10 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_tracer.h \
 	../include/vlc_meta.h \
 	../include/vlc_meta_fetcher.h \
+	../include/vlc_metadata_backend.h \
+	../include/vlc_metadata_owner.h \
+	../include/vlc_medialibrary_work.h \
+	../include/vlc_metadata_revision.h \
 	../include/vlc_mime.h \
 	../include/vlc_modules.h \
 	../include/vlc_mouse.h \
@@ -283,10 +293,38 @@ libvlccore_la_SOURCES = \
 	preparser/fetcher.h \
 	preparser/ipc.c \
 	preparser/internal.c \
+	preparser/metadata_backend.c \
+	preparser/metadata_artwork_outcome.c \
+	preparser/metadata_artwork_outcome.h \
+	preparser/metadata_native_provider.c \
+	preparser/metadata_native_provider.h \
+	preparser/metadata_owner.c \
+	preparser/metadata_owner.h \
+	preparser/metadata_pipeline.c \
+	preparser/metadata_pipeline.h \
+	preparser/metadata_request_guard.c \
+	preparser/metadata_request_guard.h \
+	preparser/metadata_request_events.c \
+	preparser/metadata_request_events.h \
+	preparser/metadata_local.h \
+	preparser/metadata_requests.c \
+	preparser/metadata_requests.h \
+	preparser/metadata_snapshot.c \
 	preparser/preparser.c \
 	preparser/preparser.h \
 	preparser/external.c \
 	input/item.c \
+	input/item_parse.c \
+	input/item_parse.h \
+	input/artwork_policy.c \
+	input/artwork_policy.h \
+	input/policy.c \
+	input/policy.h \
+	input/source_backend.c \
+	input/addon_source.c \
+	input/addon_source.h \
+	input/source_owner.c \
+	input/source_owner.h \
 	input/access.c \
 	clock/clock_internal.c \
 	clock/input_clock.c \
@@ -303,11 +341,15 @@ libvlccore_la_SOURCES = \
 	input/input.c \
 	input/info.h \
 	input/meta.c \
+	input/metadata_revision.h \
 	input/attachment.c \
 	input/parse.c \
 	input/replay_gain.c \
 	player/player.c \
 	player/player.h \
+	player/addon_session.c \
+	player/addon_session_state.c \
+	player/addon_session_state.h \
 	player/input.c \
 	player/timer.c \
 	player/track.c \
@@ -328,6 +370,7 @@ libvlccore_la_SOURCES = \
 	input/item.h \
 	input/mrl_helpers.h \
 	input/stream.h \
+	input/stream_observer.c input/stream_observer.h \
 	input/input_internal.h \
 	input/input_interface.h \
 	input/vlm_internal.h \
@@ -449,6 +492,8 @@ libvlccore_la_SOURCES = \
 	misc/subpicture.c \
 	misc/subpicture.h \
 	misc/medialibrary.c \
+	misc/medialibrary_work.c \
+	misc/medialibrary_work.h \
 	misc/viewpoint.c
 libvlccore_la_LIBADD = $(LIBS_libvlccore) \
 	../compat/libcompat.la \
@@ -701,7 +746,7 @@ test_interrupt_LDADD = $(LDADD) $(LIBS_libvlccore)
 test_jaro_winkler_SOURCES = test/jaro_winkler.c config/jaro_winkler.c
 test_list_SOURCES = test/list.c
 test_md5_SOURCES = test/md5.c
-test_objects_cxx_SOURCES = misc/objects_cxx_test.cpp misc/objects.c
+test_objects_cxx_SOURCES = misc/objects_cxx_test.cpp misc/objects.c input/stream_observer.c
 test_picture_pool_SOURCES = test/picture_pool.c
 test_sort_SOURCES = test/sort.c
 test_timer_SOURCES = test/timer.c
@@ -742,6 +787,8 @@ test_input_es_out_SOURCES = input/test/es_out.c \
 	input/es_out.c input/es_out.h \
 	input/source.c input/source.h \
 	input/item.c input/item.h \
+	input/artwork_policy.c input/artwork_policy.h \
+	input/policy.c input/policy.h \
 	clock/clock.c clock/clock.h \
 	text/strings.c \
 	clock/clock_internal.c clock/clock_internal.h \

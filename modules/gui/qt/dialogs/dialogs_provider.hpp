@@ -204,6 +204,8 @@ private:
 
     QWidget* root;
     bool b_isDying;
+    bool m_quitRetryScheduled=false;
+    bool m_quitRetryReported=false;
 
     void openDialog( OpenDialog::OpenTab );
 

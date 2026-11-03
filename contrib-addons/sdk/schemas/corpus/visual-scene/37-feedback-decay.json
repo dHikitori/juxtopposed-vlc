@@ -1,0 +1,15 @@
+{
+  "description": "A feedback decay is 1.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "feedback",
+        "buffer": 0,
+        "decay": 1
+      }
+    ]
+  }
+}

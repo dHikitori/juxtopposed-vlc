@@ -1,0 +1,14 @@
+{
+  "contract": "ui@1",
+  "id": "home",
+  "root": {
+    "type": "Page",
+    "title": "Preview",
+    "children": [
+      {"type": "Heading", "text": "Stations"},
+      {"type": "Text", "text": {"bind": "state.summary"}},
+      {"type": "Notice", "text": "This view uses the app components."},
+      {"type": "Button", "text": "Refresh", "action": {"command": "org.example.preview/refresh"}}
+    ]
+  }
+}

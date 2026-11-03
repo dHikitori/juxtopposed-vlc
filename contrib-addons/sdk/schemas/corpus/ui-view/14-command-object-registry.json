@@ -1,0 +1,29 @@
+{
+  "description": "The command registry gives the command as an object with an id.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "Button",
+          "text": "Play",
+          "action": {
+            "command": "org.example.radio/play"
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "commands": [
+      {
+        "id": "org.example.radio/play",
+        "title": "Play"
+      }
+    ]
+  }
+}

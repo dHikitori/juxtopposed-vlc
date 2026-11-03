@@ -8,6 +8,7 @@ import signal
 import subprocess
 import tempfile
 from version import verify_binary_version
+from addon_runtime_check import verify_installation
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('executable', type=Path)
@@ -80,6 +81,10 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
     for required in ('qt', 'avcodec', 'medialibrary'):
         if not any(line.split() and line.split()[0] == required for line in modules.stdout.splitlines()):
             raise SystemExit(f'Required module missing: {required}')
+    try:
+        print(verify_installation(args.executable))
+    except RuntimeError as error:
+        raise SystemExit(str(error)) from error
     sample = args.sample.resolve() if args.sample else state / 'sample.mkv'
     if not args.sample:
         subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',

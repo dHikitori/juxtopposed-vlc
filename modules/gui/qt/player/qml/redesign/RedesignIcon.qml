@@ -11,10 +11,13 @@ import QtQuick
 Item {
     id: root
     property string name
+    // Checked markup of an add-on icon (AddonUiRegistry), used when set.
+    // It contains only shapes, with COLOR in place of each paint.
+    property string markup: ""
     property color color: "#8f8f8f"
     property color detailColor: color
     property real sidebarReveal: 0
-    readonly property bool hasDetail: name === "sort-active" || (paths[name] || "").includes("DETAIL")
+    readonly property bool hasDetail: !markup && (name === "sort-active" || (paths[name] || "").includes("DETAIL"))
     // Raster requests follow the display size; layout hints use the SVG frame.
     implicitWidth: 24
     implicitHeight: 24
@@ -207,7 +210,7 @@ Item {
         anchors.fill: parent
         svg:
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">'
-        + (root.paths[root.name] || "").split("COLOR").join(root.color.toString()).split("DETAIL").join(root.detailColor.toString()) + "</svg>"
+        + (root.markup || root.paths[root.name] || "").split("COLOR").join(root.color.toString()).split("DETAIL").join(root.detailColor.toString()) + "</svg>"
     }
     // The active dot extends outside the standard icon frame in the mockup.
     // Keep its SVG frame aligned with the base icon at fractional scales.

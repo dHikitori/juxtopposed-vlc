@@ -1,0 +1,15 @@
+{
+  "description": "An empty retention record uses the host defaults.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "fields": {
+        "title": "Example"
+      },
+      "retention": {}
+    }
+  }
+}

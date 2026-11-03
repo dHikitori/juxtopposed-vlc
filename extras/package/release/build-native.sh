@@ -5,6 +5,8 @@ root=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$root"
 RELEASE_TAG=$(python3 "$root/extras/package/release/version.py")
 export RELEASE_TAG
+source "$root/extras/package/release/setup-addon-rust.sh"
+vlc_setup_addon_rust
 platform=$(uname -s)
 if [[ "$platform" == Darwin ]]; then
     brew_prefix=$(brew --prefix)
@@ -30,12 +32,12 @@ build="$root/build-release-$target"
 if [[ ! -f "$build/build.ninja" ]]; then
     meson setup "$build" --prefix=/usr --libdir=lib --buildtype=release \
         -Dpkg_config_path="${PKG_CONFIG_PATH//:/,}" \
-        -Dqt=enabled -Dupdate-check=enabled -Dmedialibrary=enabled -Dnls=enabled \
+        -Dqt=enabled -Daddon-runtime=enabled -Dupdate-check=enabled -Dmedialibrary=enabled -Dnls=enabled \
         -Dzvbi=disabled -Dlua=enabled -Dskins2=disabled "${platform_options[@]}"
 else
     meson setup --reconfigure --clearcache "$build" --prefix=/usr --libdir=lib \
         -Dpkg_config_path="${PKG_CONFIG_PATH//:/,}" \
-        -Dmedialibrary=enabled -Dupdate-check=enabled -Dskins2=disabled "${platform_options[@]}"
+        -Dmedialibrary=enabled -Daddon-runtime=enabled -Dupdate-check=enabled -Dskins2=disabled "${platform_options[@]}"
 fi
 meson compile -C "$build" -j "${JOBS:-4}"
 if [[ "$target" == macos ]]; then

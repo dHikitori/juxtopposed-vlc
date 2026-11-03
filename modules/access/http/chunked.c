@@ -31,6 +31,7 @@
 #include <string.h>
 #include <vlc_common.h>
 #include <vlc_block.h>
+#include <vlc_interrupt.h>
 #include <vlc_tls.h> /* TODO: remove this */
 
 #include "message.h"
@@ -169,12 +170,21 @@ static void vlc_chunked_close(struct vlc_http_stream *stream, bool abort)
     free(s);
 }
 
+static bool vlc_chunked_is_complete(struct vlc_http_stream *stream)
+{
+    struct vlc_chunked_stream *s = container_of(stream, struct vlc_chunked_stream, stream);
+    /* The old read result can be NULL on allocation failure or a bad terminal
+     * CRLF. Preserve that return and use the private state for evidence. */
+    return s->eof && !s->error && !vlc_killed();
+}
+
 static struct vlc_http_stream_cbs vlc_chunked_callbacks =
 {
     vlc_chunked_wait,
     NULL,
     vlc_chunked_read,
     vlc_chunked_close,
+    vlc_chunked_is_complete,
 };
 
 struct vlc_http_stream *vlc_chunked_open(struct vlc_http_stream *parent,

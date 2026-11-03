@@ -1,0 +1,28 @@
+{
+  "description": "An image with an asset handle and a media card without an action.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Row",
+      "children": [
+        {
+          "type": "Image",
+          "artwork": "asset:cover",
+          "text": "Cover art"
+        },
+        {
+          "type": "MediaCard",
+          "title": "Radio One",
+          "subtitle": {
+            "message": "card.subtitle"
+          },
+          "artwork": {
+            "bind": "state.art"
+          }
+        }
+      ]
+    }
+  }
+}

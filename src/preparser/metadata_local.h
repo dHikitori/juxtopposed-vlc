@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+#ifndef VLC_METADATA_LOCAL_INTERNAL_H
+#define VLC_METADATA_LOCAL_INTERNAL_H 1
+#include <vlc_common.h>
+#include <vlc_metadata_backend.h>
+
+/* This contract is native-only. The worker ABI cannot call it. */
+struct vlc_metadata_local_events {
+    input_item_node_t **subtrees;
+    size_t subtree_count;
+    input_attachment_t **attachments;
+    size_t attachment_count;
+};
+
+/* Return one full private native snapshot for a pending local anchor. The
+ * caller owns a reference. The job retains that exact item until release.
+ * Refuse a changed original snapshot. Do not use ordinary input_item_Copy:
+ * it omits info groups, EPG, and statistics. */
+VLC_API input_item_t *vlc_metadata_job_CopyLocalItem(vlc_metadata_job_t *);
+
+/* Read the native anchor's current target state without I/O or callbacks.
+ * The caller holds the job and exact target. A pending or retained-complete
+ * successful local anchor can pass. Cancel, closed or suspended backend, an
+ * Apply attempt, changed identity/extra/result-field tokens, and URI/name/
+ * option revisions refuse. Proposed native facts use the Apply rules. Live
+ * statistics and EPG time do not block this query. It reserves no token and
+ * grants no write authority. Apply must validate again after a file write. */
+VLC_API bool vlc_metadata_job_IsCurrentFor(vlc_metadata_job_t *, input_item_t *exact_target);
+
+/* Seal the local facts before any remote stage. parsed must be the exact
+ * CopyLocalItem result. Call once, while the anchor is pending. On success,
+ * copy subtree nodes and hold attachment references. The caller retains all
+ * supplied objects and must keep them immutable during this call. Limits:
+ * 16 MiB of copied native data, 4096 entries per collection, 32 tree levels,
+ * and 16 MiB of retained attachment data. A failure leaves no attached delta.
+ * URI, options, policy, and opaque owner data never enter the commit delta.
+ * An exact sealed artwork claim can keep the ordinary native artwork route.
+ * This exception grants no approval record and never applies to scoped media.
+ * A provider claim still requires its own current native approval.
+ */
+VLC_API int vlc_metadata_job_PrepareLocal(vlc_metadata_job_t *, input_item_t *parsed,
+                                const struct vlc_metadata_local_events *);
+
+/* Stage a fetched result from a completed native child after its Apply call.
+ * working must be the anchor's exact private item and the child's exact target.
+ * An unchanged or protected artwork field adds no outcome. A changed field
+ * needs the exact local file and current native approval on both the child
+ * result and working item. Text, provenance, and remote status are not proof.
+ * replace_artwork must match the native outer Apply choice. This call does
+ * not change the target or reserve a token. Final Apply checks
+ * the original artwork and status tokens, then commits the artwork, approval,
+ * and fetched bit together. It preserves the not-found bit and all other bits.
+ * This helper cannot stage a not-found result. A remote no-match result does
+ * not prove that every eligible provider completed a search.
+ */
+VLC_API int vlc_metadata_job_PrepareFetchedArtwork(vlc_metadata_job_t *anchor,
+                    vlc_metadata_job_t *child, input_item_t *working, bool replace_artwork);
+
+/* Carry only the typed native sideband sealed on the exact successful child.
+ * No sideband is a no-op; a present stale/invalid sideband is an error. working
+ * must be both anchor's exact private item and child's exact target. No target
+ * write/token reservation occurs here. Final Apply takes aggregate admission
+ * before backend/item locks and reserves fields+status together. Artwork and
+ * original status/identity tokens remain authoritative. No protected/fetched
+ * artwork is replaced; NOTFOUND is ORed without clearing another status bit.
+ * The legacy raw bit is not a cache/skip authority for an owned lookup. */
+VLC_API int vlc_metadata_job_PrepareNotFoundArtwork(vlc_metadata_job_t *anchor,
+    vlc_metadata_job_t *exact_completed_child, input_item_t *working);
+
+/* Transfer sideband output once, after successful Apply. A failed or cancelled
+ * commit has no output. The caller can now deliver callbacks outside native
+ * locks. Clear releases every tree and attachment after those callbacks.
+ * Cancel after admission does not undo that admitted output. */
+VLC_API bool vlc_metadata_job_TakeLocalEvents(vlc_metadata_job_t *, struct vlc_metadata_local_events *);
+VLC_API void vlc_metadata_local_events_Clear(struct vlc_metadata_local_events *);
+#endif

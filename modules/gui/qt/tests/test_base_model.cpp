@@ -24,6 +24,7 @@
 #include "../util/base_model.hpp"
 #include "../util/base_model_p.hpp"
 #include "../util/locallistcacheloader.hpp"
+#include "../util/locallistbasemodel.hpp"
 
 #include <memory>
 #include <vector>
@@ -147,6 +148,72 @@ void Model::setLabel(int id, const QString& label)
     d->invalidateCache();
 }
 
+class LocalModelPrivate;
+
+// Fills on the UI thread and ends its own loading, as the network models do.
+class LocalModel : public BaseModel
+{
+    Q_DECLARE_PRIVATE(LocalModel);
+
+public:
+    LocalModel(QObject *parent = nullptr);
+
+    QVariant data(const QModelIndex &, int) const override { return {}; }
+
+    void append(int id);
+    void touch();
+    void endLoading();
+};
+
+class LocalModelPrivate : public LocalListBaseModelPrivate<ItemPtr>
+{
+    Q_DECLARE_PUBLIC(LocalModel)
+public:
+    using LocalListBaseModelPrivate<ItemPtr>::LocalListBaseModelPrivate;
+
+    ItemLoader::ItemCompare getSortFunction() const override
+    {
+        return [](const ItemPtr& l, const ItemPtr& r) { return l->id < r->id; };
+    }
+
+    bool initializeModel() override
+    {
+        return true;
+    }
+
+    std::vector<ItemPtr> getModelData(const QString&) const override
+    {
+        return m_items;
+    }
+
+    std::vector<ItemPtr> m_items;
+};
+
+LocalModel::LocalModel(QObject *parent)
+    : BaseModel(new LocalModelPrivate(this), parent)
+{
+}
+
+void LocalModel::append(int id)
+{
+    Q_D(LocalModel);
+    d->m_items.push_back(std::make_shared<Item>(id));
+    touch();
+}
+
+void LocalModel::touch()
+{
+    Q_D(LocalModel);
+    d->m_revision++;
+    d->invalidateCache();
+}
+
+void LocalModel::endLoading()
+{
+    Q_D(LocalModel);
+    d->endLoading();
+}
+
 void await(int msec)
 {
     QElapsedTimer timer;
@@ -234,6 +301,56 @@ void test_retained_rows_notify_payload_changes()
     assert(resets == 0 && selected.isValid() && selected.row() == 2);
 }
 
+void test_loading_lasts_until_rows_are_counted()
+{
+    LocalModel m;
+    int emptyAndIdle = 0;
+    bool lastLoading = true;
+    const auto check = [&] {
+        lastLoading = m.loading();
+        if (!lastLoading && m.getCount() == 0)
+            ++emptyAndIdle;
+    };
+    QObject::connect(&m, &LocalModel::loadingChanged, &m, check);
+    QObject::connect(&m, &LocalModel::countChanged, &m, check);
+
+    // The source answers with no rows yet, as service discovery does.
+    m.touch();
+    await(10);
+    assert(m.getCount() == 0 && m.loading());
+
+    // The first row arrives and the model ends its loading before the cache
+    // has counted it: a view must not see an idle, empty list.
+    m.append(1);
+    m.endLoading();
+    assert(m.loading());
+    await(10);
+    assert(!m.loading() && !lastLoading);
+    assert(m.getCount() == 1);
+    assert(emptyAndIdle == 0);
+
+    // Rows that arrive later do not bring loading back.
+    m.append(2);
+    assert(!m.loading());
+    await(10);
+    assert(m.getCount() == 2);
+
+    // A list that stays empty still says loading ended, though its count
+    // does not change.
+    LocalModel empty;
+    bool emptyLoading = true;
+    QObject::connect(&empty, &LocalModel::loadingChanged, &empty,
+        [&] { emptyLoading = empty.loading(); });
+    empty.touch();
+    await(10);
+    empty.touch();
+    empty.endLoading();
+    assert(empty.loading());
+    await(10);
+    assert(!empty.loading() && !emptyLoading);
+    assert(empty.getCount() == 0);
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication a(argc, argv);
@@ -243,6 +360,7 @@ int main(int argc, char **argv)
         test_invalidate_on_invalidate();
         test_sanity();
         test_retained_rows_notify_payload_changes();
+        test_loading_lasts_until_rows_are_counted();
 
         a.quit();
     }, Qt::QueuedConnection);

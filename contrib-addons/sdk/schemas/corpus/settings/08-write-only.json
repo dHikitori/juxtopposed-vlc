@@ -1,0 +1,19 @@
+{
+  "description": "Secret fields from writeOnly and from the password format.",
+  "valid": true,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "password": {
+        "type": "string",
+        "writeOnly": true
+      },
+      "pin": {
+        "type": "string",
+        "format": "password",
+        "maxLength": 8
+      }
+    }
+  }
+}

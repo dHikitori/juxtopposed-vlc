@@ -9,6 +9,12 @@ FocusScope {
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
+    property var addonRegistry: typeof redesignAddonUi === "undefined" ? null : redesignAddonUi
+    readonly property var addonActions: {
+        if (!addonRegistry) return []
+        addonRegistry.revision
+        return addonRegistry.commands.filter(entry => entry.document.hook === "queue.item.actions@1").slice(0, 8)
+    }
     property Component videoBackdropContent
     property bool singleClickActivate: false
     property var hierarchyModel: null
@@ -77,6 +83,7 @@ FocusScope {
         actionsMenu.popup(list, Qt.point(0, 0))
     }
     function runAction(action) {
+        if (action.startsWith("addon/")) { if (addonRegistry) addonRegistry.triggerCommand(action.slice(6), {}); return }
         if (action === "remove") removeSelection()
         else if (action === "earlier") moveToRow(actionIndex, actionIndex - 1)
         else if (action === "later") moveToRow(actionIndex, actionIndex + 1)
@@ -206,12 +213,13 @@ FocusScope {
                     objectName: row.queueIndex >= 0 ? "queueItem_" + row.queueIndex : "queueGroup_" + row.index
                     Layout.fillWidth: true
                     text: row.title
+                    tooltipTextFormat: Text.PlainText
                     selected: row.queueIndex >= 0 ? !root.selectedGroupKey.length && root.selectedIndex === row.queueIndex : root.selectedGroupKey === row.groupKey
                     selectedForeground: row.isCurrent ? theme.accent : theme.foreground
                     contentItem: RowLayout {
                         spacing: theme.dp(12)
                         RedesignIcon { visible: row.group; Layout.preferredWidth: theme.dp(18); Layout.preferredHeight: theme.dp(18); name: row.model.treePlaylist ? "playlist" : "folder"; color: row.containsCurrent ? theme.accent : theme.foreground }
-                        Text { Layout.fillWidth: true; text: row.title; elide: Text.ElideRight; font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground }
+                        Text { Layout.fillWidth: true; text: row.title; textFormat: Text.PlainText; elide: Text.ElideRight; font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground }
                         Text { objectName: "queueDuration_" + row.queueIndex; text: root.durationText(row.model.duration); font.pixelSize: theme.dp(14); color: theme.playerLabel }
                     }
                     mediaItem: true
@@ -295,7 +303,7 @@ FocusScope {
             { action: "save", label: qsTr("Save queue to file"), enabled: root.itemCount > 0 },
             { action: "clear", label: qsTr("Clear queue"), enabled: root.itemCount > 0 },
             { action: "close", label: qsTr("Close queue"), icon: "close" }
-        ]
+        ].concat(root.addonActions.map(entry => ({action: "addon/" + entry.id, label: entry.name || entry.id, enabled: root.actionIndex >= 0 && root.actionIndex < root.itemCount})))
         onActionRequested: action => root.runAction(action)
     }
     DropArea {

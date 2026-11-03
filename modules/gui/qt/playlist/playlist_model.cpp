@@ -21,6 +21,8 @@
 #endif
 
 #include "playlist_model.hpp"
+#include "addons/addon_native_queue_store.hpp"
+#include <QSet>
 #include "playlist_model_p.hpp"
 #include <algorithm>
 #include <cassert>
@@ -286,11 +288,22 @@ PlaylistListModel::PlaylistListModel(QObject *parent)
     : QAbstractListModel(parent)
     , d_ptr(new PlaylistListModelPrivate(this))
 {
+    connect(vlc::addons::AddonNativeQueueStore::notifications(), &vlc::addons::AddonNativeQueueNotifications::metadataChanged,
+        this, [this](quintptr playlistIdentity, const QList<quint64>& itemIds) {
+            Q_D(PlaylistListModel);
+            if (reinterpret_cast<quintptr>(d->m_playlist) != playlistIdentity) return;
+            const QSet<quint64> changed(itemIds.begin(), itemIds.end());
+            for (int row = 0; row < d->m_items.size(); ++row) {
+                auto& item = d->m_items[row];
+                if (!item.raw() || !changed.contains(vlc_playlist_item_GetId(item.raw()))) continue;
+                item.sync();
+                emit dataChanged(index(row, 0), index(row, 0), {TitleRole, FilterRole});
+            }
+        });
 }
 
 PlaylistListModel::PlaylistListModel(vlc_playlist_t *raw_playlist, QObject *parent)
-    : QAbstractListModel(parent)
-    , d_ptr(new PlaylistListModelPrivate(this))
+    : PlaylistListModel(parent)
 {
     setPlaylist(Playlist(raw_playlist));
 }

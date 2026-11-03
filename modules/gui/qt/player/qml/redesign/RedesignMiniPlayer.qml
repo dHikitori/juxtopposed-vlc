@@ -95,6 +95,7 @@ Rectangle {
         Layout.maximumWidth: implicitWidth
         implicitWidth: Math.round(root.theme.dp(48) + labelMetrics.advanceWidth)
         caption: label; captionFontSize: 16; captionSpacing: 8
+        captionTextFormat: Text.PlainText
         captionMaximumWidth: Math.max(0, width - root.theme.dp(48))
         leftAligned: true; contentLeftMargin: 8
         foreground: root.metadataColor; iconForeground: root.theme.foreground
@@ -173,7 +174,7 @@ Rectangle {
         objectName: "miniPlayerTitle"
         x: theme.dp(16); y: parent.height - theme.dp(62) - baselineOffset
         width: parent.width - theme.dp(32)
-        text: root.mediaTitle; elide: Text.ElideRight
+        text: root.mediaTitle; textFormat: Text.PlainText; elide: Text.ElideRight
         color: root.metadataColor; font.pixelSize: theme.dp(16)
         MoveHandler {}
     }

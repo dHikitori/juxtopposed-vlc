@@ -9,9 +9,12 @@
 #include <QVariantMap>
 #include <functional>
 #include "util/series_discovery.hpp"
+#include <QHash>
+#include <optional>
 
 class MainCtx;
 class QJsonDocument;
+class AddonMetadataService;
 Q_MOC_INCLUDE("maininterface/mainctx.hpp")
 
 // Background episode names. Playback and file tags are never modified.
@@ -24,6 +27,7 @@ public:
     ~EpisodeMetadata() override;
     MainCtx* ctx() const;
     void setCtx(MainCtx* ctx);
+    void setMetadataService(AddonMetadataService*);
     Q_INVOKABLE void request(const QUrl& url, const QVariantMap& metadata);
     Q_INVOKABLE void readCached(const QList<QUrl>& urls);
 signals:
@@ -34,18 +38,31 @@ private:
     void cancel();
     void schedule();
     void lookup();
+    void lookupProvider();
+    void providerFinished(const QString&, const QString&, const QVariantMap&, const QString&);
     void fetchSeason(quint64 generation, int season);
     void applyTitles();
     MediaIdentity::Identity identity(const QUrl& url) const;
     void get(const QUrl& url, quint64 generation, std::function<void(const QJsonDocument&)> completed);
-    void save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QUrl& source);
+    void save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QVariantMap& provenance = {});
     QPointer<MainCtx> m_ctx;
+    QPointer<AddonMetadataService> m_sharedMetadata;
+    bool m_ownedMetadataProfile = false;
+    QString m_providerRequest;
+    QUrl m_providerTarget;
+    QVariantMap m_providerIdentity;
+    QSet<QUrl> m_attemptedProviders;
     QNetworkAccessManager m_network;
     QPointer<QNetworkReply> m_reply;
     QElapsedTimer m_lastRequest;
     QUrl m_current;
     QVariantMap m_metadata;
-    struct EpisodeTitle { QString title; QUrl source; };
+    // Parsing a file name is the costly part of a lookup, and every sibling
+    // is compared many times. A sibling's identity depends on its URL only;
+    // the current one also on m_metadata, so it is dropped when either changes.
+    mutable QHash<QUrl, MediaIdentity::Identity> m_identities;
+    mutable std::optional<MediaIdentity::Identity> m_currentIdentity;
+    struct EpisodeTitle { QString title; QUrl source; QVariantMap provenance; };
     QSet<QUrl> m_candidates;
     QSet<QUrl> m_resolved;
     QMap<int, QMap<int, EpisodeTitle>> m_titles;

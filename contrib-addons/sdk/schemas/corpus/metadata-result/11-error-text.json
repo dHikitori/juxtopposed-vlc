@@ -1,0 +1,11 @@
+{
+  "description": "An error result with an empty error text.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "error",
+    "data": {},
+    "error": ""
+  }
+}

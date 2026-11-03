@@ -1,0 +1,14 @@
+{
+  "description": "A length limit is not an integer.",
+  "valid": false,
+  "value": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "field": {
+        "type": "string",
+        "maxLength": 2.5
+      }
+    }
+  }
+}

@@ -35,6 +35,26 @@ player_programs = \
 noinst_PROGRAMS =
 check_PROGRAMS = \
     test_src_misc_configured_proxy \
+    test_src_misc_metadata_backend \
+    test_src_misc_metadata_commit \
+    test_src_misc_metadata_artwork \
+    test_src_misc_metadata_revision \
+    test_src_misc_metadata_owner \
+    test_src_misc_metadata_requests \
+    test_src_misc_metadata_pipeline \
+    test_src_misc_metadata_fetcher \
+    test_src_misc_metadata_native_provider \
+    test_src_player_addon_session_state \
+    test_src_misc_addon_medialibrary \
+    test_src_input_policy \
+    test_src_input_artwork_policy \
+    test_src_input_artwork_fetcher \
+    test_src_input_source_backend \
+    test_src_input_addon_source \
+    test_src_input_addon_source_playback \
+    test_src_misc_medialibrary_work \
+    test_src_player_audio_samples_lifecycle \
+    test_src_input_source_owner \
     test_src_misc_media_library_startup \
 	test_src_misc_iso_language \
 	test_libvlc_core \
@@ -234,6 +254,87 @@ endif
 test_src_misc_configured_proxy_SOURCES = src/misc/configured_proxy.c
 test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
+check_PROGRAMS += test_modules_lua_meta_selector
+test_modules_lua_meta_selector_SOURCES = modules/lua/meta_selector.c
+test_modules_lua_meta_selector_LDADD = $(LIBVLCCORE)
+if BUILD_LUA
+check_PROGRAMS += test_modules_lua_meta_selector_runtime
+test_modules_lua_meta_selector_runtime_SOURCES = modules/lua/meta_selector_runtime.c modules/lua/meta_art_filter_probe.c
+test_modules_lua_meta_selector_runtime_LDADD = $(LIBVLC) $(LIBVLCCORE)
+if HAVE_DARWIN
+test_modules_lua_meta_selector_runtime_LDFLAGS = $(AM_LDFLAGS) -Wl,-export_dynamic
+else
+test_modules_lua_meta_selector_runtime_LDFLAGS = $(AM_LDFLAGS) -Wl,--export-dynamic
+endif
+test_modules_lua_meta_selector_runtime_DEPENDENCIES = $(top_builddir)/share/lua/meta/reader/filename.luac
+test_modules_lua_meta_selector_runtime_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_FILENAME_LUAC="$(abs_top_builddir)/share/lua/meta/reader/filename.luac"
+$(top_builddir)/share/lua/meta/reader/filename.luac: $(top_srcdir)/share/lua/meta/reader/filename.lua
+	$(AM_V_GEN)$(MAKE) -C "$(top_builddir)/share" lua/meta/reader/filename.luac
+endif
+
+test_src_misc_metadata_backend_SOURCES = src/misc/metadata_backend.c
+test_src_misc_metadata_backend_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_commit_SOURCES = src/misc/metadata_commit.c
+test_src_misc_metadata_commit_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_artwork_SOURCES = src/misc/metadata_artwork.c
+test_src_misc_metadata_artwork_LDADD = $(LIBVLCCORE)
+
+if HAVE_LINUX
+check_PROGRAMS += test_src_misc_metadata_commit_limit
+test_src_misc_metadata_commit_limit_SOURCES = src/misc/metadata_commit_limit.c ../src/input/item_parse.c ../src/preparser/metadata_artwork_outcome.c
+test_src_misc_metadata_commit_limit_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_commit_limit_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_commit_limit_LDADD = $(LIBVLCCORE)
+endif
+
+test_src_misc_metadata_revision_SOURCES = src/misc/metadata_revision.c
+test_src_misc_metadata_revision_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_owner_SOURCES = src/misc/metadata_owner.c
+test_src_misc_metadata_owner_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_requests_SOURCES = src/misc/metadata_requests.c
+test_src_misc_metadata_requests_LDADD = $(LIBVLCCORE)
+
+test_src_misc_addon_medialibrary_SOURCES = src/misc/addon_medialibrary.c
+
+test_src_input_policy_SOURCES = src/input/input_policy.c
+test_src_input_policy_LDADD = $(LIBVLCCORE)
+
+if HAVE_LINUX
+check_PROGRAMS += test_src_input_ytdl_policy
+test_src_input_ytdl_policy_SOURCES = src/input/ytdl_policy.c
+test_src_input_ytdl_policy_LDADD = $(LIBVLC) $(LIBVLCCORE) ../modules/libvlc_json.la -lm
+endif
+
+test_src_input_artwork_policy_SOURCES = src/input/artwork_policy.c
+test_src_input_artwork_policy_LDADD = $(LIBVLCCORE)
+
+test_src_input_artwork_fetcher_SOURCES = src/input/artwork_fetcher.c \
+    ../src/preparser/metadata_owner.c ../src/preparser/metadata_pipeline.c ../src/preparser/metadata_request_guard.c
+test_src_input_artwork_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_input_artwork_fetcher_LDADD = $(LIBVLCCORE)
+
+test_src_input_source_backend_SOURCES = src/input/source_backend.c
+test_src_input_source_backend_LDADD = $(LIBVLCCORE)
+
+test_src_input_addon_source_SOURCES = src/input/addon_source.c
+test_src_input_addon_source_LDADD = $(LIBVLCCORE)
+
+test_src_input_addon_source_playback_SOURCES = src/input/addon_source_playback.c
+test_src_input_addon_source_playback_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+test_src_misc_medialibrary_work_SOURCES = src/misc/medialibrary_work.c
+test_src_misc_medialibrary_work_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+test_src_player_audio_samples_lifecycle_SOURCES = src/player/audio_samples_lifecycle.c
+test_src_player_audio_samples_lifecycle_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+test_src_input_source_owner_SOURCES = src/input/source_owner.c
+test_src_input_source_owner_LDADD = $(LIBVLCCORE)
+
 if HAVE_WIN32
 check_PROGRAMS += test_src_config_dirs_win32
 test_src_config_dirs_win32_SOURCES = src/config/dirs_win32.c
@@ -301,6 +402,7 @@ test_src_audio_output_dec_SOURCES = src/audio_output/dec.c \
 	../src/audio_output/meter.c \
 	../src/input/replay_gain.c \
 	../src/misc/objects.c \
+	../src/input/stream_observer.c \
 	../src/misc/variables.c \
 	../src/clock/clock.c \
 	../src/clock/clock_internal.c
@@ -348,9 +450,7 @@ test_src_preparser_subtree_identity_SOURCES = src/preparser/subtree_identity.c
 test_src_preparser_subtree_identity_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_playlist_preparse_depth_SOURCES = src/playlist/preparse_depth.c
 test_src_playlist_preparse_depth_LDADD = $(LIBVLCCORE) $(LIBVLC)
-test_src_preparser_fetcher_shutdown_SOURCES = src/preparser/fetcher_shutdown.c \
-    ../src/preparser/art.c ../src/misc/interrupt.c ../src/misc/objects.c \
-    ../src/misc/variables.c ../src/input/item.c ../src/text/strings.c
+test_src_preparser_fetcher_shutdown_SOURCES = src/preparser/fetcher_shutdown.c
 test_src_preparser_fetcher_shutdown_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_preparser_fetcher_shutdown_LDADD = $(LIBVLCCORE) $(LIBVLC) ../compat/libcompat.la $(SOCKET_LIBS)
 test_src_preparser_artwork_fallback_SOURCES = src/preparser/artwork_fallback.c
@@ -953,3 +1053,148 @@ test_modules_mux_mp4_drain_LDADD = $(LIBVLCCORE) $(LIBVLC)
 
 test_modules_video_filter_sepia_SOURCES = modules/video_filter/sepia.c
 test_modules_video_filter_sepia_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+
+test_src_misc_metadata_pipeline_SOURCES = src/misc/metadata_pipeline.c
+test_src_misc_metadata_pipeline_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_pipeline_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_fetcher_SOURCES = src/misc/metadata_fetcher.c ../src/preparser/metadata_request_guard.c
+test_src_misc_metadata_fetcher_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_fetcher_LDADD = $(LIBVLCCORE)
+
+test_src_misc_metadata_native_provider_SOURCES = src/misc/metadata_native_provider.c ../src/preparser/metadata_native_provider.c ../src/preparser/metadata_artwork_outcome.c
+test_src_misc_metadata_native_provider_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_native_provider_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+test_src_player_addon_session_state_SOURCES = src/player/addon_session_state.c ../src/player/addon_session_state.c
+test_src_player_addon_session_state_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_player_addon_session_state_LDADD = $(LIBVLCCORE)
+
+if HAVE_LINUX
+check_PROGRAMS += test_src_player_addon_session
+test_src_player_addon_session_SOURCES = src/player/addon_session.c
+test_src_player_addon_session_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_player_addon_session_LDFLAGS = $(AM_LDFLAGS) -Wl,--export-dynamic
+test_src_player_addon_session_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_player_addon_session_LOG_COMPILER = env VLC_TEST_TIMEOUT=90
+endif
+
+
+test_src_misc_metadata_local_SOURCES = src/misc/metadata_local.c src/misc/metadata_local_setters.c src/misc/metadata_local_status.c ../src/preparser/metadata_artwork_outcome.c
+test_src_misc_metadata_local_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_local_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_local_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_local_LDADD = $(LIBVLCCORE)
+
+if HAVE_LINUX
+check_PROGRAMS += test_src_misc_metadata_local test_src_misc_metadata_local_limit
+test_src_misc_metadata_local_limit_SOURCES = src/misc/metadata_local_limit.c ../src/input/item.c ../src/preparser/metadata_artwork_outcome.c
+test_src_misc_metadata_local_limit_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src \
+    -Dinput_item_ApplyOptions=metadata_local_unused_options -Dinput_item_CreateFilename=metadata_local_unused_filename
+test_src_misc_metadata_local_limit_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_local_limit_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_local_limit_LDADD = $(LIBVLCCORE)
+check_PROGRAMS += test_src_text_filesystem_sort
+test_src_text_filesystem_sort_SOURCES = src/text/filesystem_sort.c
+test_src_text_filesystem_sort_LDADD = $(LIBVLCCORE)
+endif
+
+check_PROGRAMS += test_src_misc_metadata_request_guard test_src_misc_metadata_request_events
+test_src_misc_metadata_request_guard_SOURCES = src/misc/metadata_request_guard.c
+test_src_misc_metadata_request_guard_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_request_guard_LDADD = $(LIBVLCCORE)
+test_src_misc_metadata_request_events_SOURCES = src/misc/metadata_request_events.c
+test_src_misc_metadata_request_events_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_request_events_LDADD = $(LIBVLCCORE)
+
+if HAVE_LINUX
+check_PROGRAMS += test_src_misc_metadata_local_current test_src_misc_metadata_preparser_internal test_src_misc_metadata_preparser_runtime
+test_src_misc_metadata_local_current_SOURCES = src/misc/metadata_local_current.c src/misc/metadata_local_setters.c
+test_src_misc_metadata_local_current_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_local_current_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_local_current_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_local_current_LDADD = $(LIBVLCCORE)
+test_src_misc_metadata_preparser_internal_SOURCES = src/misc/metadata_preparser_internal.c src/misc/metadata_preparser_setters.c
+test_src_misc_metadata_preparser_internal_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_preparser_internal_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_misc_metadata_preparser_internal_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_misc_metadata_preparser_internal_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_misc_metadata_preparser_runtime_SOURCES = src/misc/metadata_preparser_runtime.c
+test_src_misc_metadata_preparser_runtime_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_misc_metadata_preparser_runtime_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_TIMEOUT=90
+
+check_PROGRAMS += test_src_misc_metadata_pipeline_key test_src_preparser_native_ipc
+test_src_misc_metadata_pipeline_key_SOURCES = src/misc/metadata_pipeline_key.c
+test_src_misc_metadata_pipeline_key_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_pipeline_key_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_preparser_native_ipc_SOURCES = src/preparser/native_ipc.c src/misc/metadata_local_setters.c
+test_src_preparser_native_ipc_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_preparser_native_ipc_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_preparser_native_ipc_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_preparser_native_ipc_LDADD = $(LIBVLCCORE) ../modules/libvlc_json.la
+
+check_PROGRAMS += test_src_preparser_native_import
+test_src_preparser_native_import_SOURCES = src/preparser/native_import.c ../src/input/item.c ../src/preparser/metadata_artwork_outcome.c
+test_src_preparser_native_import_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src \
+    -Dinput_item_ApplyOptions=metadata_local_unused_options -Dinput_item_CreateFilename=metadata_local_unused_filename
+test_src_preparser_native_import_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_preparser_native_import_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_preparser_native_import_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+if HAVE_EXTERNAL_PREPARSER
+check_PROGRAMS += test_src_preparser_owned_pipeline
+test_src_preparser_owned_pipeline_SOURCES = src/preparser/owned_pipeline.c
+test_src_preparser_owned_pipeline_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_preparser_owned_pipeline_LDADD = $(LIBVLC) $(LIBVLCCORE)
+test_src_preparser_owned_pipeline_DEPENDENCIES = $(LIBVLC) $(LIBVLCCORE) $(top_builddir)/bin/vlc-preparser$(EXEEXT)
+test_src_preparser_owned_pipeline_LOG_COMPILER = $(LOG_COMPILER) env VLC_TEST_TIMEOUT=90
+endif
+endif
+
+check_PROGRAMS += test_modules_demux_id3_meta
+test_modules_demux_id3_meta_SOURCES = modules/demux/id3_meta.c
+test_modules_demux_id3_meta_LDADD = $(LIBVLCCORE)
+
+
+EXTRA_DIST += modules/lua/art_outcomes.lua
+if HAVE_ZLIB
+check_PROGRAMS += test_src_input_stream_observer
+test_src_input_stream_observer_SOURCES = src/input/stream_observer.c modules/lua/meta_art_prefetch.c modules/lua/meta_art_inflate.c
+test_src_input_stream_observer_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_input_stream_observer_LDADD = $(LIBVLC) $(LIBVLCCORE) -lz
+endif
+if BUILD_LUA
+check_PROGRAMS += test_modules_lua_meta_art_outcome test_modules_lua_meta_art_scripts test_modules_lua_meta_art_stream
+test_modules_lua_meta_art_outcome_SOURCES = modules/lua/meta_art_outcome.c
+test_modules_lua_meta_art_outcome_CPPFLAGS = $(AM_CPPFLAGS) $(LUA_CFLAGS)
+test_modules_lua_meta_art_outcome_LDADD = $(LUA_LIBS)
+test_modules_lua_meta_art_scripts_SOURCES = modules/lua/meta_art_scripts.c
+test_modules_lua_meta_art_scripts_CPPFLAGS = $(AM_CPPFLAGS) $(LUA_CFLAGS)
+test_modules_lua_meta_art_scripts_LDADD = $(LUA_LIBS)
+test_modules_lua_meta_art_stream_SOURCES = modules/lua/meta_art_stream.c
+test_modules_lua_meta_art_stream_CPPFLAGS = $(AM_CPPFLAGS) $(LUA_CFLAGS) -I$(top_srcdir)/src
+test_modules_lua_meta_art_stream_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_modules_lua_meta_art_stream_LDADD = $(LIBVLC) $(LIBVLCCORE) $(LUA_LIBS)
+if HAVE_DARWIN
+test_modules_lua_meta_art_stream_LDFLAGS = $(AM_LDFLAGS) -Wl,-dead_strip
+else
+test_modules_lua_meta_art_stream_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+endif
+endif
+
+check_PROGRAMS += test_src_misc_metadata_artwork_admission
+test_src_misc_metadata_artwork_admission_SOURCES = src/misc/metadata_artwork_admission.c ../src/preparser/metadata_artwork_outcome.c
+test_src_misc_metadata_artwork_admission_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_misc_metadata_artwork_admission_LDADD = $(LIBVLCCORE)
+
+# Private Windows synchronous remote-file cancellation. The adapters include
+# the real access sources; directory.c supplies their real support closure.
+if HAVE_WIN32_DESKTOP
+check_PROGRAMS += test_src_input_win_file_interrupt
+test_src_input_win_file_interrupt_SOURCES = src/input/win_file_interrupt.c src/input/win_file_interrupt_file.c src/input/win_file_interrupt_unc.c ../modules/access/directory.c
+test_src_input_win_file_interrupt_CPPFLAGS = $(AM_CPPFLAGS) -D__PLUGIN__ -DMODULE_NAME=fixture -DMODULE_STRING=\"fixture\"
+test_src_input_win_file_interrupt_CFLAGS = $(AM_CFLAGS) -ffunction-sections -fdata-sections
+test_src_input_win_file_interrupt_LDFLAGS = $(AM_LDFLAGS) -Wl,--gc-sections
+test_src_input_win_file_interrupt_LDADD = $(LIBVLCCORE) ../compat/libcompat.la -lmpr -lnetapi32
+endif

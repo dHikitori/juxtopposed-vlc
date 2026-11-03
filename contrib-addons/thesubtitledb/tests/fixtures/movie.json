@@ -1,0 +1,10 @@
+{
+  "title": {"imdb": "tt1234567", "tmdb_id": 1234, "media_type": "movie", "name": "Example Movie", "year": 2020},
+  "subtitles": {
+    "total": 3, "limit": 2, "offset": 0,
+    "items": [
+      {"id": 10001, "language": "en", "format": "srt", "release_name": "Example.Movie.2020.1080p", "hearing_impaired": false, "fps": 23.976, "bytes": 18000, "ai_transcribed": false, "download_url": "https://malicious.example/ignored"},
+      {"id": 10002, "language": "pb", "format": "ass", "release_name": "Example Movie Portuguese", "hearing_impaired": true, "fps": null, "bytes": 19000, "ai_transcribed": false}
+    ]
+  }
+}

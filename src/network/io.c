@@ -49,6 +49,7 @@
 
 #include <vlc_common.h>
 #include <vlc_network.h>
+#include <vlc_input_policy.h>
 #include <vlc_poll.h>
 #include <vlc_interrupt.h>
 #if defined (_WIN32)
@@ -115,6 +116,7 @@ int net_Socket (vlc_object_t *p_this, int family, int socktype,
 int (net_Connect)(vlc_object_t *obj, const char *host, int serv,
                   int type, int proto)
 {
+    if (!vlc_input_policy_CheckConnection(obj, host, (unsigned)serv, type != SOCK_STREAM)) { errno = EACCES; return -1; }
     struct addrinfo hints = {
         .ai_socktype = type,
         .ai_protocol = proto,

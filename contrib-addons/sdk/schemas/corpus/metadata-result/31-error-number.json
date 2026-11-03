@@ -1,0 +1,11 @@
+{
+  "description": "error is a number.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "error",
+    "data": {},
+    "error": 500
+  }
+}

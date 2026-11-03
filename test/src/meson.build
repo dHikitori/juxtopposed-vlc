@@ -6,6 +6,139 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_misc_metadata_backend',
+    'sources': files('misc/metadata_backend.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_commit',
+    'sources': files('misc/metadata_commit.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_artwork',
+    'sources': files('misc/metadata_artwork.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_commit_limit',
+    'sources': files('misc/metadata_commit_limit.c', '../../src/input/item_parse.c', '../../src/preparser/metadata_artwork_outcome.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_revision',
+    'sources': files('misc/metadata_revision.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_addon_medialibrary',
+    'sources': files('misc/addon_medialibrary.c'),
+    'suite': ['src', 'test_src', 'addons'],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_owner',
+    'sources': files('misc/metadata_owner.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_requests',
+    'sources': files('misc/metadata_requests.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_policy',
+    'sources': files('input/input_policy.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_ytdl_policy',
+    'sources': files('input/ytdl_policy.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore, vlc_json_lib],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_input_artwork_policy',
+    'sources': files('input/artwork_policy.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_artwork_fetcher',
+    'sources': files('input/artwork_fetcher.c',
+        '../../src/preparser/metadata_owner.c', '../../src/preparser/metadata_pipeline.c',
+        '../../src/preparser/metadata_request_guard.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_source_backend',
+    'sources': files('input/source_backend.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_source_owner',
+    'sources': files('input/source_owner.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_addon_source',
+    'sources': files('input/addon_source.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_input_addon_source_playback',
+    'sources': files('input/addon_source_playback.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_medialibrary_work',
+    'sources': files('misc/medialibrary_work.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_player_audio_samples_lifecycle',
+    'sources': files('player/audio_samples_lifecycle.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_misc_file_logger',
     'sources': files('misc/file_logger.c'),
     'suite': ['src', 'test_src'],
@@ -175,6 +308,7 @@ vlc_tests += {
         '../../src/audio_output/meter.c',
         '../../src/input/replay_gain.c',
         '../../src/misc/objects.c',
+        '../../src/input/stream_observer.c',
         '../../src/misc/variables.c',
         '../../src/clock/clock.c',
         '../../src/clock/clock_internal.c'),
@@ -235,12 +369,29 @@ vlc_tests += {
     'module_depends' : ['preparserserializer_json'],
 }
 
+preparser_test_depends = []
+if is_variable('vlc_preparser_static_dep')
+    preparser_test_depends += vlc_preparser_static_dep
+endif
+
+vlc_tests += {
+    'name': 'test_src_preparser_cmp_internal_external',
+    'sources': files('preparser/cmp_internal_external.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['demux_mock', 'preparserserializer_json'],
+    'depends': preparser_test_depends,
+    'timeout': 90,
+    'enabled': cdata.has('HAVE_VLC_EXTERNAL_PREPARSER'),
+}
+
 vlc_tests += {
     'name' : 'test_src_preparser_folder_options',
     'sources' : files('preparser/folder_options.c'),
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
     'module_depends' : ['filesystem', 'preparserserializer_json'],
+    'depends': preparser_test_depends,
 }
 
 vlc_tests += {
@@ -248,15 +399,13 @@ vlc_tests += {
     'sources' : files('preparser/subtree_identity.c'),
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
-    'module_depends' : ['demux_mock'],
+    'module_depends' : ['demux_mock', 'preparserserializer_json'],
+    'depends': preparser_test_depends,
 }
 
 vlc_tests += {
     'name' : 'test_src_preparser_fetcher_shutdown',
-    'sources' : files('preparser/fetcher_shutdown.c',
-        '../../src/preparser/art.c', '../../src/misc/interrupt.c',
-        '../../src/misc/objects.c', '../../src/misc/variables.c',
-        '../../src/input/item.c', '../../src/text/strings.c'),
+    'sources' : files('preparser/fetcher_shutdown.c'),
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
     'include_directories' : include_directories('../../src'),
@@ -779,3 +928,222 @@ vlc_tests += {
     'suite': ['src', 'test_src'],
     'link_with': [libvlc, libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_pipeline',
+    'sources': files('misc/metadata_pipeline.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_fetcher',
+    'sources': files('misc/metadata_fetcher.c', '../../src/preparser/metadata_request_guard.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_native_provider',
+    'sources': files('misc/metadata_native_provider.c', '../../src/preparser/metadata_native_provider.c', '../../src/preparser/metadata_artwork_outcome.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_player_addon_session_state',
+    'sources': files('player/addon_session_state.c', '../../src/player/addon_session_state.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_player_addon_session_drift',
+    'sources': files('player/addon_session_drift.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['araw', 'adummy', 'demux_mock'],
+    'env': ['VLC_TEST_TIMEOUT=90'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_player_addon_session',
+    'sources': files('player/addon_session.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'link_args': ['-Wl,--export-dynamic'],
+    'module_depends': ['araw', 'adummy'],
+    'env': ['VLC_TEST_TIMEOUT=90'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_local',
+    'sources': files('misc/metadata_local.c', 'misc/metadata_local_setters.c', 'misc/metadata_local_status.c', '../../src/preparser/metadata_artwork_outcome.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_local_limit',
+    'sources': files('misc/metadata_local_limit.c', '../../src/input/item.c', '../../src/preparser/metadata_artwork_outcome.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections',
+        '-Dinput_item_ApplyOptions=metadata_local_unused_options',
+        '-Dinput_item_CreateFilename=metadata_local_unused_filename'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_text_filesystem_sort',
+    'sources': files('text/filesystem_sort.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_request_guard',
+    'sources': files('misc/metadata_request_guard.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_request_events',
+    'sources': files('misc/metadata_request_events.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_local_current',
+    'sources': files('misc/metadata_local_current.c', 'misc/metadata_local_setters.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_preparser_internal',
+    'sources': files('misc/metadata_preparser_internal.c', 'misc/metadata_preparser_setters.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_preparser_runtime',
+    'sources': files('misc/metadata_preparser_runtime.c'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['filesystem', 'wav', 'playlist', 'lua', 'preparserserializer_json'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules', 'VLC_TEST_TIMEOUT=90'],
+    'depends': [lua_filename_reader] + preparser_test_depends,
+    'timeout': 90,
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_pipeline_key',
+    'sources': files('misc/metadata_pipeline_key.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_preparser_native_ipc',
+    'sources': files('preparser/native_ipc.c', 'misc/metadata_local_setters.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore, vlc_json_lib],
+    'c_args': ['-ffunction-sections', '-fdata-sections'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+vlc_tests += {
+    'name': 'test_src_preparser_owned_pipeline',
+    'sources': files('preparser/owned_pipeline.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['filesystem', 'wav', 'http', 'https', 'preparserserializer_json', 'lua'],
+    'depends': [lua_filename_reader] + preparser_test_depends,
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules', 'VLC_TEST_TIMEOUT=90'],
+    'timeout': 90,
+    'enabled': host_system == 'linux' and cdata.has('HAVE_VLC_EXTERNAL_PREPARSER'),
+}
+
+vlc_tests += {
+    'name': 'test_src_preparser_native_import',
+    'sources': files('preparser/native_import.c', '../../src/input/item.c', '../../src/preparser/metadata_artwork_outcome.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlc, libvlccore],
+    'c_args': ['-ffunction-sections', '-fdata-sections',
+        '-Dinput_item_ApplyOptions=metadata_local_unused_options',
+        '-Dinput_item_CreateFilename=metadata_local_unused_filename'],
+    'link_args': ['-Wl,--gc-sections'],
+    'enabled': host_system == 'linux',
+}
+
+
+if z_dep.found()
+    vlc_tests += {
+        'name': 'test_src_input_stream_observer',
+        'sources': files('input/stream_observer.c',
+                         '../modules/lua/meta_art_prefetch.c',
+                         '../modules/lua/meta_art_inflate.c'),
+        'suite': ['src', 'test_src', 'addons'],
+        'link_with': [libvlc, libvlccore],
+        'dependencies': [z_dep],
+        'timeout': 90,
+    }
+endif
+
+vlc_tests += {
+    'name': 'test_src_misc_metadata_artwork_admission',
+    'sources': files('misc/metadata_artwork_admission.c', '../../src/preparser/metadata_artwork_outcome.c'),
+    'include_directories': include_directories('../../src'),
+    'suite': ['src', 'test_src', 'addons'],
+    'link_with': [libvlccore],
+}
+
+if host_system == 'windows' and not have_win_store
+    vlc_tests += {
+        'name': 'test_src_input_win_file_interrupt',
+        'sources': files('input/win_file_interrupt.c', 'input/win_file_interrupt_file.c',
+                         'input/win_file_interrupt_unc.c', '../../modules/access/directory.c'),
+        'suite': ['src', 'test_src'],
+        'link_with': [libvlccore],
+        'dependencies': [cc.find_library('mpr'), cc.find_library('netapi32')],
+        'c_args': ['-D__PLUGIN__', '-DMODULE_NAME=fixture', '-DMODULE_STRING="fixture"',
+                   '-ffunction-sections', '-fdata-sections'],
+        'link_args': ['-Wl,--gc-sections'],
+    }
+endif

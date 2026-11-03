@@ -1263,6 +1263,11 @@ static const char *const clock_sources_text[] = {
     "Maximum number of threads used to fetch art" )
 
 #define METADATA_NETWORK_TEXT N_( "Allow metadata network access" )
+#define METADATA_OWNER_TEXT N_( "Use add-on metadata providers" )
+#define METADATA_OWNER_LONGTEXT N_( \
+    "Send online metadata and artwork lookups to the interface's add-on " \
+    "providers instead of the built-in scripts. VLC must be restarted " \
+    "for a change to take effect." )
 
 static const char *const psz_recursive_list[] = {
     "none", "collapse", "expand" };
@@ -2283,6 +2288,8 @@ vlc_module_begin ()
                  FETCH_ART_THREADS_LONGTEXT )
 
     add_bool( "metadata-network-access", false, METADATA_NETWORK_TEXT, NULL )
+    add_bool( "metadata-native-owner", false, METADATA_OWNER_TEXT,
+              METADATA_OWNER_LONGTEXT )
 
     add_string( "recursive", "collapse" , RECURSIVE_TEXT,
                 RECURSIVE_LONGTEXT )

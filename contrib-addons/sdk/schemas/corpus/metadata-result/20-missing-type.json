@@ -1,0 +1,9 @@
+{
+  "description": "The message has no type.",
+  "valid": false,
+  "value": {
+    "id": "inv-1",
+    "status": "match",
+    "data": {}
+  }
+}

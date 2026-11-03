@@ -27,11 +27,16 @@
 #include "audio_waveform_scanner.hpp"
 #include "util/shared_input_item.hpp"
 #include "util/media_identity_vlc.hpp"
+#include "util/artwork_approval.hpp"
+#include "util/artwork_selection.hpp"
+#include "maininterface/mainctx.hpp"
+#include "addons/addon_metadata_service.hpp"
 #include "playlist/playlist_controller.hpp"
 #include "playlist/media.hpp"
 #include "util/seek_preview_image_provider.hpp"
 
 #include <vlc_actions.h>           /* ACTION_ID */
+#include <vlc_artwork_policy.h>
 #include <vlc_url.h>            /* vlc_uri_decode */
 #include <vlc_strings.h>        /* vlc_strfplayer */
 #include <vlc_aout.h>           /* audio_output_t */
@@ -51,6 +56,7 @@
 #include <QImage>
 #include <QBuffer>
 #include <QStandardPaths>
+#include <QPointer>
 #include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -81,6 +87,7 @@ using SharedTitleList = ::vlc::vlc_shared_data_ptr<vlc_player_title_list,
 
 PlayerControllerPrivate::~PlayerControllerPrivate()
 {
+    m_artworkSelection.reset();
     assert(m_smpteTimerRequestCount == 0);
     m_seekSampleTimer.stop();
     m_seekPreviewEnabled = false;
@@ -229,6 +236,8 @@ void PlayerControllerPrivate::UpdateTrackSelection(vlc_es_id_t *trackid, bool se
 void PlayerControllerPrivate::UpdateMeta( input_item_t *p_item )
 {
     Q_Q(PlayerController);
+    const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(p_item));
+    m_artwork = QUrl::fromEncoded(QByteArray(artwork ? artwork.get() : ""));
 
     {
         vlc_mutex_locker locker(&p_item->lock);
@@ -238,7 +247,6 @@ void PlayerControllerPrivate::UpdateMeta( input_item_t *p_item )
             m_title   = vlc_meta_Get(p_item->p_meta, vlc_meta_Title);
             m_artist  = vlc_meta_Get(p_item->p_meta, vlc_meta_Artist);
             m_album   = vlc_meta_Get(p_item->p_meta, vlc_meta_Album);
-            m_artwork = vlc_meta_Get(p_item->p_meta, vlc_meta_ArtworkURL);
 
             /* Capture the raw sylt-data buffer; the entry list is built on
              * first read so we don't pay for it when lyrics are never shown.
@@ -3169,6 +3177,19 @@ void PlayerController::requestArtUpdate( input_item_t *p_item )
     d->requestMetadata(p_item, false);
 }
 
+void PlayerController::setMetadataService(AddonMetadataService* service)
+{
+    Q_D(PlayerController);
+    if (d->m_metadataService == service) return;
+    d->m_metadataService = service;
+    emit metadataServiceChanged();
+}
+AddonMetadataService* PlayerController::metadataService() const
+{
+    Q_D(const PlayerController);
+    return d->m_metadataService;
+}
+
 void PlayerControllerPrivate::requestMetadata(input_item_t *p_item, bool automatic)
 {
     if (m_preparser == nullptr)
@@ -3267,7 +3288,7 @@ const QString PlayerController::decodeArtURL( input_item_t *p_item )
 {
     assert( p_item );
 
-    char *psz_art = input_item_GetArtURL( p_item );
+    char *psz_art = vlc_artwork_item_GetURI( p_item );
     if( psz_art )
     {
         char *psz = vlc_uri2path( psz_art );
@@ -3285,23 +3306,51 @@ const QString PlayerController::decodeArtURL( input_item_t *p_item )
     return path;
 }
 
+void PlayerController::setArtworkSelectionLifetime(vlc::addons::AddonStreamLifetime::Handle lifetime, QString cacheDirectory)
+{
+    Q_D(PlayerController);
+    d->m_artworkSelection.reset(); d->m_artworkSelectionLifetime=std::move(lifetime);
+    d->m_artworkSelectionDirectory=std::move(cacheDirectory);
+}
+
 void PlayerController::setArt( input_item_t *p_item, QString fileUrl )
 {
     Q_D(PlayerController);
-    if( hasInput() )
+    if(!p_item || !hasInput()) return;
+    const SharedInputItem target(p_item);
     {
-        char *psz_cachedir = config_GetUserDir( VLC_CACHE_DIR );
-        QString old_url = decodeArtURL( p_item );
-        old_url = QDir( old_url ).canonicalPath();
-
-        if( psz_cachedir != nullptr && old_url.startsWith( QString::fromUtf8( psz_cachedir ) ) )
-            QFile( old_url ).remove(); /* Purge cached artwork */
-
-        free( psz_cachedir );
-
-        input_item_SetArtURL( p_item , fileUrl.toUtf8().constData() );
-        d->UpdateArt( p_item );
+        vlc_player_locker lock(d->m_player);
+        if(vlc_player_GetCurrentMedia(d->m_player)!=target.get()) return;
     }
+    if(!d->m_artworkSelection) {
+        auto lifetime=d->m_artworkSelectionLifetime;
+        auto* ctx=d->p_intf->p_mi;
+        if(!lifetime.current() && ctx) lifetime=ctx->addonStreamLifetime();
+        if(!lifetime.current()) return;
+        const auto directory=d->m_artworkSelectionDirectory.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+QStringLiteral("/selected-artwork") : d->m_artworkSelectionDirectory;
+        d->m_artworkSelection=std::make_unique<ArtworkSelection>(lifetime,directory,this);
+        auto* selection=d->m_artworkSelection.get();
+        connect(this,&PlayerController::inputChanged,selection,[selection] { selection->cancel(); });
+        if(ctx) connect(ctx,&MainCtx::addonWorkRetiring,selection,&ArtworkSelection::close,Qt::DirectConnection);
+    }
+    d->m_artworkSelection->prepare(target.get(),QUrl(fileUrl,QUrl::StrictMode),[this,target](ArtworkSelection::Result result) {
+        if(!result.receipt) return;
+        Q_D(PlayerController);
+        {
+            vlc_player_locker lock(d->m_player);
+            if(vlc_player_GetCurrentMedia(d->m_player)!=target.get()
+                || result.receipt->apply(target.get(),result.generation)!=VLC_SUCCESS) return;
+        }
+        const QPointer<PlayerController> owner(this);
+        d->UpdateMeta(target.get());
+        if(!owner) return;
+        {
+            vlc_player_locker lock(d->m_player);
+            if(vlc_player_GetCurrentMedia(d->m_player)!=target.get()) return;
+        }
+        d->UpdateArt(target.get());
+    });
 }
 
 void PlayerController::refreshMediaMeta( input_item_t *p_item )
@@ -3418,7 +3467,15 @@ PRIMITIVETYPE_GETTER(bool, getTeletextTransparency, m_teletextTransparent)
 PRIMITIVETYPE_GETTER(QString, getTitle, m_title)
 PRIMITIVETYPE_GETTER(QString, getArtist, m_artist)
 PRIMITIVETYPE_GETTER(QString, getAlbum, m_album)
-PRIMITIVETYPE_GETTER(QUrl, getArtwork, m_artwork)
+QUrl PlayerController::getArtwork() const
+{
+    Q_D(const PlayerController);
+    if (d->m_currentItem && vlc_artwork_item_IsRestricted(d->m_currentItem.get())) {
+        const auto artwork = vlc::wrap_cptr(vlc_artwork_item_GetURI(d->m_currentItem.get()));
+        return QUrl::fromEncoded(QByteArray(artwork ? artwork.get() : ""));
+    }
+    return d->m_artwork;
+}
 PRIMITIVETYPE_GETTER(QUrl, getUrl, m_url)
 
 QVariantMap PlayerController::getSeriesContext() const

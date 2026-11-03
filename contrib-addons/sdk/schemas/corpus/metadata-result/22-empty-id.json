@@ -1,0 +1,10 @@
+{
+  "description": "The id is empty.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "",
+    "status": "match",
+    "data": {}
+  }
+}

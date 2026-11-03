@@ -3,8 +3,278 @@
 #
 
 qt6 = import('qt6')
+fs = import('fs')
 
 qt_include_dir = include_directories('.')
+
+addon_host_sources = files(
+    'addons/addon_manifest.cpp',
+    'addons/addon_manifest.hpp',
+    'addons/addon_metadata_attempt.cpp',
+    'addons/addon_metadata_attempt.hpp',
+    'addons/addon_prepared_metadata_invocation.cpp',
+    'addons/addon_prepared_metadata_invocation.hpp',
+    'addons/addon_prepared_artwork_asset.hpp',
+    'addons/addon_metadata_registry_epoch.cpp',
+    'addons/addon_metadata_registry_epoch.hpp',
+    'addons/addon_artwork_attempt_plan.cpp',
+    'addons/addon_artwork_attempt_plan.hpp',
+    'addons/addon_package_configuration.hpp',
+    'addons/addon_metadata_completion_policy.cpp',
+    'addons/addon_metadata_completion_policy.hpp',
+    'addons/addon_metadata_identity.hpp',
+    'addons/addon_package_store.cpp',
+    'addons/addon_package_store.hpp',
+    'addons/addon_store_authority.cpp',
+    'addons/addon_store_authority.hpp',
+    'addons/addon_store_process_fence.cpp',
+    'addons/addon_store_process_fence.hpp',
+    'addons/addon_store_profile_generation.cpp',
+    'addons/addon_store_profile_generation.hpp',
+    'addons/addon_store_profile_protocol.cpp',
+    'addons/addon_store_profile_protocol.hpp',
+    'addons/addon_store_profile_socket.cpp',
+    'addons/addon_store_profile_socket.hpp',
+    'addons/addon_store_profile_coordinator.cpp',
+    'addons/addon_store_profile_coordinator.hpp',
+    'addons/addon_store_profile_control.cpp',
+    'addons/addon_store_profile_control.hpp',
+    'addons/addon_store_profile_client.cpp',
+    'addons/addon_store_profile_client.hpp',
+    'addons/addon_store_profile_session.cpp',
+    'addons/addon_store_profile_session.hpp',
+    'addons/addon_profile_host.cpp',
+    'addons/addon_profile_host.hpp',
+    'addons/addon_process_launch.cpp',
+    'addons/addon_process_launch.hpp',
+    'addons/addon_precompiled_modules.cpp',
+    'addons/addon_candidate_check.cpp',
+    'addons/addon_candidate_check.hpp',
+    'addons/addon_precompiled_modules.hpp',
+    'addons/addon_native_wake.cpp',
+    'addons/addon_native_wake.hpp',
+    'addons/addon_native_notifications.cpp',
+    'addons/addon_native_notifications.hpp',
+    'addons/addon_catalogue_store_lock.hpp',
+    'addons/addon_credentials.cpp',
+    'addons/addon_credentials.hpp',
+    'addons/addon_device_authorization.cpp',
+    'addons/addon_manager_accounts.cpp',
+    'addons/addon_guest_projections.cpp',
+    'addons/addon_guest_projections.hpp',
+    'addons/addon_account_setup.cpp',
+    'addons/addon_account_setup.hpp',
+    'addons/addon_device_authorization.hpp',
+    'addons/addon_manager.cpp',
+    'addons/addon_manager.hpp',
+    'addons/addon_package_reader.hpp',
+    'addons/addon_metadata_catalogue_source.hpp',
+    'addons/addon_package_summaries.cpp',
+    'addons/addon_package_summaries.hpp',
+    'addons/addon_accepted_identities.cpp',
+    'addons/addon_accepted_identities.hpp',
+    'addons/addon_identity_choice.cpp',
+    'addons/addon_identity_choice.hpp',
+    'addons/addon_catalogue_view.cpp',
+    'addons/addon_catalogue_view.hpp',
+    'addons/addon_catalogue_view_manager.cpp',
+    'addons/addon_display_catalogue_reader.hpp',
+    'addons/addon_distribution_bootstrap.cpp',
+    'addons/addon_distribution_bootstrap.hpp',
+    'addons/addon_native_authority.hpp',
+    'addons/addon_network.cpp',
+    'addons/addon_network.hpp',
+    'addons/addon_public_network_policy.cpp',
+    'addons/addon_public_network_policy.hpp',
+    'addons/addon_worker.cpp',
+    'addons/addon_worker.hpp',
+    'addons/addon_metadata_coordinator.cpp',
+    'addons/addon_metadata_coordinator.hpp',
+    'addons/addon_result_retention.hpp',
+    'addons/addon_metadata_family_plan.cpp',
+    'addons/addon_metadata_family_plan.hpp',
+    'addons/addon_metadata_choices.cpp',
+    'addons/addon_metadata_choices.hpp',
+    'addons/addon_native_provider_context.cpp',
+    'addons/addon_native_provider_context.hpp',
+    'addons/addon_core_metadata_admission.cpp',
+    'addons/addon_core_metadata_admission.hpp',
+    'addons/addon_artwork_attempt_keeper.cpp',
+    'addons/addon_artwork_attempt_keeper.hpp',
+    'addons/addon_artwork_attempt_aggregate.cpp',
+    'addons/addon_artwork_attempt_aggregate.hpp',
+    'addons/addon_artwork_lookup_runner.cpp',
+    'addons/addon_artwork_lookup_runner.hpp',
+    'addons/addon_native_provider_artwork_assets.cpp',
+    'addons/addon_native_provider_artwork_assets.hpp',
+    'addons/addon_native_metadata_owner.cpp',
+    'addons/addon_native_metadata_owner.hpp',
+    'addons/addon_ui_registry.cpp',
+    'addons/addon_ui_registry.hpp',
+    'addons/addon_panel_icon.cpp',
+    'addons/addon_panel_icon.hpp',
+    'addons/addon_media_siblings.cpp',
+    'addons/addon_media_siblings.hpp',
+    'addons/addon_ui_assets.cpp',
+    'addons/addon_ui_assets.hpp',
+    'addons/addon_metadata_service.cpp',
+    'addons/addon_metadata_service.hpp',
+    'addons/addon_discovery_coordinator.cpp',
+    'addons/addon_discovery_coordinator.hpp',
+    'addons/addon_queue_transactions.cpp',
+    'addons/addon_queue_transactions.hpp',
+    'addons/addon_discovery_service.cpp',
+    'addons/addon_discovery_service.hpp',
+    'addons/addon_player_discovery.cpp',
+    'addons/addon_player_discovery.hpp',
+    'addons/addon_source_admissions.cpp',
+    'addons/addon_source_admissions.hpp',
+    'addons/addon_stream_manifest.cpp',
+    'addons/addon_stream_manifest.hpp',
+    'addons/addon_stream_http.cpp',
+    'addons/addon_stream_http.hpp',
+    'addons/addon_stream_policy.cpp',
+    'addons/addon_stream_policy.hpp',
+    'addons/addon_stream_sockets.cpp',
+    'addons/addon_stream_sockets.hpp',
+    'addons/addon_stream_lifetime.cpp',
+    'addons/addon_stream_lifetime.hpp',
+    'addons/addon_stream_shutdown.cpp',
+    'addons/addon_stream_shutdown.hpp',
+    'addons/addon_app_shutdown.cpp',
+    'addons/addon_app_shutdown.hpp',
+    'addons/addon_stream_dns.cpp',
+    'addons/addon_stream_dns.hpp',
+    'addons/addon_stream_proxy.cpp',
+    'addons/addon_stream_proxy.hpp',
+    'addons/addon_stream_proxy_native.cpp',
+    'addons/addon_stream_proxy_native.hpp',
+    'addons/addon_websocket_codec.cpp',
+    'addons/addon_websocket_codec.hpp',
+    'addons/addon_source_consent.cpp',
+    'addons/addon_source_consent.hpp',
+    'addons/addon_visualizer_catalog.cpp',
+    'addons/addon_visualizer_catalog.hpp',
+    'addons/addon_visualizer_resources.cpp',
+    'addons/addon_visualizer_resources.hpp',
+    'addons/addon_visualizer_worker.cpp',
+    'addons/addon_visualizer_worker.hpp',
+    'addons/addon_visualizer_render_queue.cpp',
+    'addons/addon_visualizer_render_queue.hpp',
+    'addons/addon_native_source_resolver.cpp',
+    'addons/addon_native_source_resolver.hpp',
+    'addons/addon_discovery_source_owner.cpp',
+    'addons/addon_discovery_source_owner.hpp',
+    'addons/addon_native_player_analysis.cpp',
+    'addons/addon_native_player_analysis.hpp',
+    'addons/addon_visualizer_worker_runtime.cpp',
+    'addons/addon_visualizer_activation.hpp',
+    'addons/addon_visualizer_clock.hpp',
+    'addons/addon_native_queue_store.cpp',
+    'addons/addon_native_queue_store.hpp',
+    'addons/addon_native_library_store.cpp',
+    'addons/addon_native_library_store.hpp',
+    'addons/addon_native_library_targets.cpp',
+    'addons/addon_native_library_targets.hpp',
+    'addons/addon_theme_service.cpp',
+    'addons/addon_theme_service.hpp',
+    'addons/addon_theme_document.cpp',
+    'addons/addon_theme_document.hpp',
+    'addons/addon_sessions.cpp',
+    'addons/addon_sessions.hpp',
+    'addons/addon_session_player.hpp',
+    'addons/addon_session_websocket.cpp',
+    'addons/addon_session_websocket.hpp',
+    'addons/addon_session_host.cpp',
+    'addons/addon_session_host.hpp',
+    'addons/addon_session_controller.cpp',
+    'addons/addon_session_controller.hpp',
+    'addons/addon_session_ui.cpp',
+    'addons/addon_session_ui.hpp',
+    'addons/addon_session_ui_manager.cpp',
+    'addons/addon_native_session_player.cpp',
+    'addons/addon_native_session_player.hpp',
+    'addons/addon_player_sessions.cpp',
+    'addons/addon_player_sessions.hpp',
+    'addons/addon_audio_analysis.cpp',
+    'addons/addon_audio_analysis.hpp',
+    'addons/addon_visual_scene.cpp',
+    'addons/addon_visual_scene.hpp',
+    'addons/addon_visualizer_parameters.cpp',
+    'addons/addon_visualizer_parameters.hpp',
+    'addons/addon_visualizers.cpp',
+    'addons/addon_visualizers.hpp',
+    'addons/addon_settings_migrations.cpp',
+    'addons/addon_settings_migrations.hpp',
+    'addons/addon_storage.cpp',
+    'addons/addon_storage.hpp',
+    'addons/addon_storage_data.cpp',
+    'addons/addon_storage_data.hpp',
+    'addons/addon_host_services.cpp',
+    'addons/addon_host_services.hpp',
+    'addons/addon_repository_updates.cpp',
+    'addons/addon_repository_updates.hpp',
+    'addons/addon_registry_types.cpp',
+    'addons/addon_registry_types.hpp',
+    'addons/addon_registry_client.cpp',
+    'addons/addon_registry_client.hpp',
+    'addons/addon_registry_install.cpp',
+    'addons/addon_registry_install.hpp',
+    'addons/addon_registry.cpp',
+    'addons/addon_registry.hpp',
+    'addons/addon_repository_jobs.cpp',
+    'addons/addon_repository_jobs.hpp',
+    'addons/addon_repository_cancellation.hpp',
+    'addons/addon_playable_gate.cpp',
+    'addons/addon_playable_gate.hpp',
+    'addons/addon_artwork_assets.cpp',
+    'addons/addon_artwork_assets.hpp',
+    'addons/addon_artwork_image.cpp',
+    'addons/addon_artwork_image.hpp',
+    'addons/addon_native_image_formats.hpp',
+    'addons/addon_native_artwork_assets.cpp',
+    'addons/addon_native_artwork_assets.hpp',
+)
+addon_host_moc_headers = files(
+    'addons/addon_guest_projections.hpp',
+    'addons/addon_registry_client.hpp',
+    'addons/addon_registry.hpp',
+    'addons/addon_media_siblings.hpp',
+    'addons/addon_account_setup.hpp',
+    'addons/addon_device_authorization.hpp',
+    'addons/addon_native_metadata_owner.hpp',
+    'addons/addon_identity_choice.hpp',
+    'addons/addon_manager.hpp',
+    'addons/addon_package_summaries.hpp',
+    'addons/addon_catalogue_view.hpp',
+    'addons/addon_network.hpp',
+    'addons/addon_worker.hpp',
+    'addons/addon_metadata_coordinator.hpp',
+    'addons/addon_ui_registry.hpp',
+    'addons/addon_ui_assets.hpp',
+    'addons/addon_metadata_service.hpp',
+    'addons/addon_discovery_coordinator.hpp',
+    'addons/addon_queue_transactions.hpp',
+    'addons/addon_discovery_service.hpp',
+    'addons/addon_native_queue_store.hpp',
+    'addons/addon_discovery_source_owner.hpp',
+    'addons/addon_native_library_store.hpp',
+    'addons/addon_native_library_targets.hpp',
+    'addons/addon_theme_service.hpp',
+    'addons/addon_sessions.hpp',
+    'addons/addon_session_host.hpp',
+    'addons/addon_visualizers.hpp',
+    'addons/addon_session_ui.hpp',
+    'addons/addon_player_sessions.hpp',
+    'addons/addon_visualizer_catalog.hpp',
+    'addons/addon_visualizer_resources.hpp',
+    'addons/addon_visualizer_worker.hpp',
+    'addons/addon_visualizer_render_queue.hpp',
+    'addons/addon_host_services.hpp',
+    'addons/addon_playable_gate.hpp',
+    'addons/addon_artwork_assets.hpp',
+)
+
 
 subtitle_consumer_key = custom_target('subtitle_consumer_key',
     output: 'subtitle_consumer_key.hpp',
@@ -15,6 +285,10 @@ qt_extra_deps = []
 qt_extra_flags = ['-DQT_STRICT_ITERATORS','-DQT_USE_QSTRINGBUILDER','-DQT_NO_CAST_TO_ASCII','-DQT_NO_CAST_FROM_BYTEARRAY']
 qt_cppargs = []
 qt_link_args = [gc_sections_linkargs]
+if cpp.get_linker_id() == 'ld.bfd' and cpp.has_link_argument('-Wl,--no-keep-memory')
+    # Reduce GNU ld memory use for the large Qt plugin.
+    qt_link_args += '-Wl,--no-keep-memory'
+endif
 
 qt_dependency_method = host_machine.system() == 'darwin' ? 'config-tool' : 'auto'
 qt6_dep = dependency('qt6',
@@ -30,6 +304,8 @@ qt6_dep = dependency('qt6',
     private_headers: true,
     required: get_option('qt'))
 
+# Qt tests take only this part of qt_extra_flags (see test/meson.build).
+qt_yield_flags = []
 # Qt module doesn't provide the framework path to moc executable, so we
 # need to help moc find them. It's needed for QtQml/ module registration.
 if host_machine.system() == 'darwin' and qt6_dep.found()
@@ -38,13 +314,22 @@ if host_machine.system() == 'darwin' and qt6_dep.found()
     if host_machine.cpu_family() == 'aarch64' and qt6_dep.version().version_compare('<6.9')
         # Qt 6.8's qyieldcpu.h calls __yield without its ARM ACLE declaration
         # when newer Apple Clang recognizes it as a builtin.
-        qt_extra_flags += ['-include', 'arm_acle.h']
+        qt_yield_flags = ['-include', 'arm_acle.h']
+        qt_extra_flags += qt_yield_flags
     endif
     # The platform compositor messages the native video view directly.
     qt_link_args += '-lobjc'
 endif
 
+if qt6_dep.found()
+    if not z_dep.found()
+        error('The Qt add-on image host needs zlib. Install zlib or disable Qt.')
+    endif
+    qt_extra_deps += z_dep
+endif
+
 moc_headers = files(
+    'addons/addon_visualizer_surface.hpp',
     'dialogs/bookmarks/bookmarks.hpp',
     'dialogs/dialogs/dialogmodel.hpp',
     'dialogs/dialogs_provider.hpp',
@@ -154,6 +439,7 @@ moc_headers = files(
     'playlist/playlist_tree_model.hpp',
     'util/github_release_service.hpp',
     'util/subtitle_source_service.hpp',
+    'util/thumbnail_cache.hpp',
     'util/asynctask.hpp',
     'util/accessible_compat_attached.hpp',
     'util/audio_device_model.hpp',
@@ -228,6 +514,10 @@ if have_wayland and cpp.has_header('qpa/qplatformnativeinterface.h', dependencie
 endif
 
 qt_plugin_sources = files(
+    'addons/addon_visualizer_surface.cpp',
+    'addons/addon_visualizer_surface.hpp',
+    'addons/addon_player_visualizers.cpp',
+    'addons/addon_player_visualizers.hpp',
     'qt.cpp',
     'qt.hpp',
     'plugins.hpp',
@@ -340,6 +630,10 @@ qt_plugin_sources = files(
     'maininterface/mainctx_submodels.cpp',
     'maininterface/mainctx_submodels.hpp',
     'maininterface/mainui.cpp',
+    'maininterface/addon_guest_sources.cpp',
+    'maininterface/addon_guest_sources.hpp',
+    'addons/addon_asset_image_provider.cpp',
+    'addons/addon_asset_image_provider.hpp',
     'maininterface/mainui.hpp',
     'maininterface/navigationmodel.cpp',
     'maininterface/navigationmodel.hpp',
@@ -385,6 +679,9 @@ qt_plugin_sources = files(
     'medialibrary/mlhelper.cpp',
     'medialibrary/mlhelper.hpp',
     'medialibrary/mlthreadpool.cpp',
+    'medialibrary/mljoinedthreadrunner.cpp',
+    'medialibrary/mljoinedthreadrunner.hpp',
+    'medialibrary/mltaskid.hpp',
     'medialibrary/mlthreadpool.hpp',
     'medialibrary/mlqmltypes.hpp',
     'medialibrary/mlmedia.hpp',
@@ -471,6 +768,8 @@ qt_plugin_sources = files(
     'player/subtitle_timeline_scanner.hpp',
     'util/seek_preview_cache.hpp',
     'util/seek_preview_image_provider.hpp',
+    'util/thumbnail_cache.cpp',
+    'util/thumbnail_cache.hpp',
     'util/subtitle_source_service.hpp',
     'util/subtitle_source_service.cpp',
     'util/github_release_service.cpp',
@@ -516,10 +815,14 @@ qt_plugin_sources = files(
     'util/media_identity.hpp',
     'util/filter_chain_edit.hpp',
     'util/artwork_discovery.hpp',
+    'util/artwork_approval.hpp',
+    'util/artwork_selection.cpp',
+    'util/artwork_selection.hpp',
     'util/artwork_store.hpp',
     'util/media_identity_ml.hpp',
     'util/media_fingerprint.hpp',
     'util/media_identity_vlc.hpp',
+    'util/episode_title_cache.hpp',
     'util/subtitle_matching.hpp',
     'util/local_file_url.hpp',
     'util/gettext_translator.cpp',
@@ -596,6 +899,10 @@ qt_plugin_sources = files(
     'util/model_recovery_agent.hpp',
     'util/vlcqtmessagehandler.cpp',
     'util/vlcqtmessagehandler.hpp',
+    'util/hang_reporter.cpp',
+    'util/background_watcher.cpp',
+    'util/background_watcher.hpp',
+    'util/hang_reporter.hpp',
     'util/colorizedsvgicon.cpp',
     'util/colorizedsvgicon.hpp',
     'util/kirigamiwheelhandler.cpp',
@@ -834,7 +1141,6 @@ qml_modules += {
        'player/qml/redesign/RedesignBookmarks.qml',
        'player/qml/redesign/RedesignBookmarksView.qml',
        'player/qml/redesign/RedesignChaptersView.qml',
-       'player/qml/redesign/RedesignEpisodesView.qml',
        'player/qml/redesign/RedesignSeriesMetadata.qml',
        'player/qml/redesign/RedesignQueuePanel.qml',
        'player/qml/redesign/RedesignLibrary.qml',
@@ -854,6 +1160,7 @@ qml_modules += {
        'player/qml/redesign/RedesignStartupVolume.qml',
        'player/qml/redesign/RedesignConfirmationDialog.qml',
        'player/qml/redesign/RedesignGotoTimeDialog.qml',
+       'player/qml/redesign/RedesignIdentityDialog.qml',
        'player/qml/redesign/RedesignTime.qml',
        'player/qml/redesign/RedesignNetworkDialog.qml',
        'player/qml/redesign/RedesignPlaylistDialog.qml',
@@ -863,6 +1170,39 @@ qml_modules += {
        'player/qml/redesign/RedesignSubtitleProviderSetup.qml',
        'player/qml/redesign/RedesignSubtitleSourcePreferences.qml',
        'player/qml/redesign/RedesignAddons.qml',
+       'player/qml/redesign/RedesignAddonChild.qml',
+       'player/qml/redesign/RedesignAddonField.qml',
+       'player/qml/redesign/RedesignAccountSetupDialog.qml',
+       'player/qml/redesign/RedesignAddonManagement.qml',
+       'player/qml/redesign/RedesignAddonDiscovery.qml',
+       'player/qml/redesign/RedesignAddonDiscoveryWindow.qml',
+       'player/qml/redesign/RedesignAddonSessions.qml',
+       'player/qml/redesign/RedesignAddonSelection.qml',
+       'player/qml/redesign/RedesignAddonRecovery.qml',
+       'player/qml/redesign/RedesignAddonNode.qml',
+       'player/qml/redesign/RedesignAddonAssetImage.qml',
+       'player/qml/redesign/RedesignAddonFeatureDemand.qml',
+       'player/qml/redesign/RedesignAddonProviders.qml',
+       'player/qml/redesign/RedesignAddonSettings.qml',
+       'player/qml/redesign/RedesignAddonSettingsDialog.qml',
+       'player/qml/redesign/RedesignAddonTheme.qml',
+       'player/qml/redesign/RedesignAddonThemeSelector.qml',
+       'player/qml/redesign/RedesignGeneralAppearance.qml',
+       'player/qml/redesign/RedesignAddonView.qml',
+       'player/qml/redesign/RedesignAddonMount.qml',
+       'player/qml/redesign/RedesignAddonPanel.qml',
+       'player/qml/redesign/RedesignAddonPermissions.qml',
+       'player/qml/redesign/RedesignAddonUpdates.qml',
+       'player/qml/redesign/RedesignAddonBrowse.qml',
+       'player/qml/redesign/RedesignAddonSections.qml',
+       'player/qml/redesign/RedesignAddonSurface.qml',
+       'player/qml/redesign/RedesignAddonReplacements.qml',
+       'player/qml/redesign/RedesignAddonWindow.qml',
+       'player/qml/redesign/RedesignAddonVisualizerSelector.qml',
+       'player/qml/redesign/RedesignAddonTrackPreparation.qml',
+       'player/qml/redesign/AddonUi.js',
+       'player/qml/redesign/AddonSelectionContracts.js',
+       'player/qml/redesign/AddonTheme.js',
        'player/qml/redesign/RedesignPlugins.qml',
        'player/qml/redesign/RedesignTrackAssignments.qml',
        'player/qml/redesign/RedesignFolderInfo.qml',
@@ -1144,6 +1484,24 @@ qml_modules += {
 }
 
 qml_tests = {
+    'tst_AddonSelections': files('tests/tst_AddonSelections.qml'),
+    'tst_AddonSelectionSurface': files('tests/tst_AddonSelectionSurface.qml'),
+    'tst_AddonRecovery': files('tests/tst_AddonRecovery.qml'),
+    'tst_AddonTypedDialogs': files('tests/tst_AddonTypedDialogs.qml'),
+    'tst_AddonPlainText': files('tests/tst_AddonPlainText.qml'),
+    'tst_AddonDiscovery': files('tests/tst_AddonDiscovery.qml'),
+    'tst_AddonSessions': files('tests/tst_AddonSessions.qml'),
+    'tst_AddonInstaller': files('tests/tst_AddonInstaller.qml'),
+    'tst_AddonBrowse': files('tests/tst_AddonBrowse.qml'),
+    'tst_AddonUpdates': files('tests/tst_AddonUpdates.qml'),
+    'tst_AddonTrackPreparation': files('tests/tst_AddonTrackPreparation.qml'),
+    'tst_AddonUi': files('tests/tst_AddonUi.qml'),
+    'tst_AddonTheme': files('tests/tst_AddonTheme.qml'),
+    'tst_AddonThemeSelection': files('tests/tst_AddonThemeSelection.qml'),
+    'tst_GeneralAppearance': files('tests/tst_GeneralAppearance.qml'),
+    'tst_AddonThemeHost': files('tests/tst_AddonThemeHost.qml'),
+    'tst_AddonMounts': files('tests/tst_AddonMounts.qml'),
+    'tst_AddonIntegration': files('tests/tst_AddonIntegration.qml'),
     'tst_FSM': files('tests/tst_FSM.qml'),
     'tst_Redesign': files('tests/tst_Redesign.qml'),
     'tst_RedesignMediaFavorite': files('tests/tst_RedesignMediaFavorite.qml'),
@@ -1169,7 +1527,6 @@ qml_tests = {
     'tst_RedesignIconSizing': files('tests/tst_RedesignIconSizing.qml'),
     'tst_RedesignBookmarks': files('tests/tst_RedesignBookmarks.qml'),
     'tst_RedesignChapters': files('tests/tst_RedesignChapters.qml'),
-    'tst_RedesignEpisodes': files('tests/tst_RedesignEpisodes.qml'),
     'tst_RedesignNetwork': files('tests/tst_RedesignNetwork.qml'),
     'tst_RedesignPlaylist': files('tests/tst_RedesignPlaylist.qml'),
     'tst_RedesignPlaylistProperties': files('tests/tst_RedesignPlaylistProperties.qml'),
@@ -1217,6 +1574,82 @@ if qt6_dep.found()
     endif
 
     prog_python = find_program('python3')
+    # Build the application worker separately from experimental Rust VLC modules.
+    addon_worker_dependencies = []
+    # Tests that start LibVLC load the plug-ins of this build.
+    addon_worker_environment = {'VLC_PLUGIN_PATH': vlc_build_root / 'modules'}
+    if not get_option('addon-runtime').disabled()
+        addon_cargo = find_program('cargo', native: true, required: get_option('addon-runtime'))
+        if addon_cargo.found()
+            addon_worker_name = host_system == 'windows' ? 'vlc-addon-worker.exe' : 'vlc-addon-worker'
+            addon_worker_command = [prog_python, files('scripts/build-addon-worker.py'),
+                '--cargo', addon_cargo.full_path(), '--manifest', '@INPUT0@', '--output', '@OUTPUT@',
+                '--system', host_system, '--cpu', host_machine.cpu_family(),
+                '--abi', cc.get_argument_syntax() == 'msvc' ? 'msvc' : 'gnu']
+            if get_option('addon-runtime-target') != ''
+                addon_worker_command += ['--target', get_option('addon-runtime-target')]
+            endif
+            if meson.is_cross_build()
+                addon_worker_command += '--cross'
+                addon_linker = get_option('addon-runtime-linker')
+                if addon_linker == ''
+                    addon_cc_command = cc.cmd_array()
+                    if addon_cc_command.length() != 1
+                        error('If the C compiler uses a wrapper, set addon-runtime-linker to the target linker.')
+                    endif
+                    addon_linker = addon_cc_command[0]
+                endif
+                addon_worker_command += ['--linker', addon_linker]
+            endif
+            addon_worker_target = custom_target('vlc-addon-worker',
+                input: files('addons/worker/Cargo.toml', 'addons/worker/Cargo.lock', 'addons/worker/src/main.rs'),
+                output: addon_worker_name, command: addon_worker_command,
+                build_by_default: true, install: true, install_dir: bindir_path)
+            addon_worker_dependencies += addon_worker_target
+            addon_worker_environment += {'VLC_ADDON_WORKER': addon_worker_target.full_path()}
+            qt_cppargs += '-DVLC_ADDON_WORKER_BUILD_PATH="' + addon_worker_target.full_path() + '"'
+        endif
+    endif
+    # The host stores credentials. Add-on packages do not contain credential-store code.
+    if host_system == 'windows'
+        qt_extra_deps += cc.find_library('advapi32')
+    elif host_system == 'darwin'
+        qt_extra_deps += dependency('appleframeworks', modules: ['Security'])
+    endif
+    # Build the bundled add-ons from source. Each package is staged in the
+    # build tree, where the app and the tests load it, and installed from there.
+    bundled_addon_names = ['thesubtitledb', 'tvmaze', 'episodes']
+    bundled_addon_root = meson.current_build_dir() / 'bundled-addons'
+    bundled_addon_targets = []
+    addon_distribution_paths = custom_target('addon_distribution_paths',
+        output: 'addon_distribution_paths.hpp',
+        command: [prog_python, files('scripts/addon-distribution-paths.py'),
+            '--root', bundled_addon_root, '--output', '@OUTPUT@'])
+    if addon_worker_dependencies != []
+        foreach name : bundled_addon_names
+            bundled_addon_targets += custom_target('bundled-addon-' + name,
+                input: meson.project_source_root() / 'contrib-addons' / name / 'Cargo.toml',
+                output: 'bundled-addon-' + name + '.stamp', depfile: 'bundled-addon-' + name + '.d',
+                command: [prog_python, files('scripts/build-bundled-addon.py'), 'build',
+                    '--cargo', addon_cargo.full_path(), '--package', meson.project_source_root() / 'contrib-addons' / name,
+                    '--output', bundled_addon_root / name, '--target-dir', meson.current_build_dir() / 'bundled-addons-cargo',
+                    '--stamp', '@OUTPUT@', '--depfile', '@DEPFILE@'],
+                build_by_default: true)
+        endforeach
+        meson.add_install_script(prog_python, files('scripts/build-bundled-addon.py'), 'install',
+            '--staged', bundled_addon_root, '--destination', get_option('datadir') / 'vlc/addons/reference',
+            bundled_addon_names)
+    endif
+    if addon_worker_dependencies != [] and not meson.is_cross_build()
+        test('addon_tvmaze_worker', prog_python,
+            args: ['-B', meson.project_source_root() / 'contrib-addons/tvmaze/tests/test_worker.py', '--worker', addon_worker_target.full_path(),
+                '--package', bundled_addon_root / 'tvmaze'],
+            depends: addon_worker_dependencies + bundled_addon_targets, suite: ['qt', 'addons', addon_test_labels['addon_tvmaze_worker']], timeout: 90)
+        test('addon_episodes_worker', prog_python,
+            args: ['-B', meson.project_source_root() / 'contrib-addons/episodes/tests/test_worker.py', '--worker', addon_worker_target.full_path(),
+                '--package', bundled_addon_root / 'episodes'],
+            depends: addon_worker_dependencies + bundled_addon_targets, suite: ['qt', 'addons', addon_test_labels['addon_episodes_worker']], timeout: 90)
+    endif
     modules_qrc = []
     foreach module : qml_modules
         #generates 'res.qrc', 'qmldir.qrc', 'qmldir',
@@ -1516,6 +1949,64 @@ if qt6_dep.found()
         'enabled': xcb_dep.found() and xcb_render_dep.found() and xcb_xfixes_dep.found(),
     }
 
+    addon_host_moc = qt6.preprocess(
+        method: qt_dependency_method,
+        moc_headers: addon_host_moc_headers,
+        moc_extra_arguments: ['-DHAVE_CONFIG_H=1', qt_extra_flags],
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: qt6_dep)
+    addon_host_library = static_library('vlc_addon_host', addon_host_sources, addon_host_moc,
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: [qt6_dep, qt_extra_deps, libvlccore_deps, threads_dep],
+        cpp_args: [qt_extra_flags, qt_cppargs, '-D__PLUGIN__'],
+        pic: true,
+        build_by_default: false)
+    # The package validator for add-on authors: the host's install rules,
+    # without running package code.
+    addon_validate = executable('vlc-addon-validate', files('addons/tools/vlc_addon_validate.cpp'),
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: [qt6_dep, qt_extra_deps, libvlccore_deps, threads_dep],
+        link_with: [addon_host_library, libvlccore],
+        cpp_args: [qt_extra_flags, qt_cppargs],
+        install: false, build_by_default: false)
+    addon_preview = executable('vlc-addon-preview', files('addons/tools/vlc_addon_preview.cpp'),
+        include_directories: [qt_include_dir, vlc_include_dirs],
+        dependencies: [qt6_dep, qt_extra_deps, libvlccore_deps, threads_dep],
+        link_with: [addon_host_library, libvlccore],
+        cpp_args: [qt_extra_flags, qt_cppargs],
+        install: false, build_by_default: false)
+    addon_validate_examples = []
+    foreach example : bundled_addon_names
+        addon_validate_examples += bundled_addon_root / example
+    endforeach
+    foreach fixture : ['discovery-fixture', 'french-tv', 'google-images', 'lastfm', 'midnight', 'musicbrainz', 'radio-browser', 'visual-scenes']
+        addon_validate_examples += meson.current_source_dir() / 'tests/fixtures/addons' / fixture
+    endforeach
+    test('addon_validate_examples', addon_validate,
+        args: ['--ui', meson.current_source_dir() / 'player/qml/redesign/AddonUi.js'] + addon_validate_examples,
+        depends: bundled_addon_targets, suite: ['qt', 'addons', addon_test_labels['addon_validate_examples']], timeout: 60)
+    test('addon_validate_refuses', addon_validate, args: [meson.current_source_dir() / 'tests/fixtures/invalid-addon'],
+        should_fail: true, suite: ['qt', 'addons', addon_test_labels['addon_validate_refuses']], timeout: 30)
+    addon_preview_args = ['--qml', meson.current_source_dir() / 'player/qml/redesign', '--output', meson.current_build_dir() / 'addon-preview']
+    test('addon_preview', addon_preview,
+        args: addon_preview_args + [meson.current_source_dir() / 'tests/fixtures/preview-addon'],
+        env: ['QT_QPA_PLATFORM=offscreen'], suite: ['qt', 'addons', addon_test_labels['addon_preview']], timeout: 60)
+    test('addon_preview_theme', addon_preview,
+        args: addon_preview_args + [meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/midnight'],
+        env: ['QT_QPA_PLATFORM=offscreen'], suite: ['qt', 'addons', addon_test_labels['addon_preview_theme']], timeout: 60)
+    # The schemas, their generated Rust types and the author templates.
+    test('addon_schema_corpus_python', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/schemas/check-corpus.py'],
+        suite: ['qt', 'addons', addon_test_labels['addon_schema_corpus_python']], timeout: 60)
+    test('addon_schema_rust_drift', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/schemas/generate-rust.py', '--check'],
+        suite: ['qt', 'addons', addon_test_labels['addon_schema_rust_drift']], timeout: 30)
+    if addon_worker_dependencies != []
+        test('addon_templates', prog_python,
+            args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/templates/check-templates.py', '--validator', addon_validate.full_path(),
+                '--ui', meson.current_source_dir() / 'player/qml/redesign/AddonUi.js', '--worker', addon_worker_target.full_path()],
+            depends: [addon_validate, addon_worker_dependencies], env: ['RUSTUP_TOOLCHAIN=stable'],
+            suite: ['qt', 'addons', addon_test_labels['addon_templates']], timeout: 600)
+    endif
+
     qt6pre_files = qt6.preprocess(ui_files: ui_sources,
         method: qt_dependency_method,
         moc_headers: moc_headers,
@@ -1527,16 +2018,22 @@ if qt6_dep.found()
 
     # TODO support qmlcachegen
 
+    # Test builds only: the smoke test drives add-on actions through this owner.
+    if get_option('addon-test-driver')
+        qt_plugin_sources += files('addons/addon_test_driver.cpp', 'addons/addon_test_driver.hpp')
+        qt_cppargs += '-DVLC_ADDON_TEST_DRIVER'
+    endif
+
     vlc_modules += {
         'name' : 'qt',
-        'sources' : [qt6pre_files, qt6pre_qrc, shader_targets, shaders_processed, qt_sources, qt_plugin_sources, subtitle_consumer_key],
+        'sources' : [qt6pre_files, qt6pre_qrc, shader_targets, shaders_processed, qt_sources, qt_plugin_sources, subtitle_consumer_key, addon_distribution_paths],
         'extra_files' : [shader_files],
         'dependencies' : [qt_extra_deps, qt6_dep, corefoundation_dep],
         'include_directories' : qt_include_dir,
         'c_args' : qt_extra_flags,
         'cpp_args' : [qt_extra_flags, qt_cppargs],
         'link_args' : qt_link_args,
-        'link_with' : qmllibs,
+        'link_with' : [qmllibs, addon_host_library],
         'plugin_dir' : 'gui',
     }
 
@@ -1559,6 +2056,234 @@ if qt6_dep.found()
 
     qtest_qt6_dep = dependency('qt6', version: '=' + qt6_dep.version(), modules: ['Test'], required: false)
     if qtest_qt6_dep.found()
+        addon_visualizer_process = executable('addon_visualizer_process', files('tests/fixtures/addon_visualizer_process.c'), install: false, build_by_default: false)
+        addon_discovery_source_process = executable('addon_discovery_source_process', files('tests/fixtures/addon_discovery_source_process.c'), install: false, build_by_default: false)
+        addon_stream_native_tests = get_option('adaptive').allowed() and gcrypt_dep.found() and z_dep.found() and libdvbpsi_dep.found() and avcodec_dep.found()
+        foreach addon_test : ['display_integration', 'distribution_bootstrap', 'catalogue_view', 'display_catalogue', 'packages', 'package_summaries', 'runtime', 'metadata', 'metadata_choices', 'artwork_attempt_plan', 'broker', 'ui_registry', 'metadata_service', 'discovery', 'theme', 'sessions', 'audio_analysis', 'visual_scene', 'visualizer_parameters', 'store_authority', 'catalogue_native', 'native_notifications', 'stream_manifest', 'websocket_codec', 'visualizers', 'host_services', 'repository_updates', 'registry', 'playable_gate', 'artwork_assets', 'artwork_image', 'native_artwork_assets', 'queue_transactions', 'discovery_service', 'source_admissions', 'storage', 'store_process_fence', 'store_profile_generation', 'store_profile_protocol', 'store_profile_peer', 'store_profile_socket', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'store_profile_writes', 'profile_host', 'worker_health', 'candidate_check', 'accounts', 'guest_projections', 'media_siblings', 'schema_corpus', 'identity_choice', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'source_consent', 'visualizer_resources', 'visualizer_worker', 'visualizer_worker_runtime', 'visualizer_render_queue', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'manager_writes']
+            native_stream = addon_test == 'stream_proxy' and addon_stream_native_tests
+            addon_timeout = addon_test in ['catalogue_view', 'display_catalogue', 'package_summaries', 'stream_http', 'stream_proxy', 'stream_shutdown', 'app_shutdown', 'repository_jobs', 'native_authority', 'native_source_resolver', 'store_profile_settings', 'store_profile_packages', 'store_profile_lifecycle', 'playable_gate', 'runtime', 'store_profile_coordinator', 'store_profile_client', 'store_profile_session', 'profile_host', 'worker_health', 'candidate_check', 'ui_registry'] ? 90 : 30
+            if addon_test in ['display_integration', 'distribution_bootstrap']
+                addon_timeout = 180
+            endif
+            display_defines = []
+            display_links = []
+            if addon_test == 'display_integration'
+                if host_system == 'linux'
+                    display_defines += ['-DHAKONE_DISPLAY_CREDENTIAL_CREATE_WRAP', '-DHAKONE_DISPLAY_ACQUIRE_WRAP']
+                    display_links += ['-Wl,--wrap=_ZN3vlc6addons15CredentialStore6createERK7QStringS4_RK10QByteArrayb', '-Wl,--wrap=_ZN3vlc6addons18AddonCatalogueView15acquireSettingsERK7QString']
+                endif
+            elif addon_test == 'distribution_bootstrap'
+                if host_system == 'linux'
+                    display_defines += ['-DHAKONE_BOOTSTRAP_RUN_WRAP']
+                    display_links += ['-Wl,--wrap=_ZN3vlc6addons21distributionBootstrap3runENS0_12PackageStoreE5QListINS0_26DistributionBootstrapEntryEE']
+                endif
+            endif
+            if addon_test == 'display_catalogue' and host_system == 'linux'
+                display_defines += ['-DHAKONE_DISPLAY_READER_LOCK_WRAP']
+                display_links += ['-Wl,--wrap=open', '-Wl,--wrap=open64']
+            endif
+            if addon_test in ['store_profile_packages', 'store_profile_lifecycle'] and host_system == 'linux'
+                display_defines += ['-DHAKONE_PROFILE_SAVEFILE_WRAP']
+                display_links += ['-Wl,--wrap=_ZN9QSaveFile6commitEv']
+            endif
+            if addon_test == 'manager_writes' and host_system == 'linux'
+                display_defines += ['-DHAKONE_MANAGER_WRITE_WRAP']
+                display_links += ['-Wl,--wrap=_ZN9QSaveFile6commitEv']
+            endif
+            if addon_test == 'native_player_analysis' and host_system == 'linux'
+                display_defines += ['-DHAKONE_ANALYSIS_OBSERVER_WRAP']
+                display_links += ['-Wl,--wrap=vlc_player_AddTimer', '-Wl,--wrap=vlc_player_RemoveTimer', '-Wl,--wrap=vlc_player_aout_AddListener', '-Wl,--wrap=vlc_player_aout_RemoveListener', '-Wl,--wrap=vlc_player_AddListener', '-Wl,--wrap=vlc_player_RemoveListener']
+            endif
+            vlc_tests += {
+                'name': 'test_qt_addon_' + addon_test,
+                'sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                'moc_args': (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines,
+                'timeout': addon_timeout,
+                'module_depends': native_stream ? ['adaptive', 'ts', 'araw', 'adummy', 'wav', 'avcodec'] : [],
+                'link_with': addon_test in ['native_artwork_assets', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_proxy'] ? [addon_host_library, libvlccore, libvlc] : [addon_host_library, libvlccore],
+                'suite': ['qt', 'addons'],
+                'include_directories': addon_test in ['native_artwork_assets', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_proxy'] ? [qt_include_dir, include_directories('../../..')] : qt_include_dir,
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines,
+                'link_args': qt_link_args + display_links,
+                'depends': [addon_worker_dependencies, addon_visualizer_process, bundled_addon_targets],
+                'env': addon_worker_environment,
+            }
+        endforeach
+        vlc_tests += {
+            'name': 'test_qt_addon_metadata_catalogue',
+            'sources': files('tests/test_addon_metadata_catalogue.cpp'),
+            'moc_sources': files('tests/test_addon_metadata_catalogue.cpp'),
+            'moc_args': host_system == 'linux' ? ['-DHAKONE_CATALOGUE_OPEN_PROBE'] : [],
+            'cpp_args': host_system == 'linux' ? ['-DHAKONE_CATALOGUE_OPEN_PROBE'] : [],
+            'link_with': [addon_host_library, libvlccore],
+            'suite': ['qt', 'addons'],
+            'timeout': 90,
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'link_args': qt_link_args + (host_system == 'linux' ? ['-Wl,--wrap=open', '-Wl,--wrap=open64'] : []),
+        }
+        if host_system == 'linux' and addon_worker_dependencies != [] and not meson.is_cross_build()
+            addon_metadata_attempt_process = executable('addon_metadata_attempt_process',
+                files('tests/fixtures/addon_metadata_attempt_process.c'), install: false, build_by_default: false)
+            vlc_tests += {
+                'name': 'test_qt_addon_metadata_attempt',
+                'sources': files('tests/test_addon_metadata_attempt.cpp'),
+                'moc_sources': files('tests/test_addon_metadata_attempt.cpp'),
+                'link_with': [addon_host_library, libvlccore],
+                'suite': ['qt', 'addons'],
+                'timeout': 180,
+                'include_directories': qt_include_dir,
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': [
+                    '-DHAKONE_ATTEMPT_PROCESS_FIXTURE="' + addon_metadata_attempt_process.full_path() + '"',
+                    '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
+                    '-DHAKONE_ATTEMPT_RUST_WORKER="' + addon_worker_target.full_path() + '"',
+                    '-DHAKONE_ATTEMPT_FRENCH_TV_WASM="' + meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm' + '"',
+                ],
+                'link_args': qt_link_args,
+                'depends': [addon_worker_dependencies, addon_metadata_attempt_process],
+                'env': addon_worker_environment,
+            }
+            addon_prepared_metadata_process = executable('addon_prepared_metadata_process',
+                files('tests/fixtures/addon_prepared_metadata_process.c'), install: false, build_by_default: false)
+            vlc_tests += {
+                'name': 'test_qt_addon_prepared_metadata_invocation',
+                'sources': files('tests/test_addon_prepared_metadata_invocation.cpp'),
+                'moc_sources': files('tests/test_addon_prepared_metadata_invocation.cpp'),
+                'moc_args': ['-DHAKONE_PREPARED_OWNER_WRAP', '-DHAKONE_METADATA_PREPARATION_WRAP', '-DHAKONE_ARTWORK_READ_WRAP'],
+                'link_with': [addon_host_library, libvlccore],
+                'suite': ['qt', 'addons'],
+                'timeout': 180,
+                'include_directories': qt_include_dir,
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': [
+                    '-DHAKONE_PREPARED_OWNER_WRAP', '-DHAKONE_METADATA_PREPARATION_WRAP', '-DHAKONE_ARTWORK_READ_WRAP',
+                    '-DHAKONE_PREPARED_PROCESS_FIXTURE="' + addon_prepared_metadata_process.full_path() + '"',
+                    '-DHAKONE_PREPARED_RUST_WORKER="' + addon_worker_target.full_path() + '"',
+                    '-DHAKONE_PREPARED_FRENCH_TV_WASM="' + meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm' + '"',
+                    '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
+                ],
+                'link_args': qt_link_args + ['-Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv', '-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv', '-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString', '-Wl,--wrap=_ZN12QImageReader4readEv'],
+                'depends': [addon_worker_dependencies, addon_prepared_metadata_process],
+                'env': addon_worker_environment,
+            }
+        endif
+        if host_system == 'linux'
+            vlc_tests += {
+                'name': 'test_qt_addon_metadata_registry_epoch',
+                'sources': files('tests/test_addon_metadata_registry_epoch.cpp', 'tests/fixtures/addon_artwork_attempt_keeper.c'),
+                'moc_sources': files('tests/test_addon_metadata_registry_epoch.cpp'),
+                'link_with': [addon_host_library, libvlccore, libvlc],
+                'suite': ['qt', 'addons'],
+                'timeout': 90,
+                'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'link_args': qt_link_args,
+            }
+            vlc_tests += {
+                'name': 'test_qt_addon_artwork_attempt_keeper',
+                'sources': files('tests/test_addon_artwork_attempt_keeper.cpp', 'tests/fixtures/addon_artwork_attempt_keeper.c'),
+                'moc_sources': files('tests/test_addon_artwork_attempt_keeper.cpp'),
+                'link_with': [addon_host_library, libvlccore, libvlc],
+                'suite': ['qt', 'addons'],
+                'timeout': 90,
+                'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'link_args': qt_link_args,
+            }
+            if addon_worker_dependencies != [] and not meson.is_cross_build()
+                vlc_tests += {
+                    'name': 'test_qt_addon_artwork_attempt_aggregate',
+                    'sources': files('tests/test_addon_artwork_attempt_aggregate.cpp', 'tests/fixtures/addon_artwork_attempt_keeper.c', 'tests/fixtures/addon_native_provider_fixture.c', '../../../src/preparser/metadata_native_provider.c'),
+                    'moc_sources': files('tests/test_addon_artwork_attempt_aggregate.cpp'),
+                    'link_with': [addon_host_library, libvlccore, libvlc],
+                    'suite': ['qt', 'addons'],
+                    'timeout': 180,
+                    'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
+                    'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                    'cpp_args': [
+                        '-DHAKONE_AGGREGATE_PROCESS_FIXTURE="' + addon_metadata_attempt_process.full_path() + '"',
+                        '-DHAKONE_ATTEMPT_FIXTURE_DIR="' + meson.current_source_dir() / 'tests/fixtures/metadata-attempt' + '"',
+                        '-DHAKONE_AGGREGATE_RUST_WORKER="' + addon_worker_target.full_path() + '"',
+                        '-DHAKONE_AGGREGATE_FRENCH_TV_WASM="' + meson.project_source_root() / 'modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm' + '"',
+                    ],
+                    'link_args': qt_link_args,
+                    'depends': [addon_worker_dependencies, addon_metadata_attempt_process],
+                    'env': addon_worker_environment,
+                }
+            endif
+            foreach addon_test : ['native_provider_context', 'native_metadata_owner']
+                vlc_tests += {
+                    'name': 'test_qt_addon_' + addon_test,
+                    'sources': files('tests/test_addon_' + addon_test + '.cpp',
+                        'tests/fixtures/addon_native_provider_fixture.c',
+                        '../../../src/preparser/metadata_native_provider.c'),
+                    'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                    'moc_args': addon_test == 'native_provider_context' ? ['-DHAKONE_NATIVE_OUTCOME_WRAP'] : [],
+                    'cpp_args': addon_test == 'native_provider_context' ? ['-DHAKONE_NATIVE_OUTCOME_WRAP'] : [],
+                    'link_with': [addon_host_library, libvlccore, libvlc],
+                    'suite': ['qt', 'addons'],
+                    'timeout': 90,
+                    'include_directories': [qt_include_dir, include_directories('../../..', '../../../src')],
+                    'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                    'link_args': qt_link_args + (addon_test == 'native_metadata_owner' ? ['-Wl,--wrap=_Znwm', '-Wl,--wrap=_Znwj', '-Wl,--wrap=_ZdlPv', '-Wl,--wrap=_ZdlPvm', '-Wl,--wrap=_ZdlPvj'] : ['-Wl,--wrap=vlc_metadata_native_claim_AdmitOutcome']),
+                }
+            endforeach
+        endif
+        vlc_tests += {
+            'name': 'test_qt_addon_visualizer_surface',
+            'sources': files('tests/test_addon_visualizer_surface.cpp', 'addons/addon_visualizer_surface.cpp'),
+            'moc_sources': files('tests/test_addon_visualizer_surface.cpp'),
+            'moc_headers': files('addons/addon_visualizer_surface.hpp'),
+            'link_with': [addon_host_library, libvlccore],
+            'suite': ['qt', 'addons'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'link_args': qt_link_args,
+            'env': ['QT_QPA_PLATFORM=offscreen', 'QT_QUICK_BACKEND=software'],
+        }
+        vlc_tests += {
+            'name': 'test_qt_addon_ui_assets',
+            'sources': files('tests/test_addon_ui_assets.cpp', 'addons/addon_asset_image_provider.cpp'),
+            'moc_sources': files('tests/test_addon_ui_assets.cpp'),
+            'link_with': [addon_host_library, libvlccore],
+            'suite': ['qt', 'addons'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"'],
+            'link_args': qt_link_args,
+            'env': ['QT_QPA_PLATFORM=offscreen', 'QT_QUICK_BACKEND=software'],
+        }
+        vlc_tests += {
+            'name': 'test_qt_addon_native_queue_store',
+            'sources': files('tests/test_addon_native_queue_store.cpp'),
+            'moc_sources': files('tests/test_addon_native_queue_store.cpp'),
+            'link_with': [addon_host_library, libvlccore, libvlc],
+            'suite': ['qt', 'addons'],
+            'include_directories': [qt_include_dir, include_directories('../../..')],
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'cpp_args': ['-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'],
+            'link_args': qt_link_args,
+        }
+        foreach addon_test : ['discovery_source_owner']
+            vlc_tests += {
+                'name': 'test_qt_addon_' + addon_test,
+                'sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                'moc_sources': files('tests/test_addon_' + addon_test + '.cpp'),
+                'link_with': [addon_host_library, libvlccore, libvlc],
+                'suite': ['qt', 'addons'],
+                'timeout': 90,
+                'module_depends': addon_test == 'discovery_source_owner' ? ['http', 'https', 'console_logger', 'prefetch', 'record', 'wav', 'araw', 'adummy', 'float_mixer', 'scaletempo', 'audio_format', 'ugly_resampler'] : [],
+                'include_directories': [qt_include_dir, include_directories('../../..')],
+                'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"'] + (addon_test == 'discovery_source_owner' ? ['-DVLC_ADDON_DISCOVERY_PROCESS_FIXTURE="' + addon_discovery_source_process.full_path() + '"'] : []),
+                'depends': (addon_test == 'discovery_source_owner' ? [addon_discovery_source_process] : []) + bundled_addon_targets,
+                'link_args': qt_link_args,
+                'env': addon_worker_environment,
+            }
+        endforeach
         if host_system == 'windows'
             vlc_tests += {
                 'name': 'test_qt_window_fullscreen',
@@ -1677,18 +2402,28 @@ if qt6_dep.found()
         }
         vlc_tests += {
             'name': 'test_qt_series_model',
-            'sources': files('tests/test_series_model.cpp', 'player/series_model.cpp'),
+            'sources': files('tests/test_series_model.cpp', 'player/series_model.cpp', 'util/background_watcher.cpp'),
             'moc_sources': files('tests/test_series_model.cpp'),
             'moc_headers': files('player/series_model.hpp'),
             'suite': ['qt'],
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
         }
+        subtitle_preparation_args = []
+        subtitle_preparation_link_args = []
+        if host_system == 'linux'
+            subtitle_preparation_args = ['-DHAKONE_METADATA_PREPARATION_WRAP']
+            subtitle_preparation_link_args = ['-Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv', '-Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString']
+        endif
         vlc_tests += {
             'name': 'test_qt_subtitle_sources',
             'sources': files('tests/test_subtitle_sources.cpp', 'util/subtitle_source_service.cpp'),
             'moc_sources': files('tests/test_subtitle_sources.cpp'),
+            'moc_args': subtitle_preparation_args,
+            'cpp_args': subtitle_preparation_args,
+            'link_args': qt_link_args + subtitle_preparation_link_args,
             'moc_headers': files('util/subtitle_source_service.hpp'),
+            'link_with': [addon_host_library, libvlccore],
             'suite': ['qt'],
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
@@ -1744,6 +2479,17 @@ if qt6_dep.found()
             'moc_headers': files('util/effects_image_provider.hpp'),
             'suite': ['qt'],
             'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+        }
+        vlc_tests += {
+            'name': 'test_qt_thumbnail_cache',
+            'sources': files('tests/test_thumbnail_cache.cpp', 'util/thumbnail_cache.cpp'),
+            'moc_sources': files('tests/test_thumbnail_cache.cpp'),
+            'moc_headers': files('util/thumbnail_cache.hpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'link_with': [libvlccore, libvlc],
+            'link_args': qt_link_args,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
         }
         vlc_tests += {
@@ -1820,8 +2566,13 @@ if qt6_dep.found()
                 'medialibrary/mlbasemodel.cpp',
                 'medialibrary/medialib.cpp',
                 'medialibrary/mlthreadpool.cpp',
+                'medialibrary/mljoinedthreadrunner.cpp',
+                'medialibrary/mljoinedthreadrunner.hpp',
+                'medialibrary/mltaskid.hpp',
+                'addons/addon_stream_lifetime.cpp',
                 'medialibrary/mlmediastore.cpp',
                 'medialibrary/mlfileartwork.cpp',
+                'util/background_watcher.cpp',
                 'medialibrary/mlfoldersmodel.cpp',
                 'medialibrary/mlhelper.cpp',
                 'playlist/playlist_controller.cpp',
@@ -1932,6 +2683,41 @@ if qt6_dep.found()
             'link_with': [libvlccore, libvlc],
             'link_args': qt_link_args,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep]
+        }
+
+        vlc_tests += {
+            'name': 'test_qt_ml_joined_runner',
+            'sources': files('tests/test_ml_joined_runner.cpp', 'medialibrary/mljoinedthreadrunner.cpp', 'medialibrary/mlthreadpool.cpp'),
+            'moc_sources': files('tests/test_ml_joined_runner.cpp'),
+            'moc_headers': files('medialibrary/mlthreadpool.hpp'),
+            'include_directories': qt_include_dir,
+            'suite': ['qt', 'addons'],
+            'link_with': [addon_host_library, libvlccore],
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'link_args': qt_link_args,
+            'timeout': 90,
+        }
+        vlc_tests += {
+            'name': 'test_qt_artwork_selection',
+            'sources': files('tests/test_artwork_selection.cpp', 'util/artwork_selection.cpp'),
+            'moc_sources': files('tests/test_artwork_selection.cpp'),
+            'include_directories': [qt_include_dir, include_directories('../../..')],
+            'suite': ['qt', 'addons'],
+            'link_with': [addon_host_library, libvlccore],
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'link_args': qt_link_args,
+            'timeout': 90,
+        }
+        vlc_tests += {
+            'name': 'test_qt_artwork_selected_image',
+            'sources': files('tests/test_artwork_selected_image.cpp'),
+            'moc_sources': files('tests/test_artwork_selected_image.cpp'),
+            'include_directories': qt_include_dir,
+            'suite': ['qt', 'addons'],
+            'link_with': [addon_host_library, libvlccore],
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'link_args': qt_link_args,
+            'timeout': 90,
         }
 
         vlc_tests += {
@@ -2103,8 +2889,9 @@ if qt6_dep.found()
           qt6pre_qrc,
           build_by_default: false,
           dependencies: [quicktest_qt6_dep, qt6_dep, qtest_qt6_dep],
-          link_with: qmllibs,
-          cpp_args: ['-DQUICK_TEST_SOURCE_DIR="' + meson.current_source_dir() + '/tests"']
+          # qml_test.hpp keeps joined add-on work alive through shutdown.
+          link_with: [qmllibs, addon_host_library],
+          cpp_args: ['-DQUICK_TEST_SOURCE_DIR="' + meson.current_source_dir() + '/tests"'] + qt_yield_flags
         )
         foreach test_name, test_file : qml_tests
               test(test_name, qml_test, args: ['-input', test_file], suite:'qt')

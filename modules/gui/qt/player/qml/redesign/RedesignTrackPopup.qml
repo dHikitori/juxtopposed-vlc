@@ -9,8 +9,9 @@ C.Popup {
     // The device list is read once upstream; re-read it so hotplugged outputs show up.
     onAboutToShow: if (root.audioDevices) root.audioDevices.refresh()
     // Cheap: copies the list PipeWire already keeps; refresh() is a no-op when unchanged.
+    property int deviceRefreshInterval: 2000
     Timer {
-        interval: 2000
+        interval: root.deviceRefreshInterval
         repeat: true
         running: root.opened && root.page === "audio" && !!root.audioDevices
         onTriggered: root.audioDevices.refresh()

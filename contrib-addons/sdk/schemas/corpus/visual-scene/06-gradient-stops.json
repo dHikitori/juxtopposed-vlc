@@ -1,0 +1,48 @@
+{
+  "description": "A horizontal gradient with eight stops and #AARRGGBB colors.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "gradient",
+        "vertical": false,
+        "stops": [
+          [
+            0.0,
+            "#ff000000"
+          ],
+          [
+            0.14285714285714285,
+            "#ff1e1e1e"
+          ],
+          [
+            0.2857142857142857,
+            "#ff3c3c3c"
+          ],
+          [
+            0.42857142857142855,
+            "#ff5a5a5a"
+          ],
+          [
+            0.5714285714285714,
+            "#ff787878"
+          ],
+          [
+            0.7142857142857143,
+            "#ff969696"
+          ],
+          [
+            0.8571428571428571,
+            "#ffb4b4b4"
+          ],
+          [
+            1.0,
+            "#ffd2d2d2"
+          ]
+        ]
+      }
+    ]
+  }
+}

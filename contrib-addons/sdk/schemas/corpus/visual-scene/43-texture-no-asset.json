@@ -1,0 +1,16 @@
+{
+  "description": "A texture node has no asset.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "texture"
+      }
+    ],
+    "assets": {
+      "tile": "images/tile.png"
+    }
+  }
+}

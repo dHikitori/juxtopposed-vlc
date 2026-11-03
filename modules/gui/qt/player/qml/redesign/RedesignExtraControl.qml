@@ -8,6 +8,9 @@ Item {
     required property RedesignTheme theme
     required property var specification
     property var controlState: ({})
+    // A panel button shows only while its panel has content.
+    property bool shown: true
+    visible: shown
     readonly property string kind: specification.kind || "button"
     readonly property string valueText: controlState.value === undefined || controlState.value === null || String(controlState.value).length === 0 ? "—" : String(controlState.value)
     signal triggered(Item anchor)
@@ -28,6 +31,7 @@ Item {
         scaleFactor: root.theme.scaleFactor; lightTheme: root.theme.lightTheme; accentColor: root.theme.accentColor
         text: root.controlState.description || root.specification.label
         iconName: root.controlState.icon || root.specification.icon
+        iconMarkup: root.specification.iconMarkup || ""
         selected: !!root.controlState.checked
         checkable: root.controlState.checked !== undefined
         checked: !!root.controlState.checked

@@ -1,0 +1,22 @@
+{
+  "description": "List items are a string instead of a state binding.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "station-list",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "children": [
+        {
+          "type": "List",
+          "items": "state.items",
+          "keyField": "id",
+          "itemTemplate": {
+            "type": "Text"
+          }
+        }
+      ]
+    }
+  }
+}

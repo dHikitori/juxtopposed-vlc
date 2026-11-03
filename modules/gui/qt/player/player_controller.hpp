@@ -38,6 +38,7 @@
 #include "util/audio_device_model.hpp"
 #include "util/varchoicemodel.hpp"
 #include "util/vlctick.hpp"
+#include "addons/addon_stream_lifetime.hpp"
 
 Q_MOC_INCLUDE("util/renderer_manager.hpp")
 
@@ -102,6 +103,7 @@ private:
 };
 
 class PlayerControllerPrivate;
+class AddonMetadataService;
 class PlayerController : public QObject
 {
     Q_OBJECT
@@ -316,6 +318,10 @@ public slots:
 public:
     PlayerController( qt_intf_t * );
     ~PlayerController();
+    void setMetadataService(AddonMetadataService*);
+    AddonMetadataService* metadataService() const;
+    // Native host/test injection. This method is not a QML operation.
+    void setArtworkSelectionLifetime(vlc::addons::AddonStreamLifetime::Handle, QString cacheDirectory = {});
 
 public:
     using VOutThreadList = QVector<SharedVOutThread>;
@@ -574,6 +580,7 @@ signals:
     void playbackStatisticsChanged();
     void infoChanged( input_item_t* );
     void metadataNetworkAccessChanged(bool enabled);
+    void metadataServiceChanged();
     void currentMetaChanged( input_item_t* );
     void currentLyricChanged();
     void hasLyricsChanged( bool );

@@ -1,0 +1,9 @@
+{
+  "description": "The contract is visualizer.scene@2.",
+  "valid": false,
+  "value": {
+    "contract": "visualizer.scene@2",
+    "background": "theme.background",
+    "nodes": []
+  }
+}

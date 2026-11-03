@@ -1,0 +1,45 @@
+{
+  "description": "A searchAssets match with asset candidates, a cursor and extension data.",
+  "valid": true,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "match",
+    "data": {
+      "candidates": [
+        {
+          "id": "sub-1",
+          "identity": {
+            "kind": "episode",
+            "title": "Example Show",
+            "externalIds": [
+              {
+                "namespace": "exampledb",
+                "scope": "series",
+                "value": "281"
+              }
+            ],
+            "episodeNumbering": {
+              "scheme": "seasonal",
+              "season": 2,
+              "episodes": [
+                3
+              ]
+            }
+          },
+          "language": "en",
+          "format": "srt",
+          "evidence": {
+            "type": "hash"
+          }
+        }
+      ],
+      "cursor": {
+        "page": 2
+      },
+      "x-example": {
+        "note": "kept by the provider"
+      }
+    }
+  }
+}

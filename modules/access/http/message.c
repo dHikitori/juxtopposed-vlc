@@ -300,10 +300,19 @@ struct vlc_http_msg *vlc_http_msg_get_final(struct vlc_http_msg *m)
 
 block_t *vlc_http_msg_read(struct vlc_http_msg *m)
 {
+    return vlc_http_msg_read_outcome(m, NULL);
+}
+
+block_t *vlc_http_msg_read_outcome(struct vlc_http_msg *m, bool *complete)
+{
+    if (complete != NULL) *complete = false;
     if (m->payload == NULL)
         return NULL;
 
-    return vlc_http_stream_read(m->payload);
+    block_t *block = vlc_http_stream_read(m->payload);
+    if (complete != NULL && block == NULL)
+        *complete = vlc_http_stream_is_complete(m->payload);
+    return block;
 }
 
 int vlc_http_msg_write(struct vlc_http_msg *m, block_t *block, bool eos)

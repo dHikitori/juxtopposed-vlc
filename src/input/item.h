@@ -26,6 +26,14 @@
 #include "input_interface.h"
 #include <vlc_atomic.h>
 
+enum vlc_item_parse_field {
+    VLC_ITEM_PARSE_URI, VLC_ITEM_PARSE_NAME, VLC_ITEM_PARSE_DURATION,
+    VLC_ITEM_PARSE_TRACKS, VLC_ITEM_PARSE_INFOS, VLC_ITEM_PARSE_TYPE,
+    VLC_ITEM_PARSE_SLAVES, VLC_ITEM_PARSE_OPTIONS, VLC_ITEM_PARSE_EPG,
+    VLC_ITEM_PARSE_FIELD_COUNT,
+};
+struct vlc_item_parse_revisions { uint64_t fields[VLC_ITEM_PARSE_FIELD_COUNT]; };
+
 void input_item_UpdateTracksInfo( input_item_t *item, const es_format_t *fmt,
                                   const char *es_id, bool stable );
 /**
@@ -46,8 +54,21 @@ typedef struct input_item_owner
     void *libvlc_owner;
     void (*libvlc_owner_release)(void *libvlc_owner);
     vlc_atomic_rc_t rc;
+    struct vlc_input_policy *input_policy;
+    char *artwork_uri;
+    char *artwork_source_uri;
+    uint64_t artwork_revision;
+    struct vlc_input_policy *artwork_policy;
+    struct vlc_item_parse_revisions parse_revisions;
 } input_item_owner_t;
 
 # define item_owner(item) ((struct input_item_owner *)(item))
+
+/* The item lock is held. A saturated token never admits a local delta. */
+static inline void vlc_item_parse_TouchLocked(input_item_t *item, enum vlc_item_parse_field field)
+{
+    uint64_t *token = &item_owner(item)->parse_revisions.fields[field];
+    if (*token != UINT64_MAX) ++*token;
+}
 
 #endif

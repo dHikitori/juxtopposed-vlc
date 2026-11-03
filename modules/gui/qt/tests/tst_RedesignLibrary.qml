@@ -110,6 +110,7 @@ TestCase {
         }
     }
     Component { id: viewComponent; RedesignLibraryView { visible: false; width: 1920; height: 1040; settingsContext: settings } }
+    Component { id: shownViewComponent; RedesignLibraryView { width: 1200; height: 900; settingsContext: settings; category: 3; expanded: true; showAddRow: false } }
     RedesignLibraryPath { id: folderPath }
     SignalSpy { id: homeSpy; target: library; signalName: "homeActivated" }
     SignalSpy { id: homeQueueSpy; target: library; signalName: "homeEnqueueRequested" }
@@ -1026,7 +1027,8 @@ TestCase {
         verifyArtworkPixel(artwork, 25, 16, "#222222")
         artwork.source = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="#00ff00"/></svg>')
         tryCompare(image, "status", Image.Ready)
-        compare(image.sourceSize, Qt.size(1, 1))
+        // Decoded at the tile size; a genuine one-pixel file is still artwork.
+        compare(image.sourceSize, Qt.size(Math.ceil(artwork.width * Screen.devicePixelRatio), Math.ceil(artwork.height * Screen.devicePixelRatio)))
         verify(artwork.hasArtwork)
         verifyArtworkPixel(artwork, 16, 16, "#00ff00")
         ignoreWarning(/QML (?:Image|QQuickImage): Cannot open: .*missing-library-cover-test.png/)
@@ -1196,6 +1198,32 @@ TestCase {
         view=createTemporaryObject(viewComponent,testCase)
         compare(view.grid,true); compare(settings.writes,2)
         view.expanded=true; compare(view.grid,false); compare(settings.writes,2)
+    }
+    function test_toolbarStaysAtTheTopWhileAListLoads() {
+        const view = createTemporaryObject(shownViewComponent, testCase)
+        verify(view !== null)
+        verify(!view.homeSectionsVisible)
+        const divider = findChild(view, "libraryToolbarDivider")
+        const top = () => divider.mapToItem(view, 0, 0).y
+        view.loading = false
+        waitForRendering(view)
+        const settled = top()
+        verify(settled < view.height / 4)
+        // A network folder is loading and has no rows yet.
+        view.loading = true
+        waitForRendering(view)
+        compare(top(), settled)
+        // It says so in the middle of the content area, not in the toolbar.
+        const message = findChild(view, "libraryEmptyMessage")
+        compare(message.text, "Loading…")
+        compare(message.horizontalAlignment, Text.AlignHCenter)
+        compare(message.verticalAlignment, Text.AlignVCenter)
+        const middle = message.mapToItem(view, 0, message.height / 2).y
+        verify(middle > view.height / 3 && middle < view.height * 2 / 3)
+        compare(findChild(view, "libraryItemCount").text, "")
+        view.loading = false
+        compare(message.horizontalAlignment, Text.AlignLeft)
+        compare(message.text, view.emptyText)
     }
     function test_invalidViewChoicesUseTheDesignDefaults() {
         for (const value of ["invalid", "[]", "null", "42", "false", '{"compact":"grid","expanded":"list"}']) {

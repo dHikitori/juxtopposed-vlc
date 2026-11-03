@@ -1,0 +1,12 @@
+{
+  "description": "The document ID is a reserved object name.",
+  "valid": false,
+  "value": {
+    "contract": "ui@1",
+    "id": "constructor",
+    "root": {
+      "type": "Page",
+      "title": "Stations"
+    }
+  }
+}

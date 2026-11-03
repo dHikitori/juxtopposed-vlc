@@ -1,0 +1,17 @@
+{
+  "contract": "visualizer.scene@1",
+  "background": "theme.background",
+  "nodes": [
+    {
+      "type": "spectrogram",
+      "color": "theme.accent",
+      "gain": 3,
+      "rect": [
+        0.05,
+        0.05,
+        0.9,
+        0.9
+      ]
+    }
+  ]
+}

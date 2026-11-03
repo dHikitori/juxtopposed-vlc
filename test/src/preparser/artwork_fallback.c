@@ -73,6 +73,7 @@ static void Ended(vlc_preparser_req *req, int status, void *opaque)
 static void Check(vlc_object_t *owner, unsigned tags, bool allow_network,
                   bool provider_network, bool known_art, bool fill_metadata)
 {
+    assert(var_SetBool(owner, "metadata-network-access", allow_network) == VLC_SUCCESS);
     network_art = provider_network;
     metadata_available = fill_metadata;
     atomic_store(&metadata_calls, 0);
@@ -145,6 +146,7 @@ int main(void)
     libvlc_instance_t *instance = libvlc_new(ARRAY_SIZE(args), args);
     assert(instance);
     vlc_object_t *owner = VLC_OBJECT(instance->p_libvlc_int);
+    assert(var_Create(owner, "metadata-network-access", VLC_VAR_BOOL) == VLC_SUCCESS);
     // Positive control first: the provider works when all tags are present.
     Check(owner, 7, false, false, false, false);
     for (unsigned tags = 0; tags < 8; ++tags) {

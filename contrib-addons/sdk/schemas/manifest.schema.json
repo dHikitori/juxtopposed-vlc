@@ -1,0 +1,3157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakone.invalid/schemas/manifest.schema.json",
+  "title": "Hakone add-on manifest (addon.json)",
+  "description": "The package manifest of a Hakone add-on, format version 1. The host refuses unknown keys.",
+  "$comment": "Host-only rules (Manifest::parse checks these; this schema does not): (1) The serialized manifest is at most 256 KiB. (2) api.addon and each api.contracts range must contain version 1.0.0. A range has at most 8 '||' clauses of at most 8 terms. (3) Each number in a semantic version fits in an unsigned 64-bit integer. (4) String limits count UTF-16 code units, not code points. (5) Each file path is in Unicode NFC, and no two paths are equal after case folding. (6) runtime.entry, settings.schema, settings.ui, each migration resource, each locale file, each nonempty contribution resource/view/theme/scene/icon, each asset path and the root icon must occur in files. (7) Contribution IDs are unique in the package. (8) completionPolicy: each feature occurs in the contribution's features, each operation occurs in its operations, and each feature/operation pair occurs once. (9) UI data schemas: each required name is a declared property; minimum <= maximum, minLength <= maxLength and minItems <= maxItems; at most 10 levels and 256 nodes; the initial state (or {}) agrees with stateSchema. (10) locales.files contains the locales.default key. (11) Each credential binding origin is a declared network.http origin (network.websocket for wss), and each field/origin/header triple (header case-insensitive) occurs once. (12) Origins and URLs must parse as strict URLs: port 1-65535, valid host syntax. (13) Settings and storage migrations: to = from + 1, to is not more than the declared version, and each from occurs once. (14) A ui.panel command names a ui.command of the same package that has a command operation and no route. (15) Manifest::validateContents (not part of parse) checks the package files: sizes, the settings schema document, account fields, account recipes and credential fields.",
+  "type": "object",
+  "required": [
+    "formatVersion",
+    "id",
+    "name",
+    "version",
+    "publisher",
+    "license",
+    "source",
+    "api",
+    "files",
+    "contributions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "formatVersion": {
+      "const": 1
+    },
+    "id": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$",
+          "not": {
+            "pattern": "^(?:hakone|vlc)\\.builtin(?:\\.|$)"
+          }
+        }
+      ],
+      "description": "The package ID. The prefixes hakone.builtin and vlc.builtin are reserved for the host."
+    },
+    "name": {
+      "$ref": "#/$defs/text"
+    },
+    "publisher": {
+      "$ref": "#/$defs/text"
+    },
+    "license": {
+      "$ref": "#/$defs/text"
+    },
+    "version": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "$ref": "#/$defs/semanticVersion"
+        }
+      ]
+    },
+    "source": {
+      "$ref": "#/$defs/sourceUrl"
+    },
+    "api": {
+      "type": "object",
+      "required": [
+        "addon",
+        "contracts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "addon": {
+          "$ref": "#/$defs/versionRange"
+        },
+        "contracts": {
+          "$ref": "#/$defs/contractRanges"
+        },
+        "optionalContracts": {
+          "type": "object"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "kind",
+        "entry"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "wasm-message-v1"
+        },
+        "entry": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "selfTest": {
+          "type": "boolean"
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/portablePath"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "const": "addon.json"
+          }
+        },
+        {
+          "contains": {
+            "const": "LICENSE"
+          }
+        }
+      ]
+    },
+    "contributions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/contribution"
+      }
+    },
+    "permissions": {
+      "$ref": "#/$defs/permissions"
+    },
+    "settings": {
+      "type": "object",
+      "required": [
+        "version",
+        "schema"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "schema": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "ui": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "migrations": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/migrationStep"
+          }
+        },
+        "accountFields": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "migrations": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/migrationStep"
+          }
+        }
+      }
+    },
+    "locales": {
+      "type": "object",
+      "required": [
+        "default",
+        "files"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/text"
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/optionalResource"
+          }
+        }
+      }
+    },
+    "icon": {
+      "$ref": "#/$defs/optionalResource"
+    },
+    "extensions": true
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "metadata@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "metadata"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "settings@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "settings"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "ui@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "ui"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "theme@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "theme"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "discovery@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "discovery"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "visualizer@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "visualizer"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "session@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "session"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "contract"
+              ],
+              "properties": {
+                "contract": {
+                  "const": "storage@1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "storage"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "metadata.context"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "metadata.context"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "metadata.context"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "media.fingerprint"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "media.fingerprint"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "media.fingerprint"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "media.stream"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "media.stream"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "media.stream"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "network.http"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "network.http"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "network.http"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "network.websocket"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "network.websocket"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "network.websocket"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "credentials.use"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "credentials.use"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "credentials.use"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "storage.private"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "storage.private"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "storage.private"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "library.read"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "library.read"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "library.read"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "queue.read"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "queue.read"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "queue.read"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "queue.modify"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "queue.modify"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "queue.modify"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "playback.observe"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "playback.observe"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "playback.observe"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "playback.control"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "playback.control"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "playback.control"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "audio.analysis"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "audio.analysis"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "audio.analysis"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "ui.contribute"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "ui.contribute"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "ui.contribute"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "requires"
+              ],
+              "properties": {
+                "requires": {
+                  "contains": {
+                    "const": "session.background"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "session.background"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "session.background"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "metadata.provider",
+                    "discovery.source",
+                    "session.controller"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "runtime"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "settings"
+        ]
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "settings"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "contains": {
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "const": "visualizer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "permissions": {
+            "properties": {
+              "required": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "network.http"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "network.websocket"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "media.stream"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "session.background"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "optional": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "network.http"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "network.websocket"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "media.stream"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "session.background"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "required": [
+              "permissions"
+            ],
+            "properties": {
+              "permissions": {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "credentials.use"
+                    ],
+                    "properties": {
+                      "credentials.use": {
+                        "properties": {
+                          "bindings": {
+                            "minItems": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "required": [
+              "permissions"
+            ],
+            "properties": {
+              "permissions": {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "credentials.use"
+                    ],
+                    "properties": {
+                      "credentials.use": {
+                        "properties": {
+                          "bindings": {
+                            "minItems": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "required": [
+          "settings"
+        ]
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "required": [
+              "storage"
+            ]
+          },
+          {
+            "required": [
+              "permissions"
+            ],
+            "properties": {
+              "permissions": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "required"
+                    ],
+                    "properties": {
+                      "required": {
+                        "required": [
+                          "storage.private"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "required": [
+                      "optional"
+                    ],
+                    "properties": {
+                      "optional": {
+                        "required": [
+                          "storage.private"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "contracts": {
+                "required": [
+                  "storage"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "storage"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "required": [
+                  "required"
+                ],
+                "properties": {
+                  "required": {
+                    "required": [
+                      "storage.private"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "optional"
+                ],
+                "properties": {
+                  "optional": {
+                    "required": [
+                      "storage.private"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "text": {
+      "description": "A nonempty string of at most 4096 characters, without NUL.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "stringList": {
+      "description": "At most 256 distinct nonempty strings.",
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "semanticVersion": {
+      "description": "A Semantic Versioning 2.0.0 version of at most 128 characters.",
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "versionRange": {
+      "description": "A version range such as \">=1.0.0 <2.0.0\" or \"^1.0.0\". The host must find 1.0.0 in the range.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "portablePath": {
+      "description": "A relative package path that is portable to all supported file systems.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|/|$))(?!\\.[Gg][Ii][Tt](?:/|$))[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f]{0,254}[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f. ](?:/(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|/|$))(?!\\.[Gg][Ii][Tt](?:/|$))[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f]{0,254}[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f. ])*$"
+    },
+    "optionalResource": {
+      "description": "A package path from the file list. The host also accepts an empty string.",
+      "anyOf": [
+        {
+          "const": ""
+        },
+        {
+          "$ref": "#/$defs/portablePath"
+        }
+      ]
+    },
+    "imagePath": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/portablePath"
+        },
+        {
+          "pattern": "\\.(?:[Pp][Nn][Gg]|[Jj][Pp][Gg]|[Jj][Pp][Ee][Gg]|[Ww][Ee][Bb][Pp])$"
+        }
+      ]
+    },
+    "sourceUrl": {
+      "description": "An HTTPS repository URL without user data, query or fragment.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]://(?:[^\\s/?#@:\\[\\]%]+|\\[[0-9A-Fa-f:.]+\\])(?::(?:0*[1-9][0-9]{0,4})?)?(?:/[^?#]*)?$"
+        }
+      ]
+    },
+    "httpsOrigin": {
+      "description": "An HTTPS origin: no user data, path, query or fragment. A final \"/\" is permitted. Port 0 is not.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]://(?:[^\\s/?#@:\\[\\]%]+|\\[[0-9A-Fa-f:.]+\\])(?::(?:0*[1-9][0-9]{0,4})?)?/?$"
+        }
+      ]
+    },
+    "wssOrigin": {
+      "description": "A WSS origin in canonical form: lowercase, no port, no path and no final \"/\".",
+      "allOf": [
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "pattern": "^wss://(?:[a-z0-9._~!$&'()*+,;=-]+|\\[[0-9a-f:.]+\\])$"
+        }
+      ]
+    },
+    "contractRanges": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "metadata",
+          "settings",
+          "ui",
+          "theme",
+          "discovery",
+          "visualizer",
+          "session",
+          "storage"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/versionRange"
+      }
+    },
+    "credentialBinding": {
+      "description": "The host puts the secret of a settings field into one header for one declared origin.",
+      "type": "object",
+      "required": [
+        "field",
+        "origin",
+        "header"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/httpsOrigin"
+            },
+            {
+              "$ref": "#/$defs/wssOrigin"
+            }
+          ]
+        },
+        "header": {
+          "type": "string",
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$",
+          "not": {
+            "pattern": "^(?:[Hh][Oo][Ss][Tt]|[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn]|[Cc][Oo][Nn][Tt][Ee][Nn][Tt]-[Ll][Ee][Nn][Gg][Tt][Hh]|[Tt][Rr][Aa][Nn][Ss][Ff][Ee][Rr]-[Ee][Nn][Cc][Oo][Dd][Ii][Nn][Gg]|[Pp][Rr][Oo][Xx][Yy]-[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn])$"
+          }
+        },
+        "prefix": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[ -~]*$"
+        }
+      },
+      "if": {
+        "properties": {
+          "origin": {
+            "type": "string",
+            "pattern": "^[Ww][Ss][Ss]:"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "header": {
+            "not": {
+              "pattern": "^(?:[Ss][Ee][Cc]-[Ww][Ee][Bb][Ss][Oo][Cc][Kk][Ee][Tt]-|(?:[Uu][Pp][Gg][Rr][Aa][Dd][Ee]|[Oo][Rr][Ii][Gg][Ii][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee])$)"
+            }
+          }
+        }
+      }
+    },
+    "permissionSet": {
+      "description": "Permissions by capability name. Each capability has its own scope keys.",
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "metadata.context",
+          "media.fingerprint",
+          "media.stream",
+          "network.http",
+          "network.websocket",
+          "credentials.use",
+          "storage.private",
+          "library.read",
+          "queue.read",
+          "queue.modify",
+          "playback.observe",
+          "playback.control",
+          "audio.analysis",
+          "ui.contribute",
+          "session.background",
+          "media.siblings"
+        ]
+      },
+      "properties": {
+        "metadata.context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fields": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "media.fingerprint": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "algorithms": {
+              "type": "array",
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "opensubtitles-hash"
+                ]
+              }
+            }
+          }
+        },
+        "media.stream": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "profiles": {
+              "const": [
+                "public-https-media@1"
+              ]
+            }
+          },
+          "required": [
+            "profiles"
+          ]
+        },
+        "network.http": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "origins": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/httpsOrigin"
+              }
+            },
+            "methods": {
+              "type": "array",
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "GET",
+                  "POST"
+                ]
+              }
+            },
+            "minimumIntervalMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 60000
+            },
+            "assetRedirectProfiles": {
+              "type": "array",
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "internet-archive-images@1"
+                ]
+              }
+            }
+          },
+          "required": [
+            "origins"
+          ]
+        },
+        "network.websocket": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "origins": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/wssOrigin"
+              }
+            }
+          },
+          "required": [
+            "origins"
+          ]
+        },
+        "credentials.use": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bindings": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/credentialBinding"
+              }
+            }
+          },
+          "required": [
+            "bindings"
+          ]
+        },
+        "storage.private": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "quotaBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 104857600
+            }
+          },
+          "required": [
+            "quotaBytes"
+          ]
+        },
+        "library.read": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fields": {
+              "type": "array",
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "albumCount",
+                  "artist",
+                  "durationMs",
+                  "title",
+                  "trackCount",
+                  "trackNumber",
+                  "year"
+                ]
+              }
+            },
+            "collections": {
+              "type": "array",
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "albums",
+                  "artists",
+                  "playlists",
+                  "tracks",
+                  "videos"
+                ]
+              }
+            }
+          }
+        },
+        "queue.read": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "queue.modify": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operations": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "playback.observe": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fields": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "playback.control": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operations": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "audio.analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "channels": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "ui.contribute": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hooks": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "session.background": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "media.siblings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sources": {
+              "type": "array",
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "folder",
+                  "feed"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "$ref": "#/$defs/permissionSet"
+        },
+        "optional": {
+          "$ref": "#/$defs/permissionSet"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "metadata.context"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "metadata.context"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "media.fingerprint"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "media.fingerprint"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "media.stream"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "media.stream"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "network.http"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "network.http"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "network.websocket"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "network.websocket"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "credentials.use"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "credentials.use"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "storage.private"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "storage.private"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "library.read"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "library.read"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "queue.read"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "queue.read"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "queue.modify"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "queue.modify"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "playback.observe"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "playback.observe"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "playback.control"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "playback.control"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "audio.analysis"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "audio.analysis"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "ui.contribute"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "ui.contribute"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "required"
+            ],
+            "properties": {
+              "required": {
+                "required": [
+                  "session.background"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optional": {
+                "not": {
+                  "required": [
+                    "session.background"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "$comment": "A capability cannot be both required and optional."
+    },
+    "uiSchema": {
+      "description": "The UI data schema subset: one type per node, closed objects and typed enums.",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "integer",
+            "boolean"
+          ]
+        },
+        "properties": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "maxLength": 96,
+            "not": {
+              "enum": [
+                "__proto__",
+                "prototype",
+                "constructor"
+              ]
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/uiSchema"
+          }
+        },
+        "required": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "const": false
+        },
+        "items": {
+          "$ref": "#/$defs/uiSchema"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16384
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16384
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16384
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16384
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "number",
+                  "integer"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "minimum"
+                  ]
+                },
+                {
+                  "required": [
+                    "maximum"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "minLength"
+                  ]
+                },
+                {
+                  "required": [
+                    "maxLength"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "object"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "properties",
+              "additionalProperties"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "properties"
+                  ]
+                },
+                {
+                  "required": [
+                    "required"
+                  ]
+                },
+                {
+                  "required": [
+                    "additionalProperties"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "array"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "items"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "items"
+                  ]
+                },
+                {
+                  "required": [
+                    "minItems"
+                  ]
+                },
+                {
+                  "required": [
+                    "maxItems"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "enum": {
+                "items": {
+                  "type": "string",
+                  "maxLength": 16384
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "boolean"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "enum": {
+                "items": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "number"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "enum": {
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "integer"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "enum": {
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "object",
+                  "array"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "enum"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "uiObjectSchema": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/uiSchema"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "object"
+            }
+          }
+        }
+      ]
+    },
+    "completionPolicy": {
+      "description": "Completion rules for a metadata provider: an HTTP 404 or 410 answer means that the item is absent.",
+      "type": "object",
+      "required": [
+        "version",
+        "httpAbsent"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "httpAbsent": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": [
+              "feature",
+              "operation",
+              "statuses"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "feature": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+              },
+              "operation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+              },
+              "statuses": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 2,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    404,
+                    410
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "contribution": {
+      "description": "One feature that the package adds to the app.",
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "contract"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9.-]{0,63}$"
+        },
+        "type": {
+          "enum": [
+            "theme",
+            "metadata.provider",
+            "discovery.source",
+            "ui.command",
+            "ui.route",
+            "ui.modal",
+            "ui.section",
+            "ui.replacement",
+            "ui.panel",
+            "visualizer",
+            "session.controller"
+          ]
+        },
+        "contract": {
+          "type": "string",
+          "pattern": "^(?:metadata|settings|ui|theme|discovery|visualizer|session|storage)@1$"
+        },
+        "features": {
+          "$ref": "#/$defs/stringList"
+        },
+        "mediaKinds": {
+          "$ref": "#/$defs/stringList"
+        },
+        "operations": {
+          "$ref": "#/$defs/stringList"
+        },
+        "requires": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "metadata.context",
+              "media.fingerprint",
+              "media.stream",
+              "network.http",
+              "network.websocket",
+              "credentials.use",
+              "storage.private",
+              "library.read",
+              "queue.read",
+              "queue.modify",
+              "playback.observe",
+              "playback.control",
+              "audio.analysis",
+              "ui.contribute",
+              "session.background",
+              "media.siblings"
+            ]
+          }
+        },
+        "name": true,
+        "label": true,
+        "hook": true,
+        "route": true,
+        "command": true,
+        "state": true,
+        "qualityTiers": true,
+        "analysisChannels": true,
+        "extensions": true,
+        "parameters": true,
+        "stateSchema": true,
+        "resultSchema": true,
+        "resource": {
+          "$ref": "#/$defs/optionalResource"
+        },
+        "view": {
+          "$ref": "#/$defs/optionalResource"
+        },
+        "theme": {
+          "$ref": "#/$defs/optionalResource"
+        },
+        "scene": {
+          "$ref": "#/$defs/optionalResource"
+        },
+        "icon": {
+          "$ref": "#/$defs/optionalResource"
+        },
+        "completionPolicy": {
+          "$ref": "#/$defs/completionPolicy"
+        },
+        "assets": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,95}$",
+            "not": {
+              "enum": [
+                "__proto__",
+                "prototype",
+                "constructor"
+              ]
+            }
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/imagePath"
+              }
+            }
+          }
+        },
+        "placement": {
+          "description": "ui.panel only: the layout zone that the app uses one time for the panel's button, if the zone has space.",
+          "enum": [
+            "headerLeft",
+            "headerRight",
+            "footerLeft",
+            "footerRight",
+            "above"
+          ]
+        },
+        "header": {
+          "description": "ui.panel only: the id of a Row in the panel's view that is its header. The app shows that row above the scrolled view, ends it with the close button, and drops its own title; the view runs edge to edge.",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,95}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "completionPolicy"
+            ]
+          },
+          "then": {
+            "required": [
+              "features",
+              "operations"
+            ],
+            "properties": {
+              "type": {
+                "const": "metadata.provider"
+              },
+              "contract": {
+                "const": "metadata@1"
+              },
+              "features": {
+                "minItems": 1
+              },
+              "operations": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^ui\\."
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/uiObjectSchema"
+              },
+              "stateSchema": {
+                "$ref": "#/$defs/uiObjectSchema"
+              },
+              "resultSchema": {
+                "$ref": "#/$defs/uiObjectSchema"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "assets"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "ui.route",
+                  "ui.modal",
+                  "ui.section",
+                  "ui.replacement",
+                  "ui.panel"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "ui.panel"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "hook",
+              "view",
+              "command",
+              "name",
+              "label",
+              "stateSchema"
+            ],
+            "properties": {
+              "contract": {
+                "const": "ui@1"
+              },
+              "hook": {
+                "const": "player.panels@1"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "\\S"
+              },
+              "icon": {
+                "type": "string",
+                "pattern": "\\.svg$"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "placement"
+                  ]
+                },
+                {
+                  "required": [
+                    "header"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "migrationStep": {
+      "type": "object",
+      "required": [
+        "from",
+        "to",
+        "resource"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "resource": {
+          "$ref": "#/$defs/portablePath"
+        }
+      }
+    }
+  }
+}

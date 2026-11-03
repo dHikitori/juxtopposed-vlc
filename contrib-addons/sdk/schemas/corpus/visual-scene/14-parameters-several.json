@@ -1,0 +1,59 @@
+{
+  "description": "Parameters on group rotation, feedback decay, particle count and opacity.",
+  "valid": true,
+  "value": {
+    "contract": "visualizer.scene@1",
+    "background": "theme.background",
+    "nodes": [
+      {
+        "type": "group",
+        "id": "spin",
+        "rotation": 0,
+        "children": [
+          {
+            "type": "particles",
+            "count": 512,
+            "seed": 7,
+            "speed": 0.2,
+            "size": 0.006,
+            "color": "theme.accent",
+            "id": "dots",
+            "opacity": 1
+          }
+        ]
+      },
+      {
+        "type": "feedback",
+        "buffer": 0,
+        "decay": 0.6,
+        "id": "trail"
+      }
+    ],
+    "parameters": {
+      "turn": {
+        "node": "spin",
+        "property": "rotation",
+        "minimum": -90,
+        "maximum": 90
+      },
+      "trail": {
+        "node": "trail",
+        "property": "decay",
+        "minimum": 0.1,
+        "maximum": 0.9
+      },
+      "dots": {
+        "node": "dots",
+        "property": "count",
+        "minimum": 64,
+        "maximum": 1024
+      },
+      "_fade": {
+        "node": "dots",
+        "property": "opacity",
+        "minimum": 0,
+        "maximum": 1
+      }
+    }
+  }
+}

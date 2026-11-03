@@ -1,0 +1,15 @@
+{
+  "description": "A no_match result with an incorrect retention record.",
+  "valid": false,
+  "value": {
+    "type": "result",
+    "id": "inv-1",
+    "status": "no_match",
+    "data": {
+      "retention": {
+        "reuseSeconds": 3600,
+        "scope": "global"
+      }
+    }
+  }
+}

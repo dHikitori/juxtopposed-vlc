@@ -1,0 +1,35 @@
+{
+  "description": "The package ID has uppercase letters.",
+  "valid": false,
+  "value": {
+    "formatVersion": 1,
+    "id": "org.Example.midnight",
+    "name": "Midnight",
+    "version": "1.0.0",
+    "publisher": "Hakone add-on examples",
+    "license": "GPL-2.0-or-later",
+    "source": "https://github.com/hakone-org/addon-midnight.git",
+    "api": {
+      "addon": ">=1.0.0 <2.0.0",
+      "contracts": {
+        "theme": "^1.0.0"
+      }
+    },
+    "files": [
+      "addon.json",
+      "LICENSE",
+      "README.md",
+      "themes/midnight.json"
+    ],
+    "contributions": [
+      {
+        "id": "midnight",
+        "type": "theme",
+        "contract": "theme@1",
+        "name": "Midnight",
+        "resource": "themes/midnight.json"
+      }
+    ],
+    "permissions": {}
+  }
+}

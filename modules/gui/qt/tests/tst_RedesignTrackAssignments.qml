@@ -31,6 +31,37 @@ TestCase {
     SignalSpy { id: searchSpy; target: dialog; signalName: "searchRequested" }
     SignalSpy { id: linkSpy; target: dialog; signalName: "linksRequested" }
     SignalSpy { id: folderSpy; target: dialog; signalName: "folderRequested" }
+    Component { id: displaySpy; SignalSpy {} }
+    Component {
+        id: displayOwner
+        QtObject {
+            property bool catalogueReady: true
+            property bool catalogueLoading: false
+            property int catalogueRevision: 1
+            property bool ownerCurrent: true
+            property int modeReads: 0
+            property var observations: ({nativeChecks:0})
+            property int preparations: 0
+            property int releases: 0
+            property var tickets: []
+            signal catalogueChanged()
+            signal catalogueFreshnessChanged()
+            signal capabilitiesChanged()
+            signal retiring()
+            function displayCatalogueAttached() { modeReads++; return true }
+            function prepareDisplayFeature(feature) { const id=String(++preparations); tickets=tickets.concat([id]); return id }
+            function releaseDisplayRequest(id) { releases++; tickets=tickets.filter(value=>value!==id) }
+            function displayRequestCurrent(id) { return ownerCurrent && catalogueReady && tickets.includes(id) }
+            function refreshDisplayCatalogue() { catalogueFreshnessChanged() }
+        }
+    }
+    Component {
+        id: displayDialog
+        RedesignTrackAssignmentDialog {
+            id: candidateDialog
+            onMatchRequested: (media,tracks,includeSaved,request) => candidateDialog.loadMatches(request,{},includeSaved)
+        }
+    }
     TextMetrics { id: literalMetrics }
     function rows() { return [{url:first,name:"Show_S01E01.mkv",baseline:[]},{url:second,name:"Show_S01E02.mkv",baseline:[]}] }
     function load(items) {
@@ -50,6 +81,79 @@ TestCase {
         tryCompare(dialog,"opened",true); load([rows()[0]])
     }
     function cleanup() { dialog.saving=false; dialog.close(); tryCompare(dialog,"visible",false) }
+    function test_configuredBuiltinWaitsForFixedModeAndUsesNativeAuthorityWithoutATicket() {
+        const owner=createTemporaryObject(displayOwner,testCase)
+        const pane=createTemporaryObject(displayDialog,testCase,{parent:testCase,providerDisplayBackend:owner,
+            providerDisplayCandidates:[{id:"org.hakone.builtin/subtitles",builtin:true,enabled:true,configured:true,configurationKnown:true}],
+            providerConfigured:true,providerActionGuard:()=>{owner.observations.nativeChecks++;return owner.ownerCurrent}})
+        const searches=createTemporaryObject(displaySpy,testCase,{target:pane,signalName:"searchRequested"})
+        verify(pane.begin({scope:"file",url:first},true))
+        pane.loadRows(pane.requestId,{success:true,rows:[rows()[0]]}); pane.selectSource(1)
+        compare(searches.count,0); compare(owner.observations.nativeChecks,0); compare(owner.preparations,0)
+        tryCompare(searches,"count",1); compare(owner.modeReads,1); compare(owner.preparations,0)
+        owner.ownerCurrent=false; pane.requestSearch(); compare(searches.count,1)
+        owner.ownerCurrent=true; owner.catalogueReady=false; pane.requestSearch(); compare(searches.count,1)
+        owner.catalogueReady=true; pane.requestSearch(); compare(searches.count,2)
+        pane.reject(); tryCompare(pane,"visible",false); compare(owner.releases,0)
+    }
+    function test_builtinExceptionCannotAdmitAnUnavailableOrDisabledProvider_data() {
+        return [
+            {tag:"native-refusal",row:{builtin:true,enabled:true,available:true,configured:true,configurationKnown:true},nativeCurrent:false},
+            {tag:"unavailable-builtin",row:{builtin:true,enabled:true,available:false,configured:true,configurationKnown:true},nativeCurrent:true},
+            {tag:"disabled-builtin",row:{builtin:true,enabled:false,available:true,configured:true,configurationKnown:true},nativeCurrent:true},
+            {tag:"unconfigured-builtin",row:{builtin:true,enabled:true,available:true,configured:false,configurationKnown:true},nativeCurrent:true},
+            {tag:"all-disabled-portable",row:{builtin:false,enabled:false,available:true,configured:true,configurationKnown:true},nativeCurrent:true}
+        ]
+    }
+    function test_builtinExceptionCannotAdmitAnUnavailableOrDisabledProvider(data) {
+        const owner=createTemporaryObject(displayOwner,testCase,{ownerCurrent:data.nativeCurrent})
+        const pane=createTemporaryObject(displayDialog,testCase,{parent:testCase,providerDisplayBackend:owner,
+            providerDisplayCandidates:[Object.assign({id:"org.example.subtitles/search"},data.row)],
+            providerConfigured:true,providerActionGuard:()=>owner.ownerCurrent})
+        const searches=createTemporaryObject(displaySpy,testCase,{target:pane,signalName:"searchRequested"})
+        verify(pane.begin({scope:"file",url:first},true))
+        pane.loadRows(pane.requestId,{success:true,rows:[rows()[0]]}); pane.selectSource(1)
+        tryCompare(owner,"modeReads",1); wait(10)
+        compare(searches.count,0); compare(owner.preparations,0); verify(!pane.providerCurrentForAction())
+        pane.reject(); tryCompare(pane,"visible",false); compare(owner.releases,0)
+    }
+    function test_visibleOnlineModeOwnsDemandAndWaitsForUnknownSettings() {
+        const owner=createTemporaryObject(displayOwner,testCase)
+        const pane=createTemporaryObject(displayDialog,testCase,{parent:testCase,providerDisplayBackend:owner,
+            providerDisplayCandidates:[{id:"org.example.subtitles/search",enabled:true,configured:false,configurationKnown:false}],
+            providerConfigurationKnown:false,providerActionGuard:()=>owner.ownerCurrent})
+        const searches=createTemporaryObject(displaySpy,testCase,{target:pane,signalName:"searchRequested"})
+        const languages=createTemporaryObject(displaySpy,testCase,{target:pane,signalName:"languagesRequested"})
+        compare(owner.preparations,0); verify(pane.begin({scope:"file",url:first},true)); tryCompare(pane,"opened",true)
+        pane.loadRows(pane.requestId,{success:true,rows:[rows()[0]]}); compare(owner.preparations,0)
+        pane.selectSource(1); compare(searches.count,0); compare(languages.count,0)
+        tryCompare(owner,"preparations",1)
+        verify(findChild(pane,"trackAssignmentProviderState").text.includes("checks"))
+        const title=pane.searchTitle; pane.providerConfigured=true; pane.providerConfigurationKnown=true
+        compare(searches.count,1); compare(languages.count,1); compare(pane.searchTitle,title)
+        owner.capabilitiesChanged(); owner.catalogueRevision++; compare(owner.preparations,1)
+        pane.selectSource(0); tryCompare(owner,"releases",1); compare(owner.tickets.length,0)
+        pane.reject(); tryCompare(pane,"visible",false)
+    }
+    function test_staleProviderDisplayPreservesResultsAndTrackDrafts() {
+        const owner=createTemporaryObject(displayOwner,testCase)
+        const pane=createTemporaryObject(displayDialog,testCase,{parent:testCase,providerDisplayBackend:owner,
+            providerDisplayCandidates:[{id:"org.example.subtitles/search",enabled:true,configured:true,configurationKnown:true}],
+            providerConfigured:true,providerActionGuard:()=>owner.ownerCurrent})
+        const searches=createTemporaryObject(displaySpy,testCase,{target:pane,signalName:"searchRequested"})
+        verify(pane.begin({scope:"file",url:first},true)); tryCompare(pane,"opened",true)
+        pane.loadRows(pane.requestId,{success:true,rows:[rows()[0]]}); pane.selectSource(1)
+        compare(searches.count,0); tryCompare(owner,"preparations",1); tryCompare(searches,"count",1)
+        const remote="addon-subtitle:/opaque/English.srt"
+        pane.loadSearch(pane.searchRequestId,{success:true,sources:[{url:remote,name:"English"}]}); pane.toggle(first,remote)
+        pane.providerListCurrent=false; pane.providerListLoading=true; pane.requestSearch()
+        compare(searches.count,1); compare(pane.onlineSources.length,1); verify(pane.tracks(first).includes(remote))
+        owner.ownerCurrent=false; pane.providerListCurrent=true; pane.providerListLoading=false
+        compare(searches.count,1); owner.ownerCurrent=true; pane.requestSearch(); compare(searches.count,2)
+        pane.loadSearch(pane.searchRequestId,{success:false,error:"Provider changed"})
+        compare(pane.onlineSources.length,1); verify(pane.tracks(first).includes(remote)); compare(owner.preparations,1)
+        pane.reject(); tryCompare(pane,"visible",false)
+    }
     function test_fifteenEpisodeRowsFitWithFolderInformation_data() {
         return [{tag:"normal",scale:1},{tag:"fractional",scale:1.125}]
     }

@@ -13,6 +13,7 @@
 #include <vlc_common.h>
 #include <vlc_preparser.h>
 #include <vlc_modules.h>
+#include <vlc_interrupt.h>
 
 /**
  * Preparser's operations
@@ -55,6 +56,20 @@ struct vlc_preparser_t {
     const struct vlc_preparser_operations *ops;
     void *sys;
 };
+
+struct input_item_parser_cfg;
+struct vlc_preparser_parse_engine {
+    /* Run only on a native parser worker. The item is the issued private
+     * snapshot. Finish all sideband callbacks and child I/O before return.
+     * Return the parse status. Never wait for a Qt event. The opaque state
+     * outlives the internal owner and its native workers. */
+    int (*run)(void *, input_item_t *, const struct input_item_parser_cfg *,
+        vlc_tick_t deadline, vlc_interrupt_t *);
+    void *opaque;
+};
+bool vlc_preparser_internal_HasRequest(void *, const struct vlc_preparser_req *);
+void *vlc_preparser_internal_NewWithEngine(vlc_preparser_t *, vlc_object_t *,
+    const struct vlc_preparser_cfg *, const struct vlc_preparser_parse_engine *);
 
 void *vlc_preparser_internal_New(vlc_preparser_t *preparser,
                                  vlc_object_t *parent,

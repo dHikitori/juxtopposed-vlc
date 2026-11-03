@@ -536,3 +536,54 @@ vlc_tests += {
     'link_with' : [libvlc, libvlccore],
     'module_depends' : ['blend']
 }
+
+vlc_tests += {
+    'name': 'test_modules_lua_meta_selector',
+    'sources': files('lua/meta_selector.c'),
+    'suite': ['modules', 'test_modules', 'addons'],
+    'link_with': [libvlccore],
+}
+
+if lua_filename_reader.length() > 0
+    vlc_tests += {
+        'name': 'test_modules_lua_meta_selector_runtime',
+        'sources': files('lua/meta_selector_runtime.c', 'lua/meta_art_filter_probe.c'),
+        'link_args': host_system == 'darwin' ? ['-Wl,-export_dynamic'] : ['-Wl,--export-dynamic'],
+        'suite': ['modules', 'test_modules', 'addons'],
+        'link_with': [libvlc, libvlccore],
+        'module_depends': ['lua', 'record', 'cache_read'] + (z_dep.found() ? ['inflate'] : []),
+        'depends': lua_filename_reader,
+        'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules',
+                'VLC_TEST_FILENAME_LUAC=' + vlc_build_root / 'modules/lua/meta/reader/filename.luac'],
+    }
+endif
+
+vlc_tests += {
+    'name': 'test_modules_demux_id3_meta',
+    'sources': files('demux/id3_meta.c'),
+    'suite': ['modules', 'test_modules'],
+    'link_with': [libvlccore],
+}
+
+
+if lua_dep.found()
+    foreach fixture : ['meta_art_outcome', 'meta_art_scripts']
+        vlc_tests += {
+            'name': 'test_modules_lua_' + fixture,
+            'sources': files('lua/' + fixture + '.c'),
+            'suite': ['modules', 'test_modules', 'addons'],
+            'dependencies': [lua_dep],
+            'timeout': 90,
+        }
+    endforeach
+    vlc_tests += {
+        'name': 'test_modules_lua_meta_art_stream',
+        'sources': files('lua/meta_art_stream.c'),
+        'suite': ['modules', 'test_modules', 'addons'],
+        'link_with': [libvlc, libvlccore],
+        'dependencies': [lua_dep],
+        'c_args': ['-ffunction-sections', '-fdata-sections'],
+        'link_args': host_system == 'darwin' ? ['-Wl,-dead_strip'] : ['-Wl,--gc-sections'],
+        'timeout': 90,
+    }
+endif

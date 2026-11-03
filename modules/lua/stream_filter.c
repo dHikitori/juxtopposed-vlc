@@ -33,6 +33,7 @@
 
 #include <vlc_common.h>
 #include <vlc_access.h>
+#include <vlc_input_policy.h>
 
 #include "vlc.h"
 #include "libs.h"
@@ -270,6 +271,9 @@ static int ReadDir(stream_t *s, input_item_node_t *node)
  *****************************************************************************/
 int Import_LuaPlaylist(vlc_object_t *obj)
 {
+    /* Ambient Lua APIs cannot enforce a native input policy. */
+    if (vlc_input_policy_Has(obj)) return VLC_EGENERIC;
+
     stream_t *s = (stream_t *)obj;
 
     if( lua_Disabled( obj ) )

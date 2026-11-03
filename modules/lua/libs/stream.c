@@ -39,6 +39,12 @@
 
 #include "../vlc.h"
 #include "../libs.h"
+#include "../meta_outcome.h"
+
+struct vlclua_stream {
+    stream_t *stream;
+    bool counted, complete;
+};
 
 /*****************************************************************************
  * Stream handling
@@ -65,13 +71,19 @@ static int vlclua_stream_new_inner( lua_State *L, stream_t *p_stream )
 {
     if( !p_stream )
     {
+        vlclua_metadata_io_failure(L);
         lua_pushnil( L );
         lua_pushliteral( L, "Error when opening stream" );
         return 2;
     }
 
-    stream_t **pp_stream = lua_newuserdata( L, sizeof( stream_t * ) );
-    *pp_stream = p_stream;
+    if (vlclua_metadata_io_state(L) != NULL) {
+        struct vlclua_stream *data = lua_newuserdata(L, sizeof(*data));
+        data->stream = p_stream; data->complete = false;
+        data->counted = vlclua_metadata_io_opened(L);
+    } else {
+        stream_t **data = lua_newuserdata(L, sizeof(*data)); *data = p_stream;
+    }
 
     if( luaL_newmetatable( L, "stream" ) )
     {
@@ -88,6 +100,7 @@ static int vlclua_stream_new_inner( lua_State *L, stream_t *p_stream )
 
 static int vlclua_stream_new( lua_State *L )
 {
+    vlclua_metadata_io_attempt(L);
     vlc_object_t * p_this = vlclua_get_this( L );
     const char * psz_url = luaL_checkstring( L, 1 );
     stream_t *p_stream = vlc_stream_NewMRL( p_this, psz_url );
@@ -96,23 +109,29 @@ static int vlclua_stream_new( lua_State *L )
 
 static int vlclua_memory_stream_new( lua_State *L )
 {
+    vlclua_metadata_io_attempt(L);
     vlc_object_t * p_this = vlclua_get_this( L );
     /* FIXME: duplicating the whole buffer is suboptimal. Keeping a reference to the string so that it doesn't get garbage collected would be better */
     char * psz_content = strdup( luaL_checkstring( L, 1 ) );
+    if (psz_content == NULL) { vlclua_metadata_io_failure(L); return vlclua_error(L); }
     stream_t *p_stream = vlc_stream_MemoryNew( p_this, (uint8_t *)psz_content, strlen( psz_content ), false );
     return vlclua_stream_new_inner( L, p_stream );
 }
 
 static int vlclua_directory_stream_new( lua_State *L )
 {
+    vlclua_metadata_io_attempt(L);
     vlc_object_t * p_this = vlclua_get_this( L );
     const char * psz_url = luaL_checkstring( L, 1 );
     stream_t *p_stream = vlc_stream_NewURL( p_this, psz_url );
-    if( !p_stream )
+    if( !p_stream ) {
+        vlclua_metadata_io_failure(L);
         return vlclua_error( L );
+    }
     if( vlc_stream_directory_Attach( &p_stream, NULL, NULL, 0 ) != VLC_SUCCESS )
     {
         vlc_stream_Delete( p_stream );
+        vlclua_metadata_io_failure(L);
         return vlclua_error( L );
     }
     return vlclua_stream_new_inner( L, p_stream );
@@ -121,12 +140,28 @@ static int vlclua_directory_stream_new( lua_State *L )
 static int vlclua_stream_read( lua_State *L )
 {
     int i_read;
-    stream_t **pp_stream = (stream_t **)luaL_checkudata( L, 1, "stream" );
+    struct vlclua_stream *data = luaL_checkudata(L, 1, "stream");
+    stream_t **pp_stream = &data->stream;
+    if (*pp_stream == NULL) return luaL_error(L, "The stream is closed.");
     int n = luaL_checkinteger( L, 2 );
     uint8_t *p_read = malloc( n );
     if( !p_read ) return vlclua_error( L );
 
-    i_read = vlc_stream_Read( *pp_stream, p_read, n );
+    if (vlclua_metadata_io_state(L) == NULL)
+        i_read = vlc_stream_Read(*pp_stream, p_read, n);
+    else {
+        size_t copied = 0;
+        while (copied < (size_t)n) {
+            const ssize_t got = vlc_stream_ReadPartial(*pp_stream, p_read + copied, n - copied);
+            if (got < 0) { vlclua_metadata_io_failure(L); continue; }
+            if (got == 0) break;
+            copied += got;
+        }
+        i_read = copied;
+        if (data->counted && !data->complete && vlc_stream_Eof(*pp_stream)) {
+            vlclua_metadata_io_complete(L); data->complete = true;
+        }
+    }
     if( i_read > 0 )
         lua_pushlstring( L, (const char *)p_read, i_read );
     else
@@ -137,6 +172,9 @@ static int vlclua_stream_read( lua_State *L )
 
 static int vlclua_stream_readline( lua_State *L )
 {
+    /* The named providers use bounded reads. Other read forms cannot prove a
+     * complete native negative response. Keep their ordinary return values. */
+    vlclua_metadata_io_failure(L);
     stream_t **pp_stream = (stream_t **)luaL_checkudata( L, 1, "stream" );
     char *psz_line = vlc_stream_ReadLine( *pp_stream );
     if( psz_line )
@@ -151,6 +189,7 @@ static int vlclua_stream_readline( lua_State *L )
 
 static int vlclua_stream_add_filter( lua_State *L )
 {
+    vlclua_metadata_io_failure(L);
     vlc_object_t *p_this = vlclua_get_this( L );
 
     /* Make sure that we have 1 argument (+ 1 object) */
@@ -201,6 +240,7 @@ static int vlclua_stream_add_filter( lua_State *L )
 
 static int vlclua_stream_readdir( lua_State *L )
 {
+    vlclua_metadata_io_failure(L);
     stream_t **pp_stream = (stream_t **)luaL_checkudata( L, 1, "stream" );
     const char *psz_filter = NULL;
     bool b_show_hidden = false;
@@ -267,6 +307,7 @@ static int vlclua_stream_getsize( lua_State *L )
 
 static int vlclua_stream_seek( lua_State *L )
 {
+    vlclua_metadata_io_failure(L);
     stream_t **pp_stream = (stream_t **)luaL_checkudata( L, 1, "stream" );
     lua_Integer i_offset = luaL_checkinteger( L, 2 );
     if ( i_offset < 0 )
@@ -278,8 +319,14 @@ static int vlclua_stream_seek( lua_State *L )
 
 static int vlclua_stream_delete( lua_State *L )
 {
-    stream_t **pp_stream = (stream_t **)luaL_checkudata( L, 1, "stream" );
+    struct vlclua_stream *data = luaL_checkudata(L, 1, "stream");
+    stream_t **pp_stream = &data->stream;
+    if (*pp_stream == NULL) return 0;
+    const bool metadata = vlclua_metadata_io_state(L) != NULL;
+    if (metadata && data->counted && !data->complete)
+        vlclua_metadata_io_failure(L);
     vlc_stream_Delete( *pp_stream );
+    if (metadata) *pp_stream = NULL;
     return 0;
 }
 

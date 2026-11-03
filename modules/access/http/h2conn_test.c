@@ -36,6 +36,7 @@
 #include <vlc_common.h>
 #include <vlc_block.h>
 #include <vlc_tls.h>
+#include <vlc_interrupt.h>
 #include "h2frame.h"
 #include "conn.h"
 #include "message.h"
@@ -217,6 +218,7 @@ int main(void)
     stream_data(sid, "Hello ", false);
     stream_data(sid, "world!", true);
     stream_data(sid, "Stray message", false); /* data after EOS */
+    assert(!vlc_http_stream_is_complete(s)); /* Queued data is not drained. */
     b = vlc_http_msg_read(m);
     assert(b != NULL);
     block_Release(b);
@@ -225,10 +227,43 @@ int main(void)
     block_Release(b);
     b = vlc_http_msg_read(m);
     assert(b == NULL);
+    assert(vlc_http_stream_is_complete(s));
+    /* A native interrupt after END_STREAM must not inherit the completed
+     * peer state as permission to publish a negative lookup. */
+    vlc_interrupt_t *interrupt = vlc_interrupt_create();
+    assert(interrupt != NULL);
+    vlc_interrupt_t *previous = vlc_interrupt_set(interrupt);
+    vlc_interrupt_kill(interrupt);
+    assert(!vlc_http_stream_is_complete(s));
+    vlc_interrupt_set(previous);
+    vlc_interrupt_destroy(interrupt);
     vlc_http_msg_destroy(m);
 
     conn_expect(HEADERS);
     conn_expect(RST_STREAM);
+    conn_expect(RST_STREAM);
+
+    /* H2 does not run a chunk decoder. A forbidden Transfer-Encoding header
+     * must not bypass the outer Content-Length check or supply completion. */
+    sid += 2;
+    s = stream_open(false);
+    assert(s != NULL);
+    const char *invalid_transfer[][2] = {
+        {":status", "200"}, {"content-length", "999"}, {"transfer-encoding", "chunked"},
+    };
+    conn_send(vlc_h2_frame_headers(sid, VLC_H2_DEFAULT_MAX_FRAME, false,
+                                 ARRAY_SIZE(invalid_transfer), invalid_transfer));
+    m = vlc_http_msg_get_initial(s);
+    assert(m != NULL);
+    stream_data(sid, "empty", true);
+    bool valid_terminal = true;
+    b = vlc_http_msg_read_outcome(m, &valid_terminal);
+    assert(b != NULL && b != vlc_http_error && b->i_buffer == 5 && !valid_terminal);
+    block_Release(b);
+    b = vlc_http_msg_read_outcome(m, &valid_terminal);
+    assert(b == NULL && !valid_terminal);
+    vlc_http_msg_destroy(m);
+    conn_expect(HEADERS);
     conn_expect(RST_STREAM);
 
     /* Test accepted stream after continuation */

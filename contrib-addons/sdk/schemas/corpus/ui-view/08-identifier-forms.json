@@ -1,0 +1,22 @@
+{
+  "description": "IDs with full stops, hyphens and underscores, and a binding path with several parts.",
+  "valid": true,
+  "value": {
+    "contract": "ui@1",
+    "id": "_view.v-2",
+    "root": {
+      "type": "Page",
+      "title": "Stations",
+      "id": "main.page",
+      "children": [
+        {
+          "type": "Text",
+          "id": "_body.text-1",
+          "text": {
+            "bind": "state.a_b.c-d.e"
+          }
+        }
+      ]
+    }
+  }
+}

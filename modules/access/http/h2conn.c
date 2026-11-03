@@ -80,6 +80,7 @@ struct vlc_h2_stream
 
     bool interrupted;
     bool recv_end; /**< End-of-stream flag */
+    bool evidence_headers_valid;
     int recv_err; /**< Standard C error code */
     struct vlc_http_msg *recv_hdr; /**< Latest received headers (or NULL) */
 
@@ -162,6 +163,9 @@ static void vlc_h2_stream_headers(void *ctx, unsigned count,
         vlc_http_dbg(SO(s), " %s: \"%s\"", hdrs[i][0], hdrs[i][1]);
 
     s->recv_hdr = vlc_http_msg_h2_headers(count, hdrs);
+    s->evidence_headers_valid = s->recv_hdr != NULL
+        && vlc_http_msg_get_status(s->recv_hdr) >= 200
+        && vlc_http_msg_get_header(s->recv_hdr, "Transfer-Encoding") == NULL;
     if (unlikely(s->recv_hdr == NULL))
         vlc_h2_stream_fatal(s, VLC_H2_PROTOCOL_ERROR);
     vlc_cond_signal(&s->recv_wait);
@@ -484,12 +488,26 @@ static void vlc_h2_stream_close(struct vlc_http_stream *stream, bool aborted)
         vlc_h2_conn_destroy(conn);
 }
 
+static bool vlc_h2_stream_is_complete(struct vlc_http_stream *stream)
+{
+    struct vlc_h2_stream *s = container_of(stream, struct vlc_h2_stream, stream);
+    /* Do not use stream_lock: it resets interrupted. A late native interrupt
+     * must refuse the witness even after the peer sent END_STREAM. */
+    vlc_mutex_lock(&s->conn->lock);
+    const bool complete = s->recv_end && s->recv_err == 0
+        && !s->interrupted && s->recv_head == NULL && s->recv_hdr == NULL
+        && s->evidence_headers_valid;
+    vlc_mutex_unlock(&s->conn->lock);
+    return complete && !vlc_killed();
+}
+
 static const struct vlc_http_stream_cbs vlc_h2_stream_callbacks =
 {
     vlc_h2_stream_wait,
     vlc_h2_stream_write,
     vlc_h2_stream_read,
     vlc_h2_stream_close,
+    vlc_h2_stream_is_complete,
 };
 
 /**
@@ -518,6 +536,7 @@ static struct vlc_http_stream *vlc_h2_stream_open(struct vlc_http_conn *c,
     s->conn = conn;
     s->newer = NULL;
     s->recv_end = false;
+    s->evidence_headers_valid = false;
     s->recv_err = 0;
     s->recv_hdr = NULL;
     s->recv_cwnd = VLC_H2_INIT_WINDOW;
