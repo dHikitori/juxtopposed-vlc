@@ -21,16 +21,16 @@ vlc_preparser_SOURCES = \
 		preparser/cmdline.h \
 		preparser/main.c
 
-vlc_preparser_CFLAGS = $(vlc_CFLAGS)
+vlc_preparser_CFLAGS = $(hakone_CFLAGS)
 
 vlc_preparser_LDADD = \
 		../compat/libcompat.la \
 		$(SOCKET_LIBS) \
-		$(vlc_LDADD)
+		$(hakone_LDADD)
 
-vlc_preparser_LDFLAGS = $(vlc_LDFLAGS)
+vlc_preparser_LDFLAGS = $(hakone_LDFLAGS)
 vlc_preparser_DEPENDENCIES = \
-		$(vlc_DEPENDENCIES)
+		$(hakone_DEPENDENCIES)
 
 if HAVE_OSX
 vlc_preparser_LDFLAGS += -Wl,-framework,CoreFoundation,-framework,Cocoa

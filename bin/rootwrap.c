@@ -243,7 +243,7 @@ int main (int argc, char *argv[])
     }
     if (uid == 0)
     {
-        fputs("Cannot determine unprivileged user for VLC!\n", stderr);
+        fputs("Cannot determine unprivileged user for Hakone!\n", stderr);
         exit (1);
     }
     setuid (uid);

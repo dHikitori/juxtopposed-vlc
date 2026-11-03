@@ -70,24 +70,24 @@ LUA_MODULES_PKGDATA = \
 
 desktopdir = $(datadir)/applications
 if KDE_SOLID
-desktop_DATA = vlc.desktop vlc-openbd.desktop vlc-opendvd.desktop vlc-openvcd.desktop vlc-opencda.desktop
+desktop_DATA = hakone.desktop hakone-openbd.desktop hakone-opendvd.desktop hakone-openvcd.desktop hakone-opencda.desktop
 appdatadir = $(datarootdir)/metainfo
-appdata_DATA = org.videolan.vlc.appdata.xml
+appdata_DATA = org.hakone.hakone.appdata.xml
 endif
 
-EXTRA_DIST += vlc.desktop.in vlc.desktop.mimetypes
-EXTRA_DIST += vlc-openbd.desktop.in vlc-opendvd.desktop.in vlc-openvcd.desktop.in vlc-opencda.desktop.in
+EXTRA_DIST += hakone.desktop.in hakone.desktop.mimetypes
+EXTRA_DIST += hakone-openbd.desktop.in hakone-opendvd.desktop.in hakone-openvcd.desktop.in hakone-opencda.desktop.in
 CLEANFILES += $(desktop_DATA) $(appdata_DATA)
 
 %.desktop: %.desktop.in $(top_builddir)/config.status
-	$(AM_V_GEN)mimetypes="$$(sed 's/\s*#.*$$//g' $(srcdir)/vlc.desktop.mimetypes | $(EGREP) -v '^$$' | tr "\n" ';')"; \
+	$(AM_V_GEN)mimetypes="$$(sed 's/\s*#.*$$//g' $(srcdir)/hakone.desktop.mimetypes | $(EGREP) -v '^$$' | tr "\n" ';')"; \
 	sed \
 		-e 's,\@bindir\@,$(bindir),g' \
 		 -e "s,\@MIMETYPES\@,$$mimetypes,g" < "$<" > tmp-$@
 	$(AM_V_at)$(DESKTOP_FILE_VALIDATE) tmp-$@
 	$(AM_V_at)mv -f tmp-$@ $@
 
-org.videolan.vlc.appdata.xml: org.videolan.vlc.appdata.xml.in
+org.hakone.hakone.appdata.xml: org.hakone.hakone.appdata.xml.in
 	$(AM_V_GEN)$(MSGFMT) --xml --template "$<" -d "$(top_srcdir)/po" \
 			-o "$@.tmp" || \
 		cp $< $@.tmp
@@ -99,19 +99,16 @@ icons32dir = $(iconsdatadir)/32x32/apps
 icons48dir = $(iconsdatadir)/48x48/apps
 icons128dir = $(iconsdatadir)/128x128/apps
 icons256dir = $(iconsdatadir)/256x256/apps
+iconsscalabledir = $(iconsdatadir)/scalable/apps
 
 if !HAVE_WIN32
-dist_pkgdata_DATA = icons/vlc.ico
-dist_icons16_DATA = icons/16x16/vlc.png icons/16x16/vlc.xpm
-dist_icons32_DATA = icons/32x32/vlc.png icons/32x32/vlc.xpm \
-			icons/32x32/vlc-xmas.xpm \
-			icons/32x32/vlc-aprilfools.xpm
-dist_icons48_DATA = icons/48x48/vlc.png icons/48x48/vlc-xmas.png \
-			icons/48x48/vlc-aprilfools.png
-dist_icons128_DATA = icons/128x128/vlc.png icons/128x128/vlc-xmas.png \
-                     icons/128x128/vlc-kb.png \
-                     icons/128x128/vlc-aprilfools.png
-dist_icons256_DATA = icons/256x256/vlc.png
+dist_pkgdata_DATA = icons/hakone.ico
+dist_icons16_DATA = icons/16x16/hakone.png icons/16x16/hakone.xpm
+dist_icons32_DATA = icons/32x32/hakone.png icons/32x32/hakone.xpm
+dist_icons48_DATA = icons/48x48/hakone.png
+dist_icons128_DATA = icons/128x128/hakone.png
+dist_icons256_DATA = icons/256x256/hakone.png
+dist_iconsscalable_DATA = icons/hakone.svg
 
 nobase_dist_pkgdata_SCRIPTS = \
 	utils/audio-vlc-default.sh \
@@ -292,10 +289,10 @@ EXTRA_DIST += \
 	$(NULL)
 
 DIST_solid = \
-	solid/vlc-openbd.desktop \
-	solid/vlc-opencda.desktop \
-	solid/vlc-opendvd.desktop \
-	solid/vlc-openvcd.desktop
+	solid/hakone-openbd.desktop \
+	solid/hakone-opencda.desktop \
+	solid/hakone-opendvd.desktop \
+	solid/hakone-openvcd.desktop
 
 EXTRA_DIST += \
         hrtfs/dodeca_and_7channel_3DSL_HRTF.sofa

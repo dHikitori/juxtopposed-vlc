@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH VLC 1 "Feb 14, 2005"
+.TH HAKONE 1 "Nov 3, 2026"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -16,30 +16,42 @@
 .\" .sp <n>    insert n+1 empty lines
 .\" for manpage-specific macros, see man(7)
 .SH NAME
-vlc, qvlc, svlc, nvlc, rvlc, cvlc \- the VLC media player
+hakone, qvlc, svlc, nvlc, rvlc, cvlc \- Hakone Media Player
 .SH SYNOPSIS
-.B vlc
+.B hakone
 .RI [ OPTIONS ]
 .RI [ ITEMS ]...
 .SH DESCRIPTION
-This manual page documents briefly the
-.B VLC
-multimedia player and server.
+This manual page documents briefly
+.BR "Hakone Media Player" ,
+a multimedia player and server based on VLC.
+.PP
+The
+.BR qvlc ,
+.BR svlc ,
+.BR nvlc ,
+.B rvlc
+and
+.B cvlc
+commands start
+.B hakone
+with the Qt, skins, ncurses, remote control and dummy interfaces
+respectively.
 
 .SH OPTIONS
-.B VLC
+.B Hakone
 follows the usual GNU command line syntax, with long
 options starting with two dashes (`-').
-For a precise description of options, please use "vlc \-\-help".
+For a precise description of options, please use "hakone \-\-help".
 
 The complete list of
-.B VLC
+.B Hakone
 options depends on what plugins are installed because they automatically
-add their own options. Please use "vlc \-\-longhelp" for a
+add their own options. Please use "hakone \-\-longhelp" for a
 complete list of available options.
 
 .SH ITEMS
-.B VLC
+.B Hakone
 recognizes several URL-style items:
 .TP
 .B *.mpg, *.vob, *.avi, *.mp3, *.ogg, *.opus
@@ -53,7 +65,7 @@ must have been prepared beforehand.
 VCD device (for instance vcd:///dev/cdrom).
 .TP
 .B udp://[@[<multicast address>][:<local port>]]
-UDP stream, such as one sent by VLS or another VLC.
+UDP stream, such as one sent by VLS, VLC or another Hakone.
 Usually "udp://" is enough.
 .TP
 .B http://<server address>[:<server port>]/[<file>]
@@ -67,10 +79,10 @@ Execute a playlist command. Commands are:
 .B pause
 (pause execution of other items), and
 .B quit
-(close VLC).
+(close Hakone).
 
 .SH ENVIRONMENT VARIABLES
-The following environment variables may affect VLC:
+The following environment variables may affect Hakone:
 
 .TP
 .B DISPLAY
@@ -123,7 +135,7 @@ The unique identifier of the desktop session,
 used by the PulseAudio output plugin.
 
 .SH SEE ALSO
-Online documentation: http://www.videolan.org/doc/
+Online documentation: https://hakone.org/
 .PP
 .SH AUTHOR
 This manual page was written by Sam Hocevar <sam@zoy.org>, for the Debian

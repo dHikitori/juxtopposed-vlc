@@ -121,7 +121,7 @@ CLEANFILES =
 DISTCLEANFILES = $(BUILT_SOURCES_distclean) compile doltcompile doltlibtool
 MAINTAINERCLEANFILES = ChangeLog
 
-# Shortcut for developers to rebuild the core (libvlc + vlc)
+# Shortcut for developers to rebuild the core (libvlc + hakone)
 # Don't use it if you don't know what it is about.
 # Don't complain if it doesn't work. -- Courmisch
 libcompat:
@@ -133,8 +133,8 @@ libvlccore: libcompat
 libvlc: libvlccore
 	cd lib && $(MAKE) $(AM_MAKEFLAGS) libvlc.la
 
-core: libvlc vlc$(EXEEXT)
-	cd bin && $(MAKE) $(AM_MAKEFLAGS) vlc$(EXEEXT) vlc-static$(EXEEXT)
+core: libvlc hakone$(EXEEXT)
+	cd bin && $(MAKE) $(AM_MAKEFLAGS) hakone$(EXEEXT) hakone-static$(EXEEXT)
 
 doc:
 	cd doc && $(MAKE) $(AM_MAKEFLAGS) doc
@@ -172,14 +172,14 @@ nvlc: make-alias Makefile
 	$(AM_V_GEN)$(MKALIAS) ncurses
 
 if BUILD_VLC
-noinst_SCRIPTS = vlc$(EXEEXT)
+noinst_SCRIPTS = hakone$(EXEEXT)
 endif
 
-vlc$(EXEEXT):
+hakone$(EXEEXT):
 if HAVE_DARWIN
-	$(AM_V_GEN)$(LN_S) -f bin/vlc-osx-static vlc
+	$(AM_V_GEN)$(LN_S) -f bin/hakone-osx-static hakone
 else
-	$(AM_V_GEN)$(LN_S) -f bin/vlc-static$(EXEEXT) vlc$(EXEEXT)
+	$(AM_V_GEN)$(LN_S) -f bin/hakone-static$(EXEEXT) hakone$(EXEEXT)
 endif
 
 TESTS = test/run_vlc.sh

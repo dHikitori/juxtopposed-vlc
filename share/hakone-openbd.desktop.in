@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Hakone Media Player (Blu-ray)
+Name[fr]=Lecteur multimédia Hakone (Blu-ray)
+NoDisplay=true
+Exec=@bindir@/hakone --started-from-file bluray://%f
+Icon=hakone
+Terminal=false
+Type=Application
+MimeType=x-content/video-bluray

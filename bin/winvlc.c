@@ -190,9 +190,9 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance,
         HANDLE sem = CreateSemaphore(NULL, 0, 1, NULL);
 
         libvlc_SetExitHandler(vlc->p_libvlc_int, vlc_kill, &sem);
-        libvlc_set_app_id (vlc, "org.VideoLAN.VLC", PACKAGE_VERSION,
-                           PACKAGE_NAME);
-        libvlc_set_user_agent (vlc, "VLC media player", "VLC/"PACKAGE_VERSION);
+        libvlc_set_app_id (vlc, "hakone", PACKAGE_VERSION,
+                           "hakone");
+        libvlc_set_user_agent (vlc, "Hakone Media Player", "VLC/"PACKAGE_VERSION);
         libvlc_InternalAddIntf (vlc->p_libvlc_int, NULL);
         libvlc_InternalPlay (vlc->p_libvlc_int);
 
@@ -202,9 +202,9 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance,
         libvlc_release (vlc);
     }
     else
-        MessageBox (NULL, TEXT("VLC media player could not start.\n"
+        MessageBox (NULL, TEXT("Hakone Media Player could not start.\n"
                     "Either the command line options were invalid or no plugins were found.\n"),
-                    TEXT("VLC media player"),
+                    TEXT("Hakone Media Player"),
                     MB_OK|MB_ICONERROR);
 
 

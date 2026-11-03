@@ -3,7 +3,7 @@
 option('vlc',
     type : 'boolean',
     value : true,
-    description : 'Build the VLC executable program.')
+    description : 'Build the Hakone executable program.')
 
 option('tests',
     type : 'feature',

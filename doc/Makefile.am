@@ -85,8 +85,8 @@ CHANGELOGS = \
 	$(NULL)
 
 man1_MANS = \
-	   vlc.1 \
-	   vlc-wrapper.1
+	   hakone.1 \
+	   hakone-wrapper.1
 
 EXTRA_DIST = subtitle-identification.md \
 	$(CHANGELOGS) \

@@ -19,29 +19,29 @@ ${LangFileString} Desc_Section02a \
 ${LangFileString} Desc_Section02b \
     "ਸੌਖੀ ਵਰਤੋਂ ਲਈ ਤੁਹਾਡੇ ਡੈਸਕਟਾਪ ਵਿੱਚ ਆਈਕਾਨ ਸ਼ਾਮਲ ਕਰੋ"
 ${LangFileString} Desc_Section04 \
-    "VLC ActiveX ਪਲੱਗਇਨ"
+    "Hakone ActiveX ਪਲੱਗਇਨ"
 ${LangFileString} Desc_Section05 \
     "DVD ਅਤੇ CD ਪਲੇਅਬੈਕ ਰਜਿਸਟਰੇਸ਼ਨ"
 ${LangFileString} Desc_Section06 \
-    "VLC ਮੀਡਿਆ ਪਲੇਅਰ ਨੂੰ ਦਿੱਤੀ ਫਾਇਲ ਟਾਈਪ ਲਈ ਡਿਫਾਲਟ ਐਪਲੀਕੇਸ਼ਨ ਸੈੱਟ ਕਰੋ"
+    "Hakone ਮੀਡਿਆ ਪਲੇਅਰ ਨੂੰ ਦਿੱਤੀ ਫਾਇਲ ਟਾਈਪ ਲਈ ਡਿਫਾਲਟ ਐਪਲੀਕੇਸ਼ਨ ਸੈੱਟ ਕਰੋ"
 ${LangFileString} Desc_Section07 \
-    "ਪਰਸੰਗ ਮੇਨੂ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ ('VLC ਨਾਲ ਚਲਾਓ' ਅਤੇ 'VLC ਦੀ ਪਲੇਅ-ਲਿਸਟ ਵਿੱਚ ਸ਼ਾਮਲ')"
+    "ਪਰਸੰਗ ਮੇਨੂ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ ('Hakone ਨਾਲ ਚਲਾਓ' ਅਤੇ 'Hakone ਦੀ ਪਲੇਅ-ਲਿਸਟ ਵਿੱਚ ਸ਼ਾਮਲ')"
 ${LangFileString} Desc_Section08 \
-    "VLC ਮੀਡਿਆ ਪਲੇਅਰ ਪਸੰਦ ਅਤੇ ਕੈਸ਼ ਨੂੰ ਹਟਾਓ, ਜੋ ਕਿ ਪਿਛਲੀ ਇੰਸਟਾਲੇਸ਼ਨ ਤੋਂ ਬਚੀ ਹੈ"
+    "Hakone ਮੀਡਿਆ ਪਲੇਅਰ ਪਸੰਦ ਅਤੇ ਕੈਸ਼ ਨੂੰ ਹਟਾਓ, ਜੋ ਕਿ ਪਿਛਲੀ ਇੰਸਟਾਲੇਸ਼ਨ ਤੋਂ ਬਚੀ ਹੈ"
 
 ${LangFileString} Name_Section91 "ਅਣ-ਇੰਸਟਾਲ ਕਰੋ"
 ${LangFileString} Name_Section92 "ਪਸੰਦ ਅਤੇ ਕੈਸ਼ ਹਟਾਓ"
 
 ${LangFileString} Desc_Section91 \
-"VLC ਮੀਡਿਆ ਪਲੇਅਰ ਅਤੇ ਇਸ ਦੇ ਸਭ ਭਾਗ ਅਣ-ਇੰਸਟਾਲ ਕਰੋ"
+"Hakone ਮੀਡਿਆ ਪਲੇਅਰ ਅਤੇ ਇਸ ਦੇ ਸਭ ਭਾਗ ਅਣ-ਇੰਸਟਾਲ ਕਰੋ"
 ${LangFileString} Desc_Section92 \
-"Deletes VLC ਮੀਡਿਆ ਪਲੇਅਰ ਪਸੰਦ ਅਤੇ ਕੈਸ਼ ਫਾਇਲਾਂ ਹਟਾਓ"
+"Deletes Hakone ਮੀਡਿਆ ਪਲੇਅਰ ਪਸੰਦ ਅਤੇ ਕੈਸ਼ ਫਾਇਲਾਂ ਹਟਾਓ"
 
 ${LangFileString} ShellAssociation_Play "ਚਲਾਓ"
-${LangFileString} ContextMenuEntry_PlayWith "VLC ਮੀਡਿਆ ਪਲੇਅਰ ਨਾਲ ਚਲਾਓ"
-${LangFileString} ContextMenuEntry_AddToPlaylist "VLC ਮੀਡਿਆ ਪਲੇਅਰ ਦੀ ਪਲੇਅ-ਲਿਸਟ ਵਿੱਚ ਸ਼ਾਮਲ"
+${LangFileString} ContextMenuEntry_PlayWith "Hakone ਮੀਡਿਆ ਪਲੇਅਰ ਨਾਲ ਚਲਾਓ"
+${LangFileString} ContextMenuEntry_AddToPlaylist "Hakone ਮੀਡਿਆ ਪਲੇਅਰ ਦੀ ਪਲੇਅ-ਲਿਸਟ ਵਿੱਚ ਸ਼ਾਮਲ"
 
-${LangFileString} Link_VisitWebsite "VideoLAN VLC ਮੀਡਿਆ ਪਲੇਅਰ ਵੈੱਬਸਾਈਟ ਵੇਖੋ"
+${LangFileString} Link_VisitWebsite "Hakone ਮੀਡਿਆ ਪਲੇਅਰ ਵੈੱਬਸਾਈਟ ਵੇਖੋ"
 
 ${LangFileString} Name_InstTypeRecommended "ਸਿਫਾਰਸ਼ੀ"
 ${LangFileString} Name_InstTypeMinimum "ਘੱਟੋ-ਘੱਟ"

@@ -16,12 +16,12 @@ build-npapi: package-win-install
 endif
 
 if HAVE_ARM64
-WINVERSION=vlc-$(VERSION)-winarm64
+WINVERSION=hakone-$(VERSION)-winarm64
 else
 if HAVE_WIN64
-WINVERSION=vlc-$(VERSION)-win64
+WINVERSION=hakone-$(VERSION)-win64
 else
-WINVERSION=vlc-$(VERSION)-win32
+WINVERSION=hakone-$(VERSION)-win32
 endif
 endif
 
@@ -66,7 +66,7 @@ endif
 	done
 	cp "$(srcdir)/README.md" "$(win32_destdir)/README.txt"
 
-	cp $(srcdir)/share/icons/vlc.ico $(win32_destdir)
+	cp $(srcdir)/share/icons/hakone.ico $(win32_destdir)
 	for plugindir in $(pkglibdir)/plugins/*/; do \
 		plugin_destdir="$(win32_destdir)/plugins/`basename $$plugindir`"; \
 		mkdir -p "$$plugin_destdir"; \
@@ -198,7 +198,7 @@ package-win32-release: package-win32-src $(win32_destdir)/NSIS/nsProcess.dll pac
 .PHONY: package-win-install package-win-common package-win-strip package-win32-src package-win32-exe package-win32-zip package-win32-debug-zip package-win32-7zip package-win32-debug-7zip package-win32-cleanup package-win32 package-win32-debug
 
 EXTRA_DIST += \
-	extras/package/win32/vlc.exe.manifest.in \
+	extras/package/win32/hakone.exe.manifest.in \
 	extras/package/win32/libvlc.dll.manifest.in \
 	extras/package/win32/libvlccore.dll.manifest.in \
 	extras/package/win32/configure.sh \

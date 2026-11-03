@@ -104,7 +104,7 @@ int main(int argc, char **argv)
     assert(DeleteFileW(root) && CreateDirectoryW(root, NULL));
     path_join(app, root, L"app-\x7528\x6237");
     assert(CreateDirectoryW(app, NULL));
-    path_join(executable, app, L"vlc.exe");
+    path_join(executable, app, L"hakone.exe");
     path_join(portable, app, L"portable");
     if (file)
     {

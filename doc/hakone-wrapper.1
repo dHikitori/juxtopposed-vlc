@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH VLC\-WRAPPER 1 "Aug 31, 2008"
+.TH HAKONE\-WRAPPER 1 "Nov 3, 2026"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -16,19 +16,19 @@
 .\" .sp <n>    insert n+1 empty lines
 .\" for manpage-specific macros, see man(7)
 .SH NAME
-vlc-wrapper \- a wrapper to drop privileges with VLC
+hakone-wrapper \- a wrapper to drop privileges with Hakone
 .SH SYNOPSIS
-.B vlc-wrapper
+.B hakone-wrapper
 .RI [ OPTIONS ]
 .SH DESCRIPTION
 This manual page documents briefly the
-.B VLC
+.B Hakone
 wrapper to open privileged network ports.
 The ports it can open are 80, 443 and 554.
 
 .SH OPTIONS
 They will be passed to
-.B VLC
+.B hakone
 with no modification.
 
 .SH USAGE
@@ -37,16 +37,16 @@ The preferred way is to use
 .B sudo
 :
 .PP
-\& $ sudo vlc-wrapper \-\-option1 \-\-option2
+\& $ sudo hakone-wrapper \-\-option1 \-\-option2
 .PP
 You can also set the SUDO_UID environment variable:
 .PP
-\& # SUDO_UID=1000 vlc-wrapper \-\-option1 \-\-option2
+\& # SUDO_UID=1000 hakone-wrapper \-\-option1 \-\-option2
 .PP
 
 
 .SH SEE ALSO
-.BR vlc (1),
+.BR hakone (1),
 .BR sudo (8)
 
 .PP

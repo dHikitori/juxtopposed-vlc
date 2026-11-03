@@ -5252,7 +5252,7 @@ dnl
 dnl  the VLC binary
 dnl
 AC_ARG_ENABLE([vlc],
-  AS_HELP_STRING([--enable-vlc], [build the VLC media player (default enabled)]))
+  AS_HELP_STRING([--enable-vlc], [build the Hakone Media Player executable (default enabled)]))
 AM_CONDITIONAL([BUILD_VLC], [test "${enable_vlc}" != "no" -a "$vlc_winstore_app" = "0"])
 
 dnl
@@ -5357,7 +5357,7 @@ AC_CONFIG_FILES([
 
 AM_COND_IF([KDE_SOLID], [
   AC_CONFIG_FILES([
-    share/org.videolan.vlc.appdata.xml.in
+    share/org.hakone.hakone.appdata.xml.in
   ])
 ])
 
@@ -5371,7 +5371,7 @@ AM_COND_IF([HAVE_WIN32], [
     extras/package/win32/msi/config.wxi
     extras/package/win32/libvlc.dll.manifest
     extras/package/win32/libvlccore.dll.manifest
-    extras/package/win32/vlc.exe.manifest
+    extras/package/win32/hakone.exe.manifest
   ])
 ])
 
@@ -5423,7 +5423,7 @@ optimizations         : ${enable_optimizations}"
 if test "${enable_vlc}" != "no"; then
 echo "vlc aliases           :${ALIASES}"
 else
-echo "build vlc executable  : no"
+echo "build hakone executable: no"
 fi
 echo "
 To build vlc and its plugins, type \`$MAKE', or \`./compile' if you like nice colors."

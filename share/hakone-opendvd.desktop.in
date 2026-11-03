@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Hakone Media Player (DVD)
+Name[fr]=Lecteur multimédia Hakone (DVD)
+NoDisplay=true
+Exec=@bindir@/hakone --started-from-file dvd://%f
+Icon=hakone
+Terminal=false
+Type=Application
+MimeType=x-content/video-dvd

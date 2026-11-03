@@ -1,15 +1,15 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; NSIS installer script for vlc ;
-; (http://nsis.sourceforge.net) ;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; NSIS installer script for Hakone ;
+; (http://nsis.sourceforge.net)    ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-!define PRODUCT_NAME "VLC media player"
+!define PRODUCT_NAME "Hakone Media Player"
 !define VERSION @VERSION@
 !define PRODUCT_VERSION @VERSION@
-!define PRODUCT_GROUP "VideoLAN"
-!define PRODUCT_PUBLISHER "VideoLAN"
-!define PRODUCT_WEB_SITE "https://www.videolan.org/"
-!define PRODUCT_DIR_REGKEY "Software\VideoLAN\VLC"
+!define PRODUCT_GROUP "Hakone"
+!define PRODUCT_PUBLISHER "Hakone"
+!define PRODUCT_WEB_SITE "https://hakone.org/"
+!define PRODUCT_DIR_REGKEY "Software\Hakone"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
 !define PRODUCT_ID "{ea92ef52-afe4-4212-bacb-dfe9fca94cd6}"
@@ -44,10 +44,10 @@ Var 32bitPath
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Name "${PRODUCT_NAME}"
-@HAVE_WIN64_FALSE@                   OutFile ..\vlc-${VERSION}-win32.exe
-@HAVE_WIN64_TRUE@ @HAVE_ARM64_FALSE@ OutFile ..\vlc-${VERSION}-win64.exe
-@HAVE_WIN64_TRUE@ @HAVE_ARM64_TRUE@  OutFile ..\vlc-${VERSION}-winarm64.exe
-InstallDir "$@PROGRAMFILES@\${PRODUCT_PUBLISHER}\VLC"
+@HAVE_WIN64_FALSE@                   OutFile ..\hakone-${VERSION}-win32.exe
+@HAVE_WIN64_TRUE@ @HAVE_ARM64_FALSE@ OutFile ..\hakone-${VERSION}-win64.exe
+@HAVE_WIN64_TRUE@ @HAVE_ARM64_TRUE@  OutFile ..\hakone-${VERSION}-winarm64.exe
+InstallDir "$@PROGRAMFILES@\${PRODUCT_PUBLISHER}"
 !ifdef NSIS_LZMA_COMPRESS_WHOLE
 SetCompressor lzma
 !else
@@ -56,7 +56,7 @@ SetCompressor /SOLID lzma
 
 SetOverwrite ifdiff
 CRCCheck on
-BrandingText "${PRODUCT_GROUP} ${PRODUCT_NAME}"
+BrandingText "${PRODUCT_NAME}"
 
 InstType "$(Name_InstTypeRecommended)"
 InstType "$(Name_InstTypeMinimum)"
@@ -80,8 +80,8 @@ RequestExecutionLevel admin
 
 ; MUI Settings
   !define MUI_ABORTWARNING
-  !define MUI_ICON "vlc.ico"
-  !define MUI_UNICON "vlc.ico"
+  !define MUI_ICON "hakone.ico"
+  !define MUI_UNICON "hakone.ico"
   !define MUI_COMPONENTSPAGE_SMALLDESC
 
   ; Banner (welcome and finish page) for installer
@@ -114,7 +114,7 @@ RequestExecutionLevel admin
     !define MUI_FINISHPAGE_RUN
     !define MUI_FINISHPAGE_RUN_FUNCTION AppExecAs
     !define MUI_FINISHPAGE_LINK "$(Link_VisitWebsite)"
-    !define MUI_FINISHPAGE_LINK_LOCATION "https://www.videolan.org/vlc/"
+    !define MUI_FINISHPAGE_LINK_LOCATION "${PRODUCT_WEB_SITE}"
     !define MUI_FINISHPAGE_NOREBOOTSUPPORT
     !insertmacro MUI_PAGE_FINISH
 
@@ -304,8 +304,8 @@ skip_uninstall32_cleanup:
 
   !insertmacro OpenUninstallLog
 
-  ; VLC.exe, libvlc.dll
-  !insertmacro InstallFile vlc.exe
+  ; hakone.exe, libvlc.dll
+  !insertmacro InstallFile hakone.exe
   !insertmacro InstallFile vlc-cache-gen.exe
   !insertmacro InstallFile vlc-preparser.exe
 
@@ -333,36 +333,36 @@ skip_uninstall32_cleanup:
   ; URLs
   WriteIniStr "$INSTDIR\${PRODUCT_GROUP} Website.url" "InternetShortcut" "URL" "${PRODUCT_WEB_SITE}"
   FileWrite $UninstallLog "${PRODUCT_GROUP} Website.url$\r$\n"
-  WriteIniStr "$INSTDIR\Documentation.url" "InternetShortcut" "URL" "${PRODUCT_WEB_SITE}/doc/"
+  WriteIniStr "$INSTDIR\Documentation.url" "InternetShortcut" "URL" "${PRODUCT_WEB_SITE}"
   FileWrite $UninstallLog "Documentation.url$\r$\n"
-  WriteIniStr "$INSTDIR\New_Skins.url" "InternetShortcut" "URL" "${PRODUCT_WEB_SITE}/vlc/skins.php"
+  WriteIniStr "$INSTDIR\New_Skins.url" "InternetShortcut" "URL" "https://www.videolan.org/vlc/skins.php"
   FileWrite $UninstallLog "New_Skins.url$\r$\n"
 
   !insertmacro CloseUninstallLog
 
-  ; Add VLC to "recommended programs" for the following extensions
-  WriteRegStr HKCR Applications\vlc.exe "" ""
-  WriteRegStr HKCR Applications\vlc.exe "FriendlyAppName" "${PRODUCT_NAME}"
-  WriteRegStr HKCR Applications\vlc.exe\shell\Open "" "$(ContextMenuEntry_PlayWith)"
-  WriteRegStr HKCR Applications\vlc.exe\shell\Open\command "" '"$INSTDIR\vlc.exe" --started-from-file "%1"'
+  ; Add Hakone to "recommended programs" for the following extensions
+  WriteRegStr HKCR Applications\hakone.exe "" ""
+  WriteRegStr HKCR Applications\hakone.exe "FriendlyAppName" "${PRODUCT_NAME}"
+  WriteRegStr HKCR Applications\hakone.exe\shell\Open "" "$(ContextMenuEntry_PlayWith)"
+  WriteRegStr HKCR Applications\hakone.exe\shell\Open\command "" '"$INSTDIR\hakone.exe" --started-from-file "%1"'
   !insertmacro MacroAllExtensions RegisterExtensionMacro
 @BUILD_SKINS_TRUE@   !insertmacro MacroSkinExtensions RegisterSkinExtensionMacro
 
-  ; Add VLC to "App Paths" to run VLC from ShellExecute/ShellExecuteEx/run dialog without giving a full path
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe" "" "$INSTDIR\vlc.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe" "Path" "$INSTDIR"
+  ; Add Hakone to "App Paths" to run Hakone from ShellExecute/ShellExecuteEx/run dialog without giving a full path
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\App Paths\hakone.exe" "" "$INSTDIR\hakone.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\App Paths\hakone.exe" "Path" "$INSTDIR"
 
   ; Windows default programs Registration
   ; Vista and above detection
   ${If} ${AtLeastWinVista}
-    WriteRegStr HKLM "Software\RegisteredApplications" "VLC" "Software\Clients\Media\VLC\Capabilities"
-    WriteRegStr HKLM "Software\Clients\Media\VLC\Capabilities" "ApplicationName" "${PRODUCT_NAME}"
-    WriteRegStr HKLM "Software\Clients\Media\VLC\Capabilities" "ApplicationDescription" "VLC - The video swiss knife"
-    WriteRegStr HKLM "Software\Clients\Media\VLC" "" "${PRODUCT_NAME}"
-    WriteRegStr HKLM "Software\Clients\Media\VLC\InstallInfo" "HideIconsCommand" "$\"$INSTDIR\spad-setup.exe$\" /HideIcons /S"
-    WriteRegStr HKLM "Software\Clients\Media\VLC\InstallInfo" "ShowIconsCommand" "$\"$INSTDIR\spad-setup.exe$\" /ShowIcons /S"
-    WriteRegStr HKLM "Software\Clients\Media\VLC\InstallInfo" "ReinstallCommand" "$\"$INSTDIR\spad-setup.exe$\" /Reinstall /S"
-    WriteRegDWORD HKLM "Software\Clients\Media\VLC\InstallInfo" "IconsVisible" 0x001
+    WriteRegStr HKLM "Software\RegisteredApplications" "Hakone" "Software\Clients\Media\Hakone\Capabilities"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone\Capabilities" "ApplicationName" "${PRODUCT_NAME}"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone\Capabilities" "ApplicationDescription" "Hakone - The video swiss knife"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone" "" "${PRODUCT_NAME}"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone\InstallInfo" "HideIconsCommand" "$\"$INSTDIR\spad-setup.exe$\" /HideIcons /S"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone\InstallInfo" "ShowIconsCommand" "$\"$INSTDIR\spad-setup.exe$\" /ShowIcons /S"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone\InstallInfo" "ReinstallCommand" "$\"$INSTDIR\spad-setup.exe$\" /Reinstall /S"
+    WriteRegDWORD HKLM "Software\Clients\Media\Hakone\InstallInfo" "IconsVisible" 0x001
   ${EndIf}
 ${MementoSectionEnd}
 
@@ -370,9 +370,9 @@ ${MementoSection} "$(Name_Section02a)" SEC02a
   SectionIn 1 2 3
   CreateDirectory "$SMPROGRAMS\${PRODUCT_PUBLISHER}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_PUBLISHER}\${PRODUCT_NAME}.lnk" \
-    "$INSTDIR\vlc.exe" ""
+    "$INSTDIR\hakone.exe" ""
   CreateShortCut "$SMPROGRAMS\${PRODUCT_PUBLISHER}\${PRODUCT_NAME} skinned.lnk" \
-    "$INSTDIR\vlc.exe" "-Iskins"
+    "$INSTDIR\hakone.exe" "-Iskins"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_PUBLISHER}\Documentation.lnk" \
     "$INSTDIR\Documentation.url"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_PUBLISHER}\Release Notes.lnk" \
@@ -380,13 +380,13 @@ ${MementoSection} "$(Name_Section02a)" SEC02a
   CreateShortCut "$SMPROGRAMS\${PRODUCT_PUBLISHER}\${PRODUCT_GROUP} Website.lnk" \
     "$INSTDIR\${PRODUCT_GROUP} Website.url"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_PUBLISHER}\${PRODUCT_NAME} - reset preferences and cache files.lnk" \
-    "$INSTDIR\vlc.exe" "--reset-config --reset-plugins-cache vlc://quit"
+    "$INSTDIR\hakone.exe" "--reset-config --reset-plugins-cache vlc://quit"
 ${MementoSectionEnd}
 
 ${MementoSection} "$(Name_Section02b)" SEC02b
   SectionIn 1 2 3
   CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" \
-    "$INSTDIR\vlc.exe" ""
+    "$INSTDIR\hakone.exe" ""
 ${MementoSectionEnd}
 
 !ifdef INSTALL_ACTIVEX
@@ -408,104 +408,104 @@ SectionGroupEnd
 
 ${MementoSection} "$(Name_Section05)" SEC05
   SectionIn 1 2 3
-  WriteRegStr HKCR "AudioCD\shell\PlayWithVLC" "" "$(ContextMenuEntry_PlayWith)"
-  WriteRegStr HKCR "AudioCD\shell\PlayWithVLC\command" "" \
-    '"$INSTDIR\vlc.exe" --started-from-file cdda:///%1'
-  WriteRegStr HKCR "DVD\shell\PlayWithVLC" "" "$(ContextMenuEntry_PlayWith)"
-  WriteRegStr HKCR "DVD\shell\PlayWithVLC\command" "" \
-    '"$INSTDIR\vlc.exe" --started-from-file dvd:///%1'
+  WriteRegStr HKCR "AudioCD\shell\PlayWithHakone" "" "$(ContextMenuEntry_PlayWith)"
+  WriteRegStr HKCR "AudioCD\shell\PlayWithHakone\command" "" \
+    '"$INSTDIR\hakone.exe" --started-from-file cdda:///%1'
+  WriteRegStr HKCR "DVD\shell\PlayWithHakone" "" "$(ContextMenuEntry_PlayWith)"
+  WriteRegStr HKCR "DVD\shell\PlayWithHakone\command" "" \
+    '"$INSTDIR\hakone.exe" --started-from-file dvd:///%1'
 
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDMovieOnArrival" "VLCPlayDVDMovieOnArrival" ""
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDMovieOnArrival" "Action" "$(Action_OnArrivalDVD)"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDMovieOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDMovieOnArrival" "InvokeProgID" "VLC.DVDMovie"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDMovieOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDMovieOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDMovieOnArrival" "HakonePlayDVDMovieOnArrival" ""
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDMovieOnArrival" "Action" "$(Action_OnArrivalDVD)"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDMovieOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDMovieOnArrival" "InvokeProgID" "Hakone.DVDMovie"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDMovieOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDMovieOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayCDAudioOnArrival" "VLCPlayCDAudioOnArrival" ""
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayCDAudioOnArrival" "Action" "$(Action_OnArrivalAudioCD)"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayCDAudioOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayCDAudioOnArrival" "InvokeProgID" "VLC.CDAudio"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayCDAudioOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayCDAudioOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayCDAudioOnArrival" "HakonePlayCDAudioOnArrival" ""
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayCDAudioOnArrival" "Action" "$(Action_OnArrivalAudioCD)"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayCDAudioOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayCDAudioOnArrival" "InvokeProgID" "Hakone.CDAudio"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayCDAudioOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayCDAudioOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoCDMovieOnArrival" "VLCPlayVCDMovieOnArrival" ""
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVCDMovieOnArrival" "Action" "$(Action_OnArrivalVCDMovie)"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVCDMovieOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVCDMovieOnArrival" "InvokeProgID" "VLC.VCDMovie"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVCDMovieOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVCDMovieOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoCDMovieOnArrival" "HakonePlayVCDMovieOnArrival" ""
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVCDMovieOnArrival" "Action" "$(Action_OnArrivalVCDMovie)"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVCDMovieOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVCDMovieOnArrival" "InvokeProgID" "Hakone.VCDMovie"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVCDMovieOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVCDMovieOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlaySuperVideoCDMovieOnArrival" "VLCPlaySVCDMovieOnArrival" ""
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlaySVCDMovieOnArrival" "Action" "$(Action_OnArrivalSVCDMovie)"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlaySVCDMovieOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlaySVCDMovieOnArrival" "InvokeProgID" "VLC.SVCDMovie"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlaySVCDMovieOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlaySVCDMovieOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlaySuperVideoCDMovieOnArrival" "HakonePlaySVCDMovieOnArrival" ""
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlaySVCDMovieOnArrival" "Action" "$(Action_OnArrivalSVCDMovie)"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlaySVCDMovieOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlaySVCDMovieOnArrival" "InvokeProgID" "Hakone.SVCDMovie"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlaySVCDMovieOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlaySVCDMovieOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDAudioOnArrival" "VLCPlayDVDAudioOnArrival" ""
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDAudioOnArrival" "Action" "$(Action_OnArrivalDVDAudio)"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDAudioOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDAudioOnArrival" "InvokeProgID" "VLC.OPENFolder"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDAudioOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDAudioOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDAudioOnArrival" "HakonePlayDVDAudioOnArrival" ""
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDAudioOnArrival" "Action" "$(Action_OnArrivalDVDAudio)"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDAudioOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDAudioOnArrival" "InvokeProgID" "Hakone.OPENFolder"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDAudioOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDAudioOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoFilesOnArrival" "VLCPlayVideoFilesOnArrival" ""
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVideoFilesOnArrival" "Action" "$(Action_OnArrivalVideoFiles)"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVideoFilesOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVideoFilesOnArrival" "InvokeProgID" "VLC.OPENFolder"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVideoFilesOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVideoFilesOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoFilesOnArrival" "HakonePlayVideoFilesOnArrival" ""
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVideoFilesOnArrival" "Action" "$(Action_OnArrivalVideoFiles)"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVideoFilesOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVideoFilesOnArrival" "InvokeProgID" "Hakone.OPENFolder"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVideoFilesOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVideoFilesOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayMusicFilesOnArrival" "VLCPlayMusicFilesOnArrival" ""
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayMusicFilesOnArrival" "Action" "$(Action_OnArrivalMusicFiles)"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayMusicFilesOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayMusicFilesOnArrival" "InvokeProgID" "VLC.OPENFolder"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayMusicFilesOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayMusicFilesOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayMusicFilesOnArrival" "HakonePlayMusicFilesOnArrival" ""
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayMusicFilesOnArrival" "Action" "$(Action_OnArrivalMusicFiles)"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayMusicFilesOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayMusicFilesOnArrival" "InvokeProgID" "Hakone.OPENFolder"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayMusicFilesOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayMusicFilesOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayBlurayOnArrival" "VLCPlayBlurayOnArrival" ""
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayBlurayOnArrival" "Action" "$(Action_OnArrivalBluray)"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayBlurayOnArrival" "DefaultIcon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayBlurayOnArrival" "InvokeProgID" "VLC.Bluray"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayBlurayOnArrival" "InvokeVerb" "Open"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayBlurayOnArrival" "Provider" "${PRODUCT_PUBLISHER} ${PRODUCT_NAME}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayBlurayOnArrival" "HakonePlayBlurayOnArrival" ""
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayBlurayOnArrival" "Action" "$(Action_OnArrivalBluray)"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayBlurayOnArrival" "DefaultIcon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayBlurayOnArrival" "InvokeProgID" "Hakone.Bluray"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayBlurayOnArrival" "InvokeVerb" "Open"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayBlurayOnArrival" "Provider" "${PRODUCT_NAME}"
 
-  WriteRegStr HKCR "VLC.DVDMovie" "" "VLC DVD Movie"
-  WriteRegStr HKCR "VLC.DVDMovie\shell" "" "Open"
-  WriteRegStr HKCR "VLC.DVDMovie\shell\Open\command" "" \
-    '"$INSTDIR\vlc.exe" --started-from-file dvd:///%1'
-  WriteRegStr HKCR "VLC.DVDMovie\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
+  WriteRegStr HKCR "Hakone.DVDMovie" "" "Hakone DVD Movie"
+  WriteRegStr HKCR "Hakone.DVDMovie\shell" "" "Open"
+  WriteRegStr HKCR "Hakone.DVDMovie\shell\Open\command" "" \
+    '"$INSTDIR\hakone.exe" --started-from-file dvd:///%1'
+  WriteRegStr HKCR "Hakone.DVDMovie\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
 
-  WriteRegStr HKCR "VLC.CDAudio" "" "VLC CD Audio"
-  WriteRegStr HKCR "VLC.CDAudio\shell" "" "Open"
-  WriteRegStr HKCR "VLC.CDAudio\shell\Open\command" "" \
-    '"$INSTDIR\vlc.exe" --started-from-file cdda:///%1'
-  WriteRegStr HKCR "VLC.CDAudio\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
+  WriteRegStr HKCR "Hakone.CDAudio" "" "Hakone CD Audio"
+  WriteRegStr HKCR "Hakone.CDAudio\shell" "" "Open"
+  WriteRegStr HKCR "Hakone.CDAudio\shell\Open\command" "" \
+    '"$INSTDIR\hakone.exe" --started-from-file cdda:///%1'
+  WriteRegStr HKCR "Hakone.CDAudio\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
 
-  WriteRegStr HKCR "VLC.VCDMovie" "" "VLC VCD Movie"
-  WriteRegStr HKCR "VLC.VCDMovie\shell" "" "Open"
-  WriteRegStr HKCR "VLC.VCDMovie\shell\Open\command" "" \
-     '"$INSTDIR\vlc.exe" --started-from-file vcd:///%1'
-  WriteRegStr HKCR "VLC.VCDMovie\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
+  WriteRegStr HKCR "Hakone.VCDMovie" "" "Hakone VCD Movie"
+  WriteRegStr HKCR "Hakone.VCDMovie\shell" "" "Open"
+  WriteRegStr HKCR "Hakone.VCDMovie\shell\Open\command" "" \
+     '"$INSTDIR\hakone.exe" --started-from-file vcd:///%1'
+  WriteRegStr HKCR "Hakone.VCDMovie\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
 
-  WriteRegStr HKCR "VLC.SVCDMovie" "" "VLC SVCD Movie"
-  WriteRegStr HKCR "VLC.SVCDMovie\shell" "" "Open"
-  WriteRegStr HKCR "VLC.SVCDMovie\shell\Open\command" "" \
-     '"$INSTDIR\vlc.exe" --started-from-file vcd:///%1'
-  WriteRegStr HKCR "VLC.SVCDMovie\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
+  WriteRegStr HKCR "Hakone.SVCDMovie" "" "Hakone SVCD Movie"
+  WriteRegStr HKCR "Hakone.SVCDMovie\shell" "" "Open"
+  WriteRegStr HKCR "Hakone.SVCDMovie\shell\Open\command" "" \
+     '"$INSTDIR\hakone.exe" --started-from-file vcd:///%1'
+  WriteRegStr HKCR "Hakone.SVCDMovie\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
 
-  WriteRegStr HKCR "VLC.OPENFolder" "" "VLC Play content"
-  WriteRegStr HKCR "VLC.OPENFolder\shell" "" "Open"
-  WriteRegStr HKCR "VLC.OPENFolder\shell\Open\command" "" \
-     '"$INSTDIR\vlc.exe" %1'
-  WriteRegStr HKCR "VLC.OPENFolder\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
+  WriteRegStr HKCR "Hakone.OPENFolder" "" "Hakone Play content"
+  WriteRegStr HKCR "Hakone.OPENFolder\shell" "" "Open"
+  WriteRegStr HKCR "Hakone.OPENFolder\shell\Open\command" "" \
+     '"$INSTDIR\hakone.exe" %1'
+  WriteRegStr HKCR "Hakone.OPENFolder\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
 
-  WriteRegStr HKCR "VLC.Bluray" "" "VLC Bluray"
-  WriteRegStr HKCR "VLC.Bluray\shell" "" "Open"
-  WriteRegStr HKCR "VLC.Bluray\shell\Open\command" "" \
-    '"$INSTDIR\vlc.exe" --started-from-file bluray:///%1'
-  WriteRegStr HKCR "VLC.Bluray\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
+  WriteRegStr HKCR "Hakone.Bluray" "" "Hakone Bluray"
+  WriteRegStr HKCR "Hakone.Bluray\shell" "" "Open"
+  WriteRegStr HKCR "Hakone.Bluray\shell\Open\command" "" \
+    '"$INSTDIR\hakone.exe" --started-from-file bluray:///%1'
+  WriteRegStr HKCR "Hakone.Bluray\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
 
 ${MementoSectionEnd}
 
@@ -559,7 +559,7 @@ ${MementoSectionRestore}
 
 @HAVE_WIN64_TRUE@ !include "x64.nsh"
 @HAVE_WIN64_TRUE@ ${Unless} ${RunningX64}
-@HAVE_WIN64_TRUE@    MessageBox MB_OK|MB_ICONSTOP "This version of VLC only runs on 64-bit operating systems.$\nPlease get the 32-bit version and try again."
+@HAVE_WIN64_TRUE@    MessageBox MB_OK|MB_ICONSTOP "This version of Hakone only runs on 64-bit operating systems.$\nPlease get the 32-bit version and try again."
 @HAVE_WIN64_TRUE@    Quit
 @HAVE_WIN64_TRUE@ ${EndUnless}
 ${IfNot} ${AtLeastWin7}
@@ -568,18 +568,18 @@ ${Endif}
 
 ReadRegStr $INSTDIR HKLM "${PRODUCT_DIR_REGKEY}" "InstallDir"
 StrCmp $INSTDIR "" 0 WinOk
-StrCpy $INSTDIR "$@PROGRAMFILES@\${PRODUCT_PUBLISHER}\VLC"
+StrCpy $INSTDIR "$@PROGRAMFILES@\${PRODUCT_PUBLISHER}"
 Goto WinOk
 
 WinTooOld:
-    MessageBox MB_OK|MB_ICONSTOP "This version of VLC only runs on Windows 7 and newer."
+    MessageBox MB_OK|MB_ICONSTOP "This version of Hakone only runs on Windows 7 and newer."
     Quit
 
 WinOk:
   ; /update argument
   Call ParseCommandline
 
-  ; See if a other bitness VLC version exists
+  ; See if a other bitness Hakone version exists
   !ifdef VLC_64BIT_INSTALLER
     SetRegView 32
 
@@ -775,7 +775,7 @@ Section -Post
   WriteUninstaller "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "InstallDir" $INSTDIR
   WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "Version" "${VERSION}"
-  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\vlc.exe"
+  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\hakone.exe"
 
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
     "DisplayName" "$(^Name)"
@@ -784,7 +784,7 @@ Section -Post
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
     "InstallLocation" "$INSTDIR"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
-    "DisplayIcon" "$INSTDIR\vlc.exe"
+    "DisplayIcon" "$INSTDIR\hakone.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
     "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
@@ -865,36 +865,36 @@ Section "un.$(Name_Section91)" SEC91
   Call un.RemoveEmptyDirs
   RMDir "$INSTDIR"
 
-  DeleteRegKey HKLM Software\VideoLAN
+  DeleteRegKey HKLM Software\Hakone
 
-  DeleteRegKey HKCR Applications\vlc.exe
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe"
-  DeleteRegKey HKCR AudioCD\shell\PlayWithVLC
-  DeleteRegKey HKCR DVD\shell\PlayWithVLC
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDMovieOnArrival" "VLCPlayDVDMovieOnArrival"
-  DeleteRegKey HKLM Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDMovieOnArrival
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayCDAudioOnArrival" "VLCPlayCDAudioOnArrival"
-  DeleteRegKey HKLM Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayCDAudioOnArrival
-  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoCDMovieOnArrival" "VLCPlayVCDMovieOnArrival"
-  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVCDMovieOnArrival
-  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlaySuperVideoCDMovieOnArrival" "VLCPlaySVCDMovieOnArrival"
-  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlaySVCDMovieOnArrival
-  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDAudioOnArrival" "VLCPlayDVDAudioOnArrival"
-  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayDVDAudioOnArrival
-  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoFilesOnArrival" "VLCPlayVideoFilesOnArrival"
-  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayVideoFilesOnArrival
-  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayMusicFilesOnArrival" "VLCPlayMusicFilesOnArrival"
-  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\VLCPlayMusicFilesOnArrival
+  DeleteRegKey HKCR Applications\hakone.exe
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\App Paths\hakone.exe"
+  DeleteRegKey HKCR AudioCD\shell\PlayWithHakone
+  DeleteRegKey HKCR DVD\shell\PlayWithHakone
+  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDMovieOnArrival" "HakonePlayDVDMovieOnArrival"
+  DeleteRegKey HKLM Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDMovieOnArrival
+  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayCDAudioOnArrival" "HakonePlayCDAudioOnArrival"
+  DeleteRegKey HKLM Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayCDAudioOnArrival
+  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoCDMovieOnArrival" "HakonePlayVCDMovieOnArrival"
+  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVCDMovieOnArrival
+  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlaySuperVideoCDMovieOnArrival" "HakonePlaySVCDMovieOnArrival"
+  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlaySVCDMovieOnArrival
+  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayDVDAudioOnArrival" "HakonePlayDVDAudioOnArrival"
+  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayDVDAudioOnArrival
+  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayVideoFilesOnArrival" "HakonePlayVideoFilesOnArrival"
+  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayVideoFilesOnArrival
+  DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\EventHandlers\PlayMusicFilesOnArrival" "HakonePlayMusicFilesOnArrival"
+  DeleteRegKey HKLM SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\Handlers\HakonePlayMusicFilesOnArrival
 
-  DeleteRegKey HKLM Software\Clients\Media\VLC
-  DeleteRegValue HKLM "Software\RegisteredApplications" "VLC"
-  DeleteRegKey HKCR "VLC.MediaFile"
-  DeleteRegKey HKCR "VLC.DVDMovie"
-  DeleteRegKey HKCR "VLC.CDAudio"
-  DeleteRegKey HKCR "VLC.VCDMovie"
-  DeleteRegKey HKCR "VLC.SVCDMovie"
-  DeleteRegKey HKCR "VLC.OPENFolder"
-  DeleteRegKey HKCR "VLC.Bluray"
+  DeleteRegKey HKLM Software\Clients\Media\Hakone
+  DeleteRegValue HKLM "Software\RegisteredApplications" "Hakone"
+  DeleteRegKey HKCR "Hakone.MediaFile"
+  DeleteRegKey HKCR "Hakone.DVDMovie"
+  DeleteRegKey HKCR "Hakone.CDAudio"
+  DeleteRegKey HKCR "Hakone.VCDMovie"
+  DeleteRegKey HKCR "Hakone.SVCDMovie"
+  DeleteRegKey HKCR "Hakone.OPENFolder"
+  DeleteRegKey HKCR "Hakone.Bluray"
 
 
   DeleteRegKey HKLM \

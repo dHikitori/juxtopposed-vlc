@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Hakone Media Player (Audio CD)
+Name[fr]=Lecteur multimédia Hakone (CD Audio)
+NoDisplay=true
+Exec=@bindir@/hakone --started-from-file cdda://%f
+Icon=hakone
+Terminal=false
+Type=Application
+MimeType=x-content/audio-cdda

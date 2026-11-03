@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2016-2017 Jean-Baptiste Kempf CC-0 -->
+
+<component type="desktop-application">
+    <id>org.hakone.hakone</id>
+    <launchable type="desktop-id">hakone.desktop</launchable>
+    <metadata_license>CC0-1.0</metadata_license>
+    <name>Hakone</name>
+    <summary>Hakone Media Player, the open-source multimedia player</summary>
+    <description>
+        <p>
+            Hakone is a free and open source multimedia player based on VLC.
+            It plays most multimedia files as well as DVDs, Audio CDs, VCDs,
+            and various streaming protocols.
+        </p>
+    </description>
+    <url type="homepage">https://hakone.org/</url>
+    <url type="bugtracker">https://github.com/hakone-org/hakone/issues</url>
+    <releases>
+        <release version="@VERSION@" date="@VERSION_DATE@" />
+    </releases>
+    <provides>
+        <library>libvlc.so.@LIBVLC_ABI_MAJOR@</library>
+    </provides>
+    <project_license>GPL-2.0+</project_license>
+    <developer_name>Hakone contributors, VideoLAN et al.</developer_name>
+    <content_rating type="oars-1.1" />
+</component>

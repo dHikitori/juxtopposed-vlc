@@ -4,7 +4,7 @@ Type=Service
 Actions=open;
 
 [Desktop Action open]
-Name=Open with VLC media player
-Name[fr]=Ouvrir avec Lecteur multimédia VLC
-Exec=vlc bluray://%d
-Icon=vlc
+Name=Open with Hakone Media Player
+Name[fr]=Ouvrir avec Lecteur multimédia Hakone
+Exec=hakone bluray://%d
+Icon=hakone

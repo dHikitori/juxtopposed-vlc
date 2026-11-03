@@ -1,12 +1,12 @@
-# Building vlc
+# Building hakone
 #
 if BUILD_VLC
 if HAVE_OSX
-bin_PROGRAMS = vlc-osx
-noinst_PROGRAMS = vlc-osx-static
+bin_PROGRAMS = hakone-osx
+noinst_PROGRAMS = hakone-osx-static
 else
-bin_PROGRAMS = vlc
-noinst_PROGRAMS = vlc-static
+bin_PROGRAMS = hakone
+noinst_PROGRAMS = hakone-static
 endif
 endif
 EXTRA_DIST = vlc_win32_rc.rc.in
@@ -25,70 +25,70 @@ AM_CFLAGS += -sMAIN_MODULE=1
 endif
 
 #
-# Main VLC executable
+# Main Hakone executable
 #
-vlc_LDADD = ../lib/libvlc.la ../src/libvlccore.la
-vlc_CPPFLAGS = $(AM_CPPFLAGS)
+hakone_LDADD = ../lib/libvlc.la ../src/libvlccore.la
+hakone_CPPFLAGS = $(AM_CPPFLAGS)
 if !HAVE_WIN32
-vlc_SOURCES = vlc.c override.c
-vlc_LDADD += $(LIBDL)
+hakone_SOURCES = vlc.c override.c
+hakone_LDADD += $(LIBDL)
 else
-vlc_SOURCES = winvlc.c
-EXTRA_vlc_DEPENDENCIES = vlc_win32_rc.$(OBJEXT)
-vlc_LDFLAGS = -mwindows -Wc,-static
-vlc_LDADD += -lole32 vlc_win32_rc.$(OBJEXT)
+hakone_SOURCES = winvlc.c
+EXTRA_hakone_DEPENDENCIES = vlc_win32_rc.$(OBJEXT)
+hakone_LDFLAGS = -mwindows -Wc,-static
+hakone_LDADD += -lole32 vlc_win32_rc.$(OBJEXT)
 libbreakpad_wrapper_la_SOURCES = breakpad.cpp
 libbreakpad_wrapper_la_LIBADD = $(BREAKPAD_LIBS)
 libbreakpad_wrapper_la_LDFLAGS = -static
 libbreakpad_wrapper_la_CXXFLAGS = $(AM_CXXFLAGS) $(BREAKPAD_CFLAGS) -DBREAKPAD_URL=\"@BREAKPAD_URL@\"
 if HAVE_BREAKPAD
 noinst_LTLIBRARIES += libbreakpad_wrapper.la
-vlc_LDADD += libbreakpad_wrapper.la -lstdc++ -lwininet
-EXTRA_vlc_DEPENDENCIES += libbreakpad_wrapper.la
-vlc_CPPFLAGS += -DHAVE_BREAKPAD
+hakone_LDADD += libbreakpad_wrapper.la -lstdc++ -lwininet
+EXTRA_hakone_DEPENDENCIES += libbreakpad_wrapper.la
+hakone_CPPFLAGS += -DHAVE_BREAKPAD
 endif
 endif
 
-vlc_osx_SOURCES = darwinvlc.m
-vlc_osx_CPPFLAGS = $(AM_CPPFLAGS)
-vlc_osx_LDFLAGS = $(LDFLAGS_vlc) -Wl,-framework,CoreFoundation,-framework,Cocoa
-vlc_osx_LDFLAGS += -Xlinker -rpath -Xlinker "$(libdir)"
+hakone_osx_SOURCES = darwinvlc.m
+hakone_osx_CPPFLAGS = $(AM_CPPFLAGS)
+hakone_osx_LDFLAGS = $(LDFLAGS_vlc) -Wl,-framework,CoreFoundation,-framework,Cocoa
+hakone_osx_LDFLAGS += -Xlinker -rpath -Xlinker "$(libdir)"
 if HAVE_BREAKPAD
-vlc_osx_LDFLAGS += -Wl,-framework,Breakpad
-vlc_osx_OBJCFLAGS = -F$(CONTRIB_DIR)/Frameworks
-vlc_osx_CPPFLAGS += -DHAVE_BREAKPAD
+hakone_osx_LDFLAGS += -Wl,-framework,Breakpad
+hakone_osx_OBJCFLAGS = -F$(CONTRIB_DIR)/Frameworks
+hakone_osx_CPPFLAGS += -DHAVE_BREAKPAD
 endif
-vlc_osx_LDADD = ../lib/libvlc.la
+hakone_osx_LDADD = ../lib/libvlc.la
 
-vlc_osx_static_SOURCES = $(vlc_osx_SOURCES)
-vlc_osx_static_CPPFLAGS = $(vlc_osx_CPPFLAGS)
-vlc_osx_static_OBJCFLAGS = $(AM_OBJCFLAGS) \
+hakone_osx_static_SOURCES = $(hakone_osx_SOURCES)
+hakone_osx_static_CPPFLAGS = $(hakone_osx_CPPFLAGS)
+hakone_osx_static_OBJCFLAGS = $(AM_OBJCFLAGS) \
 	-DTOP_BUILDDIR=\"$(abs_top_builddir)\" \
 	-DTOP_SRCDIR=\"$(abs_top_srcdir)\" \
 	$(NULL)
-vlc_osx_static_LDFLAGS = $(vlc_osx_LDFLAGS) -static
-vlc_osx_static_LDFLAGS += -Xlinker -rpath -Xlinker "@executable_path/../lib/.libs/"
-vlc_osx_static_LDFLAGS += -Xlinker -rpath -Xlinker "@executable_path/../src/.libs/"
-vlc_osx_static_LDFLAGS += -Xlinker -rpath -Xlinker "@executable_path/../Frameworks/"
-vlc_osx_static_LDADD = $(vlc_osx_LDADD)
+hakone_osx_static_LDFLAGS = $(hakone_osx_LDFLAGS) -static
+hakone_osx_static_LDFLAGS += -Xlinker -rpath -Xlinker "@executable_path/../lib/.libs/"
+hakone_osx_static_LDFLAGS += -Xlinker -rpath -Xlinker "@executable_path/../src/.libs/"
+hakone_osx_static_LDFLAGS += -Xlinker -rpath -Xlinker "@executable_path/../Frameworks/"
+hakone_osx_static_LDADD = $(hakone_osx_LDADD)
 if HAVE_BREAKPAD
-vlc_osx_static_LDFLAGS += -Wl,-framework,Breakpad
-vlc_osx_static_OBJCFLAGS += -F$(CONTRIB_DIR)/Frameworks
+hakone_osx_static_LDFLAGS += -Wl,-framework,Breakpad
+hakone_osx_static_OBJCFLAGS += -F$(CONTRIB_DIR)/Frameworks
 endif
 
 
 #
-# Static (debug) VLC executable
+# Static (debug) Hakone executable
 #
-vlc_static_SOURCES = $(vlc_SOURCES)
-vlc_static_CFLAGS = $(AM_CFLAGS) \
+hakone_static_SOURCES = $(hakone_SOURCES)
+hakone_static_CFLAGS = $(AM_CFLAGS) \
 	-DTOP_BUILDDIR=\"$(abs_top_builddir)\" \
 	-DTOP_SRCDIR=\"$(abs_top_srcdir)\" \
 	$(NULL)
-vlc_static_CPPFLAGS = $(vlc_CPPFLAGS)
-EXTRA_vlc_static_DEPENDENCIES = $(EXTRA_vlc_DEPENDENCIES)
-vlc_static_LDADD = $(vlc_LDADD)
-vlc_static_LDFLAGS = $(vlc_LDFLAGS) -no-install -static
+hakone_static_CPPFLAGS = $(hakone_CPPFLAGS)
+EXTRA_hakone_static_DEPENDENCIES = $(EXTRA_hakone_DEPENDENCIES)
+hakone_static_LDADD = $(hakone_LDADD)
+hakone_static_LDFLAGS = $(hakone_LDFLAGS) -no-install -static
 
 #
 # Root wrapper
@@ -96,18 +96,18 @@ vlc_static_LDFLAGS = $(vlc_LDFLAGS) -no-install -static
 if BUILD_VLC
 if !HAVE_WIN32
 if !HAVE_OS2
-bin_PROGRAMS += vlc-wrapper
+bin_PROGRAMS += hakone-wrapper
 endif
 endif
 endif
-vlc_wrapper_SOURCES = rootwrap.c
-vlc_wrapper_LDADD = $(SOCKET_LIBS)
+hakone_wrapper_SOURCES = rootwrap.c
+hakone_wrapper_LDADD = $(SOCKET_LIBS)
 
 vlc_win32_rc.rc: $(top_builddir)/config.status vlc_win32_rc.rc.in
 	cd "$(top_builddir)" && \
 	$(SHELL) ./config.status --file="bin/$@"
 
-vlc_win32_rc.$(OBJEXT): vlc_win32_rc.rc $(top_builddir)/extras/package/win32/vlc.exe.manifest
+vlc_win32_rc.$(OBJEXT): vlc_win32_rc.rc $(top_builddir)/extras/package/win32/hakone.exe.manifest
 	$(WINDRES) --include-dir $(top_srcdir)/share/icons --include-dir $(top_builddir)/extras/package/win32 -i $< -o $@
 
 #
@@ -130,11 +130,11 @@ endif
 if HAVE_PARTIAL_LINKING
 AM_CPPFLAGS += -DVLC_PARTIAL_LINKING -I $(builddir)/../modules/
 if !HAVE_WIN32
-vlc_SOURCES += vlc_static_modules.c
+hakone_SOURCES += vlc_static_modules.c
 endif
-vlc_osx_SOURCES += vlc_static_modules.c
-vlc_LDADD += ../modules/libvlc_static_modules.la
-vlc_osx_LDADD += ../modules/libvlc_static_modules.la
+hakone_osx_SOURCES += vlc_static_modules.c
+hakone_LDADD += ../modules/libvlc_static_modules.la
+hakone_osx_LDADD += ../modules/libvlc_static_modules.la
 endif
 
 #
@@ -148,7 +148,7 @@ MOSTLYCLEANFILES = $(noinst_DATA)
 if HAVE_OSX
 if BUILD_VLC
 install-data-local:
-	cd "$(DESTDIR)$(bindir)"; mv vlc-osx vlc
+	cd "$(DESTDIR)$(bindir)"; mv hakone-osx hakone
 
 endif
 endif

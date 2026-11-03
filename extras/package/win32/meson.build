@@ -4,7 +4,7 @@ install_data('../../../NEWS',      rename : 'NEWS.txt',    install_dir : '.')
 install_data('../../../README.md', rename : 'README.txt',  install_dir : '.')
 install_data('../../../THANKS',    rename : 'THANKS.txt',  install_dir : '.')
 
-install_data('../../../share/icons/vlc.ico',  install_dir : '.')
+install_data('../../../share/icons/hakone.ico',  install_dir : '.')
 
 have_win64 = host_machine.cpu_family() == 'x86_64' or host_machine.cpu_family() == 'aarch64' or host_machine.cpu() == 'arm64'
 if have_win64
@@ -34,8 +34,8 @@ endif
 sevenz = find_program('7z', required: false)
 if sevenz.found()
     sevenz_opts = ['-t7z', '-m0=lzma', '-mx=9', '-mfb=64', '-md=32m', '-ms=on']
-    release_7z = 'vlc-' + vlc_version + '-' + winstaller_suffix + '.7z'
-    debug_7z   = 'vlc-' + vlc_version + '-' + winstaller_suffix + '-debug.7z'
+    release_7z = 'hakone-' + vlc_version + '-' + winstaller_suffix + '.7z'
+    debug_7z   = 'hakone-' + vlc_version + '-' + winstaller_suffix + '-debug.7z'
 
     # generate a 7z from the "installed" and stripped folder
     package_win32_7zip = custom_target(

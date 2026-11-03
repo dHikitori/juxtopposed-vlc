@@ -19,29 +19,29 @@ ${LangFileString} Desc_Section02a \
 ${LangFileString} Desc_Section02b \
     "সহজ এক্সেসের জন্য আপনার ডেস্কটপে আইকন যোগ করে"
 ${LangFileString} Desc_Section04 \
-    "ভিএলসি ActiveX প্লাগিন"
+    "Hakone ActiveX প্লাগিন"
 ${LangFileString} Desc_Section05 \
     "ডিভিডি এবং সিডি প্লেব্যাক রেজিস্ট্রেশন"
 ${LangFileString} Desc_Section06 \
-    "উল্লিখিত ধরনের ফাইলের জন্য ভিএলসি মিডিয়া প্লেয়ারকে ডিফল্ট অ্যাপ্লিকেশন হিসেবে সেট করে"
+    "উল্লিখিত ধরনের ফাইলের জন্য Hakone মিডিয়া প্লেয়ারকে ডিফল্ট অ্যাপ্লিকেশন হিসেবে সেট করে"
 ${LangFileString} Desc_Section07 \
-    "কন্টেক্সট মেনু আইটেম যোগ করুন ('ভিএলসি দ্বারা চালান' এবং 'ভিএলসি-এর চালানোর তালিকায় যোগ করুন')"
+    "কন্টেক্সট মেনু আইটেম যোগ করুন ('Hakone দ্বারা চালান' এবং 'Hakone-এর চালানোর তালিকায় যোগ করুন')"
 ${LangFileString} Desc_Section08 \
-    "পূর্ববর্তী ইন্সটলেশন থেকে ভিএলসি মিডিয়া প্লেয়ার পছন্দসমূহ এবং ক্যাশ ফাইল মুছে দেয়"
+    "পূর্ববর্তী ইন্সটলেশন থেকে Hakone মিডিয়া প্লেয়ার পছন্দসমূহ এবং ক্যাশ ফাইল মুছে দেয়"
 
 ${LangFileString} Name_Section91 "আনইন্সটল"
 ${LangFileString} Name_Section92 "পছন্দ এবং ক্যাশ মুছে ফেলুন"
 
 ${LangFileString} Desc_Section91 \
-"ভিএলসি মিডিয়া প্লেয়ার এবং এর সকল উপাদান আনইন্সটল করুন"
+"Hakone মিডিয়া প্লেয়ার এবং এর সকল উপাদান আনইন্সটল করুন"
 ${LangFileString} Desc_Section92 \
-"ভিএলসি মিডিয়া প্লেয়ার পছন্দসমূহ এবং ক্যাশ ফাইল মুছে ফেলে"
+"Hakone মিডিয়া প্লেয়ার পছন্দসমূহ এবং ক্যাশ ফাইল মুছে ফেলে"
 
 ${LangFileString} ShellAssociation_Play "চালান"
-${LangFileString} ContextMenuEntry_PlayWith "ভিএলসি মিডিয়া প্লেয়ার দ্বারা চালান"
-${LangFileString} ContextMenuEntry_AddToPlaylist "ভিএলসি মিডিয়া প্লেয়ারের চালানোর তালিকায় যোগ করুন"
+${LangFileString} ContextMenuEntry_PlayWith "Hakone মিডিয়া প্লেয়ার দ্বারা চালান"
+${LangFileString} ContextMenuEntry_AddToPlaylist "Hakone মিডিয়া প্লেয়ারের চালানোর তালিকায় যোগ করুন"
 
-${LangFileString} Link_VisitWebsite "ভিডিওল্যান ভিএলসি মিডিয়া প্লেয়ারের ওয়েবসাইট প্রদর্শন করুন"
+${LangFileString} Link_VisitWebsite "Hakone মিডিয়া প্লেয়ারের ওয়েবসাইট প্রদর্শন করুন"
 
 ${LangFileString} Name_InstTypeRecommended "সুপারিশকৃত"
 ${LangFileString} Name_InstTypeMinimum "সর্বনিম্ন"

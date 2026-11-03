@@ -11,8 +11,8 @@ BEGIN
   BEGIN
     BLOCK "040904E4"
     BEGIN
-      VALUE "CompanyName", "VideoLAN"
-      VALUE "ProductName", "VLC media player"
+      VALUE "CompanyName", "Hakone"
+      VALUE "ProductName", "Hakone Media Player"
       VALUE "ProductVersion", VERSION_NUMBER_STR
       VALUE "FileVersion", "@VERSION@"
       VALUE "FileDescription", "LibVLC plugin"

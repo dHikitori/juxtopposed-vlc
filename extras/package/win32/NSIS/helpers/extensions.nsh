@@ -8,67 +8,67 @@
 ${StrRep}
 ${StrCase}
 
-;; Function that associates one extension with VLC
+;; Function that associates one extension with Hakone
 Function AssociateExtension
   ; back up old value for extension $R0 (eg. ".opt")
   ReadRegStr $1 HKCR "$R0" ""
   StrCmp $1 "" NoBackup
-    StrCmp $1 "VLC$R0" "NoBackup"
-    WriteRegStr HKCR "$R0" "VLC.backup" $1
+    StrCmp $1 "Hakone$R0" "NoBackup"
+    WriteRegStr HKCR "$R0" "Hakone.backup" $1
 NoBackup:
-  WriteRegStr HKCR "$R0" "" "VLC$R0"
+  WriteRegStr HKCR "$R0" "" "Hakone$R0"
 FunctionEnd
 
-;; Function that registers one extension for VLC
+;; Function that registers one extension for Hakone
 Function RegisterExtension
   ; R0 contains the extension, R1 contains the type (Audio/Video)
   ; Remove the leading dot from the filetype string
   ${StrRep} $R2 $R0 "." ""
   ; And capitalize the extension
   ${StrCase} $R2 $R2 "U"
-  ; for instance: MKV Video File (VLC)
-  WriteRegStr HKCR "VLC$R0" "" "$R2 $R1 File (VLC)"
-  WriteRegStr HKCR "VLC$R0\shell" "" "Open"
-  WriteRegStr HKCR "VLC$R0\shell\Open" "" "$(ShellAssociation_Play)"
-  WriteRegStr HKCR "VLC$R0\shell\Open" "MultiSelectModel" "Player"
-  WriteRegStr HKCR "VLC$R0\shell\Open\command" "" '"$INSTDIR\vlc.exe" --started-from-file "%1"'
-  WriteRegStr HKCR "VLC$R0\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKCR "Applications\vlc.exe\SupportedTypes" $0 ""
+  ; for instance: MKV Video File (Hakone)
+  WriteRegStr HKCR "Hakone$R0" "" "$R2 $R1 File (Hakone)"
+  WriteRegStr HKCR "Hakone$R0\shell" "" "Open"
+  WriteRegStr HKCR "Hakone$R0\shell\Open" "" "$(ShellAssociation_Play)"
+  WriteRegStr HKCR "Hakone$R0\shell\Open" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "Hakone$R0\shell\Open\command" "" '"$INSTDIR\hakone.exe" --started-from-file "%1"'
+  WriteRegStr HKCR "Hakone$R0\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKCR "Applications\hakone.exe\SupportedTypes" $0 ""
 
   ${If} ${AtLeastWinVista}
-    WriteRegStr HKLM "Software\Clients\Media\VLC\Capabilities\FileAssociations" "$R0" "VLC$R0"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone\Capabilities\FileAssociations" "$R0" "Hakone$R0"
   ${EndIf}
 FunctionEnd
 
-;; Function that registers one skin extension for VLC
+;; Function that registers one skin extension for Hakone
 Function RegisterSkinExtension
-  WriteRegStr HKCR "VLC$R0" "" "VLC skin file ($R0)"
-  WriteRegStr HKCR "VLC$R0\shell" "" "Open"
-  WriteRegStr HKCR "VLC$R0\shell\Open" "" ""
-  WriteRegStr HKCR "VLC$R0\shell\Open\command" "" '"$INSTDIR\vlc.exe" -Iskins --skins2-last "%1"'
-  WriteRegStr HKCR "VLC$R0\DefaultIcon" "" '"$INSTDIR\vlc.exe",0'
+  WriteRegStr HKCR "Hakone$R0" "" "Hakone skin file ($R0)"
+  WriteRegStr HKCR "Hakone$R0\shell" "" "Open"
+  WriteRegStr HKCR "Hakone$R0\shell\Open" "" ""
+  WriteRegStr HKCR "Hakone$R0\shell\Open\command" "" '"$INSTDIR\hakone.exe" -Iskins --skins2-last "%1"'
+  WriteRegStr HKCR "Hakone$R0\DefaultIcon" "" '"$INSTDIR\hakone.exe",0'
 
   ${If} ${AtLeastWinVista}
-    WriteRegStr HKLM "Software\Clients\Media\VLC\Capabilities\FileAssociations" "$R0" "VLC$R0"
+    WriteRegStr HKLM "Software\Clients\Media\Hakone\Capabilities\FileAssociations" "$R0" "Hakone$R0"
   ${EndIf}
 FunctionEnd
 
-;; Function that removes one extension that VLC owns.
+;; Function that removes one extension that Hakone owns.
 Function un.RegisterExtension
   ;start of restore script
   ReadRegStr $1 HKCR "$R0" ""
-  StrCmp $1 "VLC$R0" 0 NoOwn ; only do this if we own it
+  StrCmp $1 "Hakone$R0" 0 NoOwn ; only do this if we own it
     ; Read the old value from Backup
-    ReadRegStr $1 HKCR "$R0" "VLC.backup"
+    ReadRegStr $1 HKCR "$R0" "Hakone.backup"
     StrCmp $1 "" 0 Restore ; if backup="" then delete the whole key
       DeleteRegKey HKCR "$R0"
     Goto NoOwn
 Restore:
       WriteRegStr HKCR "$R0" "" $1
-      DeleteRegValue HKCR "$R0" "VLC.backup"
+      DeleteRegValue HKCR "$R0" "Hakone.backup"
 NoOwn:
-    DeleteRegKey HKCR "VLC$R0" ;Delete key with association settings
-    DeleteRegKey HKLM "Software\Clients\Media\VLC\Capabilities\FileAssociations\VLC$R0" ; for vista
+    DeleteRegKey HKCR "Hakone$R0" ;Delete key with association settings
+    DeleteRegKey HKLM "Software\Clients\Media\Hakone\Capabilities\FileAssociations\Hakone$R0" ; for vista
 FunctionEnd
 
 !macro AssociateExtensionSection TYPE EXT
@@ -291,28 +291,28 @@ FunctionEnd
 
 ; Generic function for adding the context menu for one ext.
 !macro AddContextMenuExt EXT
-  WriteRegStr HKCR ${EXT}\shell\PlayWithVLC "" "$(ContextMenuEntry_PlayWith)"
-  WriteRegStr HKCR ${EXT}\shell\PlayWithVLC "Icon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKCR ${EXT}\shell\PlayWithVLC "MultiSelectModel" "Player"
-  WriteRegStr HKCR ${EXT}\shell\PlayWithVLC\command "" '"$INSTDIR\vlc.exe" --started-from-file --no-playlist-enqueue "%1"'
+  WriteRegStr HKCR ${EXT}\shell\PlayWithHakone "" "$(ContextMenuEntry_PlayWith)"
+  WriteRegStr HKCR ${EXT}\shell\PlayWithHakone "Icon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKCR ${EXT}\shell\PlayWithHakone "MultiSelectModel" "Player"
+  WriteRegStr HKCR ${EXT}\shell\PlayWithHakone\command "" '"$INSTDIR\hakone.exe" --started-from-file --no-playlist-enqueue "%1"'
 
-  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistVLC "" "$(ContextMenuEntry_AddToPlaylist)"
-  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistVLC "Icon" '"$INSTDIR\vlc.exe",0'
-  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistVLC "MultiSelectModel" "Player"
-  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistVLC\command "" '"$INSTDIR\vlc.exe" --started-from-file --playlist-enqueue "%1"'
+  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistHakone "" "$(ContextMenuEntry_AddToPlaylist)"
+  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistHakone "Icon" '"$INSTDIR\hakone.exe",0'
+  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistHakone "MultiSelectModel" "Player"
+  WriteRegStr HKCR ${EXT}\shell\AddToPlaylistHakone\command "" '"$INSTDIR\hakone.exe" --started-from-file --playlist-enqueue "%1"'
 !macroend
 
 !macro AddContextMenu TYPE EXT
-  !insertmacro AddContextMenuExt VLC${EXT}
+  !insertmacro AddContextMenuExt Hakone${EXT}
 !macroend
 
 !macro DeleteContextMenuExt EXT
-  DeleteRegKey HKCR ${EXT}\shell\PlayWithVLC
-  DeleteRegKey HKCR ${EXT}\shell\AddToPlaylistVLC
+  DeleteRegKey HKCR ${EXT}\shell\PlayWithHakone
+  DeleteRegKey HKCR ${EXT}\shell\AddToPlaylistHakone
 !macroend
 
 !macro DeleteContextMenu TYPE EXT
-  !insertmacro DeleteContextMenuExt VLC${EXT}
+  !insertmacro DeleteContextMenuExt Hakone${EXT}
 !macroend
 
 

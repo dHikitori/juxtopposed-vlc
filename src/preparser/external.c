@@ -689,7 +689,7 @@ preparser_pool_SpawnProcess(struct preparser_process_thread *thread)
     const char *static_name = VLC_PREPARSER_PATH "-static";
 #endif
 
-    /* When running from build directory (vlc-static), VLC_LIB_PATH points to
+    /* When running from build directory (hakone-static), VLC_LIB_PATH points to
      * TOP_BUILDDIR/modules, so we need to construct TOP_BUILDDIR/bin to
      * start vlc-preparser-static */
     const char *lib_path = getenv("VLC_LIB_PATH");
