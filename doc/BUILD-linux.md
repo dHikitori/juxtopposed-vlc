@@ -1,4 +1,4 @@
-# Building this fork on Linux (Meson)
+# Building Hakone on Linux (Meson)
 
 > Status on CachyOS: configure, full default build,
 > headless playback, native Wayland playback, and a staged
@@ -7,8 +7,9 @@
 > remaining failure; no live installation has been
 > performed. For portable release packaging with the media library, see
 > [RELEASING.md](RELEASING.md). The source build below disables the media library,
-> so expect that feature difference from release packages. Check the
-> [Releases page](https://github.com/hakone-org/hakone/releases) for available builds.
+> so expect that feature difference from release packages. Prebuilt builds are
+> available from [hakone.org](https://hakone.org/) and the
+> [Releases page](https://github.com/hakone-org/hakone/releases).
 
 This guide uses **Meson** and the current build definitions
 (root `meson.build` requires Meson `>= 1.10.0`). Note that
@@ -169,7 +170,7 @@ ends up beside (not inside) the source tree:
 git clone https://github.com/hakone-org/hakone.git
 meson setup build-linux hakone \
     --buildtype=debugoptimized --wrap-mode=nofallback \
-    --prefix="$HOME/.local/vlc-dev" \
+    --prefix="$HOME/.local/hakone-dev" \
     -Dqt=enabled \
     -Dmedialibrary=disabled
 meson compile -C build-linux -j2
@@ -183,15 +184,16 @@ setup.
 
 ## Running from the build tree
 
-Use the **`vlc-static`** binary, not `bin/vlc`: only the
-`vlc-static` target is compiled with `TOP_BUILDDIR` /
+Use the **`hakone-static`** binary, not `bin/hakone`: only the
+`hakone-static` target is compiled with `TOP_BUILDDIR` /
 `TOP_SRCDIR`, which point the plugin, data, library and
 libexec paths at the build tree (`bin/vlc.c`,
 `bin/meson.build`). The name marks it as the build-tree
 launcher, not a fully statically linked executable.
 
-Isolate test runs from your everyday VLC configuration with
-a throwaway XDG root (VLC maps `XDG_CONFIG_HOME` /
+Isolate test runs from your everyday Hakone or VLC
+configuration with a throwaway XDG root (Hakone keeps VLC's
+directory names and maps `XDG_CONFIG_HOME` /
 `XDG_DATA_HOME` / `XDG_CACHE_HOME` to `<root>/vlc`, see
 `src/posix/dirs.c`). The `env KEY=value` prefix works in
 both POSIX `sh` and `fish`:
@@ -202,14 +204,14 @@ mkdir -p "$test_root/config" "$test_root/data" "$test_root/cache"
 env XDG_CONFIG_HOME="$test_root/config" \
     XDG_DATA_HOME="$test_root/data" \
     XDG_CACHE_HOME="$test_root/cache" \
-    ./build-linux/bin/vlc-static --version
+    ./build-linux/bin/hakone-static --version
 ```
 
 (`fish` users: `set test_root (mktemp -d)` for the first
 line; the `env`-prefixed invocations are unchanged.) Use the
 same XDG wrapping for every later run, replacing
 `--version` with your actual arguments. The build-tree
-`--version` exits 0 and reports VLC 4.0.0-dev.
+`--version` exits 0 and reports Hakone version 4.0.0-dev.
 
 A reproducible headless playback check (validated flags;
 generate the sample with `ffmpeg`, e.g. a couple of seconds
@@ -219,7 +221,7 @@ of FFV1 video plus PCM audio in Matroska):
 env XDG_CONFIG_HOME="$test_root/config" \
     XDG_DATA_HOME="$test_root/data" \
     XDG_CACHE_HOME="$test_root/cache" \
-    ./build-linux/bin/vlc-static --ignore-config --no-media-library \
+    ./build-linux/bin/hakone-static --ignore-config --no-media-library \
         --no-metadata-network-access --intf=dummy --vout=dummy \
         --aout=dummy --play-and-exit -vv sample.mkv
 ```
@@ -229,9 +231,9 @@ audio decoder engaged through end-of-stream. No provider
 streams have been tested.
 
 Do not set `VLC_PLUGIN_PATH` to the system VLC 3.x plugin
-directory: this is a VLC 4 (`libvlc` ABI 12.0.0) build and
-must only load its own build-tree plugins. Close other VLC
-instances before testing.
+directory: Hakone is based on VLC 4 (`libvlc` ABI 12.0.0)
+and must only load its own build-tree plugins. Close other
+Hakone and VLC instances before testing.
 
 ## Wayland: audio plays but video is black
 
@@ -291,12 +293,12 @@ updates its normal build-directory install logs, and no
 strace audit was done, so this is not a claim of zero
 filesystem writes anywhere else.) Live prefix installation
 was not part of validation; the tested paths are the
-build-tree `vlc-static` runner above and the staged runner
+build-tree `hakone-static` runner above and the staged runner
 below.
 
 Measured staged-install facts (source reasoning confirmed,
 not just predicted): the tree sets no RPATH/RUNPATH and
-ships no install hooks — staged `bin/vlc` lists
+ships no install hooks — staged `bin/hakone` lists
 `libvlc.so.12` / `libvlccore.so.9` as NEEDED with no
 RPATH/RUNPATH, and runs without `LD_LIBRARY_PATH` fail
 with missing `libvlc.so.12`. Launch per-process (never a
@@ -311,7 +313,7 @@ env LD_LIBRARY_PATH="<prefix>/<libdir>:<prefix>/<libdir>/vlc" \
     XDG_CONFIG_HOME="$test_root/config" \
     XDG_DATA_HOME="$test_root/data" \
     XDG_CACHE_HOME="$test_root/cache" \
-    "<prefix>/bin/vlc" --version
+    "<prefix>/bin/hakone" --version
 ```
 
 Find your actual libdir first — do not assume `lib` vs
@@ -351,7 +353,7 @@ env QT_QPA_PLATFORM=xcb \
     XDG_CONFIG_HOME="$test_root/config" \
     XDG_DATA_HOME="$test_root/data" \
     XDG_CACHE_HOME="$test_root/cache" \
-    ./build-linux/bin/vlc-static --embedded-video
+    ./build-linux/bin/hakone-static --embedded-video
 ```
 
 ## Tests
@@ -401,10 +403,10 @@ both media-library tests correctly omitted).
 | Check | Result |
 | --- | --- |
 | Full default build | Pass |
-| Build-tree `--version` | Exit 0, VLC 4.0.0-dev |
+| Build-tree `--version` | Exit 0, 4.0.0-dev |
 | Headless playback (2 s FFV1 + PCM Matroska sample, dummy intf/vout/aout, `--play-and-exit`) | Exit 0, avcodec + araw decoders to end-of-stream |
 | Same sample from staged install (per-process `LD_LIBRARY_PATH`) | Exit 0 |
-| Staged `meson install --destdir` | Succeeds, payload staged under `DESTDIR` with live prefix absent; staged `bin/vlc` has no RPATH/RUNPATH and needs the loader paths |
+| Staged `meson install --destdir` | Succeeds, payload staged under `DESTDIR` with live prefix absent; staged `bin/hakone` has no RPATH/RUNPATH and needs the loader paths |
 | Native Wayland Qt playback (`--intf=qt`, dummy audio, silent 8 s FFV1 clip, `--play-and-exit`) | Exit 0, own Wayland window (not XWayland), `qt_wayland` + `egl_wl` in logs, end-of-stream |
 | Qt suite (`VLC:qt`, 42) | 41 pass / 1 fail (see below) |
 
