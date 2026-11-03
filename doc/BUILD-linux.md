@@ -252,7 +252,7 @@ env XDG_CONFIG_HOME="$test_root/config" \
     XDG_DATA_HOME="$test_root/data" \
     XDG_CACHE_HOME="$test_root/cache" \
     MESA_DEBUG=context EGL_LOG_LEVEL=debug \
-    ./build-linux/bin/vlc-static --ignore-config --no-media-library \
+    ./build-linux/bin/hakone-static --ignore-config --no-media-library \
         --no-qt-privacy-ask --intf=qt --vout=gl,none \
         --avcodec-hw=none -vv /path/to/video.mp4 >gl-software.log 2>&1
 ```

@@ -111,7 +111,7 @@ class App:
         self.driver = None
         self.log_path = home / f'{name}.log'
         self.trace_path = home / f'{name}.trace' if trace else None
-        command = [str(args.build / 'bin' / 'vlc'), '-I', 'qt', '--no-one-instance',
+        command = [str(args.build / 'bin' / 'hakone'), '-I', 'qt', '--no-one-instance',
                    '--extraintf', 'cli', '--rc-unix', str(self.socket_path),
                    '--aout', 'adummy', '--vout', 'vdummy', '--no-qt-privacy-ask',
                    '--no-metadata-network-access', '-vv', '--file-logging',
@@ -273,8 +273,8 @@ def run(args):
     if not sys.platform.startswith('linux'):
         print('the measurements read /proc', file=sys.stderr)
         return 77
-    if not (args.build / 'bin' / 'vlc').exists():
-        print(f'{args.build}/bin/vlc does not exist', file=sys.stderr)
+    if not (args.build / 'bin' / 'hakone').exists():
+        print(f'{args.build}/bin/hakone does not exist', file=sys.stderr)
         return 77
     results = {}
     home = Path(tempfile.mkdtemp(prefix='hakone-smoke-', dir=args.work))

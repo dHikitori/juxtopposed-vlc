@@ -20,9 +20,9 @@ class AddonRuntimeCheckTests(unittest.TestCase):
             root = Path(temp)
             for executable, worker, module in (
                 ("AppDir/AppRun", "AppDir/usr/bin/vlc-addon-worker", "AppDir/usr/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm"),
-                ("VLC.app/Contents/MacOS/vlc", "VLC.app/Contents/MacOS/vlc-addon-worker", "VLC.app/Contents/Resources/share/addons/reference/thesubtitledb/dist/addon.wasm"),
-                ("vlc-win64/vlc.exe", "vlc-win64/vlc-addon-worker.exe", "vlc-win64/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm"),
-                ("usr/bin/vlc", "usr/bin/vlc-addon-worker", "usr/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm")
+                ("Hakone.app/Contents/MacOS/hakone", "Hakone.app/Contents/MacOS/vlc-addon-worker", "Hakone.app/Contents/Resources/share/addons/reference/thesubtitledb/dist/addon.wasm"),
+                ("hakone-win64/hakone.exe", "hakone-win64/vlc-addon-worker.exe", "hakone-win64/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm"),
+                ("usr/bin/hakone", "usr/bin/vlc-addon-worker", "usr/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm")
             ):
                 self.assertEqual(check.installation_files(root / executable), (root / worker, root / module))
 
