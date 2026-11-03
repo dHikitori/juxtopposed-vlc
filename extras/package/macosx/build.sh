@@ -37,7 +37,7 @@ OPTIONS:
                      z: zip
    -k <sdk>      Use the specified SDK (default: $SDKROOT)
    -a <arch>     Use the specified arch (default: $HOST_ARCH)
-   -C            Use the specified VLC build dir
+   -C            Use the specified Hakone build dir
    -b <url>      Enable breakpad support and send crash reports to this URL
    -d            Disable debug mode (on by default)
    -g <g|l|a>    Select the license of contribs
@@ -130,7 +130,7 @@ fi
 
 ACTUAL_HOST_ARCH=`get_actual_arch $HOST_ARCH`
 
-info "Building VLC for macOS, architecture ${HOST_ARCH} (aka: ${ACTUAL_HOST_ARCH}) on a ${BUILD_ARCH} device"
+info "Building Hakone for macOS, architecture ${HOST_ARCH} (aka: ${ACTUAL_HOST_ARCH}) on a ${BUILD_ARCH} device"
 
 BUILD_TRIPLET=$(vlcGetBuildTriplet)
 HOST_TRIPLET=$(vlcGetHostTriplet)
@@ -283,40 +283,40 @@ fi
 info "Running make -j$JOBS"
 make -j$JOBS
 
-info "Preparing VLC.app"
-make VLC.app
+info "Preparing Hakone.app"
+make Hakone.app
 
 if [ "$PACKAGETYPE" = "u" ]; then
-    info "Copying app with debug symbols into VLC-debug.app and stripping"
-    rm -rf VLC-debug.app
-    cp -Rp VLC.app VLC-debug.app
+    info "Copying app with debug symbols into Hakone-debug.app and stripping"
+    rm -rf Hakone-debug.app
+    cp -Rp Hakone.app Hakone-debug.app
 
     # Workaround for breakpad symbol parsing:
     # Symbols must be uploaded for libvlc(core).dylib, not libvlc(core).x.dylib
-    (cd VLC-debug.app/Contents/MacOS/lib/ && rm libvlccore.dylib && mv libvlccore.*.dylib libvlccore.dylib)
-    (cd VLC-debug.app/Contents/MacOS/lib/ && rm libvlc.dylib && mv libvlc.*.dylib libvlc.dylib)
+    (cd Hakone-debug.app/Contents/MacOS/lib/ && rm libvlccore.dylib && mv libvlccore.*.dylib libvlccore.dylib)
+    (cd Hakone-debug.app/Contents/MacOS/lib/ && rm libvlc.dylib && mv libvlc.*.dylib libvlc.dylib)
 
-    find VLC.app/ -name "*.dylib" -exec strip -x {} \;
-    find VLC.app/ -type f -name "VLC" -exec strip -x {} \;
-    find VLC.app/ -type f -name "Sparkle" -exec strip -x {} \;
-    find VLC.app/ -type f -name "Breakpad" -exec strip -x {} \;
+    find Hakone.app/ -name "*.dylib" -exec strip -x {} \;
+    find Hakone.app/ -type f -name "Hakone" -exec strip -x {} \;
+    find Hakone.app/ -type f -name "Sparkle" -exec strip -x {} \;
+    find Hakone.app/ -type f -name "Breakpad" -exec strip -x {} \;
 
     if [ "$BUILD_TRIPLET" = "$HOST_TRIPLET" ]; then
-        bin/vlc-cache-gen VLC.app/Contents/Frameworks/plugins
+        bin/vlc-cache-gen Hakone.app/Contents/Frameworks/plugins
     fi
 
-    info "Building VLC release archive"
+    info "Building Hakone release archive"
     make package-macosx-release
     make package-macosx-sdk
 
-    shasum -a 512 vlc-*-release.zip
+    shasum -a 512 hakone-*-release.zip
     shasum -a 512 vlc-macos-sdk-*.tar.gz
 
 elif [ "$PACKAGETYPE" = "z" ]; then
-    info "Packaging VLC zip archive"
+    info "Packaging Hakone zip archive"
     make package-macosx-zip
 elif [ "$PACKAGETYPE" = "n" -o "$PACKAGE" = "yes" ]; then
-    info "Building VLC dmg package"
+    info "Building Hakone dmg package"
     make package-macosx
     make package-macosx-sdk
 fi

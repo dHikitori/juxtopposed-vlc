@@ -33,9 +33,6 @@
 #import "playqueue/VLCPlayQueueController.h"
 #import "playqueue/VLCPlayerController.h"
 
-NSString *const kIntel64UpdateURLString = @"https://update.videolan.org/vlc/sparkle/vlc-intel64.xml";
-NSString *const kARM64UpdateURLString = @"https://update.videolan.org/vlc/sparkle/vlc-arm64.xml";
-
 @interface VLCMain () <SPUUpdaterDelegate>
 @property (readwrite) SPUStandardUpdaterController *sparkleUpdaterController;
 @end
@@ -60,7 +57,7 @@ NSString *const kARM64UpdateURLString = @"https://update.videolan.org/vlc/sparkl
 {
     if ([self.playQueueController.playerController activeVideoPlayback]) {
         if (error != NULL) {
-            *error = [NSError errorWithDomain:@"org.videolan.vlc.Sparkle"
+            *error = [NSError errorWithDomain:@"org.hakone.hakone.Sparkle"
                                           code:1
                                       userInfo:@{NSLocalizedDescriptionKey: _NS("Hakone is currently playing video.")}];
         }
@@ -70,23 +67,8 @@ NSString *const kARM64UpdateURLString = @"https://update.videolan.org/vlc/sparkl
     return YES;
 }
 
-/* use the correct feed depending on the hardware architecture */
-- (nullable NSString *)feedURLStringForUpdater:(SPUUpdater *)updater
-{
-#ifdef __x86_64__
-    if (OSX_BIGSUR_AND_HIGHER) {
-        if ([self processIsTranslated] > 0) {
-            msg_Dbg(getIntf(), "Process is translated. On update, VLC will install the native ARM-64 binary.");
-            return kARM64UpdateURLString;
-        }
-    }
-    return kIntel64UpdateURLString;
-#elif __arm64__
-    return kARM64UpdateURLString;
-#else
-    #error unsupported architecture
-#endif
-}
+/* Sparkle reads the feed from SUFeedURL in Info.plist. Hakone publishes no
+ * Sparkle feed, and must never follow VLC's. */
 
 - (void)updaterDidNotFindUpdate:(SPUUpdater *)updater error:(NSError *)error
 {

@@ -122,6 +122,10 @@ def main():
                 render(tile, base * 2).save(os.path.join(iconset, f'icon_{base}x{base}@2x.png'))
             subprocess.run(['iconutil', '-c', 'icns', '-o',
                             os.path.join(ICONS, 'hakone.icns'), iconset], check=True)
+        # The Cocoa interface and its DMG keep their own copies.
+        for copy in (('modules', 'gui', 'macosx', 'Resources', 'App-Icons', 'hakone.icns'),
+                     ('extras', 'package', 'macosx', 'dmg', 'disk_image.icns')):
+            shutil.copyfile(os.path.join(ICONS, 'hakone.icns'), os.path.join(ROOT, *copy))
     else:
         print('iconutil not found: hakone.icns was not regenerated', file=sys.stderr)
 

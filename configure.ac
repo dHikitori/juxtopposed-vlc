@@ -4850,8 +4850,8 @@ dnl
 dnl  MacOS X sparkle update support
 dnl
 AC_ARG_ENABLE([sparkle],
-  AS_HELP_STRING([--enable-sparkle], [Sparkle update support for OS X (default enabled on Mac OS X)]))
-if test "${enable_sparkle}" != "no" -a "${HAVE_OSX}" = "1"
+  AS_HELP_STRING([--enable-sparkle], [Sparkle update support for OS X; needs an SUFeedURL in Info.plist (default disabled)]))
+if test "${enable_sparkle}" = "yes" -a "${HAVE_OSX}" = "1"
 then
   if test ! -d ${CONTRIB_DIR}/Sparkle.framework -a ! -d ${CONTRIB_DIR}/Frameworks/Sparkle.framework
   then
@@ -4860,7 +4860,7 @@ then
 
   AC_DEFINE([HAVE_SPARKLE], [1], [Define to 1 if sparkle is enabled.])
 fi
-AM_CONDITIONAL([HAVE_SPARKLE], [test "$enable_sparkle" != "no"])
+AM_CONDITIONAL([HAVE_SPARKLE], [test "$enable_sparkle" = "yes" -a "${HAVE_OSX}" = "1"])
 
 dnl
 dnl  MacOS X breakpad creash reporter support
