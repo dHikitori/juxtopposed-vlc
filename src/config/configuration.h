@@ -92,4 +92,10 @@ char *config_GetLibDir(void) VLC_USED VLC_MALLOC;
 
 char *platform_GetUserDir( vlc_userdir_t ) VLC_USED VLC_MALLOC;
 
+/**
+ * Copies the configuration and data folders used before Hakone into Hakone's
+ * own folders, the first time it starts.
+ */
+void config_MigrateLegacyDirs( vlc_object_t * );
+
 #endif

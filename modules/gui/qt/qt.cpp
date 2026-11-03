@@ -1201,6 +1201,27 @@ static void *Thread( void *obj )
 #endif
             QSettings::UserScope, QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
     msg_Dbg(p_intf, "Qt settings file: %s", qtu(p_intf->mainSettings->fileName()));
+#ifdef __APPLE__
+    /* Elsewhere the settings file sits in the configuration folder, which
+     * the core copies from the pre-Hakone one. On macOS it is a separate
+     * preferences domain, so copy it on the first start. Without fallbacks,
+     * only the domain's own keys are listed, not the system-wide ones. */
+    QSettings current( QSettings::NativeFormat, QSettings::UserScope,
+                       QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
+    current.setFallbacksEnabled( false );
+    if( current.allKeys().isEmpty() )
+    {
+        QSettings legacy( QSettings::NativeFormat, QSettings::UserScope,
+                          "vlc", "vlc-qt-interface" );
+        legacy.setFallbacksEnabled( false );
+        const QStringList keys = legacy.allKeys();
+        for( const QString &key : keys )
+            p_intf->mainSettings->setValue( key, legacy.value( key ) );
+        if( !keys.isEmpty() )
+            msg_Info( p_intf, "copied interface settings from %s",
+                      qtu( legacy.fileName() ) );
+    }
+#endif
 #ifdef _WIN32
     static const WCHAR moduleMarker = 0;
     HMODULE qtModule = nullptr;
