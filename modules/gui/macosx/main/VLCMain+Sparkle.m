@@ -62,7 +62,7 @@ NSString *const kARM64UpdateURLString = @"https://update.videolan.org/vlc/sparkl
         if (error != NULL) {
             *error = [NSError errorWithDomain:@"org.videolan.vlc.Sparkle"
                                           code:1
-                                      userInfo:@{NSLocalizedDescriptionKey: _NS("VLC is currently playing video.")}];
+                                      userInfo:@{NSLocalizedDescriptionKey: _NS("Hakone is currently playing video.")}];
         }
         return NO;
     }

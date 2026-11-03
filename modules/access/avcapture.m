@@ -423,7 +423,7 @@ static int Control(demux_t *p_demux, int i_query, va_list args)
             msg_Err(_demux, "Can't use the video device as access has not been granted by the user");
             vlc_dialog_display_error(_demux, _("Problem accessing a system resource"),
                 _("Please open \"System Preferences\" -> \"Security & Privacy\" "
-                  "and allow VLC to access your camera."));
+                  "and allow Hakone to access your camera."));
 
             return nil;
         }

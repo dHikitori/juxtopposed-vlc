@@ -149,7 +149,7 @@ static int Open(vlc_object_t *this)
 
 #define HELP_TEXT                                                              \
     N_("This filter module traces all frames and timestamps passing through "  \
-       "it using the VLC tracer."                                              \
+       "it using the Hakone tracer."                                              \
        "Here's a stream output chain example:\n"                               \
        "  #autodel:trace:transcode{...}:trace:file{...}\n "                    \
        "The name of the traced output defaults to the next module's name. A "  \

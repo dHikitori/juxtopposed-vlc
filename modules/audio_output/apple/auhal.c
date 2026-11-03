@@ -1007,7 +1007,7 @@ WarnConfiguration(audio_output_t *p_aout)
             _("Audio device is not configured"), "%s",
             _("You should configure your speaker layout with "
             "\"Audio Midi Setup\" in /Applications/"
-            "Utilities. VLC will output Stereo only."));
+            "Utilities. Hakone will output Stereo only."));
 
         /* Don't save too many devices */
         if (dev_count >= 10)

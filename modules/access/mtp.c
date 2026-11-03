@@ -168,7 +168,7 @@ static ssize_t Read( stream_t *p_access, void *p_buffer, size_t i_len )
             default:
                 msg_Err( p_access, "read failed: %s", vlc_strerror_c(errno) );
                 vlc_dialog_display_error( p_access, _( "File reading failed" ),
-                    _( "VLC could not read the file: %s" ),
+                    _( "Hakone could not read the file: %s" ),
                     vlc_strerror(errno) );
                 return 0;
         }

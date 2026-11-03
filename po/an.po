@@ -33,8 +33,8 @@ msgstr ""
 "Escribiu por l'equipo de VideoLAN; veiga l'archivo AUTHORS.\n"
 
 #: include/vlc_config_cat.h:33
-msgid "VLC preferences"
-msgstr "Parametros d'o VLC"
+msgid "Hakone preferences"
+msgstr "Parametros d'o Hakone"
 
 #: include/vlc_config_cat.h:35
 msgid "Select \"Advanced Options\" to see all options."
@@ -48,8 +48,8 @@ msgid "Interface"
 msgstr "Interficie"
 
 #: include/vlc_config_cat.h:39
-msgid "Settings for VLC's interfaces"
-msgstr "Parametros d'as interficies d'o VLC"
+msgid "Settings for Hakone's interfaces"
+msgstr "Parametros d'as interficies d'o Hakone"
 
 #: include/vlc_config_cat.h:41
 msgid "Main interfaces settings"
@@ -68,8 +68,8 @@ msgid "Control interfaces"
 msgstr "Interficies de control"
 
 #: include/vlc_config_cat.h:47
-msgid "Settings for VLC's control interfaces"
-msgstr "Parametros d'as Interficies de control d'o VLC"
+msgid "Settings for Hakone's control interfaces"
+msgstr "Parametros d'as Interficies de control d'o Hakone"
 
 #: include/vlc_config_cat.h:49 include/vlc_config_cat.h:50
 #: modules/gui/macosx/VLCSimplePrefsController.m:230
@@ -224,10 +224,10 @@ msgstr "Filtros de transmisión de fluxos"
 #: include/vlc_config_cat.h:109
 msgid ""
 "Stream filters are special modules that allow advanced operations on the "
-"input side of VLC. Use with care..."
+"input side of Hakone. Use with care..."
 msgstr ""
-"Os filtros de transmisión son unos modulos especials que permiten operacions "
-"abanzadas en a dentrada d'o VLC. Pare cuenta con o que fa...  "
+"Os filtros de transmisión son unos modulos especials que permiten "
+"operacions abanzadas en a dentrada d'o Hakone. Pare cuenta con o que fa...  "
 
 #: include/vlc_config_cat.h:112
 msgid "Demuxers"
@@ -361,8 +361,8 @@ msgid "VOD"
 msgstr "VOD"
 
 #: include/vlc_config_cat.h:169
-msgid "VLC's implementation of Video On Demand"
-msgstr "Implementación de VLC de Video on Demand (video baixo demanda)"
+msgid "Hakone's implementation of Video On Demand"
+msgstr "Implementación de Hakone de Video on Demand (video baixo demanda)"
 
 #: include/vlc_config_cat.h:173 src/libvlc-module.c:2053
 #: src/playlist/engine.c:233 modules/demux/playlist/playlist.c:64
@@ -795,7 +795,7 @@ msgid ""
 "  udp://[[<source address>]@[<bind address>][:<bind port>]]\n"
 "                                 UDP stream sent by a streaming server\n"
 "  vlc://pause:<seconds>          Pause the playlist for a certain time\n"
-"  vlc://quit                     Special item to quit VLC\n"
+"  vlc://quit                     Special item to quit Hakone\n"
 "\n"
 msgstr ""
 "Emplego: %s [options] [stream] ...\n"
@@ -832,7 +832,7 @@ msgstr ""
 "fluxos\n"
 "  vlc://pause:<seconds>          Aturar a lista de reproducción os segundos "
 "especificaus\n"
-"  vlc://quit                     Zarrar o VLC\n"
+"  vlc://quit                     Zarrar o Hakone\n"
 "\n"
 
 #: src/config/help.c:490
@@ -921,16 +921,16 @@ msgstr "Codec no suportau"
 
 #: src/input/decoder.c:1878
 #, c-format
-msgid "VLC could not decode the format \"%4.4s\" (%s)"
-msgstr "VLC no puede descodificar o formato \"%4.4s\" (%s)"
+msgid "Hakone could not decode the format \"%4.4s\" (%s)"
+msgstr "Hakone no puede descodificar o formato \"%4.4s\" (%s)"
 
 #: src/input/decoder.c:1882
 msgid "Unidentified codec"
 msgstr "Codec no identificau"
 
 #: src/input/decoder.c:1883
-msgid "VLC could not identify the audio or video codec"
-msgstr "VLC no puede identificar o codec d'audio u de vidio"
+msgid "Hakone could not identify the audio or video codec"
+msgstr "Hakone no puede identificar o codec d'audio u de vidio"
 
 #: src/input/decoder.c:1894
 msgid "packetizer"
@@ -948,12 +948,12 @@ msgstr "Ha fallau a transmisión u a transcodificación"
 
 #: src/input/decoder.c:1903
 #, c-format
-msgid "VLC could not open the %s module."
-msgstr "O VLC no ha puesto ubrir o modulo %s."
+msgid "Hakone could not open the %s module."
+msgstr "O Hakone no ha puesto ubrir o modulo %s."
 
 #: src/input/decoder.c:2184
-msgid "VLC could not open the decoder module."
-msgstr "O VLC no ha puesto ubrir o modulo de descodificación."
+msgid "Hakone could not open the decoder module."
+msgstr "O Hakone no ha puesto ubrir o modulo de descodificación."
 
 #: src/input/es_out.c:963 src/input/es_out.c:968 src/libvlc-module.c:239
 #: modules/gui/qt/components/open_panels.cpp:544
@@ -1296,9 +1296,10 @@ msgstr "No s'ha puesto ubrir a dentrada"
 
 #: src/input/input.c:2658
 #, c-format
-msgid "VLC is unable to open the MRL '%s'. Check the log for details."
+msgid "Hakone is unable to open the MRL '%s'. Check the log for details."
 msgstr ""
-"O VLC no ye capable d'ubrir o MRL '%s'. Comprebe o rechistro ta saber-ne mas."
+"O Hakone no ye capable d'ubrir o MRL '%s'. Comprebe o rechistro ta saber-ne "
+"mas."
 
 #: src/input/meta.c:55 src/input/var.c:170 modules/gui/macosx/VLCMainMenu.m:399
 #: modules/gui/macosx/VLCMainMenu.m:400
@@ -1540,13 +1541,13 @@ msgstr "2:1 Doble"
 
 #: src/libvlc-module.c:64
 msgid ""
-"These options allow you to configure the interfaces used by VLC. You can "
+"These options allow you to configure the interfaces used by Hakone. You can "
 "select the main interface, additional interface modules, and define various "
 "related options."
 msgstr ""
-"Istas opcions permiten configurar as interficies emplegadas por o VLC. Puet "
-"seleccionar a interficie principal, bells modulos d'interficie adicionals y "
-"mesmo definir quantas opcions relacionadas."
+"Istas opcions permiten configurar as interficies emplegadas por o Hakone. "
+"Puet seleccionar a interficie principal, bells modulos d'interficie "
+"adicionals y mesmo definir quantas opcions relacionadas."
 
 #: src/libvlc-module.c:68
 msgid "Interface module"
@@ -1554,10 +1555,10 @@ msgstr "Modulo d'a interficie"
 
 #: src/libvlc-module.c:70
 msgid ""
-"This is the main interface used by VLC. The default behavior is to "
+"This is the main interface used by Hakone. The default behavior is to "
 "automatically select the best module available."
 msgstr ""
-"Ista opción permite seleccionar a interfície emplegada por o VLC. O "
+"Ista opción permite seleccionar a interfície emplegada por o Hakone. O "
 "comportamiento por defecto ye trigar automaticament o millor modulo posible."
 
 #: src/libvlc-module.c:74 modules/control/ntservice.c:59
@@ -1566,19 +1567,19 @@ msgstr "Modulos extra d'a interficie"
 
 #: src/libvlc-module.c:76
 msgid ""
-"You can select \"additional interfaces\" for VLC. They will be launched in "
-"the background in addition to the default interface. Use a colon separated "
-"list of interface modules. (common values are \"rc\" (remote control), \"http"
-"\", \"gestures\" ...)"
+"You can select \"additional interfaces\" for Hakone. They will be launched "
+"in the background in addition to the default interface. Use a colon "
+"separated list of interface modules. (common values are \"rc\" (remote "
+"control), \"http\", \"gestures\" ...)"
 msgstr ""
-"Ista opción permite trigar \"interficies adicionals\" emplegadas por o VLC. "
-"S'executan en segundo plan, adhibidas a la interficie por defecto. Emplegue "
-"una lista de modulos d'interficie deseparaus por comas (bells valuras comuns "
-"son \"rc\" (control remoto), \"http\", \"gestures\"...)."
+"Ista opción permite trigar \"interficies adicionals\" emplegadas por o "
+"Hakone. S'executan en segundo plan, adhibidas a la interficie por defecto. "
+"Emplegue una lista de modulos d'interficie deseparaus por comas (bells "
+"valuras comuns son \"rc\" (control remoto), \"http\", \"gestures\"...)."
 
 #: src/libvlc-module.c:83
-msgid "You can select control interfaces for VLC."
-msgstr "Puet seleccionar as interficies de control d'o VLC."
+msgid "You can select control interfaces for Hakone."
+msgstr "Puet seleccionar as interficies de control d'o Hakone."
 
 #: src/libvlc-module.c:85
 msgid "Verbosity (0,1,2)"
@@ -1597,8 +1598,8 @@ msgid "Default stream"
 msgstr "Fluxo por defecto"
 
 #: src/libvlc-module.c:92
-msgid "This stream will always be opened at VLC startup."
-msgstr "Iste fluxo s'ubrirá malas que s'enchegue o VLC."
+msgid "This stream will always be opened at Hakone startup."
+msgstr "Iste fluxo s'ubrirá malas que s'enchegue o Hakone."
 
 #: src/libvlc-module.c:94
 msgid "Color messages"
@@ -1656,11 +1657,12 @@ msgstr "Modulo de salida d'audio"
 
 #: src/libvlc-module.c:125
 msgid ""
-"This is the audio output method used by VLC. The default behavior is to "
+"This is the audio output method used by Hakone. The default behavior is to "
 "automatically select the best method available."
 msgstr ""
-"Ista opción permite trigar o metodo de salida d'audio emplegau por o VLC. O "
-"comportamiento por defecto ye trigar automaticament o millor metodo posible."
+"Ista opción permite trigar o metodo de salida d'audio emplegau por o "
+"Hakone. O comportamiento por defecto ye trigar automaticament o millor "
+"metodo posible."
 
 #: src/libvlc-module.c:129
 #, fuzzy
@@ -1743,10 +1745,11 @@ msgstr "Remera o volumen d'o audio"
 
 #: src/libvlc-module.c:158
 msgid ""
-"The volume can be recorded and automatically restored next time VLC is used."
+"The volume can be recorded and automatically restored next time Hakone is "
+"used."
 msgstr ""
 "O volumen puet estar gravau y automaticament restaurau a proxima vez que "
-"s'use VLC."
+"s'use Hakone."
 
 #: src/libvlc-module.c:161
 msgid "Audio desynchronization compensation"
@@ -1929,12 +1932,12 @@ msgstr "Modulo d'a salida de vídeo"
 
 #: src/libvlc-module.c:255
 msgid ""
-"This is the the video output method used by VLC. The default behavior is to "
-"automatically select the best method available."
+"This is the the video output method used by Hakone. The default behavior is "
+"to automatically select the best method available."
 msgstr ""
-"Ista opción permite trigar o metodo de salida de video emplegau por o VLC. O "
-"comportamiento por defecto ye trigar automaticament o millor metodo "
-"disponible."
+"Ista opción permite trigar o metodo de salida de video emplegau por o "
+"Hakone. O comportamiento por defecto ye trigar automaticament o millor "
+"metodo disponible."
 
 #: src/libvlc-module.c:258 modules/gui/macosx/VLCSimplePrefsController.m:346
 #: modules/stream_out/display.c:42 modules/gui/qt/ui/sprefs_video.h:312
@@ -2263,11 +2266,12 @@ msgstr "Decoracions d'a finestra"
 
 #: src/libvlc-module.c:380
 msgid ""
-"VLC can avoid creating window caption, frames, etc... around the video, "
+"Hakone can avoid creating window caption, frames, etc... around the video, "
 "giving a \"minimal\" window."
 msgstr ""
-"O VLC puet empachar a creyación d'una captura d'a finestra, d'os fotogramas, "
-"etc... arredol d'o video, proporcionando una finestra \"minima\"."
+"O Hakone puet empachar a creyación d'una captura d'a finestra, d'os "
+"fotogramas, etc... arredol d'o video, proporcionando una finestra "
+"\"minima\"."
 
 #: src/libvlc-module.c:383
 msgid "Video splitter module"
@@ -2376,17 +2380,17 @@ msgstr "Relación d'aspecto d'a fuent"
 #: src/libvlc-module.c:433
 msgid ""
 "This forces the source aspect ratio. For instance, some DVDs claim to be "
-"16:9 while they are actually 4:3. This can also be used as a hint for VLC "
-"when a movie does not have aspect ratio information. Accepted formats are x:"
-"y (4:3, 16:9, etc.) expressing the global image aspect, or a float value "
-"(1.25, 1.3333, etc.) expressing pixel squareness."
+"16:9 while they are actually 4:3. This can also be used as a hint for "
+"Hakone when a movie does not have aspect ratio information. Accepted "
+"formats are x:y (4:3, 16:9, etc.) expressing the global image aspect, or a "
+"float value (1.25, 1.3333, etc.) expressing pixel squareness."
 msgstr ""
 "Ista opción imposa a relación d'aspecto d'a fuent. Por eixemplo, qualques "
 "DVDs s'autodefinen 16:9, quan realment son 4:3. Isto puet fer-se servir "
-"tamién como sucherencia t'o VLC quan una pelicula no tien información quanto "
-"a la relación d'aspecto. Os formatos acceptaus son x:y (4:3, 16:9, etc.), "
-"que expresan l'aspecto global d'a imachen, u una valura en coma flotant "
-"(1.25, 1.3333, etc.), que expresa la relación quadratica d'o pixel."
+"tamién como sucherencia t'o Hakone quan una pelicula no tien información "
+"quanto a la relación d'aspecto. Os formatos acceptaus son x:y (4:3, 16:9, "
+"etc.), que expresan l'aspecto global d'a imachen, u una valura en coma "
+"flotant (1.25, 1.3333, etc.), que expresa la relación quadratica d'o pixel."
 
 #: src/libvlc-module.c:440
 msgid "Video Auto Scaling"
@@ -2504,9 +2508,9 @@ msgid "Key press events"
 msgstr "Esdevenimientos de pulsación de teclas"
 
 #: src/libvlc-module.c:489
-msgid "This enables VLC hotkeys from the (non-embedded) video window."
+msgid "This enables Hakone hotkeys from the (non-embedded) video window."
 msgstr ""
-"Isto habilita os alcorces de teclau d'o VLC en a finestra de video (no "
+"Isto habilita os alcorces de teclau d'o Hakone en a finestra de video (no "
 "encrastada)."
 
 #: src/libvlc-module.c:491 modules/spu/remoteosd.c:91
@@ -3026,10 +3030,10 @@ msgstr "En a pantalla"
 
 #: src/libvlc-module.c:723
 msgid ""
-"VLC can display messages on the video. This is called OSD (On Screen "
+"Hakone can display messages on the video. This is called OSD (On Screen "
 "Display)."
 msgstr ""
-"O VLC puet amostrar mensaches sobre o video. Isto se diz OSD (On Screen "
+"O Hakone puet amostrar mensaches sobre o video. Isto se diz OSD (On Screen "
 "Display, en a pantalla)."
 
 #: src/libvlc-module.c:726
@@ -3038,11 +3042,11 @@ msgstr "Modulo de cheneración de texto"
 
 #: src/libvlc-module.c:728
 msgid ""
-"VLC normally uses Freetype for rendering, but this allows you to use svg for "
-"instance."
+"Hakone normally uses Freetype for rendering, but this allows you to use svg "
+"for instance."
 msgstr ""
-"VLC normalment usa Freetype ta la cheneración, pero isto le permite usar svg "
-"por eixemplo."
+"Hakone normalment usa Freetype ta la cheneración, pero isto le permite usar "
+"svg por eixemplo."
 
 #: src/libvlc-module.c:730
 msgid "Subpictures source module"
@@ -3386,11 +3390,12 @@ msgstr "Lista de decodificadores preferida"
 
 #: src/libvlc-module.c:904
 msgid ""
-"List of codecs that VLC will use in priority. For instance, 'dummy,a52' will "
-"try the dummy and a52 codecs before trying the other ones. Only advanced "
-"users should alter this option as it can break playback of all your streams."
+"List of codecs that Hakone will use in priority. For instance, 'dummy,a52' "
+"will try the dummy and a52 codecs before trying the other ones. Only "
+"advanced users should alter this option as it can break playback of all "
+"your streams."
 msgstr ""
-"Lista de códecs que VLC usará en prioridat. Por eixemplo, «dummy,a252» "
+"Lista de códecs que Hakone usará en prioridat. Por eixemplo, «dummy,a252» "
 "prebará os códecs simulados y a252 antes de prebar atros. Solament os "
 "usuarios abanzaus habrían de modificar ista opción pus puede estorbar a "
 "reproducción de todas as suyas emisions."
@@ -3510,9 +3515,10 @@ msgstr "Lista d'empaquetadores preferida"
 
 #: src/libvlc-module.c:965
 msgid ""
-"This allows you to select the order in which VLC will choose its packetizers."
+"This allows you to select the order in which Hakone will choose its "
+"packetizers."
 msgstr ""
-"Isto le permite seleccionar l'orden en o qual VLC seleccionará os suyos "
+"Isto le permite seleccionar l'orden en o qual Hakone seleccionará os suyos "
 "empaquetadores."
 
 #: src/libvlc-module.c:968
@@ -3668,9 +3674,10 @@ msgid "Use a plugins cache"
 msgstr "Usar una caché de complementos"
 
 #: src/libvlc-module.c:1045
-msgid "Use a plugins cache which will greatly improve the startup time of VLC."
+msgid "Use a plugins cache which will greatly improve the startup time of Hakone."
 msgstr ""
-"Usa una caché de complementos que amillorará muito o tiempo d'inicio de VLC."
+"Usa una caché de complementos que amillorará muito o tiempo d'inicio de "
+"Hakone."
 
 #: src/libvlc-module.c:1047
 msgid "Scan for new plugins"
@@ -3679,7 +3686,7 @@ msgstr ""
 #: src/libvlc-module.c:1049
 msgid ""
 "Scan plugin directories for new plugins at startup. This increases the "
-"startup time of VLC."
+"startup time of Hakone."
 msgstr ""
 
 #: src/libvlc-module.c:1052
@@ -3689,9 +3696,9 @@ msgstr "Lista d'empaquetadores preferida"
 
 #: src/libvlc-module.c:1054
 #, fuzzy
-msgid "List of keystores that VLC will use in priority."
+msgid "List of keystores that Hakone will use in priority."
 msgstr ""
-"Isto te permite seleccionar una lista de codificadors que VLC usará "
+"Isto te permite seleccionar una lista de codificadors que Hakone usará "
 "prioritariament."
 
 #: src/libvlc-module.c:1056
@@ -3724,22 +3731,22 @@ msgstr "Solament permitir executar una instancia VLC"
 
 #: src/libvlc-module.c:1070
 msgid ""
-"Allowing only one running instance of VLC can sometimes be useful, for "
-"example if you associated VLC with some media types and you don't want a new "
-"instance of VLC to be opened each time you open a file in your file manager. "
-"This option will allow you to play the file with the already running "
-"instance or enqueue it."
+"Allowing only one running instance of Hakone can sometimes be useful, for "
+"example if you associated Hakone with some media types and you don't want a "
+"new instance of Hakone to be opened each time you open a file in your file "
+"manager. This option will allow you to play the file with the already "
+"running instance or enqueue it."
 msgstr ""
 
 #: src/libvlc-module.c:1076
-msgid "VLC is started from file association"
-msgstr "VLC ye encetau dende asociación a fichero"
+msgid "Hakone is started from file association"
+msgstr "Hakone ye encetau dende asociación a fichero"
 
 #: src/libvlc-module.c:1078
-msgid "Tell VLC that it is being launched due to a file association in the OS"
+msgid "Tell Hakone that it is being launched due to a file association in the OS"
 msgstr ""
-"Fer saber a VLC que ye estando lanzau a causa d'una asociación a fichero en "
-"o CHUS"
+"Fer saber a Hakone que ye estando lanzau a causa d'una asociación a fichero "
+"en o CHUS"
 
 #: src/libvlc-module.c:1081 modules/gui/qt/ui/sprefs_interface.h:551
 msgid "Use only one instance when started from file manager"
@@ -3751,19 +3758,19 @@ msgstr "Aumentar a prioridat d'o proceso"
 
 #: src/libvlc-module.c:1085
 msgid ""
-"Increasing the priority of the process will very likely improve your playing "
-"experience as it allows VLC not to be disturbed by other applications that "
-"could otherwise take too much processor time. However be advised that in "
-"certain circumstances (bugs) VLC could take all the processor time and "
-"render the whole system unresponsive which might require a reboot of your "
-"machine."
+"Increasing the priority of the process will very likely improve your "
+"playing experience as it allows Hakone not to be disturbed by other "
+"applications that could otherwise take too much processor time. However be "
+"advised that in certain circumstances (bugs) Hakone could take all the "
+"processor time and render the whole system unresponsive which might require "
+"a reboot of your machine."
 msgstr ""
 "Aumentar a prioridat d'o proceso amillorará a suya experiencia de "
-"reproducción pus permite a VLC no estar emprenyau por atras aplicacions que "
-"d'unatro modo obtendrían masiau tiempo de procesador. Con tot y con ixo, le "
-"gritamos que en bellas circumstancias (errors) VLC podría obtener tot o "
-"tiempo de procesador y deixaría blocau tot o sistema, o qual puede requerir "
-"un reinicio d'a suya maquina."
+"reproducción pus permite a Hakone no estar emprenyau por atras aplicacions "
+"que d'unatro modo obtendrían masiau tiempo de procesador. Con tot y con "
+"ixo, le gritamos que en bellas circumstancias (errors) Hakone podría "
+"obtener tot o tiempo de procesador y deixaría blocau tot o sistema, o qual "
+"puede requerir un reinicio d'a suya maquina."
 
 #: src/libvlc-module.c:1093 modules/gui/qt/ui/sprefs_interface.h:554
 msgid "Enqueue items into playlist in one instance mode"
@@ -3783,7 +3790,7 @@ msgid "Expose media player via D-Bus"
 msgstr "Actualizacions d'o reproductor multimedia VLC"
 
 #: src/libvlc-module.c:1099
-msgid "Allow other applications to control VLC using the D-Bus MPRIS protocol."
+msgid "Allow other applications to control Hakone using the D-Bus MPRIS protocol."
 msgstr ""
 
 #: src/libvlc-module.c:1108
@@ -3972,10 +3979,10 @@ msgstr "Usar biblioteca multimedia"
 #: src/libvlc-module.c:1189
 msgid ""
 "The media library is automatically saved and reloaded each time you start "
-"VLC."
+"Hakone."
 msgstr ""
-"A biblioteca multimedia ye alzada automaticament y recargada cada vegada que "
-"s'encieta VLC."
+"A biblioteca multimedia ye alzada automaticament y recargada cada vegada "
+"que s'encieta Hakone."
 
 #: src/libvlc-module.c:1192 modules/gui/qt/ui/sprefs_interface.h:552
 msgid "Display playlist tree"
@@ -3990,9 +3997,9 @@ msgstr ""
 "obchectos, como o conteniu d'una carpeta."
 
 #: src/libvlc-module.c:1203
-msgid "These settings are the global VLC key bindings, known as \"hotkeys\"."
+msgid "These settings are the global Hakone key bindings, known as \"hotkeys\"."
 msgstr ""
-"Istas opcions son as teclas enlazadas globals de VLC, conoixidas como "
+"Istas opcions son as teclas enlazadas globals de Hakone, conoixidas como "
 "«alcorces de teclau»."
 
 #: src/libvlc-module.c:1208 modules/gui/macosx/VLCMain+OldPrefs.m:103
@@ -6827,7 +6834,7 @@ msgid "No video or audio device selected."
 msgstr "No i hai garra dispositivo de video u audio seleccionau."
 
 #: modules/access/dshow/dshow.cpp:591
-msgid "VLC cannot open ANY capture device. Check the error log for details."
+msgid "Hakone cannot open ANY capture device. Check the error log for details."
 msgstr ""
 
 #: modules/access/dshow/dshow.cpp:1053
@@ -7389,10 +7396,11 @@ msgstr "Fallo de reproducción"
 
 #: modules/access/dvdnav.c:297
 msgid ""
-"VLC cannot set the DVD's title. It possibly cannot decrypt the entire disc."
+"Hakone cannot set the DVD's title. It possibly cannot decrypt the entire "
+"disc."
 msgstr ""
-"VLC no puede establir o titol d'o DVD. Posiblement no pueda deszifrar tot o "
-"disco."
+"Hakone no puede establir o titol d'o DVD. Posiblement no pueda deszifrar "
+"tot o disco."
 
 #: modules/access/dvdread.c:76
 msgid "DVD without menus"
@@ -7525,12 +7533,12 @@ msgid "Network interaction failed"
 msgstr "Falló interacción de ret"
 
 #: modules/access/ftp.c:370
-msgid "VLC could not connect with the given server."
-msgstr "VLC no podió connectar con o servidor proporcionau."
+msgid "Hakone could not connect with the given server."
+msgstr "Hakone no podió connectar con o servidor proporcionau."
 
 #: modules/access/ftp.c:386
-msgid "VLC's connection to the given server was rejected."
-msgstr "A connexión de VLC a o servidor proporcionau estió refusada."
+msgid "Hakone's connection to the given server was rejected."
+msgstr "A connexión de Hakone a o servidor proporcionau estió refusada."
 
 #: modules/access/ftp.c:538
 msgid "Your account was rejected."
@@ -7797,17 +7805,17 @@ msgid "Pace"
 msgstr "Ritmo"
 
 #: modules/access/jack.c:61
-msgid "Read the audio stream at VLC pace rather than Jack pace."
-msgstr "Leyer a emisión d'audio a ritmo de VLC en cuenta de ritmo Jack."
+msgid "Read the audio stream at Hakone pace rather than Jack pace."
+msgstr "Leyer a emisión d'audio a ritmo de Hakone en cuenta de ritmo Jack."
 
 #: modules/access/jack.c:62 modules/gui/qt/components/open_panels.cpp:898
 msgid "Auto connection"
 msgstr "Autoconexión"
 
 #: modules/access/jack.c:64
-msgid "Automatically connect VLC input ports to available output ports."
+msgid "Automatically connect Hakone input ports to available output ports."
 msgstr ""
-"Connecta automaticament puertos de dentrada VLC a puertos de salida "
+"Connecta automaticament puertos de dentrada Hakone a puertos de salida "
 "disponibles."
 
 #: modules/access/jack.c:67
@@ -7895,12 +7903,12 @@ msgstr "Dialecto RTSP Kasenna"
 #: modules/access/live555.cpp:74
 msgid ""
 "Kasenna servers use an old and nonstandard dialect of RTSP. With this "
-"parameter VLC will try this dialect, but then it cannot connect to normal "
-"RTSP servers."
+"parameter Hakone will try this dialect, but then it cannot connect to "
+"normal RTSP servers."
 msgstr ""
-"Os servidors Kasenna usan un dialecto viello y no estandar de RTSP. Con iste "
-"parametro, VLC prebará iste dialecto pero en iste modo no puede connectar-se "
-"a servidors RTSP normals."
+"Os servidors Kasenna usan un dialecto viello y no estandar de RTSP. Con "
+"iste parametro, Hakone prebará iste dialecto pero en iste modo no puede "
+"connectar-se a servidors RTSP normals."
 
 #: modules/access/live555.cpp:78
 msgid "WMServer RTSP dialect"
@@ -7909,7 +7917,7 @@ msgstr "Dialecto WMServer RTSP"
 #: modules/access/live555.cpp:79
 msgid ""
 "WMServer uses a nonstandard dialect of RTSP. Selecting this parameter will "
-"tell VLC to assume some options contrary to RFC 2326 guidelines."
+"tell Hakone to assume some options contrary to RFC 2326 guidelines."
 msgstr ""
 
 #: modules/access/live555.cpp:84
@@ -8039,7 +8047,7 @@ msgstr "Falló lectura de fichero"
 
 #: modules/access/mtp.c:168
 #, c-format
-msgid "VLC could not read the file: %s"
+msgid "Hakone could not read the file: %s"
 msgstr ""
 
 #: modules/access/nfs.c:49
@@ -8048,8 +8056,8 @@ msgstr ""
 
 #: modules/access/nfs.c:50
 msgid ""
-"If uid/gid are not specified in the url, VLC will automatically set a uid/"
-"gid."
+"If uid/gid are not specified in the url, Hakone will automatically set a "
+"uid/gid."
 msgstr ""
 
 #: modules/access/nfs.c:57
@@ -9131,12 +9139,12 @@ msgstr "Gravacions VDR"
 
 #: modules/access/vdr.c:380
 #, c-format
-msgid "VLC could not read the file (%s)."
+msgid "Hakone could not read the file (%s)."
 msgstr ""
 
 #: modules/access/vdr.c:545
 #, c-format
-msgid "VLC could not open the file \"%s\" (%s)."
+msgid "Hakone could not open the file \"%s\" (%s)."
 msgstr ""
 
 #: modules/access/vdr.c:820
@@ -10530,12 +10538,12 @@ msgstr "O dispositivo d'audio no ye configurau"
 #: modules/audio_output/coreaudio_common.c:446
 #, fuzzy
 msgid ""
-"You should configure your speaker layout with \"Audio Midi Setup\" in /"
-"Applications/Utilities. VLC will output Stereo only."
+"You should configure your speaker layout with \"Audio Midi Setup\" in "
+"/Applications/Utilities. Hakone will output Stereo only."
 msgstr ""
 "Habría de configurar a suya disposición d'altavoces con a utilidat de "
-"«Configuración midi d'audio» en /Aplicacions/Utilidatz. O modo estéreo se ye "
-"usando agora."
+"«Configuración midi d'audio» en /Aplicacions/Utilidatz. O modo estéreo se "
+"ye usando agora."
 
 #: modules/audio_output/directsound.c:62
 msgid "Output device"
@@ -10711,10 +10719,10 @@ msgstr "Seleccionau dispositivo d'audio"
 #: modules/audio_output/waveout.c:136
 msgid ""
 "Select special Audio device, or let windows decide (default), change needs "
-"VLC restart to apply."
+"Hakone restart to apply."
 msgstr ""
 "Seleccionar dispositivo d'audio especial u deixar que windows decida "
-"(predeterminau), VLC debe reiniciar-se ta aplicar o cambeo."
+"(predeterminau), Hakone debe reiniciar-se ta aplicar o cambeo."
 
 #: modules/audio_output/waveout.c:149
 msgid "WaveOut audio output"
@@ -11323,7 +11331,7 @@ msgstr ""
 
 #: modules/codec/avcodec/encoder.c:886
 #, c-format
-msgid "VLC could not open the %4.4s %s encoder."
+msgid "Hakone could not open the %4.4s %s encoder."
 msgstr ""
 
 #: modules/codec/avcodec/vaapi.c:349
@@ -11645,11 +11653,11 @@ msgstr "A sintetización MIDI no ye configurada"
 #: modules/codec/fluidsynth.c:151
 msgid ""
 "A sound font file (.SF2) is required for MIDI synthesis.\n"
-"Please install a sound font and configure it from the VLC preferences "
+"Please install a sound font and configure it from the Hakone preferences "
 "(Input / Codecs > Audio codecs > FluidSynth).\n"
 msgstr ""
 "Un fichero de fuent de son (.SF2) ye requeriu ta la sintetización MIDI.\n"
-"Instale una fuent de son y la configure dende as preferencias de VLC "
+"Instale una fuent de son y la configure dende as preferencias de Hakone "
 "(Dentrada / Códecs > Códecs d'audio > FluidSynth).\n"
 
 #: modules/codec/g711.c:46
@@ -11700,12 +11708,12 @@ msgstr "Subtítulos formateados"
 #: modules/codec/kate.c:192
 #, fuzzy
 msgid ""
-"Kate streams allow for text formatting. VLC partly implements this, but you "
-"can choose to disable all formatting. Note that this has no effect is "
+"Kate streams allow for text formatting. Hakone partly implements this, but "
+"you can choose to disable all formatting. Note that this has no effect is "
 "rendering via Tiger is enabled."
 msgstr ""
-"As emisions Kate permiten formateo d'o texto. VLC lo implementa parcialment, "
-"pero puede seleccionar deshabilitar tot formateo."
+"As emisions Kate permiten formateo d'o texto. Hakone lo implementa "
+"parcialment, pero puede seleccionar deshabilitar tot formateo."
 
 #: modules/codec/kate.c:199
 msgid "Shadow"
@@ -11920,15 +11928,15 @@ msgstr ""
 msgid ""
 "Kate is a codec for text and image based overlays.\n"
 "The Tiger rendering library is needed to render complex Kate streams, but "
-"VLC can still render static text and image based subtitles if it is not "
+"Hakone can still render static text and image based subtitles if it is not "
 "available.\n"
-"Note that changing settings below will not take effect until a new stream is "
-"played. This will hopefully be fixed soon."
+"Note that changing settings below will not take effect until a new stream "
+"is played. This will hopefully be fixed soon."
 msgstr ""
 "Kate ye un codificador ta texto y imachen basau en superposicions.\n"
 "A biblioteca de cheneración Tiger ye necesaria ta chenerar emisions "
-"complexas Kate pero VLC puede chenerar texto estatico y imachen basada en "
-"subtítulos si no ye disponible.\n"
+"complexas Kate pero Hakone puede chenerar texto estatico y imachen basada "
+"en subtítulos si no ye disponible.\n"
 "As preferencias cambiadas no surtirán efecto dica que se reproduzca una "
 "nueva emisión. Isto será correchiu luego."
 
@@ -13002,10 +13010,10 @@ msgstr "CP1252"
 
 #: modules/codec/subsusf.c:45
 msgid ""
-"Some subtitle formats allow for text formatting. VLC partly implements this, "
-"but you can choose to disable all formatting."
+"Some subtitle formats allow for text formatting. Hakone partly implements "
+"this, but you can choose to disable all formatting."
 msgstr ""
-"Qualques formatos de subtítulos permiten formateo d'o texto. VLC lo "
+"Qualques formatos de subtítulos permiten formateo d'o texto. Hakone lo "
 "implementa parcialment, pero puede seleccionar deshabilitar tot formateo."
 
 #: modules/codec/subsusf.c:50
@@ -14317,26 +14325,6 @@ msgstr "Interficie de control D-Bus"
 #: modules/video_output/wayland/shell.c:348
 #: modules/video_output/wayland/xdg-shell.c:291
 #: modules/video_output/xcb/window.c:464
-msgid "VLC media player"
-msgstr "Reproductor multimedia VLC"
-
-#: modules/control/dbus/dbus_root.c:81 modules/gui/macosx/VLCMainWindow.m:182
-#: modules/gui/macosx/VLCMainWindow.m:669
-#: modules/gui/macosx/VLCMainWindow.m:675
-#: modules/gui/macosx/VLCMainWindow.m:1269
-#: modules/gui/macosx/VLCStatusBarIcon.m:378 modules/gui/ncurses.c:1035
-#: modules/gui/qt/dialogs/help.cpp:91 modules/gui/qt/main_interface.cpp:1234
-#: modules/gui/qt/main_interface.cpp:1238
-#: modules/gui/qt/main_interface.cpp:1277
-#: modules/gui/qt/main_interface.cpp:1279
-#: modules/gui/qt/main_interface.cpp:1388
-#: modules/gui/qt/main_interface.cpp:1405
-#: modules/gui/qt/main_interface.cpp:1413
-#: modules/gui/qt/main_interface.cpp:1436 modules/lua/libs/httpd.c:80
-#: modules/notify/osx_notifications.m:302
-#: modules/video_output/wayland/shell.c:348
-#: modules/video_output/wayland/xdg-shell.c:291
-#: modules/video_output/xcb/window.c:464
 msgid "Hakone Media Player"
 msgstr "Reproductor multimedia Hakone"
 
@@ -14603,8 +14591,8 @@ msgstr "Reloch de ret mayestro"
 
 #: modules/control/netsync.c:57
 msgid ""
-"When set, this VLC instance will act as the master clock for synchronization "
-"for clients listening"
+"When set, this Hakone instance will act as the master clock for "
+"synchronization for clients listening"
 msgstr ""
 
 #: modules/control/netsync.c:61
@@ -14743,12 +14731,12 @@ msgstr ""
 msgid ""
 "By default the rc interface plugin will start a DOS command box. Enabling "
 "the quiet mode will not bring this command box but can also be pretty "
-"annoying when you want to stop VLC and no video window is open."
+"annoying when you want to stop Hakone and no video window is open."
 msgstr ""
 "De forma predeterminada o complemento d'interficie rc encetará una consola "
 "de comandos DOS. Habilitar o modo silencioso no ubrirá ista consola de "
-"comandos pero puede estar pro molesto si quiere detener VLC y no ye ubierta "
-"garra finestra de video."
+"comandos pero puede estar pro molesto si quiere detener Hakone y no ye "
+"ubierta garra finestra de video."
 
 #: modules/control/oldrc.c:188
 msgid "RC"
@@ -15824,13 +15812,13 @@ msgstr "Indica it de YE a PID"
 
 #: modules/demux/mpeg/ts.c:85
 msgid ""
-"Set the internal ID of each elementary stream handled by VLC to the same "
+"Set the internal ID of each elementary stream handled by Hakone to the same "
 "value as the PID in the TS stream, instead of 1, 2, 3, etc. Useful to do "
 "'#duplicate{..., select=\"es=<pid>\"}'."
 msgstr ""
-"Estableix l'IT interno de cada emisión elemental maniada por VLC a la mesma "
-"valor que o PID en a emisión TS, en cuenta d'1, 2, 3, etc. Util ta fer "
-"'#duplicate{..., select=\"ye=<pid>\"}'."
+"Estableix l'IT interno de cada emisión elemental maniada por Hakone a la "
+"mesma valor que o PID en a emisión TS, en cuenta d'1, 2, 3, etc. Util ta "
+"fer '#duplicate{..., select=\"ye=<pid>\"}'."
 
 #: modules/demux/mpeg/ts.c:90 modules/mux/mpeg/ts.c:173
 msgid "CSA Key"
@@ -16368,8 +16356,8 @@ msgstr "Diapositivas (imachens)"
 
 #: modules/gui/macosx/VLCAboutWindowController.m:99
 #: modules/gui/macosx/VLCMainMenu.m:330
-msgid "About VLC media player"
-msgstr "Sobre o reproductor multimedia VLC"
+msgid "About Hakone Media Player"
+msgstr "Sobre o reproductor multimedia Hakone"
 
 #: modules/gui/macosx/VLCAboutWindowController.m:102
 #: modules/gui/qt/dialogs/help.cpp:125
@@ -16859,15 +16847,6 @@ msgstr "Resolución"
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
 #: modules/gui/qt/ui/profiles.h:740
 msgid ""
-"You just need to fill one of the three following parameters, VLC will "
-"autodetect the other using the original aspect ratio"
-msgstr ""
-"Solament ameneste replenar un d'os siguients parametros, VLC detectará "
-"l'atro usando usando a proporción orichinal"
-
-#: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
-#: modules/gui/qt/ui/profiles.h:740
-msgid ""
 "You just need to fill one of the three following parameters, Hakone will "
 "autodetect the other using the original aspect ratio"
 msgstr ""
@@ -17129,11 +17108,11 @@ msgstr "Mantener obchectos recients"
 
 #: modules/gui/macosx/macosx.m:73
 msgid ""
-"By default, VLC keeps a list of the last 10 items. This feature can be "
+"By default, Hakone keeps a list of the last 10 items. This feature can be "
 "disabled here."
 msgstr ""
-"De forma predeterminada, VLC mantiene una lista d'os 10 zaguers obchectos. "
-"Ista opción puede deshabilitar-se aquí."
+"De forma predeterminada, Hakone mantiene una lista d'os 10 zaguers "
+"obchectos. Ista opción puede deshabilitar-se aquí."
 
 #: modules/gui/macosx/macosx.m:76
 #: modules/gui/macosx/VLCSimplePrefsController.m:311
@@ -17141,9 +17120,9 @@ msgid "Control playback with the Apple Remote"
 msgstr "Controlar reproducción con Apple Remote"
 
 #: modules/gui/macosx/macosx.m:77
-msgid "By default, VLC can be remotely controlled with the Apple Remote."
+msgid "By default, Hakone can be remotely controlled with the Apple Remote."
 msgstr ""
-"De forma predeterminada, VLC puede estar controlau remotament con Apple "
+"De forma predeterminada, Hakone puede estar controlau remotament con Apple "
 "Remote."
 
 #: modules/gui/macosx/macosx.m:79
@@ -17153,19 +17132,19 @@ msgstr ""
 
 #: modules/gui/macosx/macosx.m:80
 msgid ""
-"By default, VLC will control its own volume with the Apple Remote. However, "
-"you can choose to control the global system volume instead."
+"By default, Hakone will control its own volume with the Apple Remote. "
+"However, you can choose to control the global system volume instead."
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:82
 #: modules/gui/macosx/VLCSimplePrefsController.m:314
-msgid "Display VLC status menu icon"
+msgid "Display Hakone status menu icon"
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:83
 msgid ""
-"By default, VLC will show the statusbar icon menu. However, you can choose "
-"to disable it (restart required)."
+"By default, Hakone will show the statusbar icon menu. However, you can "
+"choose to disable it (restart required)."
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:85
@@ -17174,8 +17153,8 @@ msgstr ""
 
 #: modules/gui/macosx/macosx.m:86
 msgid ""
-"By default, VLC will allow you to switch to the next or previous item with "
-"the Apple Remote. You can disable this behavior with this option."
+"By default, Hakone will allow you to switch to the next or previous item "
+"with the Apple Remote. You can disable this behavior with this option."
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:88
@@ -17185,10 +17164,10 @@ msgstr "Controlar reproducción con teclas multimedia"
 
 #: modules/gui/macosx/macosx.m:89
 msgid ""
-"By default, VLC can be controlled using the media keys on modern Apple "
+"By default, Hakone can be controlled using the media keys on modern Apple "
 "keyboards."
 msgstr ""
-"De forma predeterminada, VLC puede estar controlau usando as teclas "
+"De forma predeterminada, Hakone puede estar controlau usando as teclas "
 "multimedia en os teclaus modernos d'Apple."
 
 #: modules/gui/macosx/macosx.m:92
@@ -17208,7 +17187,7 @@ msgstr ""
 
 #: modules/gui/macosx/macosx.m:96
 msgid ""
-"By default, VLC uses the fullscreen mode known from previous Mac OS X "
+"By default, Hakone uses the fullscreen mode known from previous Mac OS X "
 "releases. It can also use the native fullscreen mode on Mac OS X 10.7 and "
 "later."
 msgstr ""
@@ -17303,7 +17282,7 @@ msgid "Control external music players"
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:129
-msgid "VLC will pause and resume supported music players on playback."
+msgid "Hakone will pause and resume supported music players on playback."
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:131
@@ -17328,8 +17307,8 @@ msgstr ""
 
 #: modules/gui/macosx/macosx.m:140
 msgid ""
-"VLC will store playback positions of the last 30 items you played. If you re-"
-"open one of those, playback will continue."
+"Hakone will store playback positions of the last 30 items you played. If "
+"you re-open one of those, playback will continue."
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:145 modules/gui/qt/qt.cpp:206
@@ -17375,13 +17354,13 @@ msgid "Remove old preferences?"
 msgstr "Eliminar preferencias antigas?"
 
 #: modules/gui/macosx/VLCMain+OldPrefs.m:102
-msgid "We just found an older version of VLC's preferences files."
+msgid "We just found an older version of Hakone's preferences files."
 msgstr ""
-"S'ha trobau una versión mas antiga d'os fichers de preferencias de VLC."
+"S'ha trobau una versión mas antiga d'os fichers de preferencias de Hakone."
 
 #: modules/gui/macosx/VLCMain+OldPrefs.m:103
-msgid "Move To Trash and Relaunch VLC"
-msgstr "Mover a la papelera y reiniciar VLC"
+msgid "Move To Trash and Relaunch Hakone"
+msgstr "Mover a la papelera y reiniciar Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:240
 #, c-format
@@ -17421,8 +17400,8 @@ msgid "Services"
 msgstr "Servicios"
 
 #: modules/gui/macosx/VLCMainMenu.m:340
-msgid "Hide VLC"
-msgstr "Amagar VLC"
+msgid "Hide Hakone"
+msgstr "Amagar Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:341
 msgid "Hide Others"
@@ -17432,10 +17411,6 @@ msgstr "Amagar atros"
 #: modules/gui/macosx/VLCSimplePrefsController.m:370
 msgid "Show All"
 msgstr "Amostrar tot"
-
-#: modules/gui/macosx/VLCMainMenu.m:343
-msgid "Quit VLC"
-msgstr "Salir de VLC"
 
 #: modules/gui/macosx/VLCMainMenu.m:343
 msgid "Quit Hakone"
@@ -17681,8 +17656,8 @@ msgid "Help"
 msgstr "Aduya"
 
 #: modules/gui/macosx/VLCMainMenu.m:479
-msgid "VLC media player Help..."
-msgstr "Aduya d'o reproductor multimedia VLC..."
+msgid "Hakone Media Player Help..."
+msgstr "Aduya d'o reproductor multimedia Hakone..."
 
 #: modules/gui/macosx/VLCMainMenu.m:481
 msgid "Online Documentation..."
@@ -17950,15 +17925,15 @@ msgstr ""
 #: modules/gui/macosx/VLCOpenWindowController.m:190
 msgid ""
 "If you want to open a multicast stream, enter the respective IP address "
-"given by the stream provider. In unicast mode, VLC will use your machine's "
-"IP automatically.\n"
+"given by the stream provider. In unicast mode, Hakone will use your "
+"machine's IP automatically.\n"
 "\n"
-"To open a stream using a different protocol, just press Cancel to close this "
-"sheet."
+"To open a stream using a different protocol, just press Cancel to close "
+"this sheet."
 msgstr ""
 "Si quiere ubrir una emisión multidifusión («multicast»), introduzca a "
 "direccion IP proporcionada por o proveeedor. En un modo unidifusión "
-"(«unicast»), VLC usa l'adreza IP d'a suya maquina automaticament.\n"
+"(«unicast»), Hakone usa l'adreza IP d'a suya maquina automaticament.\n"
 "\n"
 "Ta ubrir una emisión usando un protocolo diferent, presione Cancelar ta "
 "zarrar ista fuella."
@@ -18221,8 +18196,8 @@ msgid "Error while saving meta"
 msgstr "Error en alzar metadatos"
 
 #: modules/gui/macosx/VLCPlaylistInfo.m:358
-msgid "VLC was unable to save the meta data."
-msgstr "VLC estió incapaz d'alzar os metadatos."
+msgid "Hakone was unable to save the meta data."
+msgstr "Hakone estió incapaz d'alzar os metadatos."
 
 #: modules/gui/macosx/VLCRendererMenuController.m:72
 #: modules/gui/macosx/VLCRendererMenuController.m:144
@@ -21788,13 +21763,13 @@ msgstr ""
 "automaticament, no la modifique."
 
 #: modules/gui/skins2/src/skin_main.cpp:490
-msgid "Show a systray icon for VLC"
-msgstr "Amostrar icono en l'aria de notificación ta VLC"
+msgid "Show a systray icon for Hakone"
+msgstr "Amostrar icono en l'aria de notificación ta Hakone"
 
 #: modules/gui/skins2/src/skin_main.cpp:491
 #: modules/gui/skins2/src/skin_main.cpp:492
-msgid "Show VLC on the taskbar"
-msgstr "Amostrar VLC en a barra de quefers"
+msgid "Show Hakone on the taskbar"
+msgstr "Amostrar Hakone en a barra de quefers"
 
 #: modules/gui/skins2/src/skin_main.cpp:493
 msgid "Enable transparency effects"
@@ -22216,8 +22191,8 @@ msgid "Log to file"
 msgstr "Emitir a fichero"
 
 #: modules/logger/file.c:206
-msgid "Log all VLC messages to a text file."
-msgstr "Emitir tot mensache de VLC a un fichero de texto."
+msgid "Log all Hakone messages to a text file."
+msgstr "Emitir tot mensache de Hakone a un fichero de texto."
 
 #: modules/logger/file.c:208
 msgid "Log filename"
@@ -23076,10 +23051,10 @@ msgstr "last.fm: Falló autenticación"
 #: modules/misc/audioscrobbler.c:567
 msgid ""
 "last.fm username or password is incorrect. Please verify your settings and "
-"relaunch VLC."
+"relaunch Hakone."
 msgstr ""
 "Nombre d'usuario last.fm u clau ye incorrecto. Verifique as suyas "
-"preferencias y relanza VLC. "
+"preferencias y relanza Hakone. "
 
 #: modules/misc/audioscrobbler.c:714
 msgid "Last.fm username not set"
@@ -27266,18 +27241,18 @@ msgstr "Formato d'as imachens de salida (png, jpg, ...)."
 
 #: modules/video_filter/scene.c:63
 msgid ""
-"You can enforce the image width. By default (-1) VLC will adapt to the video "
-"characteristics."
+"You can enforce the image width. By default (-1) Hakone will adapt to the "
+"video characteristics."
 msgstr ""
-"Puede forzar l'amplaria d'imachen. De forma predeterminada (-1) VLC "
+"Puede forzar l'amplaria d'imachen. De forma predeterminada (-1) Hakone "
 "s'adaptará a las caracteristicas d'o video."
 
 #: modules/video_filter/scene.c:68
 msgid ""
-"You can enforce the image height. By default (-1) VLC will adapt to the "
+"You can enforce the image height. By default (-1) Hakone will adapt to the "
 "video characteristics."
 msgstr ""
-"Puetz forzar l'altura d'imachen. Por defecto (-1) VLC s'adaptará a las "
+"Puetz forzar l'altura d'imachen. Por defecto (-1) Hakone s'adaptará a las "
 "caracteristicas d'o video."
 
 #: modules/video_filter/scene.c:72

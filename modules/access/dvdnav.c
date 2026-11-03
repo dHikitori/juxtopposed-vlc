@@ -395,7 +395,7 @@ static int CommonOpen( vlc_object_t *p_this,
         {
             msg_Err( p_demux, "cannot set title (can't decrypt DVD?)" );
             vlc_dialog_display_error( p_demux, _("Playback failure"), "%s",
-                _("VLC cannot set the DVD's title. It possibly "
+                _("Hakone cannot set the DVD's title. It possibly "
                   "cannot decrypt the entire disc.") );
             timestamps_filter_es_out_Delete( p_sys->p_tf_out );
             free( p_sys );

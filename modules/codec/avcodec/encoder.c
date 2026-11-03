@@ -955,7 +955,7 @@ errmsg:
                 type = types[p_enc->fmt_in.i_cat];
             msg_Err( p_enc, "cannot open %4.4s %s encoder", fcc.txt, type );
             vlc_dialog_display_error( p_enc, _("Streaming / Transcoding failed"),
-                _("VLC could not open the %4.4s %s encoder."),
+                _("Hakone could not open the %4.4s %s encoder."),
                 fcc.txt, vlc_gettext(type) );
             av_dict_free(&options);
             goto error;

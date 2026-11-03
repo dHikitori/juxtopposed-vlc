@@ -138,7 +138,7 @@ struct aout_sys_t
  *****************************************************************************/
 #define DEVICE_TEXT N_("Select Audio Device")
 #define DEVICE_LONG N_("Select special Audio device, or let windows "\
-                       "decide (default), change needs VLC restart "\
+                       "decide (default), change needs Hakone restart "\
                        "to apply.")
 
 #define AUDIO_CHAN_TEXT N_("Audio output channels")

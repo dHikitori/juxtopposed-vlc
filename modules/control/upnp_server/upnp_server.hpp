@@ -32,7 +32,7 @@
 #define SERVER_SHARE_PRIVATE_MEDIA_LONGTEXT                                                        \
     N_("Every media indexed by the media library will be exposed by the UPNP server regardless "   \
        "of their public/private status. This option needs to be explicitely set at each startup "  \
-       "of VLC to avoid unnoticed private media leaks on the network.")
+       "of Hakone to avoid unnoticed private media leaks on the network.")
 
 struct vlc_object_t;
 

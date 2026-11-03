@@ -88,7 +88,7 @@ static void Close ( vlc_object_t * );
 
 #define PID_TEXT N_("Set id of ES to PID")
 #define PID_LONGTEXT N_("Set the internal ID of each elementary stream" \
-                       " handled by VLC to the same value as the PID in" \
+                       " handled by Hakone to the same value as the PID in" \
                        " the TS stream, instead of 1, 2, 3, etc. Useful to" \
                        " do \'#duplicate{..., select=\"es=<pid>\"}\'.")
 

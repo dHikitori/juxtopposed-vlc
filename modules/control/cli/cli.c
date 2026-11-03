@@ -1059,7 +1059,7 @@ static void Deactivate( vlc_object_t *p_this )
 #define QUIET_LONGTEXT N_( \
     "By default the rc interface plugin will start a DOS command box. " \
     "Enabling the quiet mode will not bring this command box but can also " \
-    "be pretty annoying when you want to stop VLC and no video window is " \
+    "be pretty annoying when you want to stop Hakone and no video window is " \
     "open." )
 #endif
 

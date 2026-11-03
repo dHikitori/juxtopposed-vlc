@@ -338,7 +338,7 @@ static const char vlc_preparser_usage[] = N_(
     "  udp://[[<source address>]@[<bind address>][:<bind port>]]\n"
     "                                 UDP stream sent by a streaming server\n"
     "  vlc://pause:<seconds>          Pause the playlist for a certain time\n"
-    "  vlc://quit                     Special item to quit VLC\n"
+    "  vlc://quit                     Special item to quit Hakone\n"
     "\n"
 );
 

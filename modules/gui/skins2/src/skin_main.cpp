@@ -486,8 +486,8 @@ static void WindowClose( vlc_window_t *pWnd )
 #define SKINS2_CONFIG_LONG N_("Windows configuration of the last skin used. " \
         "This option is updated automatically, do not touch it." )
 #define SKINS2_SYSTRAY      N_("Systray icon")
-#define SKINS2_SYSTRAY_LONG N_("Show a systray icon for VLC")
-#define SKINS2_TASKBAR      N_("Show VLC on the taskbar")
+#define SKINS2_SYSTRAY_LONG N_("Show a systray icon for Hakone")
+#define SKINS2_TASKBAR      N_("Show Hakone on the taskbar")
 #define SKINS2_TRANSPARENCY      N_("Enable transparency effects")
 #define SKINS2_TRANSPARENCY_LONG N_("You can disable all transparency effects"\
     " if you want. This is mainly useful when moving windows does not behave" \

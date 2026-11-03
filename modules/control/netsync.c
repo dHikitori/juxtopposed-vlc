@@ -60,7 +60,7 @@ static void Close(vlc_object_t *);
 
 #define NETSYNC_TEXT N_("Network master clock")
 #define NETSYNC_LONGTEXT N_("When set, " \
-  "this VLC instance will act as the master clock for synchronization " \
+  "this Hakone instance will act as the master clock for synchronization " \
   "for clients listening")
 
 #define MIP_TEXT N_("Master server IP address")

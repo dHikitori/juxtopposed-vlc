@@ -226,7 +226,7 @@ static const struct vlc_logger_operations *Open(vlc_object_t *obj,
 
 static const char *const level_list[] = { "", "errors", "warnings", "info", "debug", "silent" };
 static const char *const level_text[] = {
-    N_("Use VLC log level"), N_("Errors only"), N_("Errors and warnings"),
+    N_("Use Hakone log level"), N_("Errors only"), N_("Errors and warnings"),
     N_("Information, warnings and errors"), N_("Debug"), N_("Silent")
 };
 
@@ -244,7 +244,7 @@ static const int verbosity_values[] = {
 static const char *const verbosity_text[] = { N_("Default"), N_("Info"), N_("Error"), N_("Warning"), N_("Debug") };
 
 #define FILE_LOG_TEXT N_("Log to file")
-#define FILE_LOG_LONGTEXT N_("Log all VLC messages to a text file.")
+#define FILE_LOG_LONGTEXT N_("Log all Hakone messages to a text file.")
 
 #define LOGFILE_NAME_TEXT N_("Log filename")
 #define LOGFILE_NAME_LONGTEXT N_("Specify the log filename.")
@@ -268,7 +268,7 @@ vlc_module_begin()
     add_string("logmode", "text", LOGMODE_TEXT, LOGMODE_LONGTEXT)
         change_string_list(mode_list, mode_list_text)
     add_string("log-level", "", N_("File log level"),
-               N_("Choose the messages to save in the log file. The VLC log level uses --log-verbose or --verbose."))
+               N_("Choose the messages to save in the log file. The Hakone log level uses --log-verbose or --verbose."))
         change_string_list(level_list, level_text)
     add_integer("log-verbose", -1, LOGVERBOSE_TEXT, LOGVERBOSE_LONGTEXT)
         change_integer_list(verbosity_values, verbosity_text)

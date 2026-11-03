@@ -253,7 +253,7 @@ NSString *const VLCOpenTextFieldWasClicked = @"VLCOpenTextFieldWasClicked";
     [_netUDPMPortLabel setStringValue: _NS("Port")];
     [_netHTTPURLLabel setStringValue: _NS("URL")];
     [_netHelpLabel setStringValue: _NS("To Open a usual network stream (HTTP, RTSP, RTMP, MMS, FTP, etc.), just enter the URL in the field above. If you want to open a RTP or UDP stream, press the button below.")];
-    [_netHelpUDPLabel setStringValue: _NS("If you want to open a multicast stream, enter the respective IP address given by the stream provider. In unicast mode, VLC will use your machine's IP automatically.\n\nTo open a stream using a different protocol, just press Cancel to close this sheet.")];
+    [_netHelpUDPLabel setStringValue: _NS("If you want to open a multicast stream, enter the respective IP address given by the stream provider. In unicast mode, Hakone will use your machine's IP automatically.\n\nTo open a stream using a different protocol, just press Cancel to close this sheet.")];
     _netHTTPURLTextField.accessibilityLabel = _NS("Enter a stream URL here. To open RTP or UDP streams, use the respective button below.");
     [_netUDPCancelButton setTitle: _NS("Cancel")];
     [_netUDPOKButton setTitle: _NS("Open")];
