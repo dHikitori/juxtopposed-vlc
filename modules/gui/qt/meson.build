@@ -304,7 +304,7 @@ qt6_dep = dependency('qt6',
     private_headers: true,
     required: get_option('qt'))
 
-# The add-on tests take only this part of qt_extra_flags.
+# Qt tests take only this part of qt_extra_flags (see test/meson.build).
 qt_yield_flags = []
 # Qt module doesn't provide the framework path to moc executable, so we
 # need to help moc find them. It's needed for QtQml/ module registration.
@@ -2105,7 +2105,7 @@ if qt6_dep.found()
                 'suite': ['qt', 'addons'],
                 'include_directories': addon_test in ['native_artwork_assets', 'native_source_resolver', 'native_player_analysis', 'visualizer_clock', 'stream_proxy'] ? [qt_include_dir, include_directories('../../..')] : qt_include_dir,
                 'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
-                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines + qt_yield_flags,
+                'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines,
                 'link_args': qt_link_args + display_links,
                 'depends': [addon_worker_dependencies, addon_visualizer_process, bundled_addon_targets],
                 'env': addon_worker_environment,

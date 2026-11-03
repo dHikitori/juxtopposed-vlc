@@ -74,7 +74,11 @@ foreach vlc_test: vlc_tests
     endif
 
     moc_sources = []
+    # Qt tests (the ones with moc input) need the Qt header workaround the
+    # Qt module uses (qt_yield_flags in modules/gui/qt/meson.build).
+    qt_test_args = []
     if (vlc_test.has_key('moc_headers') or vlc_test.has_key('moc_sources')) and qt6_dep.found()
+        qt_test_args = get_variable('qt_yield_flags', [])
         moc_sources += qt6.preprocess(
             moc_headers: vlc_test.get('moc_headers', []),
             moc_sources: vlc_test.get('moc_sources', []),
@@ -93,7 +97,7 @@ foreach vlc_test: vlc_tests
         dependencies: [vlc_test.get('dependencies', []),
             libvlccore_deps, opengl_dep],
         c_args: [vlc_test.get('c_args', []), common_args],
-        cpp_args: [vlc_test.get('cpp_args', []), common_args],
+        cpp_args: [vlc_test.get('cpp_args', []), qt_test_args, common_args],
         objc_args: [vlc_test.get('objc_args', []), common_args])
 
     # Handle optional test wrapper (e.g., xvfb-run for X11 tests)
