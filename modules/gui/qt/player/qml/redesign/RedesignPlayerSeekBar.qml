@@ -11,6 +11,9 @@ RedesignSeekBar {
     signal dragStarted()
     signal dragFinished(real position, bool commit)
     signal seekRequested(real position)
+    // The wheel over the bar jumps through the media, as in the classic
+    // interface. The player turns the event into short jumps.
+    signal wheelSeekRequested(var event)
     playbackPosition: playerPosition
 
     function beginDrag() {
@@ -41,6 +44,15 @@ RedesignSeekBar {
             } else if (!root.pressed && root.dragActive) finishDragTimer.restart()
         }
         onCanceled: { root.pointerCancelled = true; finishDragTimer.stop(); root.finishDrag(false) }
+    }
+    WheelHandler {
+        target: null
+        orientation: Qt.Vertical | Qt.Horizontal
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: event => {
+            if (root.mediaStarted && !root.pressed && !root.dragActive) root.wheelSeekRequested(event)
+            event.accepted = true
+        }
     }
     Binding on value {
         when: !root.pressed && !root.dragActive

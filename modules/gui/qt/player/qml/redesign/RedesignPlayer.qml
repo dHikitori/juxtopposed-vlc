@@ -266,6 +266,18 @@ FocusScope {
         onWheelUpDown: steps => adjust(steps)
         onWheelLeftRight: steps => adjust(steps)
     }
+    // Each wheel step over the seek bar is a short jump (short-jump-size).
+    WheelToVLCConverter {
+        id: seekWheel
+        function jump(steps) {
+            for (let i = 0; i < Math.abs(steps); ++i) {
+                if (steps > 0) Player.jumpFwd()
+                else Player.jumpBwd()
+            }
+        }
+        onWheelUpDown: steps => jump(steps)
+        onWheelLeftRight: steps => jump(-steps)
+    }
     RedesignSleepTimer { id: sleepTimer; onTriggered: MainPlaylistController.pause() }
     RedesignIdentityDialog {
         id: identityDialog
@@ -536,6 +548,7 @@ FocusScope {
                 volumeWheel.qmlWheelEvent(event)
             }
         }
+        onSeekWheelRequested: event => seekWheel.qmlWheelEvent(event)
         onMuteRequested: Player.muted = !Player.muted
         onFullscreenRequested: MainCtx.toggleInterfaceFullScreen()
         onMinimizeRequested: MainCtx.requestInterfaceMinimized()

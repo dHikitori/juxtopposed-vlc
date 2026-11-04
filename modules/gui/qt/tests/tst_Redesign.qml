@@ -846,6 +846,29 @@ TestCase {
         keyClick(Qt.Key_Right)
         verify(player.position > before)
     }
+    // https://github.com/hakone-org/hakone/issues/34: the wheel over either
+    // seek bar asks for a jump, without moving the bar itself.
+    SignalSpy { id: seekWheelSpy; target: player; signalName: "seekWheelRequested" }
+    function test_wheelOverSeekBarRequestsJumps_data() {
+        return [{tag: "player", mini: false}, {tag: "mini-player", mini: true}]
+    }
+    function test_wheelOverSeekBarRequestsJumps(data) {
+        player.libraryOpen = data.mini
+        player.libraryExpanded = data.mini
+        seekWheelSpy.clear()
+        const slider = findChild(player, data.mini ? "miniPlayerSeekBar" : "seekBar")
+        const before = slider.value
+        mouseWheel(slider, slider.width / 2, slider.height / 2, 0, 120)
+        compare(seekWheelSpy.count, 1)
+        compare(seekWheelSpy.signalArguments[0][0].angleDelta.y, 120)
+        mouseWheel(slider, slider.width / 2, slider.height / 2, 0, -120)
+        compare(seekWheelSpy.count, 2)
+        compare(slider.value, before)
+        compare(seekSpy.count, 0)
+        player.started = false
+        mouseWheel(slider, slider.width / 2, slider.height / 2, 0, 120)
+        compare(seekWheelSpy.count, 2)
+    }
     readonly property url previewFixture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAAAFUlEQVR4nGP8z0AaYCJR/agG2mgAAMeRARHH28OHAAAAAElFTkSuQmCC"
     function test_seekBackdropFollowsPreviewLifetime_data() {
         return [{tag: "player", mini: false}, {tag: "mini-player", mini: true}]

@@ -39,6 +39,7 @@ Rectangle {
     signal previous()
     signal next()
     signal seekRequested(real position)
+    signal seekWheelRequested(var event)
     signal seekDragStarted()
     signal seekDragFinished(real position, bool commit)
     signal previewRequested(real position)
@@ -165,6 +166,7 @@ Rectangle {
         previewImage: root.previewImage; previewImagePosition: root.previewImagePosition
         timeForPosition: root.timeForPosition
         onSeekRequested: position => root.seekRequested(position)
+        onWheelSeekRequested: event => root.seekWheelRequested(event)
         onDragStarted: root.seekDragStarted()
         onDragFinished: (position, commit) => root.seekDragFinished(position, commit)
         onPreviewRequested: position => root.previewRequested(position)

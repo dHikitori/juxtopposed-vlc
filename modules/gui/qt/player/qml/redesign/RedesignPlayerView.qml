@@ -155,6 +155,7 @@ FocusScope {
     signal seekDragFinished(real value, bool commit)
     signal volumeRequested(real value)
     signal volumeWheelRequested(var event)
+    signal seekWheelRequested(var event)
     signal muteRequested()
     signal fullscreenRequested()
     signal minimizeRequested()
@@ -546,6 +547,7 @@ FocusScope {
         onPrevious: root.previous()
         onNext: root.next()
         onSeekRequested: position => root.seekRequested(position)
+        onSeekWheelRequested: event => root.seekWheelRequested(event)
         onSeekDragStarted: root.seekDragStarted()
         onSeekDragFinished: (position, commit) => root.seekDragFinished(position, commit)
         onPreviewRequested: position => root.seekPreviewRequested(position)
@@ -971,6 +973,7 @@ FocusScope {
                     onDragStarted: root.seekDragStarted()
                     onDragFinished: (position, commit) => root.seekDragFinished(position, commit)
                     onSeekRequested: position => root.seekRequested(position)
+                    onWheelSeekRequested: event => root.seekWheelRequested(event)
                     Layout.fillWidth: true
                     Layout.minimumWidth: theme.dp(40)
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
