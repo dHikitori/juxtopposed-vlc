@@ -588,7 +588,7 @@ Item {
                         onCanceled: { from = -1; root.dragDestination = -1 }
                     }
                 }
-                RedesignButton {
+                RedesignMediaButton {
                     id: mediaButton
                     objectName: "libraryMediaItem" + delegate.index
                     anchors.fill: parent

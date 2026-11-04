@@ -119,6 +119,10 @@ FocusScope {
         Keys.forwardTo: [root]
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
     }
+    component QueueMediaButton: RedesignMediaButton {
+        Keys.forwardTo: [root]
+        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+    }
     component QueueToolButton: QueueButton {
         foreground: theme.playerLabel
         selectedIconForeground: theme.playerLabel
@@ -209,7 +213,7 @@ FocusScope {
                         onCanceled: originIndex = -1
                     }
                 }
-                QueueButton {
+                QueueMediaButton {
                     objectName: row.queueIndex >= 0 ? "queueItem_" + row.queueIndex : "queueGroup_" + row.index
                     Layout.fillWidth: true
                     text: row.title
@@ -222,7 +226,6 @@ FocusScope {
                         Text { Layout.fillWidth: true; text: row.title; textFormat: Text.PlainText; elide: Text.ElideRight; font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground }
                         Text { objectName: "queueDuration_" + row.queueIndex; text: root.durationText(row.model.duration); font.pixelSize: theme.dp(14); color: theme.playerLabel }
                     }
-                    mediaItem: true
                     singleClickActivate: root.singleClickActivate
                     onActivated: {
                         if (row.queueIndex < 0) root.hierarchyModel.toggleExpanded(row.index)

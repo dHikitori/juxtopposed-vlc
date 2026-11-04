@@ -22,13 +22,12 @@ T.Button {
     property real cornerRadius: theme.controlRadius
     property bool selected: false
     property bool highlightSelection: true
-    // Media rows use selection on click and a separate activation gesture.
+    // Media rows (RedesignMediaButton) select on click and activate separately.
     property bool mediaItem: false
     property bool handleMediaKeys: true
     property bool singleClickActivate: false
     signal activated()
     onClicked: if (mediaItem && singleClickActivate) activated()
-    onDoubleClicked: if (mediaItem && !singleClickActivate) activated()
     Keys.onPressed: event => {
         if (mediaItem && handleMediaKeys && [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space].includes(event.key)) {
             if (!event.isAutoRepeat) activated()

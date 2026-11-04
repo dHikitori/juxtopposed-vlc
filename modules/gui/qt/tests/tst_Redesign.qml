@@ -680,6 +680,25 @@ TestCase {
         verify(!subtitles.selected)
         verify(!settings.selected)
     }
+    // https://github.com/hakone-org/hakone/issues/37: a click soon after the
+    // click that closed a menu must open it again, not count as a double-click.
+    function test_quickClickReopensMenu() {
+        const subtitles = findChild(player, "subtitleButton")
+        mouseClick(subtitles)
+        tryCompare(trackPicker, "opened", true)
+        mouseDoubleClickSequence(subtitles)
+        tryCompare(trackPicker, "opened", true)
+        verify(subtitles.selected)
+        mouseClick(subtitles)
+        tryCompare(trackPicker, "visible", false)
+
+        const settings = findChild(player, "playbackSettingsButton")
+        mouseClick(settings)
+        compare(player.settingsPage, "playback")
+        mouseDoubleClickSequence(settings)
+        compare(player.settingsPage, "playback")
+        player.settingsPage = ""
+    }
     function test_selectedToolbarGlyphs_data() {
         return [{tag: "settings-dark", button: "playbackSettingsButton", x: 7, y: 11, light: false, accent: "#d37918"},
                 {tag: "subtitles-dark", button: "subtitleButton", x: 12, y: 8, light: false, accent: "#d37918"},

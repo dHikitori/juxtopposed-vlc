@@ -93,14 +93,14 @@ Flickable {
                                 readonly property string title: model.title || model.name || ""
                                 readonly property string displayTitle: title + (!root.expanded && section.modelData.key === "listening" && model.main_artist ? " - " + model.main_artist : "")
                                 readonly property string artwork: root.artworkForItem(model)
-                                RedesignButton {
+                                RedesignMediaButton {
                                     id: button
                                     objectName: "homeItem_" + section.modelData.key + "_" + entry.index
                                     anchors.fill: parent
                                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                                     text: entry.displayTitle
                                     handleMediaKeys: false
-                                    mediaItem: true; singleClickActivate: root.singleClickActivate
+                                    singleClickActivate: root.singleClickActivate
                                     selected: root.selectedKey === section.modelData.key + "/" + entry.index
                                     onClicked: root.selectedKey = section.modelData.key + "/" + entry.index
                                     onActivated: root.activated(section.modelData.key, entry.index)
