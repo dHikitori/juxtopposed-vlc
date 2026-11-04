@@ -57,6 +57,23 @@ int main()
     assert( limits.active( 1, high ).empty() );
     assert( limits.active( 2, high ).size() == 1 );
     assert( limits.active( 2, low ).empty() );
+    // A positive delay shows cues later: the cues starting after the delayed
+    // target are needed too, up to where demuxing resumes.
+    SubtitleSeekIndex later;
+    later.add( { 1, 100, 5, VLC_TICK_FROM_SEC(1), VLC_TICK_FROM_SEC(1) } );
+    later.add( { 1, 200, 5, VLC_TICK_FROM_SEC(3), VLC_TICK_FROM_SEC(1) } );
+    later.add( { 1, 300, 5, VLC_TICK_FROM_SEC(5), VLC_TICK_FROM_SEC(1) } );
+    later.add( { 1, 400, 5, VLC_TICK_FROM_SEC(7), -1 } );
+    later.add( { 2, 200, 5, VLC_TICK_FROM_SEC(3), VLC_TICK_FROM_SEC(1) } );
+    auto unfinished = later.unfinished( 1, VLC_TICK_FROM_SEC(2), 400 );
+    assert( unfinished.size() == 2 && unfinished[0].cluster == 200
+            && unfinished[1].cluster == 300 ); // the cue at 1s is over
+    assert( later.unfinished( 1, VLC_TICK_FROM_SEC(1), 200 ).size() == 1 );
+    assert( later.unfinished( 1, VLC_TICK_FROM_SEC(1), 100 ).empty() );
+    assert( later.unfinished( 1, VLC_TICK_FROM_SEC(8), UINT64_MAX ).size() == 1 );
+    assert( later.unfinished( 2, 0, UINT64_MAX ).size() == 1 );
+    assert( later.unfinished( 3, 0, UINT64_MAX ).empty() );
+
     vlc_tick_t target;
     assert( SubtitleSeekIndex::targetBeforeDelay(10, 5, target) && target == 5 );
     assert( SubtitleSeekIndex::targetBeforeDelay(10, -5, target) && target == 15 );

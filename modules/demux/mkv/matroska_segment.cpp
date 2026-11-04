@@ -820,8 +820,8 @@ void matroska_segment_c::PrerollSubtitles( demux_t &demuxer, vlc_tick_t target,
         vlc_tick_t cue_target;
         if( !SubtitleSeekIndex::targetBeforeDelay(target, delay, cue_target) )
             continue;
-        const auto active = _seeker.get_subtitle_seekpoints( id, cue_target );
-        points.insert( points.end(), active.begin(), active.end() );
+        const auto unfinished = _seeker.get_subtitle_seekpoints( id, cue_target, start );
+        points.insert( points.end(), unfinished.begin(), unfinished.end() );
     }
     std::sort( points.begin(), points.end(), [](const auto &a, const auto &b) {
         return std::tie(a.cluster, a.relative) < std::tie(b.cluster, b.relative);
@@ -887,9 +887,12 @@ void matroska_segment_c::PrerollSubtitles( demux_t &demuxer, vlc_tick_t target,
                 vlc_tick_t delay = 0;
                 es_out_Control(demuxer.out, ES_OUT_GET_ES_DELAY, track->p_es, &delay);
                 vlc_tick_t cue_target;
+                // Restore the cues that are not over at the delayed target:
+                // the ones from the resume position on are demuxed normally.
                 if( SubtitleSeekIndex::targetBeforeDelay(target, delay, cue_target)
-                    && block_position < start && pts <= cue_target
-                    && uint64_t(cue_target) - uint64_t(pts) < uint64_t(length)
+                    && block_position < start
+                    && (pts > cue_target
+                        || uint64_t(cue_target) - uint64_t(pts) < uint64_t(length))
                     && delivered.insert(block_position).second )
                 {
                     msg_Dbg( &demuxer, "seek: subtitle preroll track %u at %" PRIu64, track->i_number, block_position );

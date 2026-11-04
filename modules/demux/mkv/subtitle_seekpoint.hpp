@@ -50,19 +50,36 @@ public:
         }
     }
 
+    static bool isActive( const Seekpoint &point, vlc_tick_t target )
+    {
+        // Unsigned subtraction handles negative cue timestamps without
+        // overflowing at the ends of the signed timestamp range.
+        return point.pts <= target && (point.duration == -1
+            || uint64_t(target) - uint64_t(point.pts) < uint64_t(point.duration));
+    }
+
     seekpoints_t active( unsigned int track, vlc_tick_t target ) const
     {
         seekpoints_t result;
         auto it = points.lower_bound( std::make_tuple( track, 0, 0, std::numeric_limits<vlc_tick_t>::min() ) );
         for( ; it != points.end() && it->second.track == track; ++it )
-        {
-            const auto &point = it->second;
-            // Unsigned subtraction handles negative cue timestamps without
-            // overflowing at the ends of the signed timestamp range.
-            if( point.pts <= target && (point.duration == -1
-                || uint64_t(target) - uint64_t(point.pts) < uint64_t(point.duration)) )
-                result.push_back( point );
-        }
+            if( isActive( it->second, target ) )
+                result.push_back( it->second );
+        return result;
+    }
+
+    // Cues that are active at target or start after it, stored before the
+    // cluster at position before. A positive subtitle delay shows cues later,
+    // so after a seek the cues starting between the delayed target and the
+    // position where demuxing resumes are still to be shown.
+    seekpoints_t unfinished( unsigned int track, vlc_tick_t target, uint64_t before ) const
+    {
+        seekpoints_t result;
+        auto it = points.lower_bound( std::make_tuple( track, 0, 0, std::numeric_limits<vlc_tick_t>::min() ) );
+        for( ; it != points.end() && it->second.track == track
+               && it->second.cluster < before; ++it )
+            if( it->second.pts > target || isActive( it->second, target ) )
+                result.push_back( it->second );
         return result;
     }
 

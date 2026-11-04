@@ -105,8 +105,8 @@ class SegmentSeeker
 
         void add_seekpoint( track_id_t, Seekpoint );
         void add_subtitle_seekpoint( SubtitleSeekpoint point ) { _subtitle_seekpoints.add( point ); }
-        subtitle_seekpoints_t get_subtitle_seekpoints( track_id_t track, vlc_tick_t target ) const
-        { return _subtitle_seekpoints.active( track, target ); }
+        subtitle_seekpoints_t get_subtitle_seekpoints( track_id_t track, vlc_tick_t target, fptr_t before ) const
+        { return _subtitle_seekpoints.unfinished( track, target, before ); }
 
         seekpoint_pair_t get_seekpoints_around( vlc_tick_t, seekpoints_t const& );
         Seekpoint get_first_seekpoint_around( vlc_tick_t, seekpoints_t const&, Seekpoint::TrustLevel = Seekpoint::TRUSTED );
