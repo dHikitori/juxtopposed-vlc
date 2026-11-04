@@ -46,7 +46,9 @@ addon_bundled_names = thesubtitledb tvmaze episodes
 addon_bundled_stamps =
 all-local: $(VLC_QT_CHECK_DEP) $(QML_MODULE_STAMPS) $(addon_bundled_stamps)
 
+if ENABLE_QT
 BUILT_SOURCES += subtitle_consumer_key.hpp addon_distribution_paths.hpp
+endif
 CLEANFILES += subtitle_consumer_key.hpp addon_distribution_paths.hpp
 .PHONY: subtitle-consumer-key-force
 subtitle_consumer_key.hpp: subtitle-consumer-key-force $(srcdir)/scripts/subtitle-consumer-key.py
