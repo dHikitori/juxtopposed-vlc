@@ -9,9 +9,9 @@ Hakone is in beta. Download it from [hakone.org](https://hakone.org/) or the
 
 ![The player showing a misty cedar-lined path, paused at 22 seconds](doc/images/redesign/player.jpg)
 
-| Library sidebar | Video settings |
+| Library sidebar | Video settings and seek preview |
 | --- | --- |
-| ![The library sidebar listing the folder's videos beside the playing video](doc/images/redesign/sidebar.jpg) | ![Video settings open beside the playing video](doc/images/redesign/video-settings.jpg) |
+| ![The library sidebar listing the Autumn in Hakone folder beside a lakeside video](doc/images/redesign/sidebar.jpg) | ![Video settings open beside a playing film, with a thumbnail preview above the seek bar](doc/images/redesign/video-settings.jpg) |
 
 | Episodes | Home |
 | --- | --- |
