@@ -113,7 +113,7 @@ set_tests_properties(addon_metadata_catalogue PROPERTIES TIMEOUT 90)
 # Keep the real worker case in this suite. A missing worker omits the target.
 set(HAKONE_METADATA_ATTEMPT_WORKER "$ENV{VLC_ADDON_WORKER}" CACHE FILEPATH "Native worker for metadata completion tests")
 if(NOT HAKONE_METADATA_ATTEMPT_WORKER AND DEFINED VLC_BUILD_DIR)
-    set(HAKONE_METADATA_ATTEMPT_WORKER "${VLC_BUILD_DIR}/modules/gui/qt/vlc-addon-worker")
+    set(HAKONE_METADATA_ATTEMPT_WORKER "${VLC_BUILD_DIR}/modules/gui/qt/hakone-addon-worker")
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND EXISTS "${HAKONE_METADATA_ATTEMPT_WORKER}")
     add_executable(addon_metadata_attempt_process "../tests/fixtures/addon_metadata_attempt_process.c")

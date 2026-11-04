@@ -95,7 +95,7 @@ AddonManager::AddonManager(const QString& directory, std::unique_ptr<QNetworkAcc
     });
     if (!m_storage->mount(&m_hostServices)) m_storage.reset();
     loadProviderOrder(false);
-    const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vlc-addon-worker")
+    const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("hakone-addon-worker")
 #ifdef Q_OS_WIN
         + QStringLiteral(".exe")
 #endif

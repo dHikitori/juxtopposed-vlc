@@ -413,7 +413,7 @@ Stable tags create draft stable releases; prerelease tags create draft prereleas
 
 ## Isolated add-on worker in release builds
 
-Release builds include `vlc-addon-worker` next to VLC. The release also
+Release builds include `hakone-addon-worker` next to Hakone. The release also
 contains the TheSubtitleDB reference package. The release setup script uses
 `addon-rust-version.txt`. This file selects
 [Rust 1.99.1](https://blog.rust-lang.org/releases/). Use Rust 1.97

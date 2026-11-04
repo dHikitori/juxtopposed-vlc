@@ -3,7 +3,7 @@ set -euo pipefail
 stage=$1 output=$2 tag=$3
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 [[ $(uname -m) == x86_64 ]] || { echo 'Linux release target must be x86_64' >&2; exit 1; }
-[[ -x "$stage/bin/vlc-addon-worker" ]] || { echo 'The stage directory has no executable add-on worker.' >&2; exit 1; }
+[[ -x "$stage/bin/hakone-addon-worker" ]] || { echo 'The stage directory has no executable add-on worker.' >&2; exit 1; }
 appdir="$output/linux-x86_64/AppDir"
 [[ ! -e "$appdir" ]] || { echo "Remove old AppDir first: $appdir" >&2; exit 1; }
 mkdir -p "$appdir/usr" "$output/tools/downloads"
@@ -61,7 +61,7 @@ export LD_LIBRARY_PATH="$stage/lib:$stage/lib/vlc:${RELEASE_DEPS_DIR:-$root/buil
 # linuxdeploy recursively scans the installed VLC modules in AppDir.
 "$output/tools/linuxdeploy" --appdir "$appdir" \
     --executable "$appdir/usr/bin/hakone" \
-    --executable "$appdir/usr/bin/vlc-addon-worker" \
+    --executable "$appdir/usr/bin/hakone-addon-worker" \
     --executable "$appdir/usr/libexec/vlc/vlc-preparser" \
     --executable "$appdir/usr/libexec/vlc/vlc-cache-gen" \
     --executable "$appdir/usr/libexec/vlc/vlc-qt-check" \

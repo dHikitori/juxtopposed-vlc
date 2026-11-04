@@ -82,7 +82,7 @@ class PackageTests(unittest.TestCase):
                 root = Path(temp)
                 stage, output, qt, sources = [root / p for p in ('stage', 'output', 'qt', 'sources')]
                 output.mkdir()
-                for name in ('bin/hakone', 'bin/vlc-addon-worker', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
+                for name in ('bin/hakone', 'bin/hakone-addon-worker', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
                              'libexec/vlc/vlc-qt-check', 'lib/libvlc.dylib',
                              'lib/vlc/plugins/gui/libqt_plugin.dylib'):
                     path = stage / name
@@ -118,7 +118,7 @@ class PackageTests(unittest.TestCase):
                     nonlocal verified, sealed_info, zipped
                     self.assertTrue(kwargs['check'])
                     if str(args[0]).endswith('/macdeployqt'):
-                        worker = app / 'Contents/MacOS/vlc-addon-worker'
+                        worker = app / 'Contents/MacOS/hakone-addon-worker'
                         self.assertTrue(worker.is_file())
                         self.assertIn(f'-executable={worker}', args)
                     if args[0] == 'codesign':
@@ -153,10 +153,10 @@ class PackageTests(unittest.TestCase):
                     archive = package.macos(stage, output, package.validate_tag(None)['version'], 'a' * 40)
                 self.assertTrue(archive.exists())
                 self.assertEqual(imaged, [output / archive.name.replace('.zip', '.dmg')])
-                self.assertIn(app / 'Contents/MacOS/vlc-addon-worker', signed_paths)
-                self.assertLess(signed_paths.index(app / 'Contents/MacOS/vlc-addon-worker'), signed_paths.index(app))
+                self.assertIn(app / 'Contents/MacOS/hakone-addon-worker', signed_paths)
+                self.assertLess(signed_paths.index(app / 'Contents/MacOS/hakone-addon-worker'), signed_paths.index(app))
                 audit = json.loads((output / f'macos-{arch}-dependency-audit.json').read_text())
-                self.assertIn('Contents/MacOS/vlc-addon-worker', audit)
+                self.assertIn('Contents/MacOS/hakone-addon-worker', audit)
                 metadata = json.loads((output / f'macos-{arch}-build.json').read_text())
                 self.assertEqual(metadata['signing'], 'ad-hoc; no Developer ID or notarization')
 
@@ -166,7 +166,7 @@ class PackageTests(unittest.TestCase):
             root = Path(temp)
             stage = root / 'stage'
             stage.mkdir()
-            for name in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll',
+            for name in ('hakone.exe', 'hakone-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll',
                          'vlc.win32.nsi', 'spad.nsi'):
                 (stage / name).write_bytes(b'fixture')
             for name in ('plugins', 'NSIS', 'helpers', 'languages', 'sdk', 'share/vlc/addons'):
@@ -181,7 +181,7 @@ class PackageTests(unittest.TestCase):
                 scripts.append(script.name)
                 # The installer stage holds the package without its portable
                 # profile or SDK, plus the NSIS scripts and helpers.
-                self.assertTrue((script.parent / 'vlc-addon-worker.exe').is_file())
+                self.assertTrue((script.parent / 'hakone-addon-worker.exe').is_file())
                 self.assertTrue((script.parent / 'share/vlc/addons').is_dir())
                 self.assertTrue((script.parent / 'NSIS/nsProcess.dll').is_file())
                 self.assertFalse((script.parent / 'portable').exists())
@@ -208,7 +208,7 @@ class PackageTests(unittest.TestCase):
             self.assertTrue(archive.is_file())
             with zipfile.ZipFile(archive) as bundled:
                 self.assertIn('hakone-win64/portable/', bundled.namelist())
-                self.assertIn('hakone-win64/vlc-addon-worker.exe', bundled.namelist())
+                self.assertIn('hakone-win64/hakone-addon-worker.exe', bundled.namelist())
                 for name in ('vlc.win32.nsi', 'spad.nsi', 'NSIS/', 'helpers/', 'languages/'):
                     self.assertNotIn('hakone-win64/' + name, bundled.namelist())
                 self.assertEqual(bundled.read('hakone-win64/SOURCE_COMMIT.txt'), ('a' * 40 + '\n').encode())

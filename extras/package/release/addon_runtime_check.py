@@ -22,7 +22,7 @@ def installation_files(executable):
         binary_directory = executable.parent
         data_directory = executable.parent.parent / "share/vlc"
     suffix = ".exe" if executable.suffix.lower() == ".exe" else ""
-    return (binary_directory / ("vlc-addon-worker" + suffix),
+    return (binary_directory / ("hakone-addon-worker" + suffix),
             data_directory / "addons/reference/thesubtitledb/dist/addon.wasm")
 
 

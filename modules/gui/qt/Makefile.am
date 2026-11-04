@@ -409,14 +409,14 @@ EXTRA_DIST += addons/worker/Cargo.toml addons/worker/Cargo.lock addons/worker/sr
 	tests/fixtures/addon-worker-fixture.py
 bin_SCRIPTS =
 if BUILD_ADDON_RUNTIME
-bin_SCRIPTS += vlc-addon-worker$(EXEEXT)
-CLEANFILES += vlc-addon-worker$(EXEEXT)
-vlc-addon-worker$(EXEEXT): $(srcdir)/addons/worker/Cargo.toml $(srcdir)/addons/worker/Cargo.lock $(srcdir)/addons/worker/src/main.rs $(srcdir)/scripts/build-addon-worker.py
+bin_SCRIPTS += hakone-addon-worker$(EXEEXT)
+CLEANFILES += hakone-addon-worker$(EXEEXT)
+hakone-addon-worker$(EXEEXT): $(srcdir)/addons/worker/Cargo.toml $(srcdir)/addons/worker/Cargo.lock $(srcdir)/addons/worker/src/main.rs $(srcdir)/scripts/build-addon-worker.py
 	$(AM_V_GEN)$(PYTHON3) $(srcdir)/scripts/build-addon-worker.py \
 		--cargo "$(ADDON_CARGO)" --manifest "$(abs_srcdir)/addons/worker/Cargo.toml" \
 		--output "$@" --target "$(ADDON_RUST_TARGET)" --linker "$(ADDON_RUST_LINKER)" \
 		--system "$(ADDON_RUNTIME_HOST_OS)" --cpu "$(ADDON_RUNTIME_HOST_CPU)" $(ADDON_RUNTIME_CROSS)
-libqt_plugin_la_CPPFLAGS += -DVLC_ADDON_WORKER_BUILD_PATH='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"'
+libqt_plugin_la_CPPFLAGS += -DVLC_ADDON_WORKER_BUILD_PATH='"$(abs_builddir)/hakone-addon-worker$(EXEEXT)"'
 
 # Build the bundled add-ons from source. Each package is staged in the build
 # tree, where the app and the tests load it, and installed from there. Cargo
@@ -3013,12 +3013,12 @@ CLEANFILES += tests/test_addon_metadata_attempt.moc
 test_qt_addon_metadata_attempt_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) \
     -DHAKONE_ATTEMPT_PROCESS_FIXTURE='"$(abs_builddir)/addon_metadata_attempt_process$(EXEEXT)"' \
     -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(abs_srcdir)/tests/fixtures/metadata-attempt"' \
-    -DHAKONE_ATTEMPT_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
+    -DHAKONE_ATTEMPT_RUST_WORKER='"$(abs_builddir)/hakone-addon-worker$(EXEEXT)"' \
     -DHAKONE_ATTEMPT_FRENCH_TV_WASM='"$(abs_top_srcdir)/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm"'
 test_qt_addon_metadata_attempt_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_metadata_attempt_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_metadata_attempt_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
-test_qt_addon_metadata_attempt$(EXEEXT): addon_metadata_attempt_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
+test_qt_addon_metadata_attempt$(EXEEXT): addon_metadata_attempt_process$(EXEEXT) hakone-addon-worker$(EXEEXT)
 check_PROGRAMS += test_qt_addon_metadata_attempt
 TESTS += test_qt_addon_metadata_attempt
 
@@ -3031,13 +3031,13 @@ CLEANFILES += tests/test_addon_prepared_metadata_invocation.moc
 test_qt_addon_prepared_metadata_invocation_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) \
     -DHAKONE_PREPARED_OWNER_WRAP -DHAKONE_METADATA_PREPARATION_WRAP -DHAKONE_ARTWORK_READ_WRAP \
     -DHAKONE_PREPARED_PROCESS_FIXTURE='"$(abs_builddir)/addon_prepared_metadata_process$(EXEEXT)"' \
-    -DHAKONE_PREPARED_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
+    -DHAKONE_PREPARED_RUST_WORKER='"$(abs_builddir)/hakone-addon-worker$(EXEEXT)"' \
     -DHAKONE_PREPARED_FRENCH_TV_WASM='"$(abs_top_srcdir)/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm"' \
     -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(abs_srcdir)/tests/fixtures/metadata-attempt"'
 test_qt_addon_prepared_metadata_invocation_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_prepared_metadata_invocation_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS)
 test_qt_addon_prepared_metadata_invocation_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS) -Wl,--wrap=_ZN3vlc6addons11AddonWorker23enablePreparedLifecycleEv -Wl,--wrap=_ZNK3vlc6addons12PackageStore23metadataCatalogueReaderEv -Wl,--wrap=_ZNK3vlc6addons12AddonManager21nativeAuthorityReaderERK7QString -Wl,--wrap=_ZN12QImageReader4readEv
-test_qt_addon_prepared_metadata_invocation$(EXEEXT): addon_prepared_metadata_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
+test_qt_addon_prepared_metadata_invocation$(EXEEXT): addon_prepared_metadata_process$(EXEEXT) hakone-addon-worker$(EXEEXT)
 tests/test_addon_prepared_metadata_invocation.moc: $(srcdir)/tests/test_addon_prepared_metadata_invocation.cpp
 	$(AM_V_GEN)$(MOC) $(MOC_CPPFLAGS) -DHAKONE_PREPARED_OWNER_WRAP -DHAKONE_METADATA_PREPARATION_WRAP -DHAKONE_ARTWORK_READ_WRAP $< -o $@
 check_PROGRAMS += test_qt_addon_prepared_metadata_invocation
@@ -3376,12 +3376,12 @@ CLEANFILES += tests/test_addon_artwork_attempt_aggregate.moc
 test_qt_addon_artwork_attempt_aggregate_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -I$(top_srcdir) -I$(top_srcdir)/src \
     -DHAKONE_AGGREGATE_PROCESS_FIXTURE='"$(abs_builddir)/addon_metadata_attempt_process$(EXEEXT)"' \
     -DHAKONE_ATTEMPT_FIXTURE_DIR='"$(srcdir)/tests/fixtures/metadata-attempt"' \
-    -DHAKONE_AGGREGATE_RUST_WORKER='"$(abs_builddir)/vlc-addon-worker$(EXEEXT)"' \
+    -DHAKONE_AGGREGATE_RUST_WORKER='"$(abs_builddir)/hakone-addon-worker$(EXEEXT)"' \
     -DHAKONE_AGGREGATE_FRENCH_TV_WASM='"$(abs_top_srcdir)/modules/gui/qt/tests/fixtures/addons/french-tv/dist/addon.wasm"'
 test_qt_addon_artwork_attempt_aggregate_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_addon_artwork_attempt_aggregate_LDADD = libqt_addon_host.la $(QT_QTEST_COMMON_ldadd) $(ADDON_PLATFORM_LIBS) $(top_builddir)/lib/libvlc.la
 test_qt_addon_artwork_attempt_aggregate_LDFLAGS = $(QT_QTEST_COMMON_ldflags) $(ADDON_PLATFORM_LDFLAGS)
-test_qt_addon_artwork_attempt_aggregate$(EXEEXT): addon_metadata_attempt_process$(EXEEXT) vlc-addon-worker$(EXEEXT)
+test_qt_addon_artwork_attempt_aggregate$(EXEEXT): addon_metadata_attempt_process$(EXEEXT) hakone-addon-worker$(EXEEXT)
 check_PROGRAMS += test_qt_addon_artwork_attempt_aggregate
 TESTS += test_qt_addon_artwork_attempt_aggregate
 endif

@@ -23,7 +23,7 @@ TAG = build_msi.validate_tag(None)['version']
 class MsiTests(unittest.TestCase):
     def package(self, root):
         package = root / 'hakone-win64'
-        for name in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'hakone.ico',
+        for name in ('hakone.exe', 'hakone-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'hakone.ico',
                      'vlc-cache-gen.exe', 'vlc-preparser.exe', 'libstdc++-6.dll', 'vulkan-1.dll',
                      'README.txt', 'SOURCE_COMMIT.txt', 'libvlc.dll.a', 'plugins/codec/libavcodec_plugin.dll',
                      'lua/intf/cli.luac', 'share/vlc/addons/reference/episodes.zip',
@@ -59,7 +59,7 @@ class MsiTests(unittest.TestCase):
                             '-cg', 'CompTopLevelGroup', '-dr', 'APPLICATIONFOLDER', '-out', str(fragment)],
                            check=True, stdout=subprocess.DEVNULL)
             names = set(re.findall(r'<File Id="[^"]+" Name="([^"]+)"', fragment.read_text()))
-            self.assertEqual(names, {'vlc-addon-worker.exe', 'libstdc++-6.dll', 'vulkan-1.dll', 'SOURCE_COMMIT.txt'})
+            self.assertEqual(names, {'hakone-addon-worker.exe', 'libstdc++-6.dll', 'vulkan-1.dll', 'SOURCE_COMMIT.txt'})
             self.assertIn('<DirectoryRef Id="APPLICATIONFOLDER">', fragment.read_text())
             self.assertIn('<ComponentGroup Id="CompTopLevelGroup">', fragment.read_text())
 
@@ -102,8 +102,8 @@ class MsiTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'portable'):
                 build_msi.build(package, output, Path(temp), TAG)
             (package / 'portable').rmdir()
-            (package / 'vlc-addon-worker.exe').unlink()
-            with self.assertRaisesRegex(ValueError, 'vlc-addon-worker.exe'):
+            (package / 'hakone-addon-worker.exe').unlink()
+            with self.assertRaisesRegex(ValueError, 'hakone-addon-worker.exe'):
                 build_msi.build(package, output, Path(temp), TAG)
 
 

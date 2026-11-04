@@ -79,7 +79,7 @@ of the packages above.
 
 ## Portable add-on runtime
 
-Qt builds include `vlc-addon-worker`. This program runs executable Wasm add-ons
+Qt builds include `hakone-addon-worker`. This program runs executable Wasm add-ons
 in a separate process. Use Rust 1.97 or later and Cargo to build the worker.
 The `-Drust` option controls experimental native VLC modules. It does not
 control this worker.

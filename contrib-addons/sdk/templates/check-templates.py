@@ -3,7 +3,7 @@
 """Build each author template and check it as an install would.
 
   check-templates.py --validator <vlc-addon-validate> [--ui <AddonUi.js>]
-                     [--worker <vlc-addon-worker>]
+                     [--worker <hakone-addon-worker>]
 
 Each template is copied to a temporary folder. A Rust template runs its
 unit tests, builds for wasm32-unknown-unknown (offline) and gets its

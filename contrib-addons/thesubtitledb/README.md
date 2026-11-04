@@ -16,7 +16,7 @@ Use Rust stable with the `wasm32-unknown-unknown` target. Dependency versions ar
 rustup target add --toolchain stable wasm32-unknown-unknown
 RUSTUP_TOOLCHAIN=stable cargo test --locked
 sh build.sh
-python3 tests/test_worker.py --worker /absolute/path/to/vlc-addon-worker
+python3 tests/test_worker.py --worker /absolute/path/to/hakone-addon-worker
 ```
 
 `dist/addon.wasm` is the package module. The message ABI is `wasm-message-v1`. Its exports are `hakone_alloc`, `hakone_dealloc`, and `hakone_dispatch`. Tests use synthetic data. They cover invalid replies, identity conflicts, cancellation, and asset resolution. They do not read a developer environment file or use a live service.

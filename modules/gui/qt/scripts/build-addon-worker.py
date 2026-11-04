@@ -95,7 +95,7 @@ def main():
               file=sys.stderr)
         return result.returncode
     suffix = ".exe" if "windows" in target or (not target and os.name == "nt") else ""
-    built = target_dir / target / "release" / ("vlc-addon-worker" + suffix)
+    built = target_dir / target / "release" / ("hakone-addon-worker" + suffix)
     if not built.is_file():
         print("Cargo did not create the add-on worker program.", file=sys.stderr)
         return 1

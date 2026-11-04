@@ -19,7 +19,7 @@ $reference = (Resolve-Path $Reference).Path
 $expected = Get-ChildItem $reference -Recurse -File |
     ForEach-Object { $_.FullName.Substring($reference.Length + 1) } |
     Where-Object { $_ -notmatch '^(portable|sdk)\\' -and $_ -notmatch '\.(pdb|dll\.a)$' }
-if (-not ($expected -contains 'vlc-addon-worker.exe')) { throw 'The reference package has no add-on worker' }
+if (-not ($expected -contains 'hakone-addon-worker.exe')) { throw 'The reference package has no add-on worker' }
 
 function Invoke-Checked([string] $File, [string[]] $Arguments, [string] $What) {
     $process = Start-Process $File -ArgumentList $Arguments -Wait -PassThru
@@ -38,7 +38,7 @@ function Assert-Installed([string] $Kind) {
 }
 
 function Assert-Removed([string] $Kind) {
-    foreach ($name in 'hakone.exe', 'libvlccore.dll', 'vlc-addon-worker.exe', 'plugins') {
+    foreach ($name in 'hakone.exe', 'libvlccore.dll', 'hakone-addon-worker.exe', 'plugins') {
         if (Test-Path (Join-Path $installDir $name)) { throw "$Kind uninstall left $name behind" }
     }
 }

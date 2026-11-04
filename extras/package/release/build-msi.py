@@ -21,7 +21,7 @@ from version import ROOT, validate_tag
 MSI_SOURCES = ROOT / 'extras/package/win32/msi'
 # The heat fragments product.wxs references, by folder.
 FOLDERS = ('Plugins', 'Visualization', 'Locale', 'Lua', 'Skins', 'Hrtfs', 'Share', 'Licenses')
-REQUIRED = ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'hakone.ico', 'plugins', 'lua')
+REQUIRED = ('hakone.exe', 'hakone-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'hakone.ico', 'plugins', 'lua')
 
 
 def config_wxi(package, info):

@@ -96,7 +96,7 @@ def macos(stage, output, tag, commit, reuse_qt=False):
             raise SystemExit('Cannot reuse a deployment from a different Qt version')
     copy(stage / 'bin/hakone', binaries / 'hakone')
     # Copy the worker before the dependency checks, Qt deployment and code signature.
-    copy(stage / 'bin/vlc-addon-worker', binaries / 'vlc-addon-worker')
+    copy(stage / 'bin/hakone-addon-worker', binaries / 'hakone-addon-worker')
     for helper in ('vlc-preparser', 'vlc-cache-gen', 'vlc-qt-check'):
         copy(stage / 'libexec/vlc' / helper, binaries / helper)
     # Deploy Qt before adding hundreds of unrelated VLC modules: macdeployqt
@@ -282,7 +282,7 @@ def windows(stage, output, tag, commit):
     if target.exists():
         raise SystemExit(f'Remove the old package before rebuilding: {target}')
     shutil.copytree(stage, target, symlinks=True, ignore=top_level_ignore(stage, NSIS_SUPPORT))
-    for required in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
+    for required in ('hakone.exe', 'hakone-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
         if not (target / required).exists():
             raise RuntimeError(f'Windows installation missing {required}')
     # MinGW's compiler runtimes are not part of a stock Windows installation.

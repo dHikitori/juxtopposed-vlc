@@ -147,7 +147,7 @@ class AddonToolchainTests(unittest.TestCase):
                 source = (
                     "import json, os, sys\nfrom pathlib import Path\n"
                     "args=sys.argv[1:]\n"
-                    "target=Path(args[args.index('--target-dir')+1])/'release'/'vlc-addon-worker'\n"
+                    "target=Path(args[args.index('--target-dir')+1])/'release'/'hakone-addon-worker'\n"
                     "target.parent.mkdir(parents=True,exist_ok=True)\n"
                     "target.write_bytes(b'worker-fixture')\n"
                     "Path(os.environ['TOOLCHAIN_TEST_LOG']).write_text(json.dumps({"

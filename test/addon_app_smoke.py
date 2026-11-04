@@ -259,7 +259,7 @@ class App:
 
 def worker_process(pid):
     try:
-        return Path(f'/proc/{pid}/exe').resolve().name.startswith('vlc-addon-worker')
+        return Path(f'/proc/{pid}/exe').resolve().name.startswith('hakone-addon-worker')
     except OSError:
         return False
 
