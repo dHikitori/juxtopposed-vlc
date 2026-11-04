@@ -19,7 +19,7 @@ struct vlc_input_policy {
     struct vlc_input_policy_operations ops;
     void *opaque;
 };
-static vlc_input_policy_t denied = { .revoked = ATOMIC_VAR_INIT(true), .permanent = true };
+static vlc_input_policy_t denied = { .revoked = true, .permanent = true };
 
 struct proxy_scope { char *prefix, *source; unsigned port; bool attachments; };
 static bool path_character(unsigned char c)

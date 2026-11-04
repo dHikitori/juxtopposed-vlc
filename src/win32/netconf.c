@@ -121,7 +121,7 @@ static bool proxy_auto(const wchar_t *url,
     struct proxy_lookup lookup = {
         .completed = CreateEventW(NULL, TRUE, FALSE, NULL),
         .closed = CreateEventW(NULL, TRUE, FALSE, NULL),
-        .ready = ATOMIC_VAR_INIT(false),
+        .ready = false,
     };
     if (!lookup.completed || !lookup.closed)
         goto out;
