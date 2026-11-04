@@ -3014,6 +3014,9 @@ static void EsOutSelect(es_out_sys_t *p_sys, es_out_id_t *es, bool b_force)
     else if( p_sys->i_mode == ES_OUT_MODE_AUTO )
     {
         const es_out_id_t *wanted_es = NULL;
+        /* The language preferences decided which track to use, or that no
+         * track should be used */
+        bool b_lang_decided = false;
 
         if( es->p_pgrm != p_sys->p_pgrm )
             return;
@@ -3049,12 +3052,15 @@ static void EsOutSelect(es_out_sys_t *p_sys, es_out_id_t *es, bool b_force)
                 i_stop_idx >= 0 || /* If fallback disabled by 'none' */
                 current_es_idx >= 0 ) /* Is currently selected by lang pref */
             {
+                b_lang_decided = true;
                 b_auto_selected = false; /* do not perform other selection rules */
             }
         }
 
-        /* If demux has specified a default active track */
-        if( wanted_es == NULL &&
+        /* If demux has specified a default active track, use it only as a
+         * fallback: it must not replace a track matching the language
+         * preferences */
+        if( wanted_es == NULL && !b_lang_decided &&
             p_esprops->i_demux_id >= 0 &&
             p_esprops->i_demux_id == es->fmt.i_id )
         {
