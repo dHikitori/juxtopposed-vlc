@@ -308,6 +308,15 @@ int main(int i_argc, const char *ppsz_argv[])
      * runloop is used. Otherwise, [NSApp run] needs to be called, which setups more stuff
      * before actually starting the loop.
      */
+    /* Qt (QProcess) learns that a child process exited from a SIGCHLD
+     * handler, so the main thread, which runs Qt, must accept SIGCHLD, as in
+     * the Linux launcher. Otherwise each QProcess wait runs to its timeout,
+     * and quitting waits on add-on helper processes for about a minute. */
+    sigset_t sigchld;
+    sigemptyset(&sigchld);
+    sigaddset(&sigchld, SIGCHLD);
+    pthread_sigmask(SIG_UNBLOCK, &sigchld, NULL);
+
     @autoreleasepool {
         CFRunLoopRun();
     }
