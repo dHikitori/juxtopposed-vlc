@@ -7,11 +7,15 @@ almost any file, disc, stream or device.
 Hakone is in beta. Download it from [hakone.org](https://hakone.org/) or the
 [Releases page](https://github.com/hakone-org/hakone/releases).
 
-![Simple player with the pixel-cat video](doc/images/redesign/player.png)
+![The player showing a misty cedar-lined path, paused at 22 seconds](doc/images/redesign/player.jpg)
 
 | Library sidebar | Video settings |
 | --- | --- |
-| ![Library sidebar over the video](doc/images/redesign/sidebar.png) | ![Video settings over the video](doc/images/redesign/video-settings.png) |
+| ![The library sidebar listing the folder's videos beside the playing video](doc/images/redesign/sidebar.jpg) | ![Video settings open beside the playing video](doc/images/redesign/video-settings.jpg) |
+
+| Episodes | Home |
+| --- | --- |
+| ![The Episodes panel listing season 1 of The Repair Club, with episode 2 playing](doc/images/redesign/episodes.jpg) | ![The library home page with continue watching, continue listening and frequently visited folders, and the mini player](doc/images/redesign/home.jpg) |
 
 ## Features
 
