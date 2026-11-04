@@ -153,7 +153,11 @@ vlc_player_input_SeekByPos(struct vlc_player_input *input, double position,
     });
 
     if (ret == VLC_SUCCESS)
+    {
+        /* The input buffers again for the current delays */
+        input->spu_lookahead = vlc_player_input_GetSpuLookahead(input);
         vlc_player_osd_Position(player, input, VLC_TICK_INVALID, position);
+    }
 }
 
 void
@@ -179,7 +183,66 @@ vlc_player_input_SeekByTime(struct vlc_player_input *input, vlc_tick_t time,
     });
 
     if (ret == VLC_SUCCESS)
+    {
+        /* The input buffers again for the current delays */
+        input->spu_lookahead = vlc_player_input_GetSpuLookahead(input);
         vlc_player_osd_Position(player, input, time, -1);
+    }
+}
+
+vlc_tick_t
+vlc_player_input_GetSpuLookahead(struct vlc_player_input *input)
+{
+    /* A negative subtitle delay shows cues before their time, so they must
+     * be read that much ahead of the picture. */
+    vlc_tick_t lookahead = -input->cat_delays[SPU_ES];
+
+    const struct vlc_player_track_priv *trackpriv;
+    vlc_vector_foreach(trackpriv, &input->spu_track_vector)
+        if (trackpriv->delay != VLC_TICK_MAX && -trackpriv->delay > lookahead)
+            lookahead = -trackpriv->delay;
+
+    return lookahead > 0 ? lookahead : 0;
+}
+
+void
+vlc_player_input_UpdateSpuDelay(struct vlc_player_input *input,
+                                vlc_tick_t old_delay, vlc_tick_t new_delay)
+{
+    /* Cues are read ahead by the look-ahead the input buffered for when
+     * starting or seeking, plus at least the smallest caching. The clock
+     * only applies a larger buffering when starting, so cues needed earlier
+     * than that reach the subtitle renderer after they have expired, and are
+     * never shown.
+     * The renderer also drops cues once they have been shown. Showing them
+     * later needs them again, and they are not shown either.
+     * In both cases, seek to the current position so that the cues are read
+     * again for the new delay. */
+    const vlc_tick_t lookahead = vlc_player_input_GetSpuLookahead(input);
+    const bool needs_earlier_cues =
+        lookahead > input->spu_lookahead + DEFAULT_PTS_DELAY;
+    const bool needs_shown_cues = new_delay - old_delay > DEFAULT_PTS_DELAY;
+    if (!needs_earlier_cues && !needs_shown_cues)
+        return;
+
+    if (!input->started || (input->capabilities & VLC_PLAYER_CAP_SEEK) == 0)
+        return;
+
+    const vlc_tick_t time = vlc_player_input_GetTime(input, false,
+                                                     vlc_tick_now());
+    if (time == VLC_TICK_INVALID)
+        return;
+
+    /* Not vlc_player_input_SeekByTime(): the position did not change, so
+     * it is not shown on screen. */
+    vlc_player_UpdateTimerSeekState(input->player, time, -1);
+    int ret = input_ControlPush(input->thread, INPUT_CONTROL_SET_TIME,
+        &(input_control_param_t) {
+            .time.i_val = time,
+            .time.b_fast_seek = false,
+    });
+    if (ret == VLC_SUCCESS)
+        input->spu_lookahead = lookahead;
 }
 
 void
@@ -1395,6 +1458,8 @@ vlc_player_input_New(vlc_player_t *player, input_item_t *item)
                                      cat_delays[i]);
         }
     }
+    /* These delays are applied before the input buffers */
+    input->spu_lookahead = vlc_player_input_GetSpuLookahead(input);
     return input;
 }
 

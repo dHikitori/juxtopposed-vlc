@@ -1881,6 +1881,7 @@ vlc_player_SetCategoryDelay(vlc_player_t *player, enum es_format_category_e cat,
     if (cat != AUDIO_ES && cat != SPU_ES && cat != VIDEO_ES)
         return VLC_EGENERIC;
     vlc_tick_t *cat_delay = &input->cat_delays[cat];
+    const vlc_tick_t old_delay = *cat_delay;
 
     if (absolute)
         *cat_delay = delay;
@@ -1893,6 +1894,8 @@ vlc_player_SetCategoryDelay(vlc_player_t *player, enum es_format_category_e cat,
     int ret = input_SetEsCatDelay(input->thread, cat, delay);
     if (ret == VLC_SUCCESS)
     {
+        if (cat == SPU_ES)
+            vlc_player_input_UpdateSpuDelay(input, old_delay, delay);
         vlc_player_osd_Message(player, _("%s delay: %i ms"),
                                es_format_category_to_string(cat),
                                (int)MS_FROM_VLC_TICK(delay));
@@ -1929,6 +1932,11 @@ vlc_player_SetEsIdDelay(vlc_player_t *player, vlc_es_id_t *es_id,
         (trackpriv->t.fmt.i_cat != AUDIO_ES && trackpriv->t.fmt.i_cat != SPU_ES))
         return VLC_EGENERIC;
 
+    /* VLC_TICK_MAX: the track follows its category delay */
+    const enum es_format_category_e cat = trackpriv->t.fmt.i_cat;
+    const vlc_tick_t old_delay = trackpriv->delay != VLC_TICK_MAX
+                               ? trackpriv->delay : input->cat_delays[cat];
+
     if (absolute)
         trackpriv->delay = delay;
     else
@@ -1944,6 +1952,10 @@ vlc_player_SetEsIdDelay(vlc_player_t *player, vlc_es_id_t *es_id,
                                 &param);
     if (ret == VLC_SUCCESS)
     {
+        if (cat == SPU_ES)
+            vlc_player_input_UpdateSpuDelay(input, old_delay,
+                                            delay != VLC_TICK_MAX
+                                            ? delay : input->cat_delays[cat]);
         if (delay != VLC_TICK_MAX)
             vlc_player_osd_Message(player, _("%s delay: %i ms"),
                                    trackpriv->t.name,

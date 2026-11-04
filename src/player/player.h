@@ -86,6 +86,8 @@ struct vlc_player_input
     struct input_stats_t stats;
 
     vlc_tick_t cat_delays[DATA_ES];
+    /* Subtitle look-ahead the input buffered for at its start or last seek */
+    vlc_tick_t spu_lookahead;
 
     vlc_player_program_vector program_vector;
     vlc_player_track_vector video_track_vector;
@@ -517,6 +519,13 @@ void
 vlc_player_input_SeekByTime(struct vlc_player_input *input, vlc_tick_t time,
                             enum vlc_player_seek_speed speed,
                             enum vlc_player_whence whence);
+
+vlc_tick_t
+vlc_player_input_GetSpuLookahead(struct vlc_player_input *input);
+
+void
+vlc_player_input_UpdateSpuDelay(struct vlc_player_input *input,
+                                vlc_tick_t old_delay, vlc_tick_t new_delay);
 
 void
 vlc_player_input_UpdateViewpoint(struct vlc_player_input *input,
