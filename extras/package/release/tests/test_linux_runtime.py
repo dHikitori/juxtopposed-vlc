@@ -221,6 +221,14 @@ class ToolTests(unittest.TestCase):
                     tools.fetch(Path(temp))
             self.assertEqual(list(Path(temp).iterdir()), [])
 
+    def test_linuxdeploy_comes_from_its_tagged_release(self):
+        self.assertEqual(tools.url('linuxdeploy', 'linuxdeploy-x86_64.AppImage'),
+                         'https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/'
+                         'linuxdeploy-x86_64.AppImage')
+        self.assertIn('/releases/download/continuous/', tools.url('linuxdeploy-plugin-qt', 'plugin.AppImage'))
+        for digest in tools.TOOLS.values():
+            self.assertRegex(digest, '^[0-9a-f]{64}$')
+
     def test_verified_download_is_cached(self):
         with tempfile.TemporaryDirectory() as temp:
             payload = b'verified tool'

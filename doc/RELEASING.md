@@ -581,7 +581,9 @@ local library build. Linux deployment-tool SHA-256 digests are pinned in
 `fetch-linux-tools.py` and verified before extraction, including cached downloads.
 Extracted tool trees are recreated from those verified archives. Review the
 upstream release asset and update its pin when adopting a newer tool; a changed
-continuous-release download fails closed until then. Tool hashes are also
+continuous-release download fails closed until then. linuxdeploy is downloaded
+from its `1-alpha-20251107-1` tagged release, which cannot change; the Qt plugin
+still comes from its continuous release. Tool hashes are also
 recorded alongside the artifact. VLC and design/font attribution remain in
 `README.md` and the bundle.
 
