@@ -26,10 +26,14 @@ nsProcess_link_args = ['-static-libgcc']
 nsProcess_sources = files('nsProcess/nsProcess.c', 'nsProcess/nsis/pluginapi.c')
 nsProcess_src = []
 nsProcess_obj = []
+nsProcess_i686_gcc = false
 if host_machine.cpu_family() != 'x86'
     # nsProcess.dll needs to be a 32-bit DLL
+    if cc.get_id() == 'gcc'
+        # GCC cannot retarget, so the i686 MinGW compiler builds the whole DLL
+        nsProcess_i686_gcc = true
     # with clang we can link a i686 DLL via -target i686-w64-mingw32
-    if cc.has_link_argument(['--target=i686-w64-mingw32'], required: nsis_required)
+    elif cc.has_link_argument(['--target=i686-w64-mingw32'], required: nsis_required)
         nsProcess_link_args += '--target=i686-w64-mingw32'
 
         x86_compiler = generator(find_program('i686-w64-mingw32-gcc'),
@@ -43,16 +47,27 @@ else
     # for each architecture
     nsProcess_src = nsProcess_sources
 endif
-nsProcess = shared_library('nsProcess',
-                           nsProcess_src,
-                           c_args: nsProcess_cargs,
-                           link_args: nsProcess_link_args,
-                           objects: nsProcess_obj,
-                           vs_module_defs: 'nsProcess.def',
-                           name_prefix: '',
-                           link_language: 'c',  # avoid using nasm linker and miss the .dll.a
-                           install: true,
-                           install_dir: 'NSIS')
+if nsProcess_i686_gcc
+    nsProcess = custom_target('nsProcess',
+                              input: [nsProcess_sources, 'nsProcess.def'],
+                              output: 'nsProcess.dll',
+                              command: [find_program('i686-w64-mingw32-gcc', required: nsis_required),
+                                        '-shared', nsProcess_cargs, nsProcess_link_args,
+                                        '@INPUT@', '-o', '@OUTPUT@'],
+                              install: true,
+                              install_dir: 'NSIS')
+else
+    nsProcess = shared_library('nsProcess',
+                               nsProcess_src,
+                               c_args: nsProcess_cargs,
+                               link_args: nsProcess_link_args,
+                               objects: nsProcess_obj,
+                               vs_module_defs: 'nsProcess.def',
+                               name_prefix: '',
+                               link_language: 'c',  # avoid using nasm linker and miss the .dll.a
+                               install: true,
+                               install_dir: 'NSIS')
+endif
 
 vlc_nsi = configure_file(
   input: 'vlc.win32.nsi.in',

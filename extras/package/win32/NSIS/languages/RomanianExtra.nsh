@@ -48,7 +48,7 @@ ${LangFileString} Reinstall_HeadlineInstall "Alegeți modul în care doriți să
 ${LangFileString} Reinstall_HeadlineMaintenance "Alegeți efectuarea opțiunii de întreținere"
 ${LangFileString} Reinstall_MessageOlder "O versiune mai veche a Hakone este instalat pe sistem. Selectați operația pe care doriți să o efectuați și faceți clic pe Următorul pentru a continua."
 ${LangFileString} Reinstall_MessageNewer "O versiune mai nouă a Hakone este deja instalată! Nu este recomandat să reveniți la o versiune mai veche. Selectați operația pe care doriți să o efectuați și faceți clic pe Următorul pentru a continua."
-${LangFileString} Reinstall_MessageSame "Hakone $ {VERSION} este deja instalat. Selectați operația pe care doriți să o efectuați și faceți clic pe Următorul pentru a continua."
+${LangFileString} Reinstall_MessageSame "Hakone ${VERSION} este deja instalat. Selectați operația pe care doriți să o efectuați și faceți clic pe Următorul pentru a continua."
 ${LangFileString} Reinstall_OptionUpgrade "Actualizare Hakone folosind setările anterioare (recomandat)"
 ${LangFileString} Reinstall_OptionDowngrade "Revenire la versiune anterioare Hakone folosind setările anterioare (recomandat)"
 ${LangFileString} Reinstall_OptionComponents "Adaugă/Elimină/Reinstalează componente"
