@@ -373,9 +373,25 @@ void CompositorVideo::adjustBlurBehind()
                     // when applying the blur effect, but KWin X11 does not consider `_GTK_FRAME_EXTENTS`.
                     // Since the mask region represents the actual content area, and the outside region
                     // is included in the frame margins, we can set the blur region only if the mask is
-                    // empty. This fixes blur backdrop applied to client shadows on X11:
-                    const auto margin = m_mainCtx->windowExtendedMargin();
-                    blurRegion = QRegion(margin, margin, window->width() - 2 * margin, window->height() - 2 * margin);
+                    // empty. This fixes blur backdrop applied to client shadows on X11.
+                    //
+                    // KWin up to 6.6 reads the region relative to the whole window, margins
+                    // included, but KWin 6.7 reads it relative to the visible content when the
+                    // client draws its own decorations (kwin cd18e4a1). The content rectangle
+                    // would then be blurred one margin to the right of and below the window, a
+                    // frosted panel sticking out of it. The KWin version can not be detected, so
+                    // only blur the part that is inside the content under both readings. A strip
+                    // one margin wide along one edge of the content is not blurred, which only
+                    // shows when the interface is translucent:
+                    const auto margin = static_cast<int>(m_mainCtx->windowExtendedMargin());
+                    const QRect safeRect(margin, margin, window->width() - 3 * margin, window->height() - 3 * margin);
+                    if (safeRect.isEmpty())
+                    {
+                        // An empty region would blur the whole window, shadows included:
+                        m_windowEffectsModule->setBlurBehind(window, false, {});
+                        return;
+                    }
+                    blurRegion = safeRect;
                 }
                 m_windowEffectsModule->setBlurBehind(window, true, blurRegion);
             }
