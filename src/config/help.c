@@ -198,7 +198,7 @@ static const char vlc_usage[] = N_(
   "  udp://[[<source address>]@[<bind address>][:<bind port>]]\n"
   "                                 UDP stream sent by a streaming server\n"
   "  vlc://pause:<seconds>          Pause the playlist for a certain time\n"
-  "  vlc://quit                     Special item to quit VLC\n"
+  "  vlc://quit                     Special item to quit Hakone\n"
   "\n");
 
 static void Help (libvlc_int_t *p_this, char const *psz_help_name)
@@ -207,19 +207,19 @@ static void Help (libvlc_int_t *p_this, char const *psz_help_name)
 
     if( psz_help_name && !strcmp( psz_help_name, "help" ) )
     {
-        printf(_(vlc_usage), "vlc");
+        printf(_(vlc_usage), "hakone");
         Usage( p_this, "=core" );
         print_help_on_full_help();
     }
     else if( psz_help_name && !strcmp( psz_help_name, "longhelp" ) )
     {
-        printf(_(vlc_usage), "vlc");
+        printf(_(vlc_usage), "hakone");
         Usage( p_this, NULL );
         print_help_on_full_help();
     }
     else if( psz_help_name && !strcmp( psz_help_name, "full-help" ) )
     {
-        printf(_(vlc_usage), "vlc");
+        printf(_(vlc_usage), "hakone");
         Usage( p_this, NULL );
     }
     else if( psz_help_name )
@@ -696,7 +696,8 @@ static void ListModules (libvlc_int_t *p_this, bool b_verbose)
 static void Version( void )
 {
     ShowConsole();
-    printf(_("VLC version %s (%s)\n"), VERSION_MESSAGE, psz_vlc_changeset);
+    printf(_("Hakone version %s (%s)\n"), HAKONE_VERSION_MESSAGE, psz_vlc_changeset);
+    printf(_("LibVLC version %s\n"), VERSION_MESSAGE);
     printf(_("Compiled by %s on %s (%s)\n"), VLC_CompileBy(),
            VLC_CompileHost(), __DATE__" "__TIME__ );
     printf(_("Compiler: %s\n"), VLC_Compiler());
@@ -720,7 +721,7 @@ static void ShowConsole( void )
      * Unicode/locale subsystem. By default, we have the obsolecent OEM code
      * page (e.g. CP437 or CP850). */
     SetConsoleOutputCP (GetACP ());
-    SetConsoleTitle (TEXT("VLC media player version ") TEXT(PACKAGE_VERSION));
+    SetConsoleTitle (TEXT("Hakone Media Player version ") TEXT(HAKONE_VERSION));
 
     freopen( "CONOUT$", "w", stderr );
     freopen( "CONIN$", "r", stdin );

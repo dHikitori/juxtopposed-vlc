@@ -104,6 +104,7 @@ libvlccore_sources_base = files(
     'config/file.c',
     'config/help.c',
     'config/intf.c',
+    'config/migrate.c',
     'config/cmdline.c',
     'config/startup.c',
     'config/language.c',

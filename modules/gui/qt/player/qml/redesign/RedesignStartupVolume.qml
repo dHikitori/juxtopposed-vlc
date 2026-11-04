@@ -69,7 +69,7 @@ Rectangle {
                     Text { x: field.leftPadding + valueMetrics.advanceWidth; anchors.verticalCenter: parent.verticalCenter; text: "%"; color: field.color; font.pixelSize: theme.dp(14); visible: !field.activeFocus }
                     onEditingFinished: invalid = !root.backend.stage("redesign-startup-volume", text)
                     onActiveFocusChanged: if (activeFocus) selectAll()
-                    RedesignToolTip { theme: root.theme; text: qsTr("Volume on the next VLC startup (0–300%)."); visible: parent.hovered; delay: 0 }
+                    RedesignToolTip { theme: root.theme; text: qsTr("Volume on the next Hakone startup (0–300%)."); visible: parent.hovered; delay: 0 }
                 }
             }
         }

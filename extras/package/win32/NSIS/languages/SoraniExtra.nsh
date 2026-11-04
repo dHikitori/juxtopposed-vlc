@@ -19,29 +19,29 @@ ${LangFileString} Desc_Section02a \
 ${LangFileString} Desc_Section02b \
     "ئایکۆن بۆ ڕوومێزەکەت زیاد ئەکات بۆ پێگەیشتنی بە ئاسانی"
 ${LangFileString} Desc_Section04 \
-    "پێوەکراوی ActiveX ـی VLC"
+    "پێوەکراوی ActiveX ـی Hakone"
 ${LangFileString} Desc_Section05 \
     "خۆتۆمارکردنی لێدانی CD و DVD"
 ${LangFileString} Desc_Section06 \
-    "لێدەری ڕەنگاڵەی VLC دەکاتە پۆگرامی بنەڕەتی بۆ لێدانی جۆرە پەڕگە دیاریکراوەکان"
+    "لێدەری ڕەنگاڵەی Hakone دەکاتە پۆگرامی بنەڕەتی بۆ لێدانی جۆرە پەڕگە دیاریکراوەکان"
 ${LangFileString} Desc_Section07 \
-    "دانەکانی ('لێدان لەگەڵ VLC' و 'زیادکردن بۆ لیستی لێدانی VLC') بۆ مێنیو زیاد دەکات"
+    "دانەکانی ('لێدان لەگەڵ Hakone' و 'زیادکردن بۆ لیستی لێدانی Hakone') بۆ مێنیو زیاد دەکات"
 ${LangFileString} Desc_Section08 \
-    "ویستراوەکان و پەڕگەکانی کاشی لێدەری ڕەنگاڵەی VLC دەسڕێتەوە بۆ هەمیشە کە پێشتر دامەزراوە"
+    "ویستراوەکان و پەڕگەکانی کاشی لێدەری ڕەنگاڵەی Hakone دەسڕێتەوە بۆ هەمیشە کە پێشتر دامەزراوە"
 
 ${LangFileString} Name_Section91 "سڕینەوە"
 ${LangFileString} Name_Section92 "ویستراوەکان و کاش بسڕەوە"
 
 ${LangFileString} Desc_Section91 \
-"لێدەری ڕەنگاڵەی VLC و هەموو پێکهاتەکانی بسڕەوە"
+"لێدەری ڕەنگاڵەی Hakone و هەموو پێکهاتەکانی بسڕەوە"
 ${LangFileString} Desc_Section92 \
-"ویستراوەکان و پەڕگەکانی کاشی لێدەری ڕەنگاڵەی VLC دەسڕێتەوە"
+"ویستراوەکان و پەڕگەکانی کاشی لێدەری ڕەنگاڵەی Hakone دەسڕێتەوە"
 
 ${LangFileString} ShellAssociation_Play "لێدان"
-${LangFileString} ContextMenuEntry_PlayWith "لێیبدە لەگەڵ لێدەری ڕەنگاڵەی VLC"
-${LangFileString} ContextMenuEntry_AddToPlaylist "زیادی بکە بۆ لیستی لێدانی لێدەری ڕەنگاڵەی VLC"
+${LangFileString} ContextMenuEntry_PlayWith "لێیبدە لەگەڵ لێدەری ڕەنگاڵەی Hakone"
+${LangFileString} ContextMenuEntry_AddToPlaylist "زیادی بکە بۆ لیستی لێدانی لێدەری ڕەنگاڵەی Hakone"
 
-${LangFileString} Link_VisitWebsite "سەردانی وێبگەی لێدەری ڕەنگاڵەی VLC بکە"
+${LangFileString} Link_VisitWebsite "سەردانی وێبگەی لێدەری ڕەنگاڵەی Hakone بکە"
 
 ${LangFileString} Name_InstTypeRecommended "ئامۆژگاریراو"
 ${LangFileString} Name_InstTypeMinimum "کەمترین"

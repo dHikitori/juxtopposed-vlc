@@ -382,7 +382,7 @@ endif
 # Qt check executable
 # This has to be declared here as it needs to end up
 # in the modules folder, not in gui/qt/ subfolder as
-# vlc-static would not find it there.
+# hakone-static would not find it there.
 if get_option('qt').allowed() and qt6_dep.found()
     enable_qt_check = host_system not in ['windows', 'os/2', 'ios', 'tvos', 'visionos']
     executable('vlc-qt-check',

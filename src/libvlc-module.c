@@ -78,26 +78,26 @@ static const char *const subtitle_vertical_position_names[] = {N_("Bottom"), N_(
 
 // DEPRECATED
 #define INTF_CAT_LONGTEXT N_( \
-    "These options allow you to configure the interfaces used by VLC. " \
+    "These options allow you to configure the interfaces used by Hakone. " \
     "You can select the main interface, additional " \
     "interface modules, and define various related options." )
 
 #define INTF_TEXT N_("Interface module")
 #define INTF_LONGTEXT N_( \
-    "This is the main interface used by VLC. " \
+    "This is the main interface used by Hakone. " \
     "The default behavior is to automatically select the best module " \
     "available.")
 
 #define EXTRAINTF_TEXT N_("Extra interface modules")
 #define EXTRAINTF_LONGTEXT N_( \
-    "You can select \"additional interfaces\" for VLC. " \
+    "You can select \"additional interfaces\" for Hakone. " \
     "They will be launched in the background in addition to the default " \
     "interface. Use a colon separated list of interface modules. (common " \
     "values are \"rc\" (remote control), \"http\", \"gestures\" ...)")
 
 #define CONTROL_TEXT N_("Control interfaces")
 #define CONTROL_LONGTEXT N_( \
-    "You can select control interfaces for VLC.")
+    "You can select control interfaces for Hakone.")
 
 #define VERBOSE_TEXT N_("Verbosity (0,1,2)")
 #define VERBOSE_LONGTEXT N_( \
@@ -106,7 +106,7 @@ static const char *const subtitle_vertical_position_names[] = {N_("Bottom"), N_(
 
 #define OPEN_TEXT N_("Default stream")
 #define OPEN_LONGTEXT N_( \
-    "This stream will always be opened at VLC startup." )
+    "This stream will always be opened at Hakone startup." )
 
 #define COLOR_TEXT N_("Color messages")
 #define COLOR_LONGTEXT N_( \
@@ -133,7 +133,7 @@ static const char *const subtitle_vertical_position_names[] = {N_("Bottom"), N_(
 
 #define AOUT_TEXT N_("Audio output module")
 #define AOUT_LONGTEXT N_( \
-    "This is the audio output method used by VLC. " \
+    "This is the audio output method used by Hakone. " \
     "The default behavior is to automatically select the best method " \
     "available.")
 
@@ -178,7 +178,7 @@ static const char *ppsz_roles_text[] = {
 #define VOLUME_SAVE_TEXT N_( "Remember the audio volume" )
 #define VOLUME_SAVE_LONGTEXT N_( \
     "The volume can be recorded and automatically restored next time " \
-    "VLC is used." )
+    "Hakone is used." )
 
 #define DESYNC_TEXT N_("Audio desynchronization compensation")
 #define DESYNC_LONGTEXT N_( \
@@ -286,7 +286,7 @@ static const char *const ppsz_replay_gain_mode_text[] = {
 
 #define VOUT_TEXT N_("Video output module")
 #define VOUT_LONGTEXT N_( \
-    "This is the the video output method used by VLC. " \
+    "This is the the video output method used by Hakone. " \
     "The default behavior is to automatically select the best method available.")
 
 #define VIDEO_TEXT N_("Enable video")
@@ -448,7 +448,7 @@ static const char *const screensaver_texts[] = {
 
 #define VIDEO_DECO_TEXT N_("Window decorations")
 #define VIDEO_DECO_LONGTEXT N_( \
-    "VLC can avoid creating window caption, frames, etc... around the video" \
+    "Hakone can avoid creating window caption, frames, etc... around the video" \
     ", giving a \"minimal\" window.")
 
 #define VIDEO_FILTER_TEXT N_("Video filter module")
@@ -497,7 +497,7 @@ static const char *const screensaver_texts[] = {
 #define ASPECT_RATIO_LONGTEXT N_( \
     "This forces the source aspect ratio. For instance, some DVDs claim " \
     "to be 16:9 while they are actually 4:3. This can also be used as a " \
-    "hint for VLC when a movie does not have aspect ratio information. " \
+    "hint for Hakone when a movie does not have aspect ratio information. " \
     "Accepted formats are x:y (4:3, 16:9, etc.) expressing the global image " \
     "aspect, or a float value (1.25, 1.3333, etc.) expressing pixel " \
     "squareness.")
@@ -548,7 +548,7 @@ static const char *const fit_descriptions[] = {
 
 #define KEYBOARD_EVENTS_TEXT N_("Key press events")
 #define KEYBOARD_EVENTS_LONGTEXT N_( \
-    "This enables VLC hotkeys from the (non-embedded) video window." )
+    "This enables Hakone hotkeys from the (non-embedded) video window." )
 
 #define MOUSE_EVENTS_TEXT N_("Mouse events")
 #define MOUSE_EVENTS_LONGTEXT N_( \
@@ -619,7 +619,7 @@ static const char *const mouse_double_click_texts[] = {
     "auto: best clock source, input if the access can't be paced " \
     "(when playing live content), or audio otherwise (most likely).\n" \
     "input: all tracks are driven by the input clock, via PCR updates " \
-    "from the demuxer. This restore the VLC 3.0 clock behavior where both audio " \
+    "from the demuxer. This restore the Hakone 3.0 clock behavior where both audio " \
     "and video tracks can be altered to catch up with the input.\n" \
     "audio: if an audio track is playing, the audio output will drive the " \
     "clock (Fallback to Monotonic if there is no audio tracks).\n" \
@@ -863,14 +863,14 @@ static const char* const ppsz_restore_playback_desc[] = {
 
 #define OSD_TEXT N_("On Screen Display")
 #define OSD_LONGTEXT N_( \
-    "VLC can display messages on the video. This is called OSD (On Screen " \
+    "Hakone can display messages on the video. This is called OSD (On Screen " \
     "Display).")
 #define OSD_DURATION_TEXT N_("Shortcut feedback duration (ms)")
 #define OSD_DURATION_LONGTEXT N_("Set how long shortcut messages and icons stay on the video. This does not change the filename display time.")
 
 #define TEXTRENDERER_TEXT N_("Text rendering module")
 #define TEXTRENDERER_LONGTEXT N_( \
-    "VLC normally uses Freetype for rendering, but this allows you to use svg for instance.")
+    "Hakone normally uses Freetype for rendering, but this allows you to use svg for instance.")
 
 #define SUB_SOURCE_TEXT N_("Subpictures source module")
 #define SUB_SOURCE_LONGTEXT N_( \
@@ -911,7 +911,7 @@ static const char* const ppsz_restore_playback_desc[] = {
     N_("Apply a delay to all subtitles (in 1/10s, eg 100 means 10s).")
 #define SUB_DELAY_MS_TEXT N_("Subtitle delay (ms)")
 #define SUB_DELAY_MS_LONGTEXT \
-    N_("Apply a subtitle delay in milliseconds. VLC adds this delay to the delay set by sub-delay.")
+    N_("Apply a subtitle delay in milliseconds. Hakone adds this delay to the delay set by sub-delay.")
 
 #define SUB_FILE_TEXT N_("Use subtitle file")
 #define SUB_FILE_LONGTEXT N_( \
@@ -1060,14 +1060,14 @@ static const char* const ppsz_restore_playback_desc[] = {
 
 #define CODEC_TEXT N_("Preferred decoders list")
 #define CODEC_LONGTEXT N_( \
-    "List of codecs that VLC will use in " \
+    "List of codecs that Hakone will use in " \
     "priority. For instance, 'dummy,a52' will try the dummy and a52 codecs " \
     "before trying the other ones. Only advanced users should " \
     "alter this option as it can break playback of all your streams." )
 
 #define HW_DEC_TEXT N_("Enable hardware decoders")
 #define HW_DEC_LONGTEXT N_( \
-    "VLC will fallback automatically to software decoders in case of " \
+    "Hakone will fallback automatically to software decoders in case of " \
     "hardware decoder failure." )
 
 #define DEC_DEV_TEXT N_("Preferred decoder hardware device")
@@ -1123,7 +1123,7 @@ static const char* const ppsz_restore_playback_desc[] = {
 
 #define PACKETIZER_TEXT N_("Preferred packetizer list")
 #define PACKETIZER_LONGTEXT N_( \
-    "This allows you to select the order in which VLC will choose its " \
+    "This allows you to select the order in which Hakone will choose its " \
     "packetizers."  )
 
 #define ANN_SAPINTV_TEXT N_("SAP announcement interval")
@@ -1166,16 +1166,16 @@ static const char* const ppsz_restore_playback_desc[] = {
 
 #define PLUGINS_CACHE_TEXT N_("Use a plugins cache")
 #define PLUGINS_CACHE_LONGTEXT N_( \
-    "Use a plugins cache which will greatly improve the startup time of VLC.")
+    "Use a plugins cache which will greatly improve the startup time of Hakone.")
 
 #define PLUGINS_SCAN_TEXT N_("Scan for new plugins")
 #define PLUGINS_SCAN_LONGTEXT N_( \
     "Scan plugin directories for new plugins at startup. " \
-    "This increases the startup time of VLC.")
+    "This increases the startup time of Hakone.")
 
 #define KEYSTORE_TEXT N_("Preferred keystore list")
 #define KEYSTORE_LONGTEXT N_( \
-    "List of keystores that VLC will use in priority." )
+    "List of keystores that Hakone will use in priority." )
 
 #define STATS_TEXT N_("Locally collect statistics")
 #define STATS_LONGTEXT N_( \
@@ -1187,15 +1187,15 @@ static const char* const ppsz_restore_playback_desc[] = {
 
 #define ONEINSTANCE_TEXT N_("Allow only one running instance")
 #define ONEINSTANCE_LONGTEXT N_( \
-    "Allowing only one running instance of VLC can sometimes be useful, " \
-    "for example if you associated VLC with some media types and you " \
-    "don't want a new instance of VLC to be opened each time you " \
+    "Allowing only one running instance of Hakone can sometimes be useful, " \
+    "for example if you associated Hakone with some media types and you " \
+    "don't want a new instance of Hakone to be opened each time you " \
     "open a file in your file manager. This option will allow you " \
     "to play the file with the already running instance or enqueue it.")
 
-#define STARTEDFROMFILE_TEXT N_("VLC is started from file association")
+#define STARTEDFROMFILE_TEXT N_("Hakone is started from file association")
 #define STARTEDFROMFILE_LONGTEXT N_( \
-    "Tell VLC that it is being launched due to a file association in the OS" )
+    "Tell Hakone that it is being launched due to a file association in the OS" )
 
 #define ONEINSTANCEWHENSTARTEDFROMFILE_TEXT N_( \
     "Use only one instance when started from file manager")
@@ -1203,9 +1203,9 @@ static const char* const ppsz_restore_playback_desc[] = {
 #define HPRIORITY_TEXT N_("Increase the priority of the process")
 #define HPRIORITY_LONGTEXT N_( \
     "Increasing the priority of the process will very likely improve your " \
-    "playing experience as it allows VLC not to be disturbed by other " \
+    "playing experience as it allows Hakone not to be disturbed by other " \
     "applications that could otherwise take too much processor time. " \
-    "However be advised that in certain circumstances (bugs) VLC could take " \
+    "However be advised that in certain circumstances (bugs) Hakone could take " \
     "all the processor time and render the whole system unresponsive which " \
     "might require a reboot of your machine.")
 
@@ -1233,7 +1233,7 @@ static const char *const clock_sources_text[] = {
     "and keep playing current item.")
 
 #define DBUS_TEXT N_("Expose media player via D-Bus")
-#define DBUS_LONGTEXT N_("Allow other applications to control VLC " \
+#define DBUS_LONGTEXT N_("Allow other applications to control Hakone " \
     "using the D-Bus MPRIS protocol.")
 
 /*****************************************************************************
@@ -1266,7 +1266,7 @@ static const char *const clock_sources_text[] = {
 #define METADATA_OWNER_TEXT N_( "Use add-on metadata providers" )
 #define METADATA_OWNER_LONGTEXT N_( \
     "Send online metadata and artwork lookups to the interface's add-on " \
-    "providers instead of the built-in scripts. VLC must be restarted " \
+    "providers instead of the built-in scripts. Hakone must be restarted " \
     "for a change to take effect." )
 
 static const char *const psz_recursive_list[] = {
@@ -1276,7 +1276,7 @@ static const char *const psz_recursive_list_text[] = {
 
 #define RECURSIVE_TEXT N_("Subdirectory behavior")
 #define RECURSIVE_LONGTEXT N_( \
-        "Select when VLC reads folders added to the queue.\n" \
+        "Select when Hakone reads folders added to the queue.\n" \
         "none: read folders when they are played.\n" \
         "collapse: read one folder level and keep its subfolders in the queue.\n" \
         "expand: read all subfolders at once.\n" )
@@ -1301,15 +1301,15 @@ static const char *const psz_recursive_list_text[] = {
 
 #define RANDOM_TEXT N_("Play files randomly forever")
 #define RANDOM_LONGTEXT N_( \
-    "VLC will randomly play files in the play queue until interrupted.")
+    "Hakone will randomly play files in the play queue until interrupted.")
 
 #define LOOP_TEXT N_("Repeat all")
 #define LOOP_LONGTEXT N_( \
-    "VLC will keep playing the play queue indefinitely." )
+    "Hakone will keep playing the play queue indefinitely." )
 
 #define REPEAT_TEXT N_("Repeat current item")
 #define REPEAT_LONGTEXT N_( \
-    "VLC will keep playing the current play queue item." )
+    "Hakone will keep playing the current play queue item." )
 
 #define PAS_TEXT N_("Play and stop")
 #define PAS_LONGTEXT N_( \
@@ -1339,7 +1339,7 @@ static const char *const psz_recursive_list_text[] = {
 #define ML_TEXT N_("Use media library")
 #define ML_LONGTEXT N_( \
     "The media library is automatically saved and reloaded each time you " \
-    "start VLC." )
+    "start Hakone." )
 
 #define PLTREE_TEXT N_("Display play queue tree")
 #define PLTREE_LONGTEXT N_( \
@@ -1363,7 +1363,7 @@ static const char *const psz_recursive_list_text[] = {
  ****************************************************************************/
 
 // DEPRECATED
-#define HOTKEY_CAT_LONGTEXT N_( "These settings are the global VLC key " \
+#define HOTKEY_CAT_LONGTEXT N_( "These settings are the global Hakone key " \
     "bindings, known as \"hotkeys\"." )
 
 static const int mouse_wheel_values[] = { -1, 0, 2, 3, };
@@ -1688,10 +1688,10 @@ vlc_module_begin ()
         change_integer_list( pi_mix_mode_values, ppsz_mix_mode_texts )
     add_bool("audio-spatial", false, N_("Spatial audio"),
              N_("Use surround audio with headphones or speakers. "
-                "If you set Spatial audio to OFF, VLC uses your speaker setup. Stereo audio does not change."))
+                "If you set Spatial audio to OFF, Hakone uses your speaker setup. Stereo audio does not change."))
     add_integer("audio-spatial-mode", AOUT_MIX_MODE_BINAURAL, N_("Spatial audio mode"),
                 N_("For headphones, select Headphone virtualization. For speakers, select Surround speakers. "
-                   "VLC uses your speaker setup for Surround speakers."))
+                   "Hakone uses your speaker setup for Surround speakers."))
         change_integer_list(spatial_mode_values, spatial_mode_texts)
     add_integer( "audio-desync", 0, DESYNC_TEXT,
                  DESYNC_LONGTEXT )
@@ -2006,7 +2006,7 @@ vlc_module_begin ()
 
     add_bool( "save-recentplay", true, SAVE_RECENTPLAY, NULL )
     add_string( "recentplay-filter", "", N_("Never remember items matching"),
-                N_("Enter a regular expression. VLC does not add matching file paths or links to the playback history. An empty field allows all paths and links.") )
+                N_("Enter a regular expression. Hakone does not add matching file paths or links to the playback history. An empty field allows all paths and links.") )
 
     add_integer( "restore-playback-pos", VLC_PLAYER_RESTORE_PLAYBACK_POS_ASK,
                  RESTORE_PLAYBACK_POS_TEXT, RESTORE_PLAYBACK_POS_LONGTEXT )
@@ -2257,9 +2257,9 @@ vlc_module_begin ()
     /* Empty preserves a pre-existing platform preference. Explicit auto is
      * persisted so System can override a legacy Windows/macOS selection. */
     add_string("language", "", N_("Interface language"),
-               N_("Choose a language for the interface. Restart VLC after a change."))
+               N_("Choose a language for the interface. Restart Hakone after a change."))
     add_string("startup-options", "", N_("Additional command line options"),
-               N_("Use these options when VLC starts. The launch command takes priority. Restart VLC after a change."))
+               N_("Use these options when Hakone starts. The launch command takes priority. Restart Hakone after a change."))
     add_bool("load-startup-options", false, NULL, NULL)
         change_volatile()
         change_private()
@@ -2269,8 +2269,8 @@ vlc_module_begin ()
         change_volatile()
     add_integer( "single-instance-preferences-version", 0, NULL, NULL )
         change_private()
-    add_bool( "media-library-startup", true, N_("Use the media library when VLC starts"),
-              N_("Use the media library when VLC starts. Restart VLC after a change. The command line can set a different value.") )
+    add_bool( "media-library-startup", true, N_("Use the media library when Hakone starts"),
+              N_("Use the media library when Hakone starts. Restart Hakone after a change. The command line can set a different value.") )
     add_bool( "playlist-tree", true, PLTREE_TEXT, PLTREE_LONGTEXT )
 
     add_string( "open", "", OPEN_TEXT, OPEN_LONGTEXT )
@@ -2917,9 +2917,9 @@ vlc_module_begin ()
     add_category_hint(N_("Miscellaneous"), NULL)
 
 #define HELP_TEXT \
-    N_("print help for VLC (can be combined with --help-verbose)")
+    N_("print help for Hakone (can be combined with --help-verbose)")
 #define LONGHELP_TEXT \
-    N_("print help for VLC and all its modules (can be combined with " \
+    N_("print help for Hakone and all its modules (can be combined with " \
        "--help-verbose)")
 #define FULL_HELP_TEXT \
     N_("print complete help (same as --longhelp --help-verbose)")

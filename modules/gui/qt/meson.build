@@ -1581,7 +1581,7 @@ if qt6_dep.found()
     if not get_option('addon-runtime').disabled()
         addon_cargo = find_program('cargo', native: true, required: get_option('addon-runtime'))
         if addon_cargo.found()
-            addon_worker_name = host_system == 'windows' ? 'vlc-addon-worker.exe' : 'vlc-addon-worker'
+            addon_worker_name = host_system == 'windows' ? 'hakone-addon-worker.exe' : 'hakone-addon-worker'
             addon_worker_command = [prog_python, files('scripts/build-addon-worker.py'),
                 '--cargo', addon_cargo.full_path(), '--manifest', '@INPUT0@', '--output', '@OUTPUT@',
                 '--system', host_system, '--cpu', host_machine.cpu_family(),
@@ -1601,7 +1601,7 @@ if qt6_dep.found()
                 endif
                 addon_worker_command += ['--linker', addon_linker]
             endif
-            addon_worker_target = custom_target('vlc-addon-worker',
+            addon_worker_target = custom_target('hakone-addon-worker',
                 input: files('addons/worker/Cargo.toml', 'addons/worker/Cargo.lock', 'addons/worker/src/main.rs'),
                 output: addon_worker_name, command: addon_worker_command,
                 build_by_default: true, install: true, install_dir: bindir_path)

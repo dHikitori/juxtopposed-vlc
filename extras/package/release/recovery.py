@@ -16,14 +16,22 @@ from release_metadata import append_metadata, release_metadata
 
 MACOS_ARM_RUNNERS = ('macos-15', 'macos-14', 'macos-26')
 
+# Extra downloads of the same app, as (metadata key, extension, label). The
+# archive remains the package that update metadata and in-app checks select.
+DISK_IMAGE = (('disk_image', 'dmg', 'disk image'),)
+INSTALLERS = (('installer', 'exe', 'installer'), ('msi', 'msi', 'MSI'))
+
 TARGETS = {
-    'macos-arm64': dict(platform='macos', architecture='arm64', extension='zip',
+    # Macs also publish a drag-to-install disk image.
+    'macos-arm64': dict(platform='macos', architecture='arm64', extension='zip', extras=DISK_IMAGE,
                         metadata='macos-arm64-build.json', job='macos (macos-15, arm64)'),
-    'macos-x86_64': dict(platform='macos', architecture='x86_64', extension='zip',
+    'macos-x86_64': dict(platform='macos', architecture='x86_64', extension='zip', extras=DISK_IMAGE,
                          metadata='macos-x86_64-build.json', job='macos (macos-15-intel, x86_64)'),
-    'linux-x86_64': dict(platform='linux', architecture='x86_64', extension='tar.gz',
+    'linux-x86_64': dict(platform='linux', architecture='x86_64', extension='tar.gz', extras=(),
                          metadata='linux-build.json', job='linux'),
-    'win64': dict(platform='windows', architecture='x86_64', extension='zip',
+    # Windows also publishes NSIS and MSI installers. The windows-smoke job
+    # builds the MSI, tests both installers and uploads the complete package.
+    'win64': dict(platform='windows', architecture='x86_64', extension='zip', extras=INSTALLERS,
                   metadata='windows-build.json', job='windows-smoke'),
 }
 
@@ -184,24 +192,35 @@ def validate_package(directory, target, version, source):
     if (directory / spec['metadata']).is_symlink():
         raise ValueError(f'{target}: symbolic links are not valid package metadata')
     metadata = json.loads((directory / spec['metadata']).read_text())
-    asset_name = f'vlc-juxtopposed-{version}-{target}.{spec["extension"]}'
+    asset_name = f'hakone-{version}-{target}.{spec["extension"]}'
     for key, expected in dict(tag=version, version=version, platform=spec['platform'],
                               architecture=spec['architecture'], source_commit=source,
                               asset_name=asset_name).items():
         if metadata.get(key) != expected:
             raise ValueError(f'{target}: {key} must be {expected!r}, got {metadata.get(key)!r}')
+    validate_asset(directory, f'{target}: archive', metadata, asset_name)
+    for key, extension, label in spec['extras']:
+        extra = metadata.get(key)
+        extra_name = f'hakone-{version}-{target}.{extension}'
+        if not isinstance(extra, dict) or extra.get('asset_name') != extra_name:
+            # Packages built before this download existed cannot be reused.
+            raise ValueError(f'{target}: {label} {extra_name!r} missing from package metadata; rebuild this target')
+        validate_asset(directory, f'{target}: {label}', extra, extra_name)
+    return metadata
+
+
+def validate_asset(directory, label, metadata, asset_name):
     archive = directory / asset_name
     if archive.is_symlink() or not archive.is_file() or archive.stat().st_size == 0:
-        raise ValueError(f'{target}: missing or empty archive')
+        raise ValueError(f'{label} missing or empty')
     if metadata.get('size') != archive.stat().st_size:
-        raise ValueError(f'{target}: archive size mismatch')
+        raise ValueError(f'{label} size mismatch')
     digest = file_digest(archive)
     if metadata.get('sha256') != digest:
-        raise ValueError(f'{target}: archive checksum mismatch')
+        raise ValueError(f'{label} checksum mismatch')
     checksum = archive.with_name(asset_name + '.sha256')
-    if checksum.is_symlink() or checksum.read_text() != f'{digest}  {asset_name}\n':
-        raise ValueError(f'{target}: checksum file mismatch')
-    return metadata
+    if checksum.is_symlink() or not checksum.is_file() or checksum.read_text() != f'{digest}  {asset_name}\n':
+        raise ValueError(f'{label} checksum file mismatch')
 
 
 def file_digest(path):
@@ -212,9 +231,14 @@ def file_digest(path):
     return digest.hexdigest()
 
 
+def target_asset_names(version, target):
+    spec = TARGETS[target]
+    extensions = [spec['extension']] + [extension for _, extension, _ in spec['extras']]
+    return [f'hakone-{version}-{target}.{extension}' for extension in extensions]
+
+
 def package_asset_names(version):
-    return sorted(f'vlc-juxtopposed-{version}-{target}.{spec["extension"]}'
-                  for target, spec in TARGETS.items())
+    return sorted(name for target in TARGETS for name in target_asset_names(version, target))
 
 
 def release_assets(directory, version):
@@ -257,6 +281,9 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
                              run_id=str(origin['run_id']),
                              asset_name=metadata['asset_name'], size=metadata['size'],
                              sha256=metadata['sha256']))
+        for key, _, _ in TARGETS[name]['extras']:
+            extra = metadata[key]
+            packages[-1][key] = dict(asset_name=extra['asset_name'], size=extra['size'], sha256=extra['sha256'])
     for package in packages:
         expected = f'{update_metadata["package_prefix"]}-{version}-{package["target"]}.{TARGETS[package["target"]]["extension"]}'
         if package['asset_name'] != expected:
@@ -265,7 +292,9 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
     for package in packages:
         name = package['target']
         directory = artifacts / f'{version}-{name}'
-        filenames = [package['asset_name'], package['asset_name'] + '.sha256', TARGETS[name]['metadata']]
+        filenames = [TARGETS[name]['metadata']]
+        for asset in [package, *(package[key] for key, _, _ in TARGETS[name]['extras'])]:
+            filenames.extend((asset['asset_name'], asset['asset_name'] + '.sha256'))
         if name.startswith('macos-'):
             audit = f'{name}-dependency-audit.json'
             if (directory / audit).is_file():
@@ -281,7 +310,8 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
     (output / 'SOURCE_COMMIT.txt').write_text(current + '\n')
     notes += '\n\n| Package | Binary source commit | Download |\n| --- | --- | --- |\n'
     for package in sorted(packages, key=lambda item: item['target'] != 'win64'):
-        notes += f'| {package["target"]} | `{package["source_commit"]}` | [download](#) |\n'
+        links = '[download](#)' + ''.join(f' · [{label}](#)' for _, _, label in TARGETS[package['target']]['extras'])
+        notes += f'| {package["target"]} | `{package["source_commit"]}` | {links} |\n'
     (output / 'UPDATE_METADATA.json').write_text(json.dumps(update_metadata, indent=2) + '\n')
     (output / 'RELEASE_NOTES.md').write_text(append_metadata(notes, update_metadata))
     sums = ''.join(f'{file_digest(output / name)}  {name}\n' for name in package_asset_names(version))
@@ -339,7 +369,7 @@ def main():
             flags = ['--prerelease'] if validate_tag(version)['channel'] != 'stable' else []
             assets = [str(p) for p in release_assets(args.output, version)]
             subprocess.run(['gh', 'release', 'create', version, '--target', current, '--draft', *flags,
-                            '--title', f'VLC Juxtopposed Redesign - {version}',
+                            '--title', f'Hakone {version}',
                             '--notes-file', str(args.output / 'RELEASE_NOTES.md'), *assets], check=True)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         parser.error(str(error))

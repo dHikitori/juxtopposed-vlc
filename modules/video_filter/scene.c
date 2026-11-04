@@ -61,12 +61,12 @@ static void SavePicture( filter_t *, picture_t * );
 
 #define WIDTH_TEXT N_( "Image width" )
 #define WIDTH_LONGTEXT N_( "You can enforce the image width. By default " \
-                            "(-1) VLC will adapt to the video " \
+                            "(-1) Hakone will adapt to the video " \
                             "characteristics.")
 
 #define HEIGHT_TEXT N_( "Image height" )
 #define HEIGHT_LONGTEXT N_( "You can enforce the image height. By default " \
-                            "(-1) VLC will adapt to the video " \
+                            "(-1) Hakone will adapt to the video " \
                             "characteristics.")
 
 #define RATIO_TEXT N_( "Recording ratio" )

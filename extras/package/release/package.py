@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import dmg
 from version import validate_tag, bundle_version
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -63,7 +64,7 @@ def sign_macos_adhoc(app, all_binaries):
                     if main.is_file():
                         main_executables.add(main.resolve())
                 break
-    # Signing Contents/MacOS/vlc directly can seal the app before its nested
+    # Signing Contents/MacOS/hakone directly can seal the app before its nested
     # libraries are signed. Framework executables must also be signed via their
     # bundle, including versioned frameworks whose top-level executable is a link.
     targets = code_bundles | {p for p in all_binaries if p.resolve() not in main_executables}
@@ -78,7 +79,7 @@ def sign_macos_adhoc(app, all_binaries):
 
 def macos(stage, output, tag, commit, reuse_qt=False):
     arch = run('uname', '-m')
-    app = output / f'macos-{arch}' / 'VLC Juxtopposed.app'
+    app = output / f'macos-{arch}' / 'Hakone.app'
     if app.exists() and not reuse_qt:
         raise SystemExit(f'Remove the old package before rebuilding: {app}')
     contents = app / 'Contents'
@@ -93,9 +94,9 @@ def macos(stage, output, tag, commit, reuse_qt=False):
             existing_qt = plistlib.load(stream)['CFBundleVersion']
         if existing_qt != run(qt / 'bin/qmake', '-query', 'QT_VERSION'):
             raise SystemExit('Cannot reuse a deployment from a different Qt version')
-    copy(stage / 'bin/vlc', binaries / 'vlc')
+    copy(stage / 'bin/hakone', binaries / 'hakone')
     # Copy the worker before the dependency checks, Qt deployment and code signature.
-    copy(stage / 'bin/vlc-addon-worker', binaries / 'vlc-addon-worker')
+    copy(stage / 'bin/hakone-addon-worker', binaries / 'hakone-addon-worker')
     for helper in ('vlc-preparser', 'vlc-cache-gen', 'vlc-qt-check'):
         copy(stage / 'libexec/vlc' / helper, binaries / helper)
     # Deploy Qt before adding hundreds of unrelated VLC modules: macdeployqt
@@ -106,21 +107,21 @@ def macos(stage, output, tag, commit, reuse_qt=False):
         shutil.copy2(library, frameworks / library.name, follow_symlinks=True)
     copy(stage / 'share/vlc', resources / 'share')
     copy(stage / 'share/locale', resources / 'share/locale')
-    copy(ROOT / 'share/vlc512x512.png', resources / 'vlc.png')
-    copy(ROOT / 'modules/gui/macosx/Resources/App-Icons/VLC.icns', resources / 'vlc.icns')
+    copy(ROOT / 'share/vlc512x512.png', resources / 'hakone.png')
+    copy(ROOT / 'share/icons/hakone.icns', resources / 'hakone.icns')
     for name in ('COPYING', 'COPYING.LIB', 'AUTHORS', 'THANKS', 'README.md'):
         copy(ROOT / name, resources / name)
     copy(ROOT / 'modules/gui/qt/fonts/LICENSE.txt', resources / 'Inter-LICENSE.txt')
     (resources / 'SOURCE_COMMIT.txt').write_text(commit + '\n')
     # The Qt plugin has greater interface priority than minimal_macosx.
     # Keep a native main executable so NSBundle, Finder file events and AppKit work.
-    info = dict(CFBundleExecutable='vlc', CFBundleName='VLC Juxtopposed',
-                CFBundleDisplayName='VLC Juxtopposed', CFBundlePackageType='APPL',
-                CFBundleIdentifier='org.juxtopposed.vlc', CFBundleIconFile='vlc.icns',
+    info = dict(CFBundleExecutable='hakone', CFBundleName='Hakone',
+                CFBundleDisplayName='Hakone', CFBundlePackageType='APPL',
+                CFBundleIdentifier='org.hakone.hakone', CFBundleIconFile='hakone.icns',
                 CFBundleVersion=bundle_version(tag),
                 CFBundleShortVersionString=tag.split('-')[0], NSHighResolutionCapable=True,
-                NSMicrophoneUsageDescription='VLC can play and record audio from input devices.',
-                NSCameraUsageDescription='VLC can play and record video from input devices.')
+                NSMicrophoneUsageDescription='Hakone can play and record audio from input devices.',
+                NSCameraUsageDescription='Hakone can play and record video from input devices.')
     with (contents / 'Info.plist').open('wb') as stream:
         plistlib.dump(info, stream)
     deploy = qt / 'bin/macdeployqt'
@@ -246,17 +247,42 @@ def macos(stage, output, tag, commit, reuse_qt=False):
         tag=tag, version=tag, channel=validate_tag(tag)['channel'], platform='macos', source_commit=commit,
         architecture=arch, minimum_macos=minimum, qt=run(qt / 'bin/qmake', '-query', 'QT_VERSION'),
         signing='ad-hoc; no Developer ID or notarization'), indent=2) + '\n')
-    archive = output / f'vlc-juxtopposed-{tag}-macos-{arch}.zip'
+    archive = output / f'hakone-{tag}-macos-{arch}.zip'
     subprocess.run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive)], check=True)
+    # The drag-to-install image carries the same signed bundle as the ZIP.
+    dmg.build(app, disk_image_path(archive))
     return archive
 
 
+def disk_image_path(archive):
+    return archive.with_suffix('.dmg')
+
+
+def write_checksum(path):
+    with path.open('rb') as stream:
+        digest = hashlib.sha256()
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+        digest = digest.hexdigest()
+    path.with_suffix(path.suffix + '.sha256').write_text(f'{digest}  {path.name}\n')
+    return digest
+
+
+# The installer scripts and helpers that -Dnsis=enabled installs beside the app.
+NSIS_SUPPORT = ('vlc.win32.nsi', 'spad.nsi', 'NSIS', 'helpers', 'languages')
+
+
+def top_level_ignore(root, ignored):
+    """A copytree filter that leaves out names at the top of root only."""
+    return lambda directory, names: [n for n in names if n in ignored] if Path(directory) == root else []
+
+
 def windows(stage, output, tag, commit):
-    target = output / 'vlc-win64'
+    target = output / 'hakone-win64'
     if target.exists():
         raise SystemExit(f'Remove the old package before rebuilding: {target}')
-    copy(stage, target)
-    for required in ('vlc.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
+    shutil.copytree(stage, target, symlinks=True, ignore=top_level_ignore(stage, NSIS_SUPPORT))
+    for required in ('hakone.exe', 'hakone-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
         if not (target / required).exists():
             raise RuntimeError(f'Windows installation missing {required}')
     # MinGW's compiler runtimes are not part of a stock Windows installation.
@@ -296,9 +322,33 @@ def windows(stage, output, tag, commit):
     (target / 'SOURCE_COMMIT.txt').write_text(commit + '\n')
     copy(ROOT / 'modules/gui/qt/fonts/LICENSE.txt', target / 'Inter-LICENSE.txt')
     # Zip entries preserve the empty portable folder.
-    archive = output / f'vlc-juxtopposed-{tag}-win64.zip'
+    archive = output / f'hakone-{tag}-win64.zip'
     shutil.make_archive(str(archive.with_suffix('')), 'zip', output, target.name)
     return archive
+
+
+def windows_installer(stage, output, tag):
+    """Build the NSIS installer from the portable package's files."""
+    if not all((stage / name).exists() for name in NSIS_SUPPORT):
+        raise RuntimeError('The installation has no NSIS scripts; configure with -Dnsis=enabled')
+    package = output / 'hakone-win64'
+    work = output / 'nsis'
+    if work.exists():
+        raise SystemExit(f'Remove the old installer stage before rebuilding: {work}')
+    # The portable folder would switch an installed copy to portable mode.
+    shutil.copytree(package, work, symlinks=True, ignore=top_level_ignore(package, ('portable', 'sdk')))
+    for name in NSIS_SUPPORT:
+        copy(stage / name, work / name)
+    # spad-setup.exe handles Windows' "Set Program Access and Defaults" and is
+    # installed with the other executables. The main script writes its
+    # installer beside the stage, as hakone-<version>-win64.exe.
+    for script in ('spad.nsi', 'vlc.win32.nsi'):
+        subprocess.run(['makensis', '-V2', str(work / script)], check=True)
+    installer = output / f'hakone-{tag}-win64.exe'
+    if not installer.is_file():
+        raise RuntimeError(f'makensis did not write {installer.name}')
+    shutil.rmtree(work)
+    return installer
 
 
 def main():
@@ -328,18 +378,25 @@ def main():
         archive = macos(args.stage.resolve(), args.output.resolve(), args.tag, commit, args.reuse_qt)
     else:
         archive = windows(args.stage.resolve(), args.output.resolve(), args.tag, commit)
-    with archive.open('rb') as stream:
-        digest = hashlib.sha256()
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(block)
-        digest = digest.hexdigest()
-    archive.with_suffix(archive.suffix + '.sha256').write_text(f'{digest}  {archive.name}\n')
+    digest = write_checksum(archive)
     metadata_path = args.output / (f"macos-{run('uname', '-m')}-build.json" if args.platform == 'macos' else 'windows-build.json')
     package_metadata = json.loads(metadata_path.read_text())
+    # asset_name stays the ZIP: update metadata and older clients select it.
     package_metadata.update(asset_name=archive.name, size=archive.stat().st_size,
                             sha256=digest, package_type='portable-zip')
+    if args.platform == 'macos':
+        image = disk_image_path(archive)
+        package_metadata['disk_image'] = dict(asset_name=image.name, size=image.stat().st_size,
+                                              sha256=write_checksum(image), package_type='drag-install-dmg')
+    else:
+        # The MSI is added later, on Windows, by build-msi.py.
+        installer = windows_installer(args.stage.resolve(), args.output.resolve(), args.tag)
+        package_metadata['installer'] = dict(asset_name=installer.name, size=installer.stat().st_size,
+                                             sha256=write_checksum(installer), package_type='nsis-installer')
     metadata_path.write_text(json.dumps(package_metadata, indent=2) + '\n')
     print(archive)
+    if args.platform == 'macos':
+        print(disk_image_path(archive))
 
 
 if __name__ == '__main__':

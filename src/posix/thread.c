@@ -154,6 +154,10 @@ static int vlc_clone_attr (vlc_thread_t *th, pthread_attr_t *attr,
         sigaddset (&set, SIGTERM);
 
         sigaddset (&set, SIGPIPE); /* We don't want this one, really! */
+        /* The executables block SIGCHLD before starting LibVLC. On macOS the
+         * main thread then accepts it for Qt, so keep it out of LibVLC
+         * threads started from there too. */
+        sigaddset (&set, SIGCHLD);
         pthread_sigmask (SIG_BLOCK, &set, &oldset);
     }
 

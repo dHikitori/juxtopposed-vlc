@@ -38,7 +38,7 @@ RedesignShortcutEditor {
         const conflicts = draft.shortcutConflicts(name, shortcut)
         if (conflicts.length) {
             pendingName = name; pendingShortcut = shortcut
-            conflictDialog.message = qsTr("VLC uses %1 for %2. Use %1 for this action?").arg(shortcut).arg(conflicts.map(conflict => {
+            conflictDialog.message = qsTr("Hakone uses %1 for %2. Use %1 for this action?").arg(shortcut).arg(conflicts.map(conflict => {
                 const row = shortcuts.find(row => row.name === conflict.name || row.globalName === conflict.name)
                 return row ? row.title : conflict.title
             }).join(", "))

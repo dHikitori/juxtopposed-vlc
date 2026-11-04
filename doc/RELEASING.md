@@ -1,13 +1,16 @@
 # Cutting a release
 
-The release pipeline builds four native targets. The next release is `4.0.0-beta.5`:
+The release pipeline builds four native targets:
 
 | Target | Download |
 | --- | --- |
-| Windows 10 (1809+) / 11, x86_64 | `vlc-juxtopposed-4.0.0-beta.5-win64.zip` (portable) |
-| macOS Apple Silicon | `vlc-juxtopposed-4.0.0-beta.5-macos-arm64.zip` |
-| macOS Intel | `vlc-juxtopposed-4.0.0-beta.5-macos-x86_64.zip` |
-| Linux x86_64, glibc >= 2.35, GLIBCXX >= 3.4.30 | `.tar.gz` portable directory bundle |
+| Windows 10 (1809+) / 11, x86_64 | `hakone-<tag>-win64.zip` (portable `hakone-win64` folder with `hakone.exe`), `hakone-<tag>-win64.exe` (NSIS installer) or `hakone-<tag>-win64.msi` (MSI installer) |
+| macOS Apple Silicon | `hakone-<tag>-macos-arm64.dmg` (drag-to-install) or `hakone-<tag>-macos-arm64.zip` (`Hakone.app`) |
+| macOS Intel | `hakone-<tag>-macos-x86_64.dmg` (drag-to-install) or `hakone-<tag>-macos-x86_64.zip` (`Hakone.app`) |
+| Linux x86_64, glibc >= 2.35, GLIBCXX >= 3.4.30 | `hakone-<tag>-linux-x86_64.tar.gz` portable directory bundle |
+
+Releases up to `4.0.0-beta.5` used the `vlc-juxtopposed-<tag>-...` names and a
+`VLC Juxtopposed.app` bundle.
 
 The Mac packages are separate native apps, rather than a universal binary.
 Both include Qt, VLC plugins and their non-system dynamic libraries. Packaging
@@ -21,6 +24,21 @@ code before its containing bundle and verifies the completed app. Invalid ad-hoc
 signatures still fail packaging because they can prevent execution on Apple
 Silicon. Downloaded Mac apps remain subject to Gatekeeper's checks for unverified
 publishers.
+
+Each Mac target also produces a drag-to-install disk image,
+`hakone-<tag>-macos-<arch>.dmg`, containing the same signed `Hakone.app` as the
+ZIP and an `Applications` link. Opening it shows a fixed-size Finder window
+("Install Hakone", "Drag to Applications") without toolbar, sidebar or status
+bar; the volume is named `Hakone` and uses `share/icons/hakone.icns`. The image
+itself is neither signed nor notarized, like the ZIP, so the same Gatekeeper
+steps apply after copying the app. It is built by `extras/package/release/dmg.py`
+with [dmgbuild](https://pypi.org/project/dmgbuild/) at the exact versions in
+`extras/package/release/dmg/requirements.txt`; dmgbuild writes the Finder layout
+directly and needs no GUI session. Images are LZFSE-compressed (`ULFO`), which
+macOS 10.11 and later can open, below any `LSMinimumSystemVersion` the app
+records. The window artwork is `extras/package/release/dmg/background.svg`;
+the committed 1x and @2x PNGs (combined into a HiDPI TIFF at build time) are
+re-rendered with `dmg/render-background.py` after editing it.
 
 The maximum deployment version found across the included binaries becomes
 `LSMinimumSystemVersion` and
@@ -76,6 +94,21 @@ Windows builds the pinned contrib sources rather than using upstream prebuilt
 libraries, which would omit those patches. Windows has no publisher signature.
 Its portable ZIP includes imported MinGW runtime DLLs and the Vulkan loader,
 with their license notices. Windows build metadata lists the external imports.
+
+Windows also publishes two installers of the same files, without the
+`portable` folder, which would put an installed copy in portable mode, or the
+SDK. Both install to `Program Files\Hakone`. The Docker build makes the NSIS
+installer, `hakone-<tag>-win64.exe`, from the portable folder after packaging it.
+The `windows-smoke` job then builds the MSI, `hakone-<tag>-win64.msi`, natively
+with WiX 3.14 using `extras/package/release/build-msi.py`. It uses the runner's
+WiX when present and otherwise installs version 3.14.1 with Chocolatey.
+`extras/package/release/test-windows-installers.ps1` then installs each
+installer silently, requires every package file and the version and module
+checks to pass from the installed copy, and uninstalls it. Only after these
+checks does the job upload the complete `<version>-win64` artifact; the
+Docker build's own upload is `<version>-win64-build`. The installers are
+listed with each package in the build metadata and the release checksums.
+Packages from runs before the installers existed cannot be reused.
 No signing credentials or OpenSubtitles app key are required.
 
 The optional repository Actions secret `OPENSUBTITLES_API_KEY` is passed only to
@@ -106,15 +139,16 @@ notes in the published release format: platform summary and Git tag, full
 changelog link, design attribution, changes since the previous release, usage
 instructions and current limits. Assembly appends the final
 `Package | Binary source commit | Download` table with the actual source commits
-and `[download](#)` placeholders. Replace each `#` with the matching package's
-download URL in the draft before publishing. Build run details and the packaging
+and `[download](#)` placeholders (Mac rows also have `[disk image](#)`).
+Replace each `#` with the matching package's (or `.dmg`'s) download URL in the
+draft before publishing. Build run details and the packaging
 commit remain in the workflow artifacts. Inspect the candidate release source
 before creating a tag:
 
 ```sh
-git fetch origin tag 4.0.0-beta.4
-git log --oneline 4.0.0-beta.4..HEAD
-git diff 4.0.0-beta.4..HEAD -- .github/workflows extras/package/release doc/RELEASING.md doc/releases README.md
+git fetch origin tag 4.0.0-beta.5
+git log --oneline 4.0.0-beta.5..HEAD
+git diff 4.0.0-beta.5..HEAD -- .github/workflows extras/package/release doc/RELEASING.md doc/releases README.md
 ```
 
 Generated files go into ignored `build-release-*` and `contrib/contrib-*`
@@ -140,24 +174,24 @@ There is no automatic image switch or guarantee that another pool has capacity.
 ## Dependency caches
 
 Release builds cache dependencies by default. Every run still compiles, packages
-and verifies VLC. On **Run workflow**, check **bypass_cache** to skip cache restore
+and verifies Hakone. On **Run workflow**, check **bypass_cache** to skip cache restore
 and save operations and build the Linux environment without cached layers. The
 first build for a new cache key remains a cold build; already-running jobs use
 their original workflow and cannot populate these caches retrospectively.
 
 Windows saves this fork's installed contrib libraries, installed native build
-tools (including Qt's QML tools), and Vulkan license files. It does not save VLC's
+tools (including Qt's QML tools), and Vulkan license files. It does not save Hakone's
 build tree, staged app, generated API-key header or dependency source/build trees.
 The cache key includes the digest-pinned container image, target, fixed container
 path, tracked contrib recipes/checksums/patches, build-tool sources and Windows
-release configuration. Changing only VLC's version or application code keeps the
+release configuration. Changing only Hakone's version or application code keeps the
 dependency key. Compiled SDK caches require an exact key and a matching inventory
 of file contents, permissions and symbolic links. An incomplete or modified SDK
 is discarded and its dependencies rebuilt normally. Source archive downloads use
 a separate cache; normal contrib checksum verification still applies.
 
 The Windows dependency phase runs without the OpenSubtitles secret and saves its
-cache before VLC compilation. This preserves successfully built dependencies even
+cache before Hakone compilation. This preserves successfully built dependencies even
 if later application packaging fails. The normal build then uses that validated
 installed SDK; local builds without a cache key retain the original build path.
 
@@ -205,7 +239,7 @@ full run:
    recovery succeeds. Leave it unchecked to produce only the complete artifact.
 6. Start the workflow. It verifies and copies the reusable packages into this
    run, builds and tests the selected targets, and assembles
-   `4.0.0-beta.5-complete`. Inspect the downloads before publishing the draft.
+   `1.0.0-beta.1-complete`. Inspect the downloads before publishing the draft.
 
 Recovery requires the original run to use the same version and an ancestor of
 the current commit. Only release tooling (including the Windows build wrapper),
@@ -219,6 +253,8 @@ selects those targets for rebuilding. The Windows-only launcher and plugin-loade
 sources may differ when **win64 is rebuilt**; changes to shared application
 sources still require a full build. A recovery run itself cannot serve
 as the original full run for another recovery; keep using the original run ID.
+Mac packages from runs made before disk images were added have no `.dmg` and
+fail reuse validation; rebuild those Mac targets.
 
 The completed bundle includes `RELEASE_MANIFEST.json` with each package's source
 commit, originating run, size, hash and reuse status. Existing package metadata
@@ -226,8 +262,10 @@ and embedded source commits are preserved. `SOURCE_COMMIT.txt` identifies the
 current release packaging commit, not every binary's source: the release notes
 and manifest list the sources individually. Metadata, manifests and dependency
 audits remain in the workflow's `<version>-complete` artifact. The draft release
-attaches only `SHA256SUMS.txt`, the four application archives and their individual
-`.sha256` files. `SHA256SUMS.txt` covers only the application archives. No custom
+attaches only `SHA256SUMS.txt`, the four application archives, the two Mac disk
+images, the two Windows installers and their individual `.sha256` files.
+`SHA256SUMS.txt` covers only the application archives, disk images and
+installers. No custom
 source archives are generated; releases use GitHub's automatic source downloads.
 
 **create_draft** is also available for full manual builds. It uses the checked-out
@@ -281,14 +319,14 @@ An optional `doc/releases/<version>.json` file supplies release display fields:
 
 ```json
 {
-  "product_name": "VLC",
-  "package_prefix": "vlc-juxtopposed",
+  "product_name": "Hakone",
+  "package_prefix": "hakone",
   "subtitle": "A short announcement for this release"
 }
 ```
 
-All three fields are optional. Without the file, the product name is `VLC`, the
-package prefix is `vlc-juxtopposed`, and no subtitle is shown. Product names and
+All three fields are optional. Without the file, the product name is `Hakone`, the
+package prefix is `hakone`, and no subtitle is shown. Product names and
 subtitles are plain single-line text, with limits of 128 and 512 UTF-16 code
 units respectively. The prefix contains lowercase letters/numbers separated by
 hyphens, up to 64 characters. It must agree with the packages actually built;
@@ -298,14 +336,17 @@ above the full release notes in the update window and notification pane.
 Assembly adds `schema: 1`, the exact version tag, and the compiled update
 generation automatically. These fields cannot be overridden by the JSON file.
 `vlc_update_generation` in `meson.build` and `UPDATE_GENERATION` in `configure.ac`
-must agree. Generation zero is the current value. Keep it unchanged for ordinary
-releases. If a later release starts a new version sequence, increase both values
-in its source before building. The updater compares generation first, then
+must agree. Generation one is the current value: it started with `1.0.0-beta.1`,
+when Hakone's own version sequence replaced the `4.0.0-beta.N` releases. Keep it
+unchanged for ordinary releases. If a later release starts a new version
+sequence, increase both values in its source before building. The updater compares generation first, then
 normal semantic versions; never decrease or reuse a generation for an older
 sequence. Stable builds continue to exclude prereleases across generations.
 
-Releases with no metadata block are treated as generation zero with the existing
-VLC package names. Invalid, duplicate, unsupported-schema or mismatched metadata
+Releases with no metadata block are treated as generation zero with the
+pre-rebrand `vlc-juxtopposed` package names, which is what releases published
+before the metadata block used. Clients from `4.0.0-beta.5` on read the prefix
+from the block, so they find the renamed `hakone-` packages. Invalid, duplicate, unsupported-schema or mismatched metadata
 blocks make that release ineligible. Release-page and asset URLs must still
 belong to this repository, and an uploaded package for the current platform and
 architecture must exist. Metadata does not enable automatic installation.
@@ -316,34 +357,43 @@ stable so existing clients can continue checking it.
 
 ### Tagging
 
-Before tagging, update `meson.build`'s project version and `configure.ac`'s
-`AC_INIT` / `VERSION_*` fields together. Add `doc/releases/<version>.md`, then run:
+Hakone's version is separate from the LibVLC version. The `meson.build` project
+version and `configure.ac`'s `AC_INIT` / `VERSION_*` fields are the LibVLC and
+core version, kept in step with upstream VLC; LibVLC, its plugins, Lua's
+`vlc.misc.version()` and the engine's network user agents report it. Release
+tags, packages, the updater and the app's own version displays use Hakone's
+version, and its codename is Jiji.
+
+Before tagging, update `hakone_version` in `meson.build` and `configure.ac`'s
+`HAKONE_VERSION` / `HAKONE_VERSION_*` fields together. Add
+`doc/releases/<version>.md`, then run:
 
 ```sh
-python3 extras/package/release/version.py 4.0.0-beta.5
+python3 extras/package/release/version.py 1.0.0-beta.1
 python3 -m unittest discover -s extras/package/release/tests
 ```
 
 The validator rejects old `beta-N` tags and tags that disagree with the compiled
-version. Use `4.0.0-beta.N`, `4.0.0-rc.N`, or `4.0.0` (stable). Published historical
-`beta-1` through `beta-3` tags remain intact. Create the annotated tag only after
+version. Use `1.0.0-beta.N`, `1.0.0-rc.N`, or `1.0.0` (stable). Published historical
+`beta-1` through `beta-3` and `4.0.0-beta.4` / `4.0.0-beta.5` tags remain intact. Create the annotated tag only after
 committing the reviewed release source:
 
 ```sh
-git tag -a 4.0.0-beta.5 -m 'VLC Juxtopposed 4.0.0-beta.5'
-git show 4.0.0-beta.5 --stat
+git tag -a 1.0.0-beta.1 -m 'Hakone 1.0.0-beta.1'
+git show 1.0.0-beta.1 --stat
 ```
 
 Once the source/tag is acceptable, explicitly push the branch and tag:
 
 ```sh
 git push origin HEAD
-git push origin refs/tags/4.0.0-beta.5
+git push origin refs/tags/1.0.0-beta.1
 ```
 
-A pushed `4.0.0-beta.5` tag runs the same builds and creates a **draft prerelease** named
-`VLC Juxtopposed Redesign - 4.0.0-beta.5`. It attaches only the four application
-archives, their `.sha256` files and `SHA256SUMS.txt`. Build metadata stays in the
+A pushed `1.0.0-beta.1` tag runs the same builds and creates a **draft prerelease** named
+`Hakone 1.0.0-beta.1`. It attaches only the four application
+archives, the two Mac disk images, the two Windows installers, their `.sha256`
+files and `SHA256SUMS.txt`. Build metadata stays in the
 workflow artifacts; source downloads are provided automatically by GitHub.
 The notes are taken from the tagged source and include its commit hash.
 Inspect and publish the draft
@@ -363,7 +413,7 @@ Stable tags create draft stable releases; prerelease tags create draft prereleas
 
 ## Isolated add-on worker in release builds
 
-Release builds include `vlc-addon-worker` next to VLC. The release also
+Release builds include `hakone-addon-worker` next to Hakone. The release also
 contains the TheSubtitleDB reference package. The release setup script uses
 `addon-rust-version.txt`. This file selects
 [Rust 1.99.1](https://blog.rust-lang.org/releases/). Use Rust 1.97
@@ -413,19 +463,33 @@ build-release-tools/bin/aqt install-qt mac desktop 6.8.3 clang_64 -O build-relea
 export QT_ROOT_DIR="$PWD/build-release-qt/6.8.3/macos"
 ```
 
+Packaging also creates the disk image, so install the pinned dmgbuild too.
+`package.py` uses `$DMGBUILD`, then `build-release-tools/bin/dmgbuild`, then
+`dmgbuild` on `PATH`:
+
+```sh
+build-release-tools/bin/pip install -r extras/package/release/dmg/requirements.txt
+```
+
 Use an Intel Mac for the Intel package or an Apple Silicon Mac for ARM. Optional
 modules are detected from the installed libraries; inspect Meson's summary.
 
 ```sh
-RELEASE_TAG=4.0.0-beta.5 JOBS=4 bash extras/package/release/build-native.sh
+RELEASE_TAG=1.0.0-beta.1 JOBS=4 bash extras/package/release/build-native.sh
 python3 extras/package/release/verify.py \
-    'build-release-output/macos-arm64/VLC Juxtopposed.app/Contents/MacOS/vlc'
+    'build-release-output/macos-arm64/Hakone.app/Contents/MacOS/hakone'
 ```
+
+To check the disk image as CI does, mount it read-only and compare its app with
+a fresh extraction of the ZIP (`hdiutil attach -nobrowse -readonly -mountpoint
+<dir> <image>`, then `python3 extras/package/release/dmg.py check <dir>
+--reference <extracted>/Hakone.app`, then `hdiutil detach <dir>`). Opening the
+image normally shows the Finder layout.
 
 For an Intel build, replace `macos-arm64` with `macos-x86_64`. `QT_ROOT_DIR` can
 select a Qt installation other than Homebrew. The script builds a private patched
 media library and stages the installation before bundling; it does not install
-VLC into `/usr` or Homebrew. Remove the specific output app directory before
+Hakone into `/usr` or Homebrew. Remove the specific output app directory before
 repackaging an existing build. To rebuild from clean dependency state, remove
 the corresponding `build-release-macos-deps` directory too.
 
@@ -469,8 +533,10 @@ resulting ZIP on an actual Windows machine, including playback, the library,
 settings and a path with spaces. The GUI targets the Windows versions supported
 by [Qt 6.8](https://doc.qt.io/qt-6.8/supported-platforms.html#windows).
 The release wrapper disables Wine execution of VLC configuration probes and
-disables installer generation. This also permits cross-compilation under ARM
-Docker emulation when Wine cannot run Windows programs. Native executable
+builds the NSIS installer from the portable package rather than upstream's
+installer targets. This also permits cross-compilation under ARM
+Docker emulation when Wine cannot run Windows programs. The MSI is built only
+in CI, on Windows. Native executable
 validation remains a separate Windows CI job.
 That job launches the same portable profile twice and requires both Qt startup
 and audio decoding, covering first launch and cached graphics startup.
@@ -489,7 +555,7 @@ twice using the same cache, to cover first launch and cached graphics startup.
 The saved graphics backend must be applied before constructing any Qt Quick
 windows. In particular, an Intel Mac runner can lack OpenGL 3.0 and use software
 rendering on its first launch; its second launch must retain that fallback.
-An aborted or timed-out verification prints the captured VLC output before the
+An aborted or timed-out verification prints the captured Hakone output before the
 failure reason, including the GUI attempt number and signal. For a local check,
 `--diagnostics-dir <directory>` also keeps each process's output in a separate
 file. CI uses its normal build log and does not upload crash-report files.
@@ -497,7 +563,7 @@ Linux requires a working Qt Quick OpenGL context on both X11 and native Wayland,
 using Mesa's software GPU driver in CI. This exercises EGL and the normal RHI
 rendering path; `QT_QUICK_BACKEND=software` is a separate fallback check. The
 verifier rejects graphics-context and missing-buffer-integration errors even
-when VLC exits with status zero. The runtime audit also runs after extraction
+when Hakone exits with status zero. The runtime audit also runs after extraction
 and relocation, without the build SDK's library paths. A required disposable
 Ubuntu 24.04 runtime test repeats Wayland/OpenGL, X11/OpenGL and software playback
 without system Qt or a build SDK. It uses the identical read-only package and
@@ -515,7 +581,9 @@ local library build. Linux deployment-tool SHA-256 digests are pinned in
 `fetch-linux-tools.py` and verified before extraction, including cached downloads.
 Extracted tool trees are recreated from those verified archives. Review the
 upstream release asset and update its pin when adopting a newer tool; a changed
-continuous-release download fails closed until then. Tool hashes are also
+continuous-release download fails closed until then. linuxdeploy is downloaded
+from its `1-alpha-20251107-1` tagged release, which cannot change; the Qt plugin
+still comes from its continuous release. Tool hashes are also
 recorded alongside the artifact. VLC and design/font attribution remain in
 `README.md` and the bundle.
 
@@ -537,16 +605,21 @@ Release selection filters platform packages before selecting the highest version
 publication order and GitHub's latest-release badge do not determine precedence.
 An asset must be uploaded, nonempty, and named exactly:
 
-- `vlc-juxtopposed-<tag>-win64.zip` (Windows x86_64)
-- `vlc-juxtopposed-<tag>-win32.zip` (Windows x86)
-- `vlc-juxtopposed-<tag>-winarm64.zip` (Windows ARM64)
-- `vlc-juxtopposed-<tag>-macos-<arm64|x86_64>.zip` (macOS native)
-- `vlc-juxtopposed-<tag>-macos-universal.zip` (either supported macOS architecture)
-- `vlc-juxtopposed-<tag>-linux-<x86_64|arm64>.tar.gz` (Linux portable directory)
+- `<prefix>-<tag>-win64.zip` (Windows x86_64)
+- `<prefix>-<tag>-win32.zip` (Windows x86)
+- `<prefix>-<tag>-winarm64.zip` (Windows ARM64)
+- `<prefix>-<tag>-macos-<arm64|x86_64>.zip` (macOS native)
+- `<prefix>-<tag>-macos-universal.zip` (either supported macOS architecture)
+- `<prefix>-<tag>-linux-<x86_64|arm64>.tar.gz` (Linux portable directory)
+
+`<prefix>` is the release's metadata `package_prefix` (`hakone` by default), or
+`vlc-juxtopposed` for a release without a metadata block.
 
 The current workflow produces Windows x86_64, both native macOS packages, and
 Linux x86_64. Recognizing other target names does not claim CI builds for them.
-Source archives, SDKs, symbols and checksums are not eligible packages. Architecture
+Source archives, SDKs, symbols, checksums, the Mac `.dmg` disk images and the
+Windows `.exe` and `.msi` installers are not eligible packages: names are matched exactly, so the checker keeps selecting the
+`.zip` for each Mac (current and earlier clients alike). Architecture
 matching follows the running binary; automatic migration from emulated to native
 builds is not enabled. Minimum OS/glibc requirements remain in release notes and
 build metadata; filename matching does not certify all operating system versions.

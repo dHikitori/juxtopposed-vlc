@@ -9,7 +9,7 @@ Use Rust stable with the `wasm32-unknown-unknown` target.
 ```sh
 RUSTUP_TOOLCHAIN=stable cargo test --locked
 sh build.sh
-python3 tests/test_worker.py --worker /absolute/path/to/vlc-addon-worker
+python3 tests/test_worker.py --worker /absolute/path/to/hakone-addon-worker
 ```
 
 `dist/addon.wasm` is the package module. Install the folder with the add-on manager. Then enable the package. The host supplies private references for folders, items, and page cursors. A saved queue reference contains the source and item identity. A separate user command must accept a suggestion before it changes the queue.

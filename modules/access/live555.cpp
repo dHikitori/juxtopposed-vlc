@@ -77,12 +77,12 @@ static void Close( vlc_object_t * );
 
 #define KASENNA_TEXT N_( "Kasenna RTSP dialect")
 #define KASENNA_LONGTEXT N_( "Kasenna servers use an old and nonstandard " \
-    "dialect of RTSP. With this parameter VLC will try this dialect, but "\
+    "dialect of RTSP. With this parameter Hakone will try this dialect, but "\
     "then it cannot connect to normal RTSP servers." )
 
 #define WMSERVER_TEXT N_("WMServer RTSP dialect")
 #define WMSERVER_LONGTEXT N_("WMServer uses a nonstandard dialect " \
-    "of RTSP. Selecting this parameter will tell VLC to assume some " \
+    "of RTSP. Selecting this parameter will tell Hakone to assume some " \
     "options contrary to RFC 2326 guidelines.")
 
 #define USER_TEXT N_("Username")

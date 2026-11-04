@@ -113,15 +113,15 @@ vlc_module_begin ()
     set_capability( "sout access", 0 )
     set_subcategory( SUBCAT_SOUT_ACO )
     add_shortcut( "shout" )
-    add_string( SOUT_CFG_PREFIX "name", "VLC media player - Live stream",
+    add_string( SOUT_CFG_PREFIX "name", "Hakone Media Player - Live stream",
                 NAME_TEXT, NAME_LONGTEXT )
-    add_string( SOUT_CFG_PREFIX "description", "Live stream from VLC media player",
+    add_string( SOUT_CFG_PREFIX "description", "Live stream from Hakone Media Player",
                 DESCRIPTION_TEXT, DESCRIPTION_LONGTEXT )
     add_bool(   SOUT_CFG_PREFIX "mp3", false,
                 MP3_TEXT, MP3_LONGTEXT )
     add_string( SOUT_CFG_PREFIX "genre", "Alternative",
                 GENRE_TEXT, GENRE_LONGTEXT )
-    add_string( SOUT_CFG_PREFIX "url", "https://www.videolan.org/vlc",
+    add_string( SOUT_CFG_PREFIX "url", "https://hakone.org/",
                 URL_TEXT, URL_LONGTEXT )
     add_string( SOUT_CFG_PREFIX "bitrate", "",
                 BITRATE_TEXT, BITRATE_LONGTEXT )

@@ -77,7 +77,7 @@ TestCase {
     }
     function test_scaledAndSmallWindow(data) {
         width=data.w; height=data.h; dialog.scaleFactor=data.scale; dialog.lightTheme=!!data.light
-        dialog.load(dialog.requestId,{success:false,error:"VLC cannot read this playlist. Select it again."})
+        dialog.load(dialog.requestId,{success:false,error:"Hakone cannot read this playlist. Select it again."})
         wait(50)
         verify(dialog.x>=0 && dialog.y>=0)
         verify(dialog.x+dialog.width<=width && dialog.y+dialog.height<=height)

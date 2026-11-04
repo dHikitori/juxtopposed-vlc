@@ -202,7 +202,7 @@ NSString *VLCConvertAndSaveProfileNamesKey = @"CASProfileNames";
     [_customizeVidBitrateLabel setStringValue: _NS("Bitrate")];
     [_customizeVidFramerateLabel setStringValue: _NS("Frame rate")];
     [_customizeVidResolutionBox setTitle: _NS("Resolution")];
-    [_customizeVidResLabel setStringValue: _NS("You just need to fill one of the three following parameters, VLC will autodetect the other using the original aspect ratio")];
+    [_customizeVidResLabel setStringValue: _NS("You just need to fill one of the three following parameters, Hakone will autodetect the other using the original aspect ratio")];
     [_customizeVidWidthLabel setStringValue: _NS("Width")];
     [_customizeVidHeightLabel setStringValue: _NS("Height")];
     [_customizeVidScaleLabel setStringValue: _NS("Scale")];

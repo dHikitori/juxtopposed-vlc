@@ -52,6 +52,9 @@ extern "C" char **environ;
 #endif
 
 #include <QApplication>
+#include <QDialog>
+#include <QTimer>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <atomic>
 #include <QDate>
@@ -159,11 +162,11 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
 
 #define SYSTRAY_TEXT N_( "Systray icon" )
 #define SYSTRAY_LONGTEXT N_( "Show an icon in the systray " \
-                             "allowing you to control VLC media player " \
+                             "allowing you to control Hakone Media Player " \
                              "for basic actions." )
 
-#define MINIMIZED_TEXT N_( "Start VLC with only a systray icon" )
-#define MINIMIZED_LONGTEXT N_( "VLC will start with just an icon in " \
+#define MINIMIZED_TEXT N_( "Start Hakone with only a systray icon" )
+#define MINIMIZED_LONGTEXT N_( "Hakone will start with just an icon in " \
                                "your taskbar." )
 
 #define KEEPSIZE_TEXT N_( "Resize interface to the native video size" )
@@ -177,7 +180,7 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
 #define NOTIFICATION_TEXT N_( "Show notification popup on track change" )
 #define NOTIFICATION_LONGTEXT N_( \
     "Show a notification popup with the artist and track name when " \
-    "the current play queue item changes, when VLC is minimized or hidden." )
+    "the current play queue item changes, when Hakone is minimized or hidden." )
 
 #define OPACITY_TEXT N_( "Windows opacity between 0.1 and 1" )
 #define OPACITY_LONGTEXT N_( "Sets the windows opacity between 0.1 and 1 " \
@@ -214,7 +217,7 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
         "the recent items played in the player." )
 
 #define QT_MODE_TEXT N_( "Selection of the starting mode and look" )
-#define QT_MODE_LONGTEXT N_( "Start VLC with:\n" \
+#define QT_MODE_LONGTEXT N_( "Start Hakone with:\n" \
                              " - normal mode\n"  \
                              " - a zone always present to show information " \
                                   "as lyrics, album arts...\n" \
@@ -244,8 +247,8 @@ static void ShowDialog   ( intf_thread_t *, int, int, intf_dialog_args_t * );
 #define QT_DISABLE_VOLUME_KEYS_LONGTEXT N_(                                             \
     "With this option checked, the volume up, volume down and mute buttons on your "    \
     "keyboard will always change your system volume. With this option unchecked, the "  \
-    "volume buttons will change VLC's volume when VLC is selected and change the "      \
-    "system volume when VLC is not selected." )
+    "volume buttons will change Hakone's volume when Hakone is selected and change the "      \
+    "system volume when Hakone is not selected." )
 
 #define QT_PAUSE_MINIMIZED_TEXT N_( "Pause the video playback when minimized" )
 #define QT_PAUSE_MINIMIZED_LONGTEXT N_( \
@@ -463,7 +466,7 @@ vlc_module_begin ()
     add_bool( "qt-error-dialogs", true, ERROR_TEXT,
               nullptr )
     add_bool( "qt-minor-warnings", false, N_("Show minor warnings"),
-              N_("Show short notices for warnings in VLC's log. Warnings that arrive together share a notice.") )
+              N_("Show short notices for warnings in Hakone's log. Warnings that arrive together share a notice.") )
 
     add_obsolete_string( "qt-slider-colours")
 
@@ -585,6 +588,54 @@ Q_DECLARE_METATYPE(QQmlError)
 static qt_intf_t* g_qtIntf = nullptr;
 // Only the app thread reads or writes this pointer.
 static vlc::addons::AddonAppShutdown* g_addonAppShutdown = nullptr;
+
+namespace {
+/* Counts nested event deliveries on each thread, so shutdown can tell when
+ * it runs inside an event handler's nested loop, such as a blocking dialog. */
+class QVLCApplication : public QApplication
+{
+public:
+    using QApplication::QApplication;
+
+    bool notify( QObject *receiver, QEvent *event ) override
+    {
+        ++s_eventDepth;
+        const auto leave = qScopeGuard( [] { --s_eventDepth; } );
+        return QApplication::notify( receiver, event );
+    }
+
+    static int eventDepth() { return s_eventDepth; }
+
+private:
+    static thread_local int s_eventDepth;
+};
+
+thread_local int QVLCApplication::s_eventDepth = 0;
+}
+
+/* A blocking dialog opened from an event handler (often a QML signal
+ * handler) runs a nested event loop. Unloading the interface from inside it
+ * deletes objects whose handlers are still on the stack, which Qt aborts on.
+ * Close the topmost modal dialog and retry until the work runs from the
+ * outermost event delivery. Give up waiting after about five seconds. */
+static void runOutsideNestedEventLoops( std::function<void()> work, int attempt = 0 )
+{
+    if( QVLCApplication::eventDepth() <= 1 || attempt >= 200 )
+    {
+        work();
+        return;
+    }
+    if( QWidget *modal = QApplication::activeModalWidget() )
+    {
+        if( auto *dialog = qobject_cast<QDialog *>( modal ) )
+            dialog->reject();
+        else
+            modal->close();
+    }
+    QTimer::singleShot( 25, qApp, [work = std::move( work ), attempt]() mutable {
+        runOutsideNestedEventLoops( std::move( work ), attempt + 1 );
+    } );
+}
 static vlc::threads::condition_variable wait_ready;
 static vlc::threads::mutex lock;
 static bool busy = false;
@@ -798,13 +849,15 @@ static void Close( vlc_object_t *p_this )
         struct Completion { std::mutex mutex; std::condition_variable changed; bool done=false; };
         const auto completion=std::make_shared<Completion>();
         QMetaObject::invokeMethod(qApp,[p_intf,completion] {
-            const auto cleanup=[p_intf,completion] {
-                ThreadCleanup(p_intf,CLEANUP_INTF_CLOSED);
-                { std::lock_guard<std::mutex> guard(completion->mutex); completion->done=true; }
-                completion->changed.notify_all();
-            };
-            if(!g_addonAppShutdown || !g_addonAppShutdown->requestNativeClose(cleanup))
-                msg_Err(p_intf,"The app cannot stop add-on work.");
+            runOutsideNestedEventLoops([p_intf,completion] {
+                const auto cleanup=[p_intf,completion] {
+                    ThreadCleanup(p_intf,CLEANUP_INTF_CLOSED);
+                    { std::lock_guard<std::mutex> guard(completion->mutex); completion->done=true; }
+                    completion->changed.notify_all();
+                };
+                if(!g_addonAppShutdown || !g_addonAppShutdown->requestNativeClose(cleanup))
+                    msg_Err(p_intf,"The app cannot stop add-on work.");
+            });
         },Qt::QueuedConnection);
         { std::unique_lock<std::mutex> guard(completion->mutex); completion->changed.wait(guard,[&] { return completion->done; }); }
 
@@ -854,7 +907,7 @@ static void *Thread( void *obj )
 
     auto vlcQtMessageHandler = VlcQtMessageHandlerRegisterer{VLC_OBJECT(p_intf)};
 
-    char vlc_name[] = "vlc"; /* for WM_CLASS */
+    char vlc_name[] = "hakone"; /* for WM_CLASS */
     char *argv[5] = { nullptr };
     int argc = 0;
 
@@ -990,7 +1043,7 @@ static void *Thread( void *obj )
         qputenv("QSG_DISTANCEFIELD_ANTIALIASING", QByteArrayLiteral("gray"));
 
     /* Start the QApplication here */
-    QApplication app( argc, argv );
+    QVLCApplication app( argc, argv );
     // Declared after the app, so it also reports waits in the final cleanup.
     std::unique_ptr<HangReporter> hangReporter;
     if (var_InheritBool(p_intf, "qt-hang-report"))
@@ -1127,14 +1180,19 @@ static void *Thread( void *obj )
 
     /* All the settings are in the .conf/.ini style */
 #ifdef _WIN32
+    bool portableConfig = false;
     char *cConfigDir = config_GetUserDir( VLC_CONFIG_DIR );
     if (likely(cConfigDir != nullptr))
     {
         msg_Dbg(p_intf, "Qt configuration directory: %s", cConfigDir);
         QString configDir = cConfigDir;
         free( cConfigDir );
-        if( configDir.endsWith( "\\vlc" ) )
-            configDir.chop( 4 ); /* the "\vlc" dir is added again by QSettings */
+        /* QSettings adds the organization folder again */
+        const QString organizationDir = QStringLiteral( "\\" QT_SETTINGS_ORGANIZATION );
+        if( configDir.endsWith( organizationDir ) )
+            configDir.chop( organizationDir.size() );
+        else
+            portableConfig = true;
         QSettings::setPath( QSettings::IniFormat, QSettings::UserScope, configDir );
     }
 #endif
@@ -1145,9 +1203,50 @@ static void *Thread( void *obj )
 #else
             QSettings::NativeFormat,
 #endif
-            QSettings::UserScope, "vlc", "vlc-qt-interface" );
+            QSettings::UserScope, QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
     msg_Dbg(p_intf, "Qt settings file: %s", qtu(p_intf->mainSettings->fileName()));
+#ifdef __APPLE__
+    /* Elsewhere the settings file sits in the configuration folder, which
+     * the core copies from the pre-Hakone one. On macOS it is a separate
+     * preferences domain, so copy it on the first start. Without fallbacks,
+     * only the domain's own keys are listed, not the system-wide ones. */
+    QSettings current( QSettings::NativeFormat, QSettings::UserScope,
+                       QT_SETTINGS_ORGANIZATION, "vlc-qt-interface" );
+    current.setFallbacksEnabled( false );
+    if( current.allKeys().isEmpty() )
+    {
+        QSettings legacy( QSettings::NativeFormat, QSettings::UserScope,
+                          "vlc", "vlc-qt-interface" );
+        legacy.setFallbacksEnabled( false );
+        const QStringList keys = legacy.allKeys();
+        for( const QString &key : keys )
+            p_intf->mainSettings->setValue( key, legacy.value( key ) );
+        if( !keys.isEmpty() )
+            msg_Info( p_intf, "copied interface settings from %s",
+                      qtu( legacy.fileName() ) );
+    }
+#endif
 #ifdef _WIN32
+    /* A portable folder keeps the settings file in a subfolder named after
+     * the settings organization, which was "vlc" before Hakone. The core only
+     * copies the %APPDATA% folders, so copy a portable folder's file here,
+     * when Hakone has none yet. */
+    if( portableConfig && !QFileInfo::exists( p_intf->mainSettings->fileName() ) )
+    {
+        QSettings legacy( QSettings::IniFormat, QSettings::UserScope,
+                          "vlc", "vlc-qt-interface" );
+        legacy.setFallbacksEnabled( false );
+        if( QFileInfo::exists( legacy.fileName() ) )
+        {
+            const QStringList keys = legacy.allKeys();
+            for( const QString &key : keys )
+                p_intf->mainSettings->setValue( key, legacy.value( key ) );
+            p_intf->mainSettings->sync();
+            msg_Info( p_intf, "copied interface settings from %s",
+                      qtu( legacy.fileName() ) );
+        }
+    }
+
     static const WCHAR moduleMarker = 0;
     HMODULE qtModule = nullptr;
     if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -1452,15 +1551,12 @@ static void *Thread( void *obj )
     }
 #endif
 
-    app.setApplicationDisplayName( qtr("VLC media player") );
-    app.setApplicationVersion( QString::fromUtf8(VERSION_MESSAGE) );
+    app.setApplicationDisplayName( qtr("Hakone Media Player") );
+    app.setApplicationVersion( QString::fromUtf8(HAKONE_VERSION_MESSAGE) );
 
-    if( QDate::currentDate().dayOfYear() >= QT_XMAS_JOKE_DAY && var_InheritBool( p_intf, "qt-icon-change" ) )
-        app.setWindowIcon( QIcon::fromTheme( "vlc-xmas", QIcon( ":/logo/vlc128-xmas.png" ) ) );
-    else
-        app.setWindowIcon( QIcon::fromTheme( "vlc", QIcon( ":/logo/vlc256.png" ) ) );
+    app.setWindowIcon( QVLCAppIcon() );
 
-    app.setDesktopFileName( PACKAGE );
+    app.setDesktopFileName( QStringLiteral( "hakone" ) );
 
     DialogErrorModel::getInstance( p_intf );
     VLCDialogModel::getInstance( p_intf );

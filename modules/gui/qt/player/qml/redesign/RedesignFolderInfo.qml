@@ -25,7 +25,7 @@ C.Dialog {
     function load(request, result) {
         if (!visible || request !== requestId) return
         loading = false; info = result
-        if (!result.success) errorMessage = qsTr("VLC cannot read this folder. Make sure that you can read the folder. Try again.")
+        if (!result.success) errorMessage = qsTr("Hakone cannot read this folder. Make sure that you can read the folder. Try again.")
     }
     function date(value) {
         if (value === null || value === undefined) return qsTr("Unknown")

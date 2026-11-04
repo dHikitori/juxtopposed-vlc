@@ -45,7 +45,7 @@ vlc_wix = configure_file(
     install_dir: '.',
 )
 
-heat_dirs = ['Plugins', 'Visualization']
+heat_dirs = ['Plugins', 'Visualization', 'Hrtfs', 'Share', 'Licenses']
 if wix_conf.get('ENABLE_NLS', 0) == 1
     heat_dirs += 'Locale'
 endif
@@ -79,6 +79,20 @@ foreach heat : heat_dirs
     wxs_files += [ [ wxs, W_MSIBUILDDIR ] ]
 endforeach
 
+# Top-level files that product.wxs does not list itself
+top_level_wxs = custom_target(
+    command: [python3, files('msi-heat.py'), '--dir', prefix_path, '--top-level',
+        '--skip-listed', files('product.wxs'), '-cg', 'CompTopLevelGroup',
+        '-dr', 'APPLICATIONFOLDER', '-out', '@OUTPUT@'
+    ],
+    output: 'TopLevel.fragment.wxs',
+    depend_files: [files('msi-heat.py', 'product.wxs')],
+    build_always_stale: true,
+    build_by_default: false,
+    console: true,
+)
+wxs_files += [ [ top_level_wxs, W_MSIBUILDDIR ] ]
+
 compiled_wxs = []
 compiled_winpath = []
 if x86_runner.found() and candlex86.found() and lightx86.found()
@@ -103,7 +117,7 @@ foreach wxsobj : wxs_files
     compiled_winpath += out_winpath
 endforeach
 
-msi_name = 'vlc-' + vlc_version + '-' + winstaller_suffix + '.msi'
+msi_name = 'hakone-' + hakone_version + '-' + winstaller_suffix + '.msi'
 msi_output = custom_target(
     command: [x86_runner, lightx86, '-nologo',
         '-sval', '-spdb', '-ext', 'WixUIExtension', '-ext', 'WixUtilExtension', '-cultures:en-us',

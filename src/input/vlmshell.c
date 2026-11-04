@@ -1051,8 +1051,8 @@ static int Load( vlm_t *vlm, char *file )
 VLC_MALLOC static char *Save( vlm_t *vlm )
 {
     const char *psz_header = "\n"
-                             "# VLC media player VLM command batch\n"
-                             "# https://www.videolan.org/vlc/\n\n" ;
+                             "# Hakone Media Player VLM command batch\n"
+                             "# https://hakone.org/\n\n" ;
 
     struct vlc_memstream stream;
 

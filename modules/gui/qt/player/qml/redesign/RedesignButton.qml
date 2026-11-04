@@ -90,7 +90,7 @@ T.Button {
             name: root.selected ? root.selectedIconName : root.iconName
             markup: root.iconMarkup
             sidebarReveal: root.iconReveal
-            color: root.iconName === "cone" ? theme.accent : root.accent ? theme.onAccent : root.selected ? root.selectedIconForeground : root.hovered || root.visualFocus ? theme.bright : root.iconForeground
+            color: root.iconName === "logo" ? theme.accent : root.accent ? theme.onAccent : root.selected ? root.selectedIconForeground : root.hovered || root.visualFocus ? theme.bright : root.iconForeground
             detailColor: root.iconDetailColor === undefined ? color : root.iconDetailColor
             opacity: root.enabled ? 1 : root.primaryAction ? 0.5 : 0.35
         }
@@ -102,7 +102,7 @@ T.Button {
             anchors.verticalCenterOffset: theme.dp(root.captionVerticalOffset)
             text: root.caption
             textFormat: root.captionTextFormat
-            color: root.iconName === "cone" ? theme.accent : root.accent ? theme.onAccent : root.selected ? root.selectedForeground : root.foreground
+            color: root.iconName === "logo" ? theme.accent : root.accent ? theme.onAccent : root.selected ? root.selectedForeground : root.foreground
             font.pixelSize: theme.dp(root.captionFontSize)
             font.weight: root.captionFontWeight
             opacity: root.enabled ? 1 : root.primaryAction ? 0.5 : 0.35

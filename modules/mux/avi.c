@@ -70,7 +70,7 @@ vlc_module_begin ()
     add_string( SOUT_CFG_PREFIX "name", NULL,      CFG_NAME_TEXT, NULL )
     add_string( SOUT_CFG_PREFIX "subject", NULL,   CFG_SUBJECT_TEXT, NULL )
     add_string( SOUT_CFG_PREFIX "encoder",
-                "VLC Media Player - " VERSION_MESSAGE,
+                "Hakone Media Player - " HAKONE_VERSION_MESSAGE,
                                                    CFG_ENCODER_TEXT, NULL )
     add_string( SOUT_CFG_PREFIX "keywords", NULL,  CFG_KEYWORDS_TEXT, NULL )
 

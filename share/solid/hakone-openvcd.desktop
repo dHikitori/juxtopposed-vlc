@@ -1,0 +1,11 @@
+[Desktop Entry]
+X-KDE-Solid-Predicate=[ StorageVolume.ignored == false AND OpticalDisc.availableContent & 'VideoCd|SuperVideoCd' ]
+Type=Service
+Actions=open;
+
+[Desktop Action open]
+Name=Open with Hakone Media Player
+Name[fr]=Ouvrir avec Lecteur multimédia Hakone
+Exec=hakone vcd://%d
+Icon=hakone
+

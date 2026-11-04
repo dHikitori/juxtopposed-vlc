@@ -104,7 +104,7 @@ int main(int argc, char **argv)
     assert(DeleteFileW(root) && CreateDirectoryW(root, NULL));
     path_join(app, root, L"app-\x7528\x6237");
     assert(CreateDirectoryW(app, NULL));
-    path_join(executable, app, L"vlc.exe");
+    path_join(executable, app, L"hakone.exe");
     path_join(portable, app, L"portable");
     if (file)
     {
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
     const bool use_portable = !denied && !absent && !file;
     WCHAR expected[MAX_PATH];
     if (use_portable) wcscpy_s(expected, MAX_PATH, portable);
-    else path_join(expected, roaming, L"vlc");
+    else path_join(expected, roaming, L"hakone");
     char *expected_utf8 = FromWide(expected);
     char *selected = test_platform_GetUserDir(VLC_CONFIG_DIR);
     bool passed = selected != NULL && !strcmp(selected, expected_utf8);

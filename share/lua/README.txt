@@ -206,7 +206,8 @@ Misc (Interfaces only)
 /!\ NB: this namespace is ONLY usable for interfaces.
 ---
 ----------------------------------------------------------------
-misc.version(): Get the VLC version string.
+misc.version(): Get the LibVLC version string.
+misc.app_version(): Get the Hakone version string.
 misc.copyright(): Get the VLC copyright statement.
 misc.license(): Get the VLC license.
 

@@ -187,7 +187,10 @@ int libvlc_InternalInit( libvlc_int_t *p_libvlc, int i_argc,
             config_SaveConfigFile( p_libvlc ); /* Save default config */
         }
         else
+        {
+            config_MigrateLegacyDirs( VLC_OBJECT(p_libvlc) );
             config_LoadConfigFile( p_libvlc );
+        }
     }
 
     vlc_LogInit(p_libvlc);

@@ -565,7 +565,7 @@ static int Handshake(intf_thread_t *p_this)
         vlc_dialog_display_error(p_this,
             _("last.fm: Authentication failed"),
             "%s", _("last.fm username or password is incorrect. "
-              "Please verify your settings and relaunch VLC."));
+              "Please verify your settings and relaunch Hakone."));
         return VLC_AUDIOSCROBBLER_EFATAL;
     }
 
@@ -725,7 +725,7 @@ static void *Run(void *data)
                     vlc_dialog_display_error(p_intf,
                         _("Last.fm username not set"),
                         "%s", _("Please set a username or disable the "
-                        "audioscrobbler plugin, and restart VLC.\n"
+                        "audioscrobbler plugin, and restart Hakone.\n"
                         "Visit https://www.last.fm/join/ to get an account."));
                     goto out;
 

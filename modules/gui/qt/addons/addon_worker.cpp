@@ -107,7 +107,7 @@ void AddonWorker::start()
     if (m_hostCallCount) { fail(tr("The add-on worker request state is not ready.")); return; }
     m_retired.clear(); m_retiredOrder.clear();
     auto executable = m_executable;
-    if (executable.isEmpty()) executable = QStandardPaths::findExecutable(QStringLiteral("vlc-addon-worker"));
+    if (executable.isEmpty()) executable = QStandardPaths::findExecutable(QStringLiteral("hakone-addon-worker"));
     if (executable.isEmpty()) { QTimer::singleShot(0, this, [this] { fail(tr("Install the add-on worker to use this add-on.")); }); return; }
     QProcessEnvironment environment;
 #ifdef Q_OS_WIN

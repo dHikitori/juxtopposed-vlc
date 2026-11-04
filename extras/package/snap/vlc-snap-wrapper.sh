@@ -18,4 +18,4 @@ if [ ! -L "$HOME/.config/aacs" ]; then
     ln -s $SNAP_REAL_HOME/.config/aacs $HOME/.config/aacs
 fi
 
-exec $SNAP/usr/bin/vlc --config=$SNAP_USER_COMMON/vlcrc "$@"
+exec $SNAP/usr/bin/hakone --config=$SNAP_USER_COMMON/vlcrc "$@"

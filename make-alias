@@ -1,5 +1,5 @@
 #! /bin/sh
-# Interface alias build script for VLC
+# Interface alias build script for Hakone
 # Copyright © 2007 Rémi Denis-Courmont.
 
 OUT="$1"
@@ -7,7 +7,7 @@ IFACE="$2"
 
 cat > "$OUT.tmp" << EOF
 #! /bin/sh
-exec $bindir/`echo "$program_prefix"vlc"$program_suffix" | sed -e "$transform"` -I "$IFACE" "\$@"
+exec $bindir/`echo "$program_prefix"hakone"$program_suffix" | sed -e "$transform"` -I "$IFACE" "\$@"
 EOF
 
 chmod +x "$OUT.tmp"

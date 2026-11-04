@@ -180,7 +180,7 @@ static int Open (vlc_object_t *p_this)
         vlc_dialog_display_error (p_this, _("MIDI synthesis not set up"),
             _("A sound font file (.SF2) is required for MIDI synthesis.\n"
               "Please install a sound font and configure it "
-              "from the VLC preferences "
+              "from the Hakone preferences "
               "(Input / Codecs > Audio codecs > FluidSynth).\n"));
         delete_fluid_synth (p_sys->synth);
         delete_fluid_settings (p_sys->settings);

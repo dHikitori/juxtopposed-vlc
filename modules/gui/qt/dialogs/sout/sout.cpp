@@ -281,7 +281,7 @@ void SoutDialog::retranslate()
     customOptions->setText(qtr("Edit output options"));
     ui.groupBox_4->setTitle(qtr("Custom output options"));
     ui.mrlEdit->setAccessibleName(qtr("Output options"));
-    ui.mrlEdit->setToolTip(qtr("Change these options only if you know the VLC stream output syntax."));
+    ui.mrlEdit->setToolTip(qtr("Change these options only if you know the Hakone stream output syntax."));
 
     setButtonText( QWizard::BackButton, qtr("Back") );
     setButtonText( QWizard::CancelButton, qtr("Cancel") );

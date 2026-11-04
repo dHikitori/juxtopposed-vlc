@@ -677,7 +677,7 @@ SET_INPUTITEM_PROP(field, field)                \
     } else {
         NSAlert *alert = [[NSAlert alloc] init];
         [alert setMessageText:_NS("Error while saving meta")];
-        [alert setInformativeText:_NS("VLC was unable to save the meta data.")];
+        [alert setInformativeText:_NS("Hakone was unable to save the meta data.")];
         [alert addButtonWithTitle:_NS("OK")];
         [alert runModal];
     }

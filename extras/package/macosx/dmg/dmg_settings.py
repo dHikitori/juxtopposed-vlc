@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 import os
 
 # Configuration file for the dmgbuild tool, used to build
-# a fancy DMG for VLC, with background image and aligned
+# a fancy DMG for Hakone, with background image and aligned
 # icons.
 #
 # This is python, so make sure to write valid python,
@@ -14,13 +14,13 @@ import os
 #    make package-macosx
 #
 # To use directly, use this:
-#    dmgbuild -s dmgsettings.py "VLC Media Player" VLC.dmg
+#    dmgbuild -s dmgsettings.py "Hakone Media Player" Hakone.dmg
 #
 # To specify a different App location:
 #    dmgbuild -s dmgsettings.py -D app=/path/to/My.app "My Application" MyApp.dmg
 
 # Application settings
-application = defines.get('app', 'VLC.app')
+application = defines.get('app', 'Hakone.app')
 appname = os.path.basename(application)
 
 # Volume format (see hdiutil create -help)
@@ -36,9 +36,11 @@ files = [ application ]
 symlinks = { 'Applications': '/Applications' }
 
 # Location of the icons
+# Same layout as extras/package/release/dmg: the icons sit on the
+# background's arrow.
 icon_locations = {
-    appname:        (181, 168),
-    'Applications': (392, 168),
+    appname:        (170, 230),
+    'Applications': (470, 230),
 }
 
 # Background
@@ -54,7 +56,9 @@ sidebar_width = 180
 default_view = 'icon-view'
 
 # Window rect in ((x, y), (w, h)) format
-window_rect = ((100, 100), (573, 340))
+window_rect = ((200, 120), (640, 400))
+icon_size = 128
+text_size = 13
 
 # Volume icon or badge icon
 icon = 'disk_image.icns'

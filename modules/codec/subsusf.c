@@ -43,7 +43,7 @@ static void CloseDecoder  ( vlc_object_t * );
 
 #define FORMAT_TEXT N_("Formatted Subtitles")
 #define FORMAT_LONGTEXT N_("Some subtitle formats allow for text formatting. " \
- "VLC partly implements this, but you can choose to disable all formatting.")
+ "Hakone partly implements this, but you can choose to disable all formatting.")
 
 vlc_module_begin ()
     set_capability( "spu decoder", 40 )

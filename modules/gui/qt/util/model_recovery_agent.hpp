@@ -71,7 +71,7 @@ public:
                 if (fileInfo.size() > 0)
                 {
                     const auto name = modelIdentifier == QStringLiteral("Playlist") ? qtr("play queue") : modelIdentifier;
-                    const auto choice = DialogsProvider::getInstance()->messageDialog(qtr("VLC did not close normally.\nRestore the %1 saved on %2?").arg(name,
+                    const auto choice = DialogsProvider::getInstance()->messageDialog(qtr("Hakone did not close normally.\nRestore the %1 saved on %2?").arg(name,
                                                                                                                               fileInfo.lastModified().toString()),
                                                                       qtr("Restore saved items"),
                                                                       (QMessageBox::Yes | QMessageBox::No),

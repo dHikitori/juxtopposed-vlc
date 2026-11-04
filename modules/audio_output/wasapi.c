@@ -959,11 +959,11 @@ error:
 
 #define WASAPI_EXCLUSIVE_TEXT N_("Use exclusive mode")
 #define WASAPI_EXCLUSIVE_LONGTEXT N_( \
-    "VLC will have a direct connection of the audio endpoint device. " \
+    "Hakone will have a direct connection of the audio endpoint device. " \
     "This mode can be used to reduce the audio latency or " \
     "to assure that the audio stream won't be modified by the OS. " \
     "This mode is more likely to fail if the soundcard format is not " \
-    "handled by VLC.")
+    "handled by Hakone.")
 
 vlc_module_begin()
     set_shortname("WASAPI")

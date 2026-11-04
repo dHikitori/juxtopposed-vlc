@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Hakone Media Player (VCD)
+Name[fr]=Lecteur multimédia Hakone (VCD)
+NoDisplay=true
+Exec=@bindir@/hakone --started-from-file vcd://%f
+Icon=hakone
+Terminal=false
+Type=Application
+MimeType=x-content/video-vcd;x-content/video-svcd

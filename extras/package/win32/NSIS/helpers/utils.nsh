@@ -19,21 +19,21 @@
     IntOp $0 $0 + 1
     ReadRegStr $2 HKU "$1\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" AppData
     StrCmp $2 "" "${Index}-Loop"
-    RMDir /r "$2\vlc"
+    RMDir /r "$2\hakone"
     Goto "${Index}-Loop"
   "${Index}-End:"
   !undef Index
 !macroend
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Start VLC with dropped privileges ;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Start Hakone with dropped privileges ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Function AppExecAs
   ${If} ${AtLeastWinVista}
-    Exec '"$WINDIR\explorer.exe" "$INSTDIR\vlc.exe"'
+    Exec '"$WINDIR\explorer.exe" "$INSTDIR\hakone.exe"'
   ${Else}
-    Exec '$INSTDIR\vlc.exe'
+    Exec '$INSTDIR\hakone.exe'
   ${Endif}
 FunctionEnd
 
@@ -287,18 +287,18 @@ Function RemoveEmptyDirs
   !undef Index
 FunctionEnd
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Check if VLC is running and kill it if necessary ;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Check if Hakone is running and kill it if necessary ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Function CheckRunningProcesses
-    ${nsProcess::FindProcess} "vlc.exe" $R0
+    ${nsProcess::FindProcess} "hakone.exe" $R0
     StrCmp $R0 0 0 end
     IfSilent +3
     BringToFront
     MessageBox MB_OKCANCEL|MB_ICONQUESTION "$(MessageBox_VLCRunning)" IDCANCEL stop
 
-    ${nsProcess::CloseProcess} "vlc.exe" $R0
+    ${nsProcess::CloseProcess} "hakone.exe" $R0
     IfSilent end
     StrCmp $R0 0 end 0      ; Success
     StrCmp $R0 603 end 0    ; Not running

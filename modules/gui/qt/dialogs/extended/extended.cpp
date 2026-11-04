@@ -521,7 +521,7 @@ void ExtendedDialog::saveConfig()
                 m_savedVideoValues.insert(it.key(), savedEffectValue(it.key(), it.value()));
         }
         DialogsProvider::getInstance()->messageDialog(
-            qtr("VLC cannot save these settings.\n\nYour changes stay in this window. Select Save to try again."),
+            qtr("Hakone cannot save these settings.\n\nYour changes stay in this window. Select Save to try again."),
             qtr("Save effects"), QMessageBox::Close, QMessageBox::Close, QMessageBox::Warning, this);
         return;
     }

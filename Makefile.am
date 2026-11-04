@@ -23,8 +23,12 @@ EXTRA_DIST = \
 	extras/package/release/recovery.py \
 	extras/package/release/dependency-cache.py \
 	extras/package/release/package.py \
+	extras/package/release/dmg.py \
+	extras/package/release/dmg \
 	extras/package/release/build-native.sh \
 	extras/package/release/build-windows.sh \
+	extras/package/release/build-msi.py \
+	extras/package/release/test-windows-installers.ps1 \
 	extras/package/release/build-medialibrary.sh \
 	extras/package/release/package-linux.sh \
 	extras/package/release/bundle-linux-runtime.py \
@@ -35,6 +39,8 @@ EXTRA_DIST = \
 	extras/package/release/tests/test_verify.py \
 	extras/package/release/tests/test_native_build.py \
 	extras/package/release/tests/test_package.py \
+	extras/package/release/tests/test_dmg.py \
+	extras/package/release/tests/test_msi.py \
 	extras/package/release/tests/test_recovery.py \
 	extras/package/release/tests/test_dependency_cache.py \
 	doc/RELEASING.md \
@@ -121,7 +127,7 @@ CLEANFILES =
 DISTCLEANFILES = $(BUILT_SOURCES_distclean) compile doltcompile doltlibtool
 MAINTAINERCLEANFILES = ChangeLog
 
-# Shortcut for developers to rebuild the core (libvlc + vlc)
+# Shortcut for developers to rebuild the core (libvlc + hakone)
 # Don't use it if you don't know what it is about.
 # Don't complain if it doesn't work. -- Courmisch
 libcompat:
@@ -133,8 +139,8 @@ libvlccore: libcompat
 libvlc: libvlccore
 	cd lib && $(MAKE) $(AM_MAKEFLAGS) libvlc.la
 
-core: libvlc vlc$(EXEEXT)
-	cd bin && $(MAKE) $(AM_MAKEFLAGS) vlc$(EXEEXT) vlc-static$(EXEEXT)
+core: libvlc hakone$(EXEEXT)
+	cd bin && $(MAKE) $(AM_MAKEFLAGS) hakone$(EXEEXT) hakone-static$(EXEEXT)
 
 doc:
 	cd doc && $(MAKE) $(AM_MAKEFLAGS) doc
@@ -172,14 +178,14 @@ nvlc: make-alias Makefile
 	$(AM_V_GEN)$(MKALIAS) ncurses
 
 if BUILD_VLC
-noinst_SCRIPTS = vlc$(EXEEXT)
+noinst_SCRIPTS = hakone$(EXEEXT)
 endif
 
-vlc$(EXEEXT):
+hakone$(EXEEXT):
 if HAVE_DARWIN
-	$(AM_V_GEN)$(LN_S) -f bin/vlc-osx-static vlc
+	$(AM_V_GEN)$(LN_S) -f bin/hakone-osx-static hakone
 else
-	$(AM_V_GEN)$(LN_S) -f bin/vlc-static$(EXEEXT) vlc$(EXEEXT)
+	$(AM_V_GEN)$(LN_S) -f bin/hakone-static$(EXEEXT) hakone$(EXEEXT)
 endif
 
 TESTS = test/run_vlc.sh

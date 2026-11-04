@@ -22,17 +22,18 @@ def parse_version(value):
 
 
 def source_version(root=ROOT):
-    meson = re.search(r"version:\s*'([^']+)'", (root / 'meson.build').read_text())
+    """Hakone's own version. LibVLC keeps the upstream project version."""
+    meson = re.search(r"^hakone_version = '([^']+)'$", (root / 'meson.build').read_text(), re.MULTILINE)
     configure = (root / 'configure.ac').read_text()
-    autoconf = re.search(r'AC_INIT\(\[vlc\],\s*\[([^]]+)\]\)', configure)
+    autoconf = re.search(r'^HAKONE_VERSION=(.*)$', configure, re.MULTILINE)
     if not meson or not autoconf or meson[1] != autoconf[1]:
-        raise ValueError('Meson and Autoconf application versions must agree')
+        raise ValueError('Meson and Autoconf Hakone versions must agree')
     info = parse_version(meson[1])
     for name, expected in (('MAJOR', info['major']), ('MINOR', info['minor']),
-                           ('REVISION', info['patch']), ('EXTRA', 0), ('DEV', info['prerelease'])):
-        value = re.search(rf'^VERSION_{name}=(.*)$', configure, re.MULTILINE)
+                           ('REVISION', info['patch']), ('DEV', info['prerelease'])):
+        value = re.search(rf'^HAKONE_VERSION_{name}=(.*)$', configure, re.MULTILINE)
         if not value or value[1].strip("\"'") != str(expected):
-            raise ValueError(f'Autoconf VERSION_{name} must match {info["version"]}')
+            raise ValueError(f'Autoconf HAKONE_VERSION_{name} must match {info["version"]}')
     info['generation'] = source_generation(root)
     return info
 
@@ -63,11 +64,12 @@ def bundle_version(tag):
 
 
 def reported_version(output):
-    # The CLI uses "VLC version"; accept the familiar product-name banner too.
+    # The CLI uses "Hakone version"; accept the product-name banner and the
+    # pre-rebrand "VLC" banners too.
     # Match the application token, never a version in the parenthesized changeset.
-    banner = re.search(r'^VLC (?:version|media player) (\S+)(?=\s|$)', output, re.MULTILINE)
+    banner = re.search(r'^(?:Hakone|VLC) (?:version|[Mm]edia [Pp]layer) (\S+)(?=\s|$)', output, re.MULTILINE)
     if not banner:
-        raise ValueError('Could not read the application version from VLC --version output')
+        raise ValueError('Could not read the application version from Hakone --version output')
     return banner[1]
 
 
@@ -105,7 +107,7 @@ def verify_required_modules(executable, required, env=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('tag', nargs='?', default=os.environ.get('RELEASE_TAG') or None)
-    parser.add_argument('--executable', type=Path, help='Also verify the installed VLC executable')
+    parser.add_argument('--executable', type=Path, help='Also verify the installed Hakone executable')
     parser.add_argument('--require-module', action='append', default=[], help='Require a loadable module in --list output')
     args = parser.parse_args()
     try:

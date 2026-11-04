@@ -24,7 +24,7 @@ hooks:
       - desktop
 apps:
   vlc:
-    desktop: vlc.desktop
+    desktop: hakone.desktop
     command: usr/bin/vlc-snap-wrapper.sh
     extensions:
       - kde-neon-6
@@ -115,10 +115,10 @@ parts:
 
       find ${CRAFT_PART_INSTALL}/usr/lib -name "*.la" -delete
 
-      cp ${CRAFT_PART_INSTALL}/usr/share/icons/hicolor/256x256/apps/vlc.png ${CRAFT_PART_INSTALL}/vlc.png
-      cp ${CRAFT_PART_INSTALL}/usr/share/applications/vlc.desktop ${CRAFT_PART_INSTALL}/vlc.desktop
-      sed -i 's/\(^Icon=\).*$/\1\/vlc.png/' ${CRAFT_PART_INSTALL}/vlc.desktop
-      sed -i 's|TryExec=.*|TryExec=/snap/bin/vlc|' ${CRAFT_PART_INSTALL}/vlc.desktop
+      cp ${CRAFT_PART_INSTALL}/usr/share/icons/hicolor/256x256/apps/hakone.png ${CRAFT_PART_INSTALL}/hakone.png
+      cp ${CRAFT_PART_INSTALL}/usr/share/applications/hakone.desktop ${CRAFT_PART_INSTALL}/hakone.desktop
+      sed -i 's/\(^Icon=\).*$/\1\/hakone.png/' ${CRAFT_PART_INSTALL}/hakone.desktop
+      sed -i 's|TryExec=.*|TryExec=/snap/bin/vlc|' ${CRAFT_PART_INSTALL}/hakone.desktop
     build-packages:
       # build tools
       - ant

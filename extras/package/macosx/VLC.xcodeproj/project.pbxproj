@@ -684,8 +684,7 @@
 		6B8224661E4D2B4700833BE1 /* wav.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = wav.icns; sourceTree = "<group>"; };
 		6B8224671E4D2B4700833BE1 /* wma.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = wma.icns; sourceTree = "<group>"; };
 		6B8224681E4D2B4700833BE1 /* wmv.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = wmv.icns; sourceTree = "<group>"; };
-		6B82247D1E4D2BAB00833BE1 /* VLC-Xmas.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = "VLC-Xmas.icns"; sourceTree = "<group>"; };
-		6B82247E1E4D2BAB00833BE1 /* VLC.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = VLC.icns; sourceTree = "<group>"; };
+		6B82247E1E4D2BAB00833BE1 /* hakone.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = hakone.icns; sourceTree = "<group>"; };
 		6B82255B1E4D2C2400833BE1 /* backward-3btns-pressed.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "backward-3btns-pressed.png"; sourceTree = "<group>"; };
 		6B82255C1E4D2C2400833BE1 /* backward-3btns-pressed@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "backward-3btns-pressed@2x.png"; sourceTree = "<group>"; };
 		6B82255D1E4D2C2400833BE1 /* backward-3btns.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "backward-3btns.png"; sourceTree = "<group>"; };
@@ -1915,8 +1914,7 @@
 		6B8224811E4D2BB300833BE1 /* App Icons */ = {
 			isa = PBXGroup;
 			children = (
-				6B82247D1E4D2BAB00833BE1 /* VLC-Xmas.icns */,
-				6B82247E1E4D2BAB00833BE1 /* VLC.icns */,
+				6B82247E1E4D2BAB00833BE1 /* hakone.icns */,
 			);
 			name = "App Icons";
 			path = "App-Icons";
@@ -2744,7 +2742,7 @@
 					"-framework",
 					Sparkle,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.videolan.vlc;
+				PRODUCT_BUNDLE_IDENTIFIER = org.hakone.hakone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SYSTEM_FRAMEWORK_SEARCH_PATHS = "$(inherited) $(SDKROOT)$(SYSTEM_LIBRARY_DIR)/PrivateFrameworks";
@@ -2785,7 +2783,7 @@
 					"-framework",
 					Sparkle,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.videolan.vlc;
+				PRODUCT_BUNDLE_IDENTIFIER = org.hakone.hakone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SYSTEM_FRAMEWORK_SEARCH_PATHS = "$(inherited) $(SDKROOT)$(SYSTEM_LIBRARY_DIR)/PrivateFrameworks";
@@ -2826,7 +2824,7 @@
 					"-framework",
 					Sparkle,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.videolan.vlc;
+				PRODUCT_BUNDLE_IDENTIFIER = org.hakone.hakone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SYSTEM_FRAMEWORK_SEARCH_PATHS = "$(inherited) $(SDKROOT)$(SYSTEM_LIBRARY_DIR)/PrivateFrameworks";
@@ -2866,7 +2864,7 @@
 					"-framework",
 					Sparkle,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.videolan.vlc;
+				PRODUCT_BUNDLE_IDENTIFIER = org.hakone.hakone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 			};
@@ -2905,7 +2903,7 @@
 					"-framework",
 					Sparkle,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.videolan.vlc;
+				PRODUCT_BUNDLE_IDENTIFIER = org.hakone.hakone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 			};
@@ -2944,7 +2942,7 @@
 					"-framework",
 					Sparkle,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.videolan.vlc;
+				PRODUCT_BUNDLE_IDENTIFIER = org.hakone.hakone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 			};
@@ -2996,7 +2994,7 @@
 				OBJROOT = "${BUILD_PATH}";
 				ONLY_ACTIVE_ARCH = YES;
 				PATH = $VLC_PATH;
-				PRODUCT_NAME = VLC;
+				PRODUCT_NAME = Hakone;
 				PROJECT_TEMP_DIR = "build-xcode";
 				SYMROOT = "${BUILD_PATH}";
 				VLC_BUILD_TRIPLET = "aarch64-apple-darwin23";
@@ -3049,7 +3047,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				OBJROOT = "${BUILD_PATH}";
 				PATH = $VLC_PATH;
-				PRODUCT_NAME = VLC;
+				PRODUCT_NAME = Hakone;
 				PROJECT_TEMP_DIR = "build-xcode";
 				SYMROOT = "${BUILD_PATH}";
 				VLC_BUILD_TRIPLET = "aarch64-apple-darwin23";
@@ -3102,7 +3100,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				OBJROOT = "${BUILD_PATH}";
 				PATH = $VLC_PATH;
-				PRODUCT_NAME = VLC;
+				PRODUCT_NAME = Hakone;
 				PROJECT_TEMP_DIR = "build-xcode";
 				SYMROOT = "${BUILD_PATH}";
 				VLC_BUILD_TRIPLET = "aarch64-apple-darwin23";

@@ -663,8 +663,7 @@ BUILT_SOURCES += $(libmacosx_plugin_la_XIB_SOURCES:.xib=.nib)
 endif
 
 libmacosx_plugin_la_RES = \
-	gui/macosx/Resources/App-Icons/VLC-Xmas.icns \
-	gui/macosx/Resources/App-Icons/VLC.icns \
+	gui/macosx/Resources/App-Icons/hakone.icns \
 	gui/macosx/Resources/File-Icons/aiff.icns \
 	gui/macosx/Resources/File-Icons/audio.icns \
 	gui/macosx/Resources/File-Icons/avi.icns \

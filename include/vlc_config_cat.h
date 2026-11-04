@@ -28,7 +28,7 @@
 
 # include <vlc_plugin.h>
 
-#define MAIN_TITLE N_( "VLC preferences" )
+#define MAIN_TITLE N_( "Hakone preferences" )
 
 /*  - Titles -
  * These are used for simple prefs view tabs, for advanced prefs view
@@ -63,10 +63,10 @@
  */
 
 /* Interface */
-#define INTF_HELP  N_( "Settings for VLC's interfaces" )
+#define INTF_HELP  N_( "Settings for Hakone's interfaces" )
 #define INTF_GENERAL_HELP N_( "Main interfaces settings" )
 #define INTF_MAIN_HELP N_( "Settings for the main interface" )
-#define INTF_CONTROL_HELP N_( "Settings for VLC's control interfaces" )
+#define INTF_CONTROL_HELP N_( "Settings for Hakone's control interfaces" )
 #define INTF_HOTKEYS_HELP N_( "Hotkeys settings" )
 
 /* Audio */
@@ -94,7 +94,7 @@
     "caching settings." )
 #define STREAM_FILTER_HELP N_( \
     "Stream filters are special modules that allow advanced operations on " \
-    "the input side of VLC. Use with care..." )
+    "the input side of Hakone. Use with care..." )
 #define DEMUX_HELP N_( "Demuxers are used to separate audio and video streams." )
 #define VDEC_HELP N_( "Settings for the video, images or video+audio decoders and encoders." )
 #define ADEC_HELP N_( "Settings for the audio-only decoders and encoders." )
@@ -132,7 +132,7 @@
                 "processing chain. Please refer to the Streaming 'how-to' for " \
                 "more information. You can configure default options for " \
                 "each sout stream module here.")
-#define SOUT_VOD_HELP N_( "VLC's implementation of Video On Demand" )
+#define SOUT_VOD_HELP N_( "Hakone's implementation of Video On Demand" )
 
 /* Play Queue */
 #define PLAYLIST_HELP N_( "Settings related to play queue behaviour " \

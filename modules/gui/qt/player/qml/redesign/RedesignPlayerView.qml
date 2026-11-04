@@ -95,7 +95,7 @@ FocusScope {
     property real volume: 1
     property real maxVolume: 1.25
     property real buffering: 1
-    property string mediaTitle: qsTr("VLC Media Player")
+    property string mediaTitle: qsTr("Hakone Media Player")
     property string locationTitle: qsTr("Home")
     property string timeText: "00:00:00"
     property real timeLabelFontSize: 15
@@ -360,7 +360,7 @@ FocusScope {
             RedesignIcon {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: theme.dp(48); height: width
-                name: "cone"; color: theme.accent
+                name: "logo"; color: theme.accent
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -649,7 +649,7 @@ FocusScope {
             ChromeButton {
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 implicitWidth: theme.dp(50)
-                iconName: "cone"; text: qsTr("Open file"); foreground: theme.accent
+                iconName: "logo"; text: qsTr("Open file"); foreground: theme.accent
                 onClicked: root.openRequested()
             }
             ChromeButton {

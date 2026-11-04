@@ -25,7 +25,7 @@ class VerifyTests(unittest.TestCase):
     def test_reported_banner_reaches_playback_checks(self):
         def command(args, **kwargs):
             if '--version' in args:
-                output = 'VLC version 4.0.0-beta.4 Otto Chriek (4.0.0-dev-40063-ge93a0c3478)\n'
+                output = 'Hakone version 4.0.0-beta.4 Otto Chriek (4.0.0-dev-40063-ge93a0c3478)\n'
             elif '--list' in args:
                 output = 'qt Qt interface\navcodec FFmpeg decoder\nmedialibrary Media library\n'
             else:
@@ -36,7 +36,7 @@ class VerifyTests(unittest.TestCase):
                           'using vout display module "opengl"\n')
             return subprocess.CompletedProcess(args, 0, stdout=output)
 
-        argv = ['verify.py', '/path with spaces/vlc', '--expected-version', '4.0.0-beta.4',
+        argv = ['verify.py', '/path with spaces/hakone', '--expected-version', '4.0.0-beta.4',
                 '--sample', '/sample.mkv', '--gui', '--video']
         with mock.patch.object(sys, 'argv', argv), \
              mock.patch.object(subprocess, 'run', side_effect=command) as run, \
@@ -53,7 +53,7 @@ class VerifyTests(unittest.TestCase):
         def command(args, **kwargs):
             calls.append(args)
             if '--version' in args:
-                text = 'VLC version 4.0.0-beta.4 Otto Chriek\n'
+                text = 'Hakone version 4.0.0-beta.4 Otto Chriek\n'
             elif '--list' in args:
                 text = 'qt Qt\navcodec FFmpeg\nmedialibrary Library\n'
             elif 'qt' not in args:
@@ -65,7 +65,7 @@ class VerifyTests(unittest.TestCase):
                 text = ('using interface module "qt"\nusing video decoder module "avcodec"\n'
                         'using vout window module "qt"\nusing vout display module "gl"\n') + result
             return subprocess.CompletedProcess(args, 0, stdout=text)
-        argv = ['verify.py', '/vlc', '--sample', '/sample.mkv', '--gui', '--video']
+        argv = ['verify.py', '/hakone', '--sample', '/sample.mkv', '--gui', '--video']
         if require_opengl:
             argv.append('--require-opengl')
         if diagnostics:
@@ -76,7 +76,7 @@ class VerifyTests(unittest.TestCase):
         return calls
 
     def test_second_start_abort_keeps_the_actual_crash_output(self):
-        error = subprocess.CalledProcessError(-6, ['/vlc'], output='fatal graphics diagnostic\n')
+        error = subprocess.CalledProcessError(-6, ['/hakone'], output='fatal graphics diagnostic\n')
         with tempfile.TemporaryDirectory() as temp:
             diagnostics = Path(temp) / 'logs'
             output = io.StringIO()
@@ -90,14 +90,14 @@ class VerifyTests(unittest.TestCase):
 
     def test_timeout_keeps_partial_bytes_and_fails_verification(self):
         output = io.StringIO()
-        error = subprocess.TimeoutExpired(['/vlc'], 60, output=b'last output before hang\n')
+        error = subprocess.TimeoutExpired(['/hakone'], 60, output=b'last output before hang\n')
         with self.assertRaisesRegex(SystemExit, 'gui-1: timed out after 60 seconds'):
             self.run_gui([error], capture=output)
         self.assertIn('last output before hang', output.getvalue())
 
     def test_nonzero_exit_is_not_retried_or_reported_as_success(self):
         output = io.StringIO()
-        error = subprocess.CalledProcessError(1, ['/vlc'], output='startup error\n')
+        error = subprocess.CalledProcessError(1, ['/hakone'], output='startup error\n')
         with self.assertRaisesRegex(SystemExit, 'gui-1: exited with status 1'):
             self.run_gui([error, ''], capture=output)
         self.assertNotIn('GUI startup 2/2', output.getvalue())
@@ -129,8 +129,8 @@ class VerifyTests(unittest.TestCase):
         self.run_gui(['Using existing QOpenGLContext 0x123\nCreated QRhi 0x456\n'] * 2, True)
 
     def test_wrong_version_stops_before_module_and_playback_checks(self):
-        result = subprocess.CompletedProcess([], 0, stdout='VLC version 4.0.0-beta.3 Otto Chriek\n')
-        argv = ['verify.py', '/vlc', '--expected-version', '4.0.0-beta.4']
+        result = subprocess.CompletedProcess([], 0, stdout='Hakone version 4.0.0-beta.3 Otto Chriek\n')
+        argv = ['verify.py', '/hakone', '--expected-version', '4.0.0-beta.4']
         with mock.patch.object(sys, 'argv', argv), \
              mock.patch.object(subprocess, 'run', return_value=result) as run, \
              self.assertRaisesRegex(SystemExit, 'expected 4.0.0-beta.4; got 4.0.0-beta.3'):

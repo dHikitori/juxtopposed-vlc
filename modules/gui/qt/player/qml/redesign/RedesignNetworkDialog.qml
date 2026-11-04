@@ -45,7 +45,7 @@ C.Dialog {
     function finish(success) {
         busy = false
         if (success) accept()
-        else { errorMessage = qsTr("VLC cannot open these streams. Make sure that the links are correct. Try again."); urlsField.forceActiveFocus() }
+        else { errorMessage = qsTr("Hakone cannot open these streams. Make sure that the links are correct. Try again."); urlsField.forceActiveFocus() }
     }
     function revealFocusedField() { Qt.callLater(revealFocusedFieldNow) }
     function revealFocusedFieldNow() {
@@ -160,7 +160,7 @@ C.Dialog {
                     x: root.theme.dp(20); width: parent.width - root.theme.dp(40)
                     y: Math.max(root.theme.dp(70) - baselineOffset, nameHeading.y + nameHeading.height + root.theme.dp(10))
                     text: root.canSavePlaylist ? qsTr("Save these links in a playlist with this name.")
-                                              : qsTr("To save a playlist, turn on the media library in Settings. Close VLC. Start VLC again.")
+                                              : qsTr("To save a playlist, turn on the media library in Settings. Close Hakone. Start Hakone again.")
                     color: root.theme.playerLabel; font.pixelSize: root.theme.dp(14)
                     wrapMode: Text.WordWrap
                 }

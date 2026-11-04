@@ -39,6 +39,8 @@ Makefile.in
 stamp-*
 vlc
 vlc.exe
+/hakone
+/hakone.exe
 qvlc
 rvlc
 svlc

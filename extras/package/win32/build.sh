@@ -709,8 +709,8 @@ if [ -n "$BUILD_MESON" ]; then
             ninja -C ${BUILD_PATH}/$SHORTARCH-meson package-win32-exe
             # generate .msi installer
             ninja -C ${BUILD_PATH}/$SHORTARCH-meson package-msi
-            sha512sum vlc-*-*.exe
-            sha512sum vlc-*-*.msi
+            sha512sum hakone-*-*.exe
+            sha512sum hakone-*-*.msi
         fi
     elif [ "$INSTALLER" = "m" ]; then
         meson install -C ${BUILD_PATH}/$SHORTARCH-meson ${MINSTALLFLAGS}
@@ -765,9 +765,9 @@ else
         make package-win32
     elif [ "$INSTALLER" = "u" ]; then
         make -j$JOBS package-win32-release package-win32-exe package-msi
-        sha512sum vlc-*-release.7z
-        sha512sum vlc-*-*.exe
-        sha512sum vlc-*-*.msi
+        sha512sum hakone-*-release.7z
+        sha512sum hakone-*-*.exe
+        sha512sum hakone-*-*.msi
     elif [ "$INSTALLER" = "m" ]; then
         make package-msi
     elif [ -n "$INSTALL_PATH" ]; then

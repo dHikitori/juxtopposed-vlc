@@ -46,7 +46,6 @@
 #include <QString>
 #include <QDialogButtonBox>
 #include <QEvent>
-#include <QDate>
 #include <QPushButton>
 #include <QApplication>
 #include <QStyleHints>
@@ -311,14 +310,14 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
     copyTimer->setInterval(2500);
     connect(copyTimer, &QTimer::timeout, ui.copyFeedback, &QLabel::clear);
     connect(ui.copyVersionButton, &QToolButton::clicked, this, [this, copyTimer] {
-        QGuiApplication::clipboard()->setText(QStringLiteral("VLC media player ") + AboutModel::getVersion());
+        QGuiApplication::clipboard()->setText(QStringLiteral("Hakone Media Player ") + AboutModel::getVersion());
         ui.copyFeedback->setText(qtr("Version copied."));
         copyTimer->start();
     });
     const auto updateText = [this, copyTimer] {
         ui.retranslateUi(this);
         setWindowTitle(qtr("About"));
-        ui.title->setText(qtr("VLC media player"));
+        ui.title->setText(qtr("Hakone Media Player"));
         ui.closeButton->setText(qtr("&Close"));
         ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.authorsPage), qtr("Authors"));
         ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.creditPage), qtr("Credits"));
@@ -332,14 +331,14 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         ui.buildDetails->setPlainText(qtr("Build user: %1\nBuild host: %2\nBuild date: %3 %4\nCompiler: %5")
             .arg(qfu(VLC_CompileBy()), qfu(VLC_CompileHost()), QStringLiteral(__DATE__), QStringLiteral(__TIME__), qfu(VLC_Compiler())));
 #ifdef UPDATE_CHECK
-        ui.checkUpdatesButton->setToolTip(qtr("Check for a new version of VLC."));
+        ui.checkUpdatesButton->setToolTip(qtr("Check for a new version of Hakone."));
 #else
         ui.checkUpdatesButton->setToolTip(qtr("Update checks are not available in this build."));
 #endif
         copyTimer->stop();
         ui.copyFeedback->clear();
         ui.MainBlabla->setHtml("<html><head/><body>" +
-        qtr( "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
+        qtr( "<p>Hakone Media Player is a free and open source media player, encoder, and streamer. Hakone is a fork of VLC media player, made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>Hakone uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://hakone.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
         "</p>" + AboutModel::getDesignAttribution() + "</body> </html>");
         colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link));
         updateUpdateButton();
@@ -358,9 +357,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         ui.checkUpdatesButton->setIconSize(iconSize);
         ui.checkUpdatesButton->setFixedHeight(helpDp(p_intf, 32));
         ui.buildDetails->setFixedHeight(helpDp(p_intf, 128));
-        const auto today = QDate::currentDate();
-        const bool april = today.month() == 4 && today.day() == 1 && var_InheritBool(p_intf,"qt-icon-change");
-        QPixmap cone(april ? QStringLiteral(":/logo/vlc128-aprilfools.png") : QStringLiteral(":/logo/vlc256.png"));
+        QPixmap cone(QStringLiteral(":/logo/hakone256.png"));
         cone = cone.scaled(QSize(helpDp(p_intf, 64),helpDp(p_intf, 64)) * devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         cone.setDevicePixelRatio(devicePixelRatioF());
         ui.VLCcone->setPixmap(cone);
@@ -413,15 +410,15 @@ void AboutDialog::updateUpdateButton()
 #ifdef UPDATE_CHECK
     const auto status = m_updateModel ? m_updateModel->updateStatus() : UpdateModel::Unchecked;
     QString text = qtr("Check for updates");
-    QString hint = qtr("Check for a new version of VLC.");
+    QString hint = qtr("Check for a new version of Hakone.");
     switch (status) {
     case UpdateModel::Checking:
         text = qtr("Checking for updates");
         hint = text;
         break;
     case UpdateModel::UpToDate:
-        text = qtr("VLC is up to date");
-        hint = qtr("VLC is up to date. Select this button to check again.");
+        text = qtr("Hakone is up to date");
+        hint = qtr("Hakone is up to date. Select this button to check again.");
         break;
     case UpdateModel::CheckFailed:
         text = qtr("Cannot check for updates");
@@ -677,7 +674,7 @@ void UpdateModel::startCheck(bool explicitCheck, bool inlineCheck)
         emit explicitCheckChanged();
     }
     d->release.reset();
-    auto installed = vlc::updates::Version::parse(QStringLiteral(PACKAGE_VERSION));
+    auto installed = vlc::updates::Version::parse(QStringLiteral(HAKONE_VERSION));
     if (installed)
         installed->generation = PACKAGE_UPDATE_GENERATION;
     d->status = installed ? Checking : CheckFailed;
@@ -930,7 +927,7 @@ void UpdateDialog::updateUI()
         break;
     case UpdateModel::UpToDate:
         ui.updateTitle->setText(qtr("No update is available"));
-        ui.updateSummary->setText(qtr("No newer compatible release is available for VLC %1.").arg(QStringLiteral(PACKAGE_VERSION)));
+        ui.updateSummary->setText(qtr("No newer compatible release is available for Hakone %1.").arg(QStringLiteral(HAKONE_VERSION)));
         break;
     case UpdateModel::CheckFailed:
         ui.updateTitle->setText(qtr("Cannot check for updates"));
@@ -938,15 +935,15 @@ void UpdateDialog::updateUI()
         break;
     case UpdateModel::Checking:
         ui.updateTitle->setText(qtr("Checking for updates"));
-        ui.updateSummary->setText(qtr("You can close this window while VLC checks for updates."));
+        ui.updateSummary->setText(qtr("You can close this window while Hakone checks for updates."));
         break;
     case UpdateModel::Downloading:
         ui.updateTitle->setText(qtr("Downloading update"));
         ui.updateSummary->setText(qtr("The update is downloading."));
         break;
     case UpdateModel::Unchecked:
-        ui.updateTitle->setText(qtr("VLC updates"));
-        ui.updateSummary->setText(qtr("Installed version: %1\nCheck for a new version of VLC.").arg(QStringLiteral(PACKAGE_VERSION)));
+        ui.updateTitle->setText(qtr("Hakone updates"));
+        ui.updateSummary->setText(qtr("Installed version: %1\nCheck for a new version of Hakone.").arg(QStringLiteral(HAKONE_VERSION)));
         break;
     }
     ui.updateFeedback->setVisible(available && m_feedback != None);

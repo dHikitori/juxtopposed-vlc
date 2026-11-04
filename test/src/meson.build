@@ -200,6 +200,15 @@ vlc_tests += {
     'link_with': [libvlc, libvlccore],
 }
 
+if host_system != 'windows'
+    vlc_tests += {
+        'name': 'test_src_config_migrate',
+        'sources': files('config/migrate.c'),
+        'suite': ['src', 'test_src'],
+        'link_with': [libvlc, libvlccore],
+    }
+endif
+
 vlc_tests += {
     'name' : 'test_src_config_chain',
     'sources' : files('config/chain.c'),

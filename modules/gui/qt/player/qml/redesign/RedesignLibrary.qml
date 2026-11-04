@@ -145,7 +145,7 @@ RedesignLibraryView {
             })
         } else if (action === "podcast-played") {
             MediaLib.setMediaState(Qt.resolvedUrl(target.url || target.key), "played", !target.played, result => {
-                if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
+                if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("Hakone Media Player"))
             })
         } else if (action === "restart" || action === "podcast-video") {
             if (target.kind === "linked-channel") linkedPlaylist.playEpisode(linkedPlaylist.indexForKey(target.channelKey), action === "podcast-video", action === "restart")
@@ -172,13 +172,13 @@ RedesignLibraryView {
             folderInfo.begin(folderTools.requestInfo(Qt.resolvedUrl(target.key)))
         } else if (action === "resync" && target.kind === "folder") {
             MediaLib.resyncFolder(Qt.resolvedUrl(target.key), result => {
-                if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
+                if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("Hakone Media Player"))
             })
             folderArtwork.clear(); root.resolvedArtwork = ({})
             if (folderLoader.item) folderLoader.item.refresh()
         } else if (action === "favorite" && target.kind === "playlist") {
             MediaLib.setPlaylistFavorite(MediaLib.deserializeMlItemIdFromString(target.key), !target.favorite, result => {
-                if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
+                if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("Hakone Media Player"))
             })
         } else if (action === "shuffle" && target.kind === "playlist") {
             MediaLib.shuffleAndPlay(MediaLib.deserializeMlItemIdFromString(target.key))
@@ -190,7 +190,7 @@ RedesignLibraryView {
         } else if (action === "watched" || action === "favorite") {
             MediaLib.setMediaState(Qt.resolvedUrl(target.url || target.key), action === "watched" ? "played" : "favorite",
                 action === "watched" ? !target.played : !target.favorite, result => {
-                    if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
+                    if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("Hakone Media Player"))
                 })
         } else if (action === "stream" || action === "convert") DialogsProvider.streamingDialog([Qt.resolvedUrl(target.url || target.key)], action === "convert")
         else if (action === "subtitle-tracks" || action === "audio-tracks") {
@@ -209,7 +209,7 @@ RedesignLibraryView {
         } else if (action === "properties") {
             MediaLib.mediaState(Qt.resolvedUrl(target.url || target.key), true, result => {
                 if (result.success) DialogsProvider.mediaInfoDialog(MediaLib.deserializeMlItemIdFromString(result.id))
-                else DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
+                else DialogsProvider.messageDialog(result.error, qsTr("Hakone Media Player"))
             })
         } else if (["earlier", "later", "remove-entry"].includes(action)) {
             if (!playlistEditing || target.playlistKey !== playlistKey) return
@@ -544,7 +544,7 @@ RedesignLibraryView {
         const selectedCategory = category
         MediaLib.addLibraryFiles(files, result => {
             if (result.folders.length) openFolder(result.folders[0], selectedCategory)
-            if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
+            if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("Hakone Media Player"))
         })
     }
     onFolderRequested: {
@@ -711,7 +711,7 @@ RedesignLibraryView {
                 if (["file", "folder"].includes(pin.kind)) request(Qt.resolvedUrl(pin.key), pin.category !== 2)
         }
         onSelectionFinished: (url, success) => {
-            if (!success) DialogsProvider.messageDialog(qsTr("VLC could not save this artwork. Choose a readable image and try again."), qsTr("Artwork"))
+            if (!success) DialogsProvider.messageDialog(qsTr("Hakone could not save this artwork. Choose a readable image and try again."), qsTr("Artwork"))
         }
     }
     Loader {

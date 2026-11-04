@@ -7,7 +7,7 @@ import VLC.Dialogs
 
 Window {
     id: root
-    title: qsTr("Welcome — VLC Media Player")
+    title: qsTr("Welcome — Hakone Media Player")
     width: Math.min(1114 * VLCStyle.scale, Screen.desktopAvailableWidth - 40)
     height: Math.min(783 * VLCStyle.scale, Screen.desktopAvailableHeight - 40)
     minimumWidth: Math.min(860 * VLCStyle.scale, Screen.desktopAvailableWidth - 40)

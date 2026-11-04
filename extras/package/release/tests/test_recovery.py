@@ -174,7 +174,7 @@ class RecoveryTests(unittest.TestCase):
     def fixture_package(self, directory, target, source):
         spec = recovery.TARGETS[target]
         directory.mkdir(parents=True)
-        filename = f'vlc-juxtopposed-{VERSION}-{target}.{spec["extension"]}'
+        filename = f'hakone-{VERSION}-{target}.{spec["extension"]}'
         data = ('archive ' + target).encode()
         digest = hashlib.sha256(data).hexdigest()
         (directory / filename).write_bytes(data)
@@ -182,6 +182,13 @@ class RecoveryTests(unittest.TestCase):
         metadata = dict(tag=VERSION, version=VERSION, source_commit=source,
                         platform=spec['platform'], architecture=spec['architecture'],
                         asset_name=filename, size=len(data), sha256=digest)
+        for key, extension, label in spec['extras']:
+            extra = f'hakone-{VERSION}-{target}.{extension}'
+            data = f'{label} {target}'.encode()
+            digest = hashlib.sha256(data).hexdigest()
+            (directory / extra).write_bytes(data)
+            (directory / (extra + '.sha256')).write_text(f'{digest}  {extra}\n')
+            metadata[key] = dict(asset_name=extra, size=len(data), sha256=digest)
         (directory / spec['metadata']).write_text(json.dumps(metadata))
         return metadata
 
@@ -203,6 +210,59 @@ class RecoveryTests(unittest.TestCase):
             (directory / metadata['asset_name']).write_bytes(b'tampered archive')
             with self.assertRaises(ValueError):
                 recovery.validate_package(directory, 'win64', VERSION, OLD)
+
+    def test_mac_package_requires_a_matching_disk_image(self):
+        image = f'hakone-{VERSION}-macos-x86_64.dmg'
+        tamper = {
+            'legacy package without a disk image': lambda d, m: m.pop('disk_image'),
+            'wrong name': lambda d, m: m['disk_image'].update(asset_name='../other.dmg'),
+            'arm image for intel': lambda d, m: m['disk_image'].update(
+                asset_name=f'hakone-{VERSION}-macos-arm64.dmg'),
+            'size': lambda d, m: m['disk_image'].update(size=1),
+            'hash': lambda d, m: m['disk_image'].update(sha256='0' * 64),
+            'missing file': lambda d, m: (d / image).unlink(),
+            'tampered file': lambda d, m: (d / image).write_bytes(b'disk image macos-x86_64!'),
+            'missing checksum file': lambda d, m: (d / (image + '.sha256')).unlink(),
+            'symlink': lambda d, m: ((d / image).unlink(), (d / image).symlink_to(d / m['asset_name'])),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp) / 'valid'
+            self.fixture_package(directory, 'macos-x86_64', OLD)
+            self.assertEqual(recovery.validate_package(directory, 'macos-x86_64', VERSION, OLD)
+                             ['disk_image']['asset_name'], image)
+        for case, change in tamper.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp) / 'artifact'
+                metadata = self.fixture_package(directory, 'macos-x86_64', OLD)
+                change(directory, metadata)
+                (directory / 'macos-x86_64-build.json').write_text(json.dumps(metadata))
+                with self.assertRaises(ValueError):
+                    recovery.validate_package(directory, 'macos-x86_64', VERSION, OLD)
+        self.assertEqual(recovery.target_asset_names(VERSION, 'win64'),
+                         [f'hakone-{VERSION}-win64.{extension}' for extension in ('zip', 'exe', 'msi')])
+
+    def test_windows_package_requires_both_installers(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp) / 'valid'
+            self.fixture_package(directory, 'win64', OLD)
+            metadata = recovery.validate_package(directory, 'win64', VERSION, OLD)
+            self.assertEqual(metadata['installer']['asset_name'], f'hakone-{VERSION}-win64.exe')
+            self.assertEqual(metadata['msi']['asset_name'], f'hakone-{VERSION}-win64.msi')
+        tamper = {
+            'package from before the installers': lambda d, m: (m.pop('installer'), m.pop('msi')),
+            'no MSI': lambda d, m: m.pop('msi'),
+            'installer named as the MSI': lambda d, m: m['installer'].update(asset_name=m['msi']['asset_name']),
+            'tampered MSI': lambda d, m: (d / m['msi']['asset_name']).write_bytes(b'other MSI'),
+            'missing installer checksum': lambda d, m: (d / (m['installer']['asset_name'] + '.sha256')).unlink(),
+        }
+        for case, change in tamper.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp) / 'artifact'
+                metadata = self.fixture_package(directory, 'win64', OLD)
+                change(directory, metadata)
+                (directory / 'windows-build.json').write_text(json.dumps(metadata))
+                with self.assertRaises(ValueError):
+                    recovery.validate_package(directory, 'win64', VERSION, OLD)
 
     def make_repository(self, root):
         def command(*args):
@@ -307,7 +367,7 @@ class RecoveryTests(unittest.TestCase):
             update_metadata = json.loads((output / 'UPDATE_METADATA.json').read_text())
             self.assertEqual(update_metadata['version'], VERSION)
             self.assertEqual(update_metadata['generation'], 0)
-            self.assertEqual(update_metadata['product_name'], 'VLC')
+            self.assertEqual(update_metadata['product_name'], 'Hakone')
             self.assertIn(recovery.append_metadata('', update_metadata).strip(), notes)
             self.assertIn(f'`{old}`', notes)
             self.assertIn(f'`{new}`', notes)
@@ -316,7 +376,19 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(len(rows), 4)
             self.assertTrue(rows[0].startswith('| win64 |'))
             for package in manifest['packages']:
-                self.assertIn(f'| {package["target"]} | `{package["source_commit"]}` | [download](#) |', rows)
+                links = '[download](#)' + (' · [disk image](#)' if package['target'].startswith('macos-') else
+                                           ' · [installer](#) · [MSI](#)' if package['target'] == 'win64' else '')
+                self.assertIn(f'| {package["target"]} | `{package["source_commit"]}` | {links} |', rows)
+                self.assertEqual('disk_image' in package, package['target'].startswith('macos-'))
+                self.assertEqual('msi' in package, package['target'] == 'win64')
+            for extension, label in (('exe', 'installer'), ('msi', 'MSI')):
+                installer = f'hakone-{VERSION}-win64.{extension}'
+                self.assertEqual((output / installer).read_bytes(), f'{label} win64'.encode())
+                self.assertTrue((output / (installer + '.sha256')).is_file())
+            for target in ('macos-arm64', 'macos-x86_64'):
+                image = f'hakone-{VERSION}-{target}.dmg'
+                self.assertEqual((output / image).read_bytes(), ('disk image ' + target).encode())
+                self.assertTrue((output / (image + '.sha256')).is_file())
             self.assertNotIn('Release packaging commit:', notes)
             self.assertNotIn('| Build run |', notes)
             self.assertNotIn('/actions/runs/', notes)
@@ -325,7 +397,10 @@ class RecoveryTests(unittest.TestCase):
                 digest, filename = line.split('  ')
                 self.assertEqual(digest, recovery.file_digest(output / filename))
                 checksum_names.add(filename)
-            self.assertEqual(checksum_names, {p['asset_name'] for p in manifest['packages']})
+            self.assertEqual(checksum_names, {p['asset_name'] for p in manifest['packages']} |
+                             {p[key]['asset_name'] for p in manifest['packages']
+                              for key in ('disk_image', 'installer', 'msi') if key in p})
+            self.assertEqual(len(checksum_names), 8)
             # An incomplete set must not produce a "complete" output directory.
             (artifacts / f'{VERSION}-win64/windows-build.json').unlink()
             with self.assertRaises(OSError):
@@ -413,12 +488,12 @@ class RecoveryTests(unittest.TestCase):
             (output / 'windows-build.json').write_text('{}')
             (output / 'UPDATE_METADATA.json').write_text('{}')
             (output / 'SOURCE_COMMIT.txt').write_text(NEW)
-            (output / f'vlc-juxtopposed-{VERSION}-source.tar.gz').write_bytes(b'old source archive')
-            (output / f'vlc-juxtopposed-{VERSION}-source.zip').write_bytes(b'old source archive')
+            (output / f'hakone-{VERSION}-source.tar.gz').write_bytes(b'old source archive')
+            (output / f'hakone-{VERSION}-source.zip').write_bytes(b'old source archive')
             expected = ['SHA256SUMS.txt']
-            for target, spec in recovery.TARGETS.items():
-                name = f'vlc-juxtopposed-{VERSION}-{target}.{spec["extension"]}'
-                expected.extend((name, name + '.sha256'))
+            for target in recovery.TARGETS:
+                for name in recovery.target_asset_names(VERSION, target):
+                    expected.extend((name, name + '.sha256'))
             for name in expected:
                 (output / name).write_bytes(b'package or checksum')
             with mock.patch.object(sys, 'argv', ['recovery.py', 'publish', '--repository', REPO,
@@ -434,7 +509,11 @@ class RecoveryTests(unittest.TestCase):
             notes_index = args.index('--notes-file')
             self.assertEqual(args[notes_index + 1], str(output / 'RELEASE_NOTES.md'))
             self.assertEqual(set(args[notes_index + 2:]), {str(output / name) for name in expected})
-            self.assertEqual(len(args[notes_index + 2:]), 9)
+            self.assertEqual(len(args[notes_index + 2:]), 17)
+            self.assertIn(str(output / f'hakone-{VERSION}-win64.msi'), args)
+            self.assertIn(str(output / f'hakone-{VERSION}-win64.exe.sha256'), args)
+            self.assertIn(str(output / f'hakone-{VERSION}-macos-arm64.dmg'), args)
+            self.assertIn(str(output / f'hakone-{VERSION}-macos-x86_64.dmg.sha256'), args)
             self.assertTrue(tool.call_args.kwargs['check'])
 
     def test_incomplete_release_downloads_do_not_create_a_draft(self):

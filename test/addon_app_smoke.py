@@ -111,7 +111,7 @@ class App:
         self.driver = None
         self.log_path = home / f'{name}.log'
         self.trace_path = home / f'{name}.trace' if trace else None
-        command = [str(args.build / 'bin' / 'vlc'), '-I', 'qt', '--no-one-instance',
+        command = [str(args.build / 'bin' / 'hakone'), '-I', 'qt', '--no-one-instance',
                    '--extraintf', 'cli', '--rc-unix', str(self.socket_path),
                    '--aout', 'adummy', '--vout', 'vdummy', '--no-qt-privacy-ask',
                    '--no-metadata-network-access', '-vv', '--file-logging',
@@ -128,7 +128,7 @@ class App:
         self.audit_path = home / f'{name}-gui-files.log' if args.gui_file_audit and driver else None
         if self.audit_path:
             env['LD_PRELOAD'] = ' '.join(filter(None, [str(args.gui_file_audit), env.get('LD_PRELOAD', '')]))
-            env['VLC_ADDON_GUI_FILE_AUDIT_ROOT'] = str(home / 'data' / 'vlc' / 'addons') + '/'
+            env['VLC_ADDON_GUI_FILE_AUDIT_ROOT'] = str(home / 'data' / 'hakone' / 'addons') + '/'
             env['VLC_ADDON_GUI_FILE_AUDIT_LOG'] = str(self.audit_path)
         self.process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -259,7 +259,7 @@ class App:
 
 def worker_process(pid):
     try:
-        return Path(f'/proc/{pid}/exe').resolve().name.startswith('vlc-addon-worker')
+        return Path(f'/proc/{pid}/exe').resolve().name.startswith('hakone-addon-worker')
     except OSError:
         return False
 
@@ -273,8 +273,8 @@ def run(args):
     if not sys.platform.startswith('linux'):
         print('the measurements read /proc', file=sys.stderr)
         return 77
-    if not (args.build / 'bin' / 'vlc').exists():
-        print(f'{args.build}/bin/vlc does not exist', file=sys.stderr)
+    if not (args.build / 'bin' / 'hakone').exists():
+        print(f'{args.build}/bin/hakone does not exist', file=sys.stderr)
         return 77
     results = {}
     home = Path(tempfile.mkdtemp(prefix='hakone-smoke-', dir=args.work))
@@ -296,7 +296,7 @@ def run(args):
     # compositor fix also crash with a display.)
     args.env.pop('DISPLAY', None)
     args.env.pop('WAYLAND_DISPLAY', None)
-    store = home / 'data' / 'vlc' / 'addons'
+    store = home / 'data' / 'hakone' / 'addons'
     apps = []
     try:
         first = App(args, home, 'first', args.trace, args.driver)
@@ -446,7 +446,7 @@ def run(args):
                 opened = app.gui_store_opens(args.timeout)
                 results.setdefault('gui_store_opens', {})[app.name] = len(opened)
                 if opened:
-                    root = str(home / 'data' / 'vlc' / 'addons') + '/'
+                    root = str(home / 'data' / 'hakone' / 'addons') + '/'
                     raise Failure(f'{app.name}: the GUI thread opened add-on store files: '
                                   + ', '.join(path.replace(root, '') for path in opened[:12]))
         if second:

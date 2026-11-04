@@ -15,7 +15,7 @@ Use Rust stable with the `wasm32-unknown-unknown` target.
 ```sh
 RUSTUP_TOOLCHAIN=stable cargo test --locked
 sh build.sh
-python3 tests/test_worker.py --worker /absolute/path/to/vlc-addon-worker
+python3 tests/test_worker.py --worker /absolute/path/to/hakone-addon-worker
 ```
 
 `dist/addon.wasm` is the package module. Tests use synthetic HTTP data. They cover identity conflicts, ambiguous replies, cancellation, response limits, and rate limits. They do not use a live service.

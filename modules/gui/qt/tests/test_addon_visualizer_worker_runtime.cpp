@@ -40,7 +40,7 @@ private slots:
 #ifndef VLC_ADDON_NATIVE_BUILD_ROOT
         QSKIP("Set VLC_BUILD_DIR to test the native worker.");
 #else
-        auto prepared = activation(); prepared->executable = QStringLiteral(VLC_ADDON_NATIVE_BUILD_ROOT "/modules/gui/qt/vlc-addon-worker");
+        auto prepared = activation(); prepared->executable = QStringLiteral(VLC_ADDON_NATIVE_BUILD_ROOT "/modules/gui/qt/hakone-addon-worker");
         QVERIFY(QFileInfo::exists(prepared->executable));
         AddonVisualizerWorker worker(prepared->scene, AddonVisualizerWorker::production(prepared, global));
         QVERIFY(worker.update({{"clock", QJsonObject{{"timeUs", 1000000}}}}));

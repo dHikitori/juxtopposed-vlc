@@ -6,7 +6,7 @@
 # Authors: http://forum.videolan.org/viewtopic.php?f=13&t=40560
 #          Rafaël Carré <funman@videolanorg>
 #
-# Sets VLC media player the default application for video mime types
+# Sets Hakone Media Player the default application for video mime types
 # on a freedesktop compliant desktop
 #
 
@@ -18,4 +18,4 @@ if [ ! -f $MIME_FILE ]
     mv /tmp/vlc.defaults.list.tmp $MIME_FILE
 fi
 
-ls /usr/share/mime/video/* | sed -e 's@/usr/share/mime/@@' -e 's/\.xml/=vlc.desktop/' >> $MIME_FILE
+ls /usr/share/mime/video/* | sed -e 's@/usr/share/mime/@@' -e 's/\.xml/=hakone.desktop/' >> $MIME_FILE

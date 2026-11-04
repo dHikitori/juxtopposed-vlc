@@ -186,13 +186,13 @@ QString OpenUrlDialog::inputError() const
     if (text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))
         return qtr("Enter one media address or file path.");
     if (text.contains(QLatin1Char('\0')))
-        return qtr("VLC cannot use this address. Check the address. Try again.");
+        return qtr("Hakone cannot use this address. Check the address. Try again.");
     if (text.contains(QStringLiteral("://")))
     {
         const QUrl url(text);
         const bool webAddress = url.scheme() == QStringLiteral("http") || url.scheme() == QStringLiteral("https");
         if (!url.isValid() || (webAddress && url.host().isEmpty()))
-            return qtr("VLC cannot use this address. Check the address. Try again.");
+            return qtr("Hakone cannot use this address. Check the address. Try again.");
     }
     return {};
 }

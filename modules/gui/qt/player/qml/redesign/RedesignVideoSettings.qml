@@ -290,7 +290,7 @@ ColumnLayout {
             {label: "HLG", value: "hlg", enabled: false}
         ]
         help: enabled ? qsTr("Use Direct3D11 output for this setting. The mode applies when a video output starts. Unavailable formats are dimmed.")
-                      : qsTr("This VLC build does not include Direct3D11 HDR output.")
+                      : qsTr("This Hakone build does not include Direct3D11 HDR output.")
         emptyText: root.current(optionName) === "generate" ? qsTr("SDR to HDR") : qsTr("Auto")
     }
     Choice {

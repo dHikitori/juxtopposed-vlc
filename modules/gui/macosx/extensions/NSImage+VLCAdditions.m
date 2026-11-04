@@ -87,12 +87,12 @@ static NSImage *ImageFromEmoji(NSString *emoji, NSSize size)
 
 + (NSImage *)VLCAppIconImage
 {
-    return [NSImage imageNamed:@"VLC"];
+    return [NSImage imageNamed:@"hakone"];
 }
 
 + (NSImage *)VLCXmasAppIconImage
 {
-    return [NSImage imageNamed:@"VLC-Xmas"];
+    return [NSImage imageNamed:@"hakone"];
 }
 
 + (NSImage *)VLCStatusBarIconImage

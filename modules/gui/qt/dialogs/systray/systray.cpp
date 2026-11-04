@@ -44,16 +44,12 @@ VLCSystray::VLCSystray(MainCtx* ctx, QObject* parent)
     assert(ctx);
     assert(m_intf);
 
-    QIcon iconVLC;
-    if( m_ctx->useXmasCone() )
-        iconVLC = QIcon::fromTheme( "vlc-xmas", QIcon( ":/logo/vlc128-xmas.png" ) );
-    else
-        iconVLC = QIcon::fromTheme( "vlc", QIcon( ":/logo/vlc256.png" ) );
+    const QIcon iconVLC = QVLCAppIcon();
 
     setIcon(iconVLC);
-    setToolTip( qtr( "VLC media player" ));
+    setToolTip( qtr( "Hakone Media Player" ));
 
-    m_menu = std::make_unique<VLCMenu>( qtr( "VLC media player"), m_intf );
+    m_menu = std::make_unique<VLCMenu>( qtr( "Hakone Media Player"), m_intf );
     m_menu->setIcon( iconVLC );
     m_menu->setObjectName(QStringLiteral("redesignTrayMenu"));
     styleRedesignMenus(m_menu.get(), m_ctx);
@@ -148,7 +144,7 @@ void VLCSystray::updateTooltipName( const QString& name )
 {
     if( name.isEmpty() )
     {
-        setToolTip( qtr( "VLC media player" ) );
+        setToolTip( qtr( "Hakone Media Player" ) );
     }
     else
     {
@@ -158,7 +154,7 @@ void VLCSystray::updateTooltipName( const QString& name )
         if (vlc::systray::shouldNotify(notificationSetting, visibility))
         {
             const auto showMessageTemplate = [this, &name](const auto &icon) {
-                showMessage(qtr("VLC media player"), name, icon, var_InheritInteger(m_intf, "qt-notification-timeout"));
+                showMessage(qtr("Hakone Media Player"), name, icon, var_InheritInteger(m_intf, "qt-notification-timeout"));
             };
 
             assert(m_intf);
@@ -193,7 +189,7 @@ void VLCSystray::updateTooltipName( const QString& name )
 void VLCSystray::createMenu()
 {
 #ifndef Q_OS_MAC
-    auto *visibility = m_menu->addAction(qtr("&Hide VLC"), this, [this] {
+    auto *visibility = m_menu->addAction(qtr("&Hide Hakone"), this, [this] {
         if (m_ctx->interfaceVisibility() == QWindow::Hidden) showUpdateMenu();
         else hideUpdateMenu();
     });
@@ -252,7 +248,7 @@ void VLCSystray::update()
     const bool started = player->isStarted();
     const bool playing = hasInput && player->getPlayingState() == PlayerController::PLAYING_STATE_PLAYING;
 #ifndef Q_OS_MAC
-    set("trayVisibility", m_ctx->interfaceVisibility() == QWindow::Hidden ? qtr("&Show VLC") : qtr("&Hide VLC"), QStringLiteral(":/logo/vlc16.png"));
+    set("trayVisibility", m_ctx->interfaceVisibility() == QWindow::Hidden ? qtr("&Show Hakone") : qtr("&Hide Hakone"),QStringLiteral(":/logo/hakone16.png"));
 #endif
     set("vlcMenuPlayPause", playing ? qtr("Pause") : qtr("&Play"), playing
         ? QStringLiteral(":/menu/ic_pause_filled.svg") : QStringLiteral(":/menu/redesign/play.svg"));

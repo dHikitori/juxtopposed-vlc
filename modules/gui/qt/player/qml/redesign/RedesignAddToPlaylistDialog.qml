@@ -117,7 +117,7 @@ C.Dialog {
     function finish(success, message) {
         busy = false
         if (success) accept()
-        else { errorMessage = message || qsTr("VLC cannot save this selection. Try again."); addonPicker.begin() }
+        else { errorMessage = message || qsTr("Hakone cannot save this selection. Try again."); addonPicker.begin() }
     }
     function invalidateAddonChoices() {
         clearSelection()
@@ -344,7 +344,7 @@ C.Dialog {
                 Text {
                     anchors.fill: parent; anchors.margins: root.theme.dp(20)
                     visible: destinations.count === 0
-                    text: root.filterText.length ? qsTr("No playlists match your search.") : qsTr("VLC has no saved playlists.")
+                    text: root.filterText.length ? qsTr("No playlists match your search.") : qsTr("Hakone has no saved playlists.")
                     color: root.theme.playerLabel; font.pixelSize: root.theme.dp(14); wrapMode: Text.WordWrap
                     verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter
                 }

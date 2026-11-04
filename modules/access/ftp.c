@@ -387,7 +387,7 @@ static int Login( vlc_object_t *p_access, access_sys_t *p_sys, const char *path 
     {
         msg_Err( p_access, "connection failed" );
         vlc_dialog_display_error( p_access, _("Network interaction failed"), "%s",
-            _("VLC could not connect with the given server.") );
+            _("Hakone could not connect with the given server.") );
         goto error;
     }
 
@@ -403,7 +403,7 @@ static int Login( vlc_object_t *p_access, access_sys_t *p_sys, const char *path 
     {
         msg_Err( p_access, "connection rejected" );
         vlc_dialog_display_error( p_access, _("Network interaction failed"), "%s",
-            _("VLC's connection to the given server was rejected.") );
+            _("Hakone's connection to the given server was rejected.") );
         goto error;
     }
 

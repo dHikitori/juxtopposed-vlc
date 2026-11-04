@@ -6,7 +6,7 @@
 namespace vlc::addons {
 struct InstalledPackage;
 // Precompiled worker modules (continuation plan finding F1). An entry is the
-// native code that `vlc-addon-worker --precompile` made from one release's
+// native code that `hakone-addon-worker --precompile` made from one release's
 // module with one worker build, and that code's SHA-256. The worker loads an
 // entry only when the digest matches, and Wasmtime refuses code from another
 // version or configuration. Otherwise the worker compiles from source.

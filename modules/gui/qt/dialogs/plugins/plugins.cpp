@@ -471,7 +471,7 @@ void ExtensionTab::updateButtons()
     butMoreInfo->setEnabled(extList->currentIndex().isValid() && extList->selectionModel()->hasSelection());
     if (extList->model()->rowCount() > 0) listInfo->setText(extList->model()->rowCount() == 1 ? qtr("1 extension") : qtr("%1 extensions").arg(extList->model()->rowCount()));
     else if (!searchInput->text().trimmed().isEmpty()) listInfo->setText(qtr("No extensions match your search."));
-    else if (ExtensionsManager::getInstance(p_intf)->cannotLoad()) listInfo->setText(qtr("VLC cannot load local extensions in this build."));
+    else if (ExtensionsManager::getInstance(p_intf)->cannotLoad()) listInfo->setText(qtr("Hakone cannot load local extensions in this build."));
     else listInfo->setText(qtr("No local extensions were found."));
 }
 
@@ -717,7 +717,7 @@ QVariant ExtensionListModel::ExtensionCopy::data( int role ) const
     case Qt::DisplayRole:
         return title;
     case Qt::DecorationRole:
-        if ( !icon ) return QPixmap( ":/logo/vlc48.png" );
+        if ( !icon ) return QPixmap( ":/logo/hakone48.png" );
         return *icon;
     case SummaryRole:
         return shortdesc;
@@ -921,7 +921,7 @@ void AddonItemDelegate::paint( QPainter *painter,
     /* Draw common base  */
     QString name = index.data( Qt::DisplayRole ).toString();
     QPixmap icon = index.data(Qt::DecorationRole).value<QPixmap>();
-    if (icon.isNull()) icon = QPixmap(QStringLiteral(":/logo/vlc48.png"));
+    if (icon.isNull()) icon = QPixmap(QStringLiteral(":/logo/hakone48.png"));
     QString description = index.data( AddonsModel::Role::SUMMARY ).toString();
 
     QFont badgeFont(newopt.font);
@@ -1140,7 +1140,7 @@ void createPluginInfo(QVLCDialog *dialog, qt_intf_t *intf, const QString &name, 
         root->setContentsMargins(margin, margin, margin, margin);
         root->setSpacing(pluginDp(intf, 12));
         icon->setFixedSize(pluginDp(intf, 48), pluginDp(intf, 48));
-        const auto pixmap = art.isNull() ? QPixmap(QStringLiteral(":/logo/vlc48.png")) : art;
+        const auto pixmap = art.isNull() ? QPixmap(QStringLiteral(":/logo/hakone48.png")) : art;
         icon->setPixmap(pixmap.scaled(icon->size() * dialog->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         auto scaled = icon->pixmap(); scaled.setDevicePixelRatio(dialog->devicePixelRatioF()); icon->setPixmap(scaled);
         const auto available = dialog->screen() ? dialog->screen()->availableGeometry().size() : QSize(1280, 720);

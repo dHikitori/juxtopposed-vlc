@@ -91,7 +91,7 @@ TestCase {
     function test_scaledAndSmallWindow(data) {
         width=data.w; height=data.h; dialog.scaleFactor=data.scale; dialog.lightTheme=!!data.light
         dialog.playlistName="Retry"; dialog.submit()
-        dialog.finish(dialog.requestId,{success:false,error:"VLC cannot read or save this image. Select another image."})
+        dialog.finish(dialog.requestId,{success:false,error:"Hakone cannot read or save this image. Select another image."})
         wait(50)
         verify(dialog.x>=0 && dialog.y>=0)
         verify(dialog.x+dialog.width<=width && dialog.y+dialog.height<=height)

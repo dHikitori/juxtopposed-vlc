@@ -112,8 +112,8 @@ static const int kCurrentPreferencesVersion = 4;
         NSAlert *alert = [[NSAlert alloc] init];
         [alert setAlertStyle:NSAlertStyleInformational];
         [alert setMessageText:_NS("Remove old preferences?")];
-        [alert setInformativeText:_NS("We just found an older version of VLC's preferences files.")];
-        [alert addButtonWithTitle:_NS("Move To Trash and Relaunch VLC")];
+        [alert setInformativeText:_NS("We just found an older version of Hakone's preferences files.")];
+        [alert addButtonWithTitle:_NS("Move To Trash and Relaunch Hakone")];
         [alert addButtonWithTitle:_NS("Ignore")];
         NSModalResponse res = [alert runModal];
         if (res != NSAlertFirstButtonReturn) {

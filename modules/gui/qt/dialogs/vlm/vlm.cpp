@@ -191,7 +191,7 @@ int VLMDialog::vlmEvent(vlc_object_t*, const char*, vlc_value_t, vlc_value_t val
             const bool keepError = self->states.value(id).value(instance) == VLM_ERROR_S
                 && (state == VLM_INIT_S || state == VLM_END_S);
             if (!keepError) self->states[id][instance] = state;
-            if (state == VLM_ERROR_S) self->feedback(qtr("VLC cannot play %1. Check its input and output.").arg(name));
+            if (state == VLM_ERROR_S) self->feedback(qtr("Hakone cannot play %1. Check its input and output.").arg(name));
         } else if (type == VLM_EVENT_MEDIA_REMOVED) self->states.remove(id);
         self->queueRefresh();
     }, Qt::QueuedConnection);
@@ -223,7 +223,7 @@ bool VLMDialog::refresh(qint64 selectId)
     if (!vlm) { feedback(qtr("VLM is not available.")); updateActions(); return false; }
     if (selectId < 0) if (auto *current = selected()) selectId = current->id;
     vlm_media_t **items = nullptr; int count = 0;
-    if (vlm_Control(vlm, VLM_GET_MEDIAS, &items, &count)) { feedback(qtr("VLC cannot read the broadcast list.")); return false; }
+    if (vlm_Control(vlm, VLM_GET_MEDIAS, &items, &count)) { feedback(qtr("Hakone cannot read the broadcast list.")); return false; }
     media.clear();
     for (int i = 0; i < count; ++i) media.emplace_back(items[i], &vlm_media_Delete);
     free(items);
@@ -342,7 +342,7 @@ void VLMDialog::saveModifications()
     int64_t id = editingId;
     const bool active = editingId >= 0 && Instances(vlm, editingId).count > 0;
     const int result = editingId < 0 ? vlm_Control(vlm, VLM_ADD_MEDIA, &draft.value, &id) : vlm_Control(vlm, VLM_CHANGE_MEDIA, &draft.value);
-    if (result) { refresh(); feedback(qtr("VLC cannot save this broadcast. Check its name and try again.")); return; }
+    if (result) { refresh(); feedback(qtr("Hakone cannot save this broadcast. Check its name and try again.")); return; }
     if (!active) states.remove(id);
     clearWidgets(); refresh(id);
     feedback(active ? qtr("Saved. Stop and start this broadcast to use the new settings.") : qtr("Broadcast saved."));
@@ -351,7 +351,7 @@ void VLMDialog::removeVLMItem()
 {
     auto *item = selected(); if (!item || !vlm) return;
     const auto id = item->id;
-    if (vlm_Control(vlm, VLM_DEL_MEDIA, int64_t(id))) { feedback(qtr("VLC cannot remove this broadcast.")); refresh(); return; }
+    if (vlm_Control(vlm, VLM_DEL_MEDIA, int64_t(id))) { feedback(qtr("Hakone cannot remove this broadcast.")); refresh(); return; }
     if (editingId == id && !dirty) clearWidgets();
     refresh(); feedback(qtr("Broadcast removed."));
 }
@@ -367,7 +367,7 @@ void VLMDialog::control(int action)
     else for (int i = 0; i < instances.count; ++i)
         if (instances.items[i]->b_paused == (action == 0))
             if (vlm_Control(vlm, VLM_PAUSE_MEDIA_INSTANCE, int64_t(id), instances.items[i]->psz_name)) result = VLC_EGENERIC;
-    if (result) feedback(qtr("VLC cannot complete this playback action."));
+    if (result) feedback(qtr("Hakone cannot complete this playback action."));
     else { if (action == 2) states.remove(id); feedback({}); }
     refresh(id);
 }
@@ -414,7 +414,7 @@ bool VLMDialog::importVLMConf()
     if (path.isEmpty()) return false;
     const bool result = execute(QStringLiteral("load ") + token(path));
     refresh(); ui.tabs->setCurrentIndex(0);
-    feedback(result ? qtr("Configuration loaded.") : qtr("VLC cannot load the full file. Check the broadcast list."));
+    feedback(result ? qtr("Configuration loaded.") : qtr("Hakone cannot load the full file. Check the broadcast list."));
     return result;
 }
 
@@ -438,7 +438,7 @@ bool VLMDialog::exportVLMConf()
             const QString name = qfu(item->psz_name);
             QStringList values = strings(item->i_input, item->ppsz_input) + strings(item->i_option, item->ppsz_option);
             values << name << qfu(item->psz_output);
-            for (const auto &value : values) if (value.contains(QLatin1Char('\n')) || value.contains(QLatin1Char('\r'))) { feedback(qtr("VLC cannot save a value that contains a line break.")); return false; }
+            for (const auto &value : values) if (value.contains(QLatin1Char('\n')) || value.contains(QLatin1Char('\r'))) { feedback(qtr("Hakone cannot save a value that contains a line break.")); return false; }
             text += QStringLiteral("new %1 broadcast %2%3\n").arg(token(name), item->b_enabled ? QStringLiteral("enabled") : QStringLiteral("disabled"), item->broadcast.b_loop ? QStringLiteral(" loop") : QString());
             for (const auto &input : strings(item->i_input, item->ppsz_input)) text += QStringLiteral("setup %1 input %2\n").arg(token(name), token(input));
             if (item->psz_output) text += QStringLiteral("setup %1 output %2\n").arg(token(name), token(qfu(item->psz_output)));
@@ -453,9 +453,9 @@ bool VLMDialog::exportVLMConf()
             if (!saved) error = file.errorString();
         }
         if (!saved) {
-            feedback(qtr("VLC did not save the configuration."));
+            feedback(qtr("Hakone did not save the configuration."));
             const auto answer = DialogsProvider::getInstance(p_intf)->messageDialog(
-                qtr("VLC cannot save this file.\n\n%1\n\n%2\n\nSelect another file or folder.")
+                qtr("Hakone cannot save this file.\n\n%1\n\n%2\n\nSelect another file or folder.")
                     .arg(error, toNativeSeparators(path)),
                 qtr("Export VLM configuration"), QMessageBox::Yes | QMessageBox::Cancel,
                 QMessageBox::Cancel, QMessageBox::Warning, this, qtr("Select file"));
@@ -465,7 +465,7 @@ bool VLMDialog::exportVLMConf()
         }
         lastExportPath = path;
         feedback(dirty
-            ? qtr("VLC exported the saved broadcasts. Save the changes before the next export.")
+            ? qtr("Hakone exported the saved broadcasts. Save the changes before the next export.")
             : qtr("Configuration saved."));
         return true;
     }

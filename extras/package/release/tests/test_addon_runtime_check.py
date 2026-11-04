@@ -19,15 +19,15 @@ class AddonRuntimeCheckTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for executable, worker, module in (
-                ("AppDir/AppRun", "AppDir/usr/bin/vlc-addon-worker", "AppDir/usr/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm"),
-                ("VLC.app/Contents/MacOS/vlc", "VLC.app/Contents/MacOS/vlc-addon-worker", "VLC.app/Contents/Resources/share/addons/reference/thesubtitledb/dist/addon.wasm"),
-                ("vlc-win64/vlc.exe", "vlc-win64/vlc-addon-worker.exe", "vlc-win64/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm"),
-                ("usr/bin/vlc", "usr/bin/vlc-addon-worker", "usr/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm")
+                ("AppDir/AppRun", "AppDir/usr/bin/hakone-addon-worker", "AppDir/usr/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm"),
+                ("Hakone.app/Contents/MacOS/hakone", "Hakone.app/Contents/MacOS/hakone-addon-worker", "Hakone.app/Contents/Resources/share/addons/reference/thesubtitledb/dist/addon.wasm"),
+                ("hakone-win64/hakone.exe", "hakone-win64/hakone-addon-worker.exe", "hakone-win64/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm"),
+                ("usr/bin/hakone", "usr/bin/hakone-addon-worker", "usr/share/vlc/addons/reference/thesubtitledb/dist/addon.wasm")
             ):
                 self.assertEqual(check.installation_files(root / executable), (root / worker, root / module))
 
     def files(self, root):
-        worker, module = root / "vlc-addon-worker", root / "addon.wasm"
+        worker, module = root / "hakone-addon-worker", root / "addon.wasm"
         worker.write_bytes(b"worker-fixture")
         module.write_bytes(b"\0asm")
         return worker, module

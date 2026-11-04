@@ -127,7 +127,7 @@ vlc_module_begin ()
     set_help(MARQUEE_HELP)
     set_callback_sub_source( CreateFilter, 0 )
     set_subcategory( SUBCAT_VIDEO_SUBPIC )
-    add_string( CFG_PREFIX "marquee", "VLC", MSG_TEXT, MSG_LONGTEXT )
+    add_string( CFG_PREFIX "marquee", "Hakone", MSG_TEXT, MSG_LONGTEXT )
     add_loadfile(CFG_PREFIX "file", NULL, FILE_TEXT, FILE_LONGTEXT)
 
     set_section( N_("Position"), NULL )

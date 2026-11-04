@@ -576,7 +576,7 @@
                      </sizepolicy>
                     </property>
                     <property name="text">
-                     <string>Set a scale, width, or height. VLC uses the source aspect ratio for the other values.</string>
+                     <string>Set a scale, width, or height. Hakone uses the source aspect ratio for the other values.</string>
                     </property>
                     <property name="wordWrap">
                      <bool>true</bool>

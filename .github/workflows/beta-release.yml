@@ -215,6 +215,11 @@ jobs:
         with:
           path: build-release-qt
           key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools
+      - name: Install pinned disk image tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dmg-tools"
+          "$RUNNER_TEMP/dmg-tools/bin/pip" install -r extras/package/release/dmg/requirements.txt
+          echo "DMGBUILD=$RUNNER_TEMP/dmg-tools/bin/dmgbuild" >> "$GITHUB_ENV"
       - name: Build and bundle
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
@@ -222,13 +227,29 @@ jobs:
       - name: Verify relocated app
         run: |
           mkdir -p "$RUNNER_TEMP/relocated app"
-          ditto -x -k build-release-output/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}.zip "$RUNNER_TEMP/relocated app"
-          python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video "$RUNNER_TEMP/relocated app/VLC Juxtopposed.app/Contents/MacOS/vlc"
+          ditto -x -k build-release-output/hakone-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}.zip "$RUNNER_TEMP/relocated app"
+          python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video "$RUNNER_TEMP/relocated app/Hakone.app/Contents/MacOS/hakone"
+      - name: Verify disk image
+        run: |
+          image="build-release-output/hakone-$RELEASE_TAG-macos-${{ matrix.arch }}.dmg"
+          hdiutil verify "$image"
+          test "$(hdiutil imageinfo -format "$image")" = ULFO
+          # Compare with a fresh extraction: running the app may leave files beside it.
+          mkdir -p "$RUNNER_TEMP/zip reference"
+          ditto -x -k "build-release-output/hakone-$RELEASE_TAG-macos-${{ matrix.arch }}.zip" "$RUNNER_TEMP/zip reference"
+          mount="$RUNNER_TEMP/disk image"
+          mkdir -p "$mount"
+          hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mount" "$image"
+          trap 'hdiutil detach "$mount" || hdiutil detach -force "$mount"' EXIT
+          # Same files as the verified ZIP app, then a non-GUI run from the read-only volume.
+          python3 extras/package/release/dmg.py check "$mount" --reference "$RUNNER_TEMP/zip reference/Hakone.app"
+          python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" "$mount/Hakone.app/Contents/MacOS/hakone"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}
           path: |
             build-release-output/*.zip
+            build-release-output/*.dmg
             build-release-output/*.sha256
             build-release-output/*.json
           if-no-files-found: error
@@ -281,7 +302,7 @@ jobs:
       - name: Verify relocated directory bundle
         run: |
           mkdir -p "$RUNNER_TEMP/relocated"
-          tar -xzf build-release-output/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated"
+          tar -xzf build-release-output/hakone-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated"
           python3 extras/package/release/bundle-linux-runtime.py --verify-only "$RUNNER_TEMP/relocated/AppDir"
           QT_QPA_PLATFORM=xcb LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a \
             python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video --require-opengl "$RUNNER_TEMP/relocated/AppDir/AppRun"
@@ -387,7 +408,7 @@ jobs:
         with:
           path: contrib/tarballs
           key: ${{ steps.deps-key.outputs.download_key }}
-      - name: Build and package portable archive
+      - name: Build and package portable archive and NSIS installer
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
           RELEASE_DEPS_CACHE_KEY: ${{ steps.deps-key.outputs.key }}
@@ -397,11 +418,13 @@ jobs:
           -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
           "$WINDOWS_BUILD_IMAGE"
           bash extras/package/release/build-windows.sh
+      # windows-smoke adds the MSI and uploads the complete win64 package.
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ needs.prepare.outputs.version }}-win64
+          name: ${{ needs.prepare.outputs.version }}-win64-build
           path: |
             build-release-output/*.zip
+            build-release-output/*.exe
             build-release-output/*.sha256
             build-release-output/*-build.json
           if-no-files-found: error
@@ -415,27 +438,70 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.prepare.outputs.version }}-win64
+          name: ${{ needs.prepare.outputs.version }}-win64-build
           path: downloads
-      - shell: pwsh
+      - name: Verify portable package
+        shell: pwsh
         run: |
-          Expand-Archive downloads/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-win64.zip "$env:RUNNER_TEMP/relocated"
-          $vlc = "$env:RUNNER_TEMP/relocated/vlc-win64/vlc.exe"
-          python extras/package/release/version.py "$env:RELEASE_TAG" --executable $vlc --require-module qt --require-module avcodec --require-module medialibrary
+          Expand-Archive downloads/hakone-${{ needs.prepare.outputs.version }}-win64.zip "$env:RUNNER_TEMP/relocated"
+          $hakone = "$env:RUNNER_TEMP/relocated/hakone-win64/hakone.exe"
+          python extras/package/release/version.py "$env:RELEASE_TAG" --executable $hakone --require-module qt --require-module avcodec --require-module medialibrary
           if ($LASTEXITCODE -ne 0) { throw 'Compiled version or required plugin verification failed' }
           python -c "import wave; w=wave.open('sample.wav','wb'); w.setparams((1,2,48000,0,'NONE','not compressed')); w.writeframes(b'\0\0'*96000); w.close()"
           $sample = (Resolve-Path sample.wav).Path
           # Reuse the portable profile to exercise the cached graphics probe.
           foreach ($attempt in 1..2) {
-            $log = "$env:RUNNER_TEMP/vlc-smoke-$attempt.log"
-            $process = Start-Process $vlc -ArgumentList '--ignore-config','-vv','-I','qt','--no-video','--aout=dummy','--no-qt-privacy-ask','--no-qt-updates-notif','--no-media-library','--no-metadata-network-access','--play-and-exit','--file-logging',"--logfile=$log",$sample -PassThru
-            if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'VLC startup timed out' }
-            if ($process.ExitCode -ne 0) { throw "VLC exited $($process.ExitCode)" }
+            $log = "$env:RUNNER_TEMP/hakone-smoke-$attempt.log"
+            $process = Start-Process $hakone -ArgumentList '--ignore-config','-vv','-I','qt','--no-video','--aout=dummy','--no-qt-privacy-ask','--no-qt-updates-notif','--no-media-library','--no-metadata-network-access','--play-and-exit','--file-logging',"--logfile=$log",$sample -PassThru
+            if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Hakone startup timed out' }
+            if ($process.ExitCode -ne 0) { throw "Hakone exited $($process.ExitCode)" }
             $messages = Get-Content $log -Raw
             if ($messages -notmatch 'using interface module "qt"') { throw 'Qt interface did not start' }
             if ($messages -notmatch 'using audio decoder module') { throw 'Audio decoder did not start' }
-            if ($messages -match 'failed to load component|QQmlApplicationEngine failed|is not installed|qml loading|Cannot load the VLC interface|svg icon plugin is not found|Scene Graph Error|Failed to create RHI|Failed to initialize graphics backend') { throw 'Qt interface reported a startup failure' }
+            if ($messages -match 'failed to load component|QQmlApplicationEngine failed|is not installed|qml loading|Cannot load the (VLC|Hakone) interface|svg icon plugin is not found|Scene Graph Error|Failed to create RHI|Failed to initialize graphics backend') { throw 'Qt interface reported a startup failure' }
           }
+      - name: Find or install WiX 3
+        shell: pwsh
+        run: |
+          $wix = @($env:WIX, "${env:ProgramFiles(x86)}\WiX Toolset v3.14\") |
+            Where-Object { $_ -and (Test-Path (Join-Path $_ 'bin\candle.exe')) } | Select-Object -First 1
+          if (-not $wix) {
+            choco install wixtoolset --version 3.14.1 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'WiX 3.14.1 could not be installed' }
+            $wix = "${env:ProgramFiles(x86)}\WiX Toolset v3.14\"
+          }
+          & (Join-Path $wix 'bin\candle.exe') -? | Select-Object -First 1
+          "WIX_BIN=$(Join-Path $wix 'bin')" >> $env:GITHUB_ENV
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          # A clean copy: the portable check above wrote to its profile.
+          Expand-Archive downloads/hakone-$env:RELEASE_TAG-win64.zip "$env:RUNNER_TEMP/msi-package"
+          Remove-Item "$env:RUNNER_TEMP/msi-package/hakone-win64/portable" -Recurse -Force
+          python extras/package/release/build-msi.py "$env:RUNNER_TEMP/msi-package/hakone-win64" --output downloads --wix $env:WIX_BIN
+          if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }
+      - name: Install, run and uninstall both installers
+        shell: pwsh
+        run: >-
+          ./extras/package/release/test-windows-installers.ps1 -Downloads downloads -Tag $env:RELEASE_TAG
+          -Reference "$env:RUNNER_TEMP/msi-package/hakone-win64"
+      - name: Keep installer logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.version }}-win64-installer-logs
+          path: ${{ runner.temp }}/hakone-msi-*.log
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.version }}-win64
+          path: |
+            downloads/*.zip
+            downloads/*.exe
+            downloads/*.msi
+            downloads/*.sha256
+            downloads/*-build.json
+          if-no-files-found: error
 
   draft:
     needs: [prepare, reuse, macos, linux, windows, windows-smoke]

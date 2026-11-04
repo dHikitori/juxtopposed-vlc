@@ -16,12 +16,12 @@ build-npapi: package-win-install
 endif
 
 if HAVE_ARM64
-WINVERSION=vlc-$(VERSION)-winarm64
+WINVERSION=hakone-$(HAKONE_VERSION)-winarm64
 else
 if HAVE_WIN64
-WINVERSION=vlc-$(VERSION)-win64
+WINVERSION=hakone-$(HAKONE_VERSION)-win64
 else
-WINVERSION=vlc-$(VERSION)-win32
+WINVERSION=hakone-$(HAKONE_VERSION)-win32
 endif
 endif
 
@@ -66,7 +66,7 @@ endif
 	done
 	cp "$(srcdir)/README.md" "$(win32_destdir)/README.txt"
 
-	cp $(srcdir)/share/icons/vlc.ico $(win32_destdir)
+	cp $(srcdir)/share/icons/hakone.ico $(win32_destdir)
 	for plugindir in $(pkglibdir)/plugins/*/; do \
 		plugin_destdir="$(win32_destdir)/plugins/`basename $$plugindir`"; \
 		mkdir -p "$$plugin_destdir"; \
@@ -151,7 +151,7 @@ if HAVE_MAKENSIS
 	cp -r $(srcdir)/extras/package/win32/NSIS/languages           "$(win32_destdir)/"
 	cp -r $(srcdir)/extras/package/win32/NSIS/helpers             "$(win32_destdir)/"
 	cp "$(top_srcdir)/extras/package/win32/NSIS/nsProcess.nsh" "$(win32_destdir)/NSIS/"
-	cp "$(top_srcdir)/extras/package/win32/NSIS/vlc_branding.bmp" "$(win32_destdir)/NSIS/"
+	cp "$(top_srcdir)/extras/package/win32/NSIS/hakone_branding.bmp" "$(win32_destdir)/NSIS/"
 endif
 
 if HAVE_MAKENSIS
@@ -189,6 +189,7 @@ package-win32-release: package-win32-src $(win32_destdir)/NSIS/nsProcess.dll pac
 	mkdir -p "$(win32_destdir)/msi/"
 	cp    $(top_builddir)/extras/package/win32/msi/config.wxi	  "$(win32_destdir)/msi/"
 	cp    $(top_srcdir)/extras/package/win32/msi/bannrbmp.bmp	  "$(win32_destdir)/msi/"
+	cp    $(top_srcdir)/extras/package/win32/msi/dlgbmp.bmp	  "$(win32_destdir)/msi/"
 	cp    $(top_srcdir)/extras/package/win32/msi/extensions.wxs	  "$(win32_destdir)/msi/"
 	cp    $(top_srcdir)/extras/package/win32/msi/LICENSE.rtf	  "$(win32_destdir)/msi/"
 	cp    $(top_srcdir)/extras/package/win32/msi/product.wxs	  "$(win32_destdir)/msi/"
@@ -198,13 +199,13 @@ package-win32-release: package-win32-src $(win32_destdir)/NSIS/nsProcess.dll pac
 .PHONY: package-win-install package-win-common package-win-strip package-win32-src package-win32-exe package-win32-zip package-win32-debug-zip package-win32-7zip package-win32-debug-7zip package-win32-cleanup package-win32 package-win32-debug
 
 EXTRA_DIST += \
-	extras/package/win32/vlc.exe.manifest.in \
+	extras/package/win32/hakone.exe.manifest.in \
 	extras/package/win32/libvlc.dll.manifest.in \
 	extras/package/win32/libvlccore.dll.manifest.in \
 	extras/package/win32/configure.sh \
 	extras/package/win32/NSIS/vlc.win32.nsi.in \
 	extras/package/win32/NSIS/spad.nsi.in \
-	extras/package/win32/NSIS/vlc_branding.bmp \
+	extras/package/win32/NSIS/hakone_branding.bmp \
 	extras/package/win32/NSIS/languages/BengaliExtra.nsh \
 	extras/package/win32/NSIS/languages/BasqueExtra.nsh \
 	extras/package/win32/NSIS/languages/PortugueseBRExtra.nsh \

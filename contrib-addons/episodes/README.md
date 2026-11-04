@@ -25,7 +25,7 @@ other add-on.
 ```sh
 ./build.sh                      # dist/addon.wasm
 cargo test                      # the panel rules, case by case
-python3 -B tests/test_worker.py --worker <build>/modules/gui/qt/vlc-addon-worker
+python3 -B tests/test_worker.py --worker <build>/modules/gui/qt/hakone-addon-worker
 ```
 
 `tests/sample-state.json` is the state for a sample season. The Rust tests

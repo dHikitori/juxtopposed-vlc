@@ -9,4 +9,4 @@ export VLC_LOCALE_PATH="$APPDIR/usr/share/locale"
 # ELF RUNPATH and each executable's qt.conf locate the bundled libraries.
 # Do not pass bundle/SDK paths to browsers, file managers or other child apps.
 unset LD_LIBRARY_PATH QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH
-exec "$APPDIR/usr/bin/vlc" -I qt "$@"
+exec "$APPDIR/usr/bin/hakone" -I qt "$@"

@@ -87,7 +87,7 @@ RedesignSettingsDialog {
             }
         }
         title: qsTr("Reset all settings")
-        message: qsTr("This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again.")
+        message: qsTr("This action replaces all Hakone settings with the default settings. After this action, close Hakone. Start Hakone again.")
         confirmText: qsTr("Reset"); destructive: true
         onAccepted: root.resetSettings()
     }
@@ -96,7 +96,7 @@ RedesignSettingsDialog {
         function onChanged() { if (!preferenceStore.errorMessage.length) root.resetFailed = false }
         function onHistoryCleared(success) {
             root.actionMessageIsError = !success
-            root.actionMessage = success ? qsTr("VLC cleared the playback history.") : qsTr("VLC cannot clear the playback history. Try again.")
+            root.actionMessage = success ? qsTr("Hakone cleared the playback history.") : qsTr("Hakone cannot clear the playback history. Try again.")
         }
         function onPluginScanChanged() {
             root.actionMessage = preferenceStore.pluginScanMessage
@@ -137,7 +137,7 @@ RedesignSettingsDialog {
         if (action === "redesign-clear-history") {
             if (!preferenceStore.clearHistory()) {
                 actionMessageIsError = true
-                actionMessage = qsTr("VLC cannot clear the playback history. Try again.")
+                actionMessage = qsTr("Hakone cannot clear the playback history. Try again.")
             }
             return
         }
@@ -151,13 +151,13 @@ RedesignSettingsDialog {
         if (action !== "redesign-config-folder") return
         actionMessageIsError = true
         const folder = preferenceStore.configurationFolder()
-        actionMessage = folder.toString().length && Qt.openUrlExternally(folder) ? "" : qsTr("VLC cannot open the settings folder.")
+        actionMessage = folder.toString().length && Qt.openUrlExternally(folder) ? "" : qsTr("Hakone cannot open the settings folder.")
     }
     function resetSettings() {
         resetFailed = !preferenceStore.resetAll()
         if (!resetFailed) {
             actionMessageIsError = false
-            actionMessage = qsTr("VLC saved the default settings. Close VLC. Start VLC again to use all settings.")
+            actionMessage = qsTr("Hakone saved the default settings. Close Hakone. Start Hakone again to use all settings.")
         }
     }
     onDismissRequested: root.closeSettings()
@@ -490,7 +490,7 @@ RedesignSettingsDialog {
                     visible: root.advanced && !root.search.length
                     width: parent.width
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                    caption: root.expert ? qsTr("Hide all VLC options") : qsTr("All VLC options")
+                    caption: root.expert ? qsTr("Hide all Hakone options") : qsTr("All Hakone options")
                     text: caption; selected: root.expert
                     onClicked: root.expert = !root.expert
                 }

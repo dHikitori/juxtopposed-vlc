@@ -16,17 +16,20 @@ spec.loader.exec_module(version)
 
 class VersionTests(unittest.TestCase):
     def test_reported_cli_version(self):
-        output = ('VLC version 4.0.0-beta.4 Otto Chriek (4.0.0-dev-40063-ge93a0c3478)\n'
+        output = ('Hakone version 4.0.0-beta.4 Otto Chriek (4.0.0-dev-40063-ge93a0c3478)\n'
                   'Compiled by [not implemented with meson] on [not implemented with meson]\n'
                   'Compiler: gcc 11.4.0\n')
         self.assertEqual(version.reported_version(output), '4.0.0-beta.4')
 
     def test_other_banners_and_line_endings(self):
         for output, expected in (
+                ('Hakone Media Player 4.0.0-beta.4 Otto Chriek (abcdef)\r\n', '4.0.0-beta.4'),
+                ('Hakone version 4.0.0 Otto Chriek\n', '4.0.0'),
+                ('Hakone version 4.0.0-beta.10', '4.0.0-beta.10'),
+                ('startup notice\nHakone version 4.1.0-rc.1 Otto Chriek\n', '4.1.0-rc.1'),
+                # Builds from before the rebrand print VLC banners.
                 ('VLC media player 4.0.0-beta.4 Otto Chriek (abcdef)\r\n', '4.0.0-beta.4'),
-                ('VLC version 4.0.0 Otto Chriek\n', '4.0.0'),
-                ('VLC version 4.0.0-beta.10', '4.0.0-beta.10'),
-                ('startup notice\nVLC version 4.1.0-rc.1 Otto Chriek\n', '4.1.0-rc.1')):
+                ('VLC version 4.0.0 Otto Chriek\n', '4.0.0')):
             with self.subTest(output=output):
                 self.assertEqual(version.reported_version(output), expected)
 
@@ -36,9 +39,9 @@ class VersionTests(unittest.TestCase):
                 version.reported_version(output)
 
     def test_probe_matches_application_version(self):
-        output = 'VLC version 4.0.0-beta.4 Otto Chriek (4.0.0-dev-40063-ge93a0c3478)\n'
+        output = 'Hakone version 4.0.0-beta.4 Otto Chriek (4.0.0-dev-40063-ge93a0c3478)\n'
         result = subprocess.CompletedProcess([], 0, stdout=output)
-        executable = Path('/path with spaces/VLC.app/Contents/MacOS/vlc')
+        executable = Path('/path with spaces/Hakone.app/Contents/MacOS/hakone')
         with mock.patch.object(version.subprocess, 'run', return_value=result) as run:
             self.assertEqual(version.verify_binary_version(executable, '4.0.0-beta.4',
                              {'LC_ALL': 'fr_FR.UTF-8', 'LANGUAGE': 'fr', 'TEST_MARKER': 'kept'}), output)
@@ -51,30 +54,30 @@ class VersionTests(unittest.TestCase):
         for actual in ('4.0.0-beta.3', '4.0.0-beta.40', '4.0.0', '3.0.99'):
             with self.subTest(actual=actual):
                 result = subprocess.CompletedProcess([], 0, stdout=
-                    f'VLC version {actual} Otto Chriek (4.0.0-beta.4-123-gabcdef)\n')
+                    f'Hakone version {actual} Otto Chriek (4.0.0-beta.4-123-gabcdef)\n')
                 with mock.patch.object(version.subprocess, 'run', return_value=result), self.assertRaises(ValueError):
-                    version.verify_binary_version('vlc', '4.0.0-beta.4')
+                    version.verify_binary_version('hakone', '4.0.0-beta.4')
 
     def test_windows_probe_skips_interactive_help_console(self):
-        result = subprocess.CompletedProcess([], 0, stdout='VLC version 4.0.0-beta.4 Otto Chriek\n')
+        result = subprocess.CompletedProcess([], 0, stdout='Hakone version 4.0.0-beta.4 Otto Chriek\n')
         with mock.patch.object(version.os, 'name', 'nt'), \
              mock.patch.object(version.subprocess, 'run', return_value=result) as run:
-            version.verify_binary_version('vlc.exe', '4.0.0-beta.4', {})
+            version.verify_binary_version('hakone.exe', '4.0.0-beta.4', {})
         self.assertTrue(run.call_args.kwargs['env']['PWD'])
 
     def test_executable_cli_uses_shared_probe(self):
         current = version.source_version()['version']
-        argv = ['version.py', current, '--executable', '/path with spaces/vlc']
-        banner = f'VLC version {current} Otto Chriek\n'
+        argv = ['version.py', current, '--executable', '/path with spaces/hakone']
+        banner = f'Hakone version {current} Otto Chriek\n'
         with mock.patch.object(sys, 'argv', argv), \
              mock.patch.object(version, 'verify_binary_version', return_value=banner) as probe, \
              mock.patch('sys.stdout', new_callable=io.StringIO) as output:
             version.main()
-        probe.assert_called_once_with(Path('/path with spaces/vlc'), current)
+        probe.assert_called_once_with(Path('/path with spaces/hakone'), current)
         self.assertEqual(output.getvalue(), banner)
 
     def test_required_modules_detect_loader_failures_before_gui_startup(self):
-        executable = Path('/release/vlc.exe')
+        executable = Path('/release/hakone.exe')
         output = '  qt Qt interface\n  avcodec Video decoder\n  medialibrary Media library\n'
         with mock.patch.object(version.subprocess, 'run', return_value=
                                subprocess.CompletedProcess([], 0, stdout=output)) as run:
@@ -91,19 +94,19 @@ class VersionTests(unittest.TestCase):
         result = subprocess.CompletedProcess([], 0, stdout='qt Qt interface\n')
         with mock.patch.object(version.os, 'name', 'nt'), \
                 mock.patch.object(version.subprocess, 'run', return_value=result) as run:
-            version.verify_required_modules('vlc.exe', ['qt'], {})
+            version.verify_required_modules('hakone.exe', ['qt'], {})
         self.assertTrue(run.call_args.kwargs['env']['PWD'])
 
     def test_cli_can_require_loadable_modules(self):
         current = version.source_version()['version']
-        argv = ['version.py', current, '--executable', 'vlc.exe', '--require-module', 'qt',
+        argv = ['version.py', current, '--executable', 'hakone.exe', '--require-module', 'qt',
                 '--require-module', 'medialibrary']
         with mock.patch.object(sys, 'argv', argv), \
                 mock.patch.object(version, 'verify_binary_version', return_value='banner\n'), \
                 mock.patch.object(version, 'verify_required_modules') as modules, \
                 mock.patch('sys.stdout', new_callable=io.StringIO):
             version.main()
-        modules.assert_called_once_with(Path('vlc.exe'), ['qt', 'medialibrary'])
+        modules.assert_called_once_with(Path('hakone.exe'), ['qt', 'medialibrary'])
 
     def test_source_matches_next_release(self):
         current = version.source_version()['version']
@@ -123,8 +126,18 @@ class VersionTests(unittest.TestCase):
     def test_mismatched_build_definitions(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            (root / 'meson.build').write_text("project('VLC', version: '4.0.0-beta.4')")
-            (root / 'configure.ac').write_text('AC_INIT([vlc], [4.0.0-beta.3])')
+            (root / 'meson.build').write_text("project('VLC', version: '4.0.0-dev')\n"
+                                              "hakone_version = '1.0.0-beta.2'\n"
+                                              "vlc_update_generation = 1\n")
+            configure = ('AC_INIT([vlc], [4.0.0-dev])\nHAKONE_VERSION={}\nHAKONE_VERSION_MAJOR=1\n'
+                         'HAKONE_VERSION_MINOR=0\nHAKONE_VERSION_REVISION=0\nHAKONE_VERSION_DEV={}\n'
+                         'UPDATE_GENERATION=1\n')
+            (root / 'configure.ac').write_text(configure.format('1.0.0-beta.2', 'beta.2'))
+            self.assertEqual(version.source_version(root)['version'], '1.0.0-beta.2')
+            (root / 'configure.ac').write_text(configure.format('1.0.0-beta.1', 'beta.1'))
+            with self.assertRaises(ValueError):
+                version.source_version(root)
+            (root / 'configure.ac').write_text(configure.format('1.0.0-beta.2', 'beta.1'))
             with self.assertRaises(ValueError):
                 version.source_version(root)
 

@@ -6,12 +6,23 @@ from pathlib import Path
 import time
 import urllib.request
 
-# Digests published with these GitHub release assets. continuous URLs may move;
-# an upstream replacement must be reviewed and its pin updated before use.
+# Digests published with these GitHub release assets. A tagged release asset
+# never changes. The continuous release may be replaced upstream; a replacement
+# must be reviewed and its pin updated before use.
 TOOLS = {
-    'linuxdeploy': '8aea8da0f7f7039d2a2cecb14657d752a222a5e1d3825caeef186c82f751cdd1',
+    'linuxdeploy': 'c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d',
     'linuxdeploy-plugin-qt': 'cfc1055b2b9dbc08412b579f20990b7b41a17b61beaa5847dc9477c96c9e9617',
 }
+# The release each tool is downloaded from. linuxdeploy's continuous build was
+# replaced in November 2026, so it is pinned to its newest tagged release.
+RELEASES = {
+    'linuxdeploy': '1-alpha-20251107-1',
+}
+
+
+def url(tool, filename):
+    release = RELEASES.get(tool, 'continuous')
+    return f'https://github.com/linuxdeploy/{tool}/releases/download/{release}/{filename}'
 
 
 def digest(path):
@@ -29,8 +40,7 @@ def fetch(directory):
         if not path.exists():
             partial = path.with_suffix('.partial')
             try:
-                url = f'https://github.com/linuxdeploy/{tool}/releases/download/continuous/{path.name}'
-                request = urllib.request.Request(url, headers={'User-Agent': 'VLC-release-packaging'})
+                request = urllib.request.Request(url(tool, path.name), headers={'User-Agent': 'Hakone-release-packaging'})
                 for attempt in range(3):
                     try:
                         with urllib.request.urlopen(request, timeout=60) as source, partial.open('wb') as target:

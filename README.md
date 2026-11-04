@@ -1,171 +1,129 @@
-# VLC media player
+# Hakone Media Player
 
-This fork adapts [Juxtopposed’s VLC redesign](https://www.figma.com/community/file/1691465999134370980/vlc-redesign)
-for VLC’s native interface. The interface and settings workflow are in active development.
-See the [Releases page](https://github.com/hakone-org/hakone/releases) for available builds.
-Release tooling and the `4.0.0-beta.N` version scheme are documented in [doc/RELEASING.md](doc/RELEASING.md).
-For building on Linux from source, see [doc/BUILD-linux.md](doc/BUILD-linux.md).
-For building on macOS from source, see [doc/BUILD-macos.md](doc/BUILD-macos.md).
+**Hakone** is a free and open source media player for Windows, macOS and Linux.
+It pairs a redesigned, modern interface with a playback engine that handles
+almost any file, disc, stream or device.
 
-![Simple player with the pixel-cat video](doc/images/redesign/player.png)
+Hakone is in beta. Download it from [hakone.org](https://hakone.org/) or the
+[Releases page](https://github.com/hakone-org/hakone/releases).
 
-| Library sidebar | Video settings |
+![The player showing a misty cedar-lined path, paused at 22 seconds](doc/images/redesign/player.jpg)
+
+| Library sidebar | Video settings and seek preview |
 | --- | --- |
-| ![Library sidebar over the video](doc/images/redesign/sidebar.png) | ![Video settings over the video](doc/images/redesign/video-settings.png) |
+| ![The library sidebar listing the Autumn in Hakone folder beside a lakeside video](doc/images/redesign/sidebar.jpg) | ![Video settings open beside a playing film, with a thumbnail preview above the seek bar](doc/images/redesign/video-settings.jpg) |
 
-**VLC** is a libre and open source **media player** and **multimedia engine**,
-focused on **playing everything**, and **running everywhere**.
+| Episodes | Home |
+| --- | --- |
+| ![The Episodes panel listing season 1 of The Repair Club, with episode 2 playing](doc/images/redesign/episodes.jpg) | ![The library home page with continue watching, continue listening and frequently visited folders, and the mini player](doc/images/redesign/home.jpg) |
 
-**VLC** can play most multimedia files, discs, streams, devices and is also able to
-convert, encode, **stream** and manipulate streams into numerous formats.
+## Features
 
-VLC is used by many over the world, on numerous platforms, for very different use cases.
+- **A player that stays out of the way:** floating controls, a compact mode,
+  and a layout you can rearrange and save as presets.
+- **Your library:** browse local folders, music, series and podcasts, resume
+  where you left off, and see your saved progress as you browse.
+- **Subtitles and metadata:** search for subtitles online, match episodes and
+  artwork, and correct what the player identified.
+- **Add-ons:** extend the player with episode guides, metadata providers, media
+  sources, themes and visualizers from the [Hakone add-on registry](https://addons.hakone.org/).
+- **Plays almost everything:** local files, discs, network streams and capture
+  devices, with conversion and streaming built in.
+- **Your look:** light and dark themes, accent colours, and the interface in
+  many languages.
 
-The **engine of VLC** can be embedded into 3rd party applications, and is called *libVLC*.
+## Download
 
-**VLC** is part of the [VideoLAN project](https://videolan.org) and
-is developed and supported by a community of volunteers.
+| Platform | Requirements |
+| --- | --- |
+| Windows | Windows 10 (1809 or later) or Windows 11, x64 |
+| macOS | Apple Silicon or Intel |
+| Linux | x86_64, glibc 2.35 or later (Ubuntu 22.04 or equivalent) |
 
-The VideoLAN project was started at the university [École Centrale Paris](https://www.centralesupelec.fr/) who
-relicensed VLC under the GPLv2 license in February 2001. Since then, VLC has
-been downloaded **billions** of times.
+Get the latest build from [hakone.org](https://hakone.org/) or the
+[Releases page](https://github.com/hakone-org/hakone/releases).
 
-## License
+## Add-ons
 
-**VLC** is released under the GPLv2 *(or later)* license.
-*On some platforms, it is de facto GPLv3, because of the licenses of dependencies*.
+Add-ons are sandboxed packages that the player runs in a separate process,
+with only the permissions you accept. Hakone ships with a few add-ons turned
+on, and you can find more on [addons.hakone.org](https://addons.hakone.org/).
 
-**libVLC**, the engine is released under the LGPLv2 *(or later)* license. \
-This allows embedding the engine in 3rd party applications, while letting them to be licensed under other licenses.
+To write your own, start with [contrib-addons/README.md](contrib-addons/README.md)
+and the [add-on SDK](contrib-addons/sdk/README.md).
 
-## Redesign attribution
+## Building from source
 
-The redesigned interface on `master` is adapted from **VLC Redesign**
+- [Linux](doc/BUILD-linux.md)
+- [macOS](doc/BUILD-macos.md)
+- [Windows](doc/BUILD-win32.md)
+
+Release packaging and the `1.0.0-beta.N` version scheme are described in
+[doc/RELEASING.md](doc/RELEASING.md).
+
+## Contributing
+
+Hakone is developed at [github.com/hakone-org/hakone](https://github.com/hakone-org/hakone).
+Report bugs and request features in the
+[issue tracker](https://github.com/hakone-org/hakone/issues), and send changes
+as pull requests.
+
+The interface is written in C++ and QML on Qt and lives in
+[modules/gui/qt](modules/gui/qt). Most of the engine is C, with some C++,
+Objective-C, assembly and Rust.
+
+Help is welcome with code, packaging, documentation, design, translations
+and support.
+
+## Credits
+
+Hakone is based on [VLC media player](https://www.videolan.org/vlc/), made by
+the volunteers of the VideoLAN community. Hakone uses VLC's engine, libVLC, and
+keeps its name and API.
+
+The redesigned interface is adapted from **VLC Redesign**
 by [Juxtopposed](https://www.juxtopposed.com/), licensed under
 [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
 The original design is available on
 [Figma Community](https://www.figma.com/community/file/1691465999134370980/vlc-redesign),
 with a [video walkthrough](https://www.youtube.com/watch?v=ERFeOgqk324).
-
-This implementation modifies the design for VLC's native interface, including
-responsive layouts, interactive controls, settings organization, and integration
-with VLC's playback and media library features. The design credit and CC BY 4.0
-notice apply to the original design; VLC's software licenses remain as described
-above.
+This implementation modifies the design for the player's native interface,
+including responsive layouts, interactive controls, settings organization, and
+integration with playback and media library features. The design credit and
+CC BY 4.0 notice apply to the original design; the software licenses are
+described below.
 
 The interface uses [Inter](https://rsms.me/inter/) by Rasmus Andersson and contributors.
 The bundled fonts use the [SIL Open Font License 1.1](modules/gui/qt/fonts/LICENSE.txt).
 
-# Platforms
+## License
 
-VLC is available for the following platforms:
-- [Windows] *(from 7 and later, including UWP platforms and all versions of Windows 10)*
-- [macOS] *(10.10 and later)*
-- [GNU/Linux] and affiliated
-- [BSD] and affiliated
-- [Android] *(4.2 and later)*, including Android TV and Android Auto
-- [iOS] *(9 and later)*, including AppleTV and iPadOS
-- Haiku, OS/2 and a few others.
+Hakone is released under the GPLv2 *(or later)* license. On some platforms
+it is de facto GPLv3, because of the licenses of its dependencies.
 
-[Windows]: https://www.videolan.org/vlc/download-windows.html
-[macOS]: https://www.videolan.org/vlc/download-macosx.html
-[GNU/Linux]: https://www.videolan.org/vlc/#download
-[BSD]: https://www.videolan.org/vlc/download-freebsd.html
-[Android]: https://www.videolan.org/vlc/download-android.html
-[iOS]: https://www.videolan.org/vlc/download-ios.html
+libVLC, the engine, is released under the LGPLv2 *(or later)* license.
 
-Not all platforms receive the same amount of care, due to our limited resources.
+Hakone is a modified version of VLC media player, and VLC's copyright and
+license notices still apply. See [COPYING](COPYING), [COPYING.LIB](COPYING.LIB),
+[AUTHORS](AUTHORS) and [THANKS](THANKS).
 
-**Nota Bene**: The [Android app](https://code.videolan.org/videolan/vlc-android/) and
-the [iOS app](https://code.videolan.org/videolan/vlc-ios/) are located in different repositories
-than the main one.
+## Source code layout
 
-# Contributing & Community
-
-**VLC** is maintained by a community of people, and VideoLAN is not paying any of them.\
-The community is composed of developers, helpers, maintainers, designers and writers that want
-this open source project to thrive.
-
-The main development of VLC is done in the C language, but this repository also contains
-plenty of C++, Obj-C, asm and Rust.
-
-Other repositories linked to vlc are done in languages including Kotlin/Java [(Android)](https://code.videolan.org/videolan/vlc-android/),
-Swift [(iOS)](https://code.videolan.org/videolan/vlc-ios/), and C# [(libVLCSharp)](https://code.videolan.org/videolan/libvlcsharp/).
-
-We need help with the following tasks:
-- Coding
-- Packaging for Windows, macOS and Linux distributions
-- Technical writing for the documentation
-- Design
-- Support
-- Community management and communication.
-
-Please contribute :)
-
-We are on IRC. You can find us on the **#videolan** channel on *[Libera.chat]*.
-
-[Libera.chat]: https://libera.chat
-
-## Contributions
-
-Contributions are now done through Merge Requests on our [GitLab repository](https://code.videolan.org/videolan/vlc/).
-
-CI and discussions should be resolved before a Merge Request can be merged.
-
-# libVLC
-
-**libVLC** is an embeddable engine for 3rd party applications and frameworks.
-
-It runs on the same platforms as VLC *(and sometimes on more)* and can provide playback,
-streaming and conversion of multimedia files and streams.
-
-
-**libVLC** has numerous bindings for other languages, such as C++, Python and C#.
-
-# Support
-
-## Links
-
-Some useful links that might help you:
-
-- [VLC web site](https://www.videolan.org/vlc/)
-- [Support](https://www.videolan.org/support/)
-- [Forums](https://forum.videolan.org/)
-- [Wiki](https://wiki.videolan.org/)
-- [Developer's Corner](https://wiki.videolan.org/Developers_Corner)
-- [VLC hacking guide](https://wiki.videolan.org/Hacker_Guide)
-- [Bugtracker](https://code.videolan.org/videolan/vlc/-/issues)
-- [VideoLAN web site](https://www.videolan.org/)
-
-## Source Code sitemap
 ```
-ABOUT-NLS          - Notes on the Free Translation Project.
-AUTHORS            - VLC authors.
-COPYING            - The GPL license.
-COPYING.LIB        - The LGPL license.
-INSTALL            - Installation and building instructions.
-NEWS               - Important modifications between the releases.
-README             - Project summary.
-THANKS             - VLC contributors.
-
-bin/               - VLC binaries.
-bindings/          - libVLC bindings to other languages.
-compat/            - compatibility library for operating systems missing
-                     essential functionalities.
-contrib/           - Facilities for retrieving external libraries and building
-                     them for systems that don't have the right versions.
-doc/               - Miscellaneous documentation.
-extras/analyser    - Code analyser and editor specific files.
-extras/buildsystem - Different build system specific files.
-extras/misc        - Files that don't fit in the other extras/ categories.
-extras/package     - VLC packaging specific files such as spec files.
-extras/tools/      - Facilities for retrieving external building tools needed
-                     for systems that don't have the right versions.
+bin/               - Hakone executables.
+compat/            - Compatibility library for systems missing
+                     essential functions.
+contrib/           - Scripts that fetch and build external libraries.
+contrib-addons/    - Bundled add-ons and the add-on SDK.
+doc/               - Build guides and other documentation.
+extras/package     - Packaging and release tooling.
+extras/tools/      - Scripts that fetch and build required build tools.
 include/           - Header files.
 lib/               - libVLC source code.
-modules/           - VLC plugins and modules. Most of the code is here.
-po/                - VLC translations.
-share/             - Common resource files.
+modules/           - Plugins and modules. Most of the code is here.
+                     The Hakone interface is in modules/gui/qt.
+po/                - Translations.
+share/             - Icons, desktop files and other resources.
 src/               - libvlccore source code.
-test/              - Testing system.
+test/              - Tests.
 ```

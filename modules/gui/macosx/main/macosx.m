@@ -64,27 +64,27 @@ int  WindowOpen   (vlc_window_t *);
                                  "once they were added.")
 
 #define RECENT_ITEMS_TEXT N_("Keep Recent Items")
-#define RECENT_ITEMS_LONGTEXT N_("By default, VLC keeps a list of the last 10 items. " \
+#define RECENT_ITEMS_LONGTEXT N_("By default, Hakone keeps a list of the last 10 items. " \
                                  "This feature can be disabled here.")
 
 #define USE_APPLE_REMOTE_TEXT N_("Control playback with the Apple Remote")
-#define USE_APPLE_REMOTE_LONGTEXT N_("By default, VLC can be remotely controlled with the Apple Remote.")
+#define USE_APPLE_REMOTE_LONGTEXT N_("By default, Hakone can be remotely controlled with the Apple Remote.")
 
 #define USE_APPLE_REMOTE_VOLUME_TEXT N_("Control system volume with the Apple Remote")
-#define USE_APPLE_REMOTE_VOLUME_LONGTEXT N_("By default, VLC will control its own volume with the Apple Remote. However, you can choose to control the global system volume instead.")
+#define USE_APPLE_REMOTE_VOLUME_LONGTEXT N_("By default, Hakone will control its own volume with the Apple Remote. However, you can choose to control the global system volume instead.")
 
-#define DISPLAY_STATUS_ICONMENU_TEXT N_("Display VLC status menu icon")
-#define DISPLAY_STATUS_ICONMENU_LONGTEXT N_("By default, VLC will show the statusbar icon menu. However, you can choose to disable it (restart required).")
+#define DISPLAY_STATUS_ICONMENU_TEXT N_("Display Hakone status menu icon")
+#define DISPLAY_STATUS_ICONMENU_LONGTEXT N_("By default, Hakone will show the statusbar icon menu. However, you can choose to disable it (restart required).")
 
 #define USE_APPLE_REMOTE_PREVNEXT_TEXT N_("Control play queue items with the Apple Remote")
-#define USE_APPLE_REMOTE_PREVNEXT_LONGTEXT N_("By default, VLC will allow you to switch to the next or previous item with the Apple Remote. You can disable this behavior with this option.")
+#define USE_APPLE_REMOTE_PREVNEXT_LONGTEXT N_("By default, Hakone will allow you to switch to the next or previous item with the Apple Remote. You can disable this behavior with this option.")
 
 #define USE_MEDIAKEYS_TEXT N_("Control playback with media keys")
-#define USE_MEDIAKEYS_LONGTEXT N_("By default, VLC can be controlled using the media keys on modern Apple " \
+#define USE_MEDIAKEYS_LONGTEXT N_("By default, Hakone can be controlled using the media keys on modern Apple " \
                                   "keyboards.")
 
 #define NATIVE_FULLSCREEN_MODE_ON_LION_TEXT N_("Use the native fullscreen mode")
-#define NATIVE_FULLSCREEN_MODE_ON_LION_LONGTEXT N_("By default, VLC uses the fullscreen mode known from previous Mac OS X releases. It can also use the native fullscreen mode on Mac OS X 10.7 and later.")
+#define NATIVE_FULLSCREEN_MODE_ON_LION_LONGTEXT N_("By default, Hakone uses the fullscreen mode known from previous Mac OS X releases. It can also use the native fullscreen mode on Mac OS X 10.7 and later.")
 
 #define KEEPSIZE_TEXT N_("Resize interface to the native video size")
 #define KEEPSIZE_LONGTEXT N_("You have two choices:\n" \
@@ -105,7 +105,7 @@ int  WindowOpen   (vlc_window_t *);
 #define DIM_KEYBOARD_PLAYBACK_LONGTEXT N_("Turn off the MacBook keyboard backlight while a video is playing in fullscreen. Automatic brightness adjustment should be disabled in System Preferences.")
 
 #define ITUNES_TEXT N_("Control external music players")
-#define ITUNES_LONGTEXT N_("VLC will pause and resume supported music players on playback.")
+#define ITUNES_LONGTEXT N_("Hakone will pause and resume supported music players on playback.")
 
 #define AUTOLOAD_EXTENSIONS_TEXT N_("Automatically load extensions on startup")
 #define AUTOLOAD_EXTENSIONS_LONGTEXT N_("Automatically load and enable VLC extensions when the application starts.")
@@ -117,7 +117,7 @@ static const char *const itunes_list_text[] = {
 };
 
 #define CONTINUE_PLAYBACK_TEXT N_("Continue playback where you left off")
-#define CONTINUE_PLAYBACK_LONGTEXT N_("VLC will store playback positions of the last 30 items you played. If you re-open one of those, playback will continue.")
+#define CONTINUE_PLAYBACK_LONGTEXT N_("Hakone will store playback positions of the last 30 items you played. If you re-open one of those, playback will continue.")
 
 static const int continue_playback_list[] =
 { 0, 1, 2 };

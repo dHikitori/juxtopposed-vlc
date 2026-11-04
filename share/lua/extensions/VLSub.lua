@@ -129,8 +129,8 @@ local options = {
       without asking confirmation, so put them elsewhere if
       they're important.<br>
       <br>
-      Find more VLC extensions at
-      <a href='https://addons.videolan.org'>addons.videolan.org</a>.
+      Find more extensions at
+      <a href='https://addons.hakone.org/'>addons.hakone.org</a>.
       ]],
     int_no_support_mess = [[
       <strong>VLSub is not working with VLC 2.1.x on

@@ -54,7 +54,7 @@ void GithubReleaseService::fetchPage(int page)
     QNetworkRequest request(url);
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
-    request.setRawHeader("User-Agent", QByteArray("VLC-Juxtopposed/") + m_installed.text.toUtf8());
+    request.setRawHeader("User-Agent", QByteArray("Hakone/") + m_installed.text.toUtf8());
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::SameOriginRedirectPolicy);
     auto* reply = m_network.get(request);
     m_reply = reply;

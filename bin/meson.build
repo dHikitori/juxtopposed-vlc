@@ -1,4 +1,4 @@
-# Do we build the main VLC binary?
+# Do we build the main Hakone binary?
 build_vlc = get_option('vlc')
 
 if build_vlc and (host_system != 'darwin' or have_osx) and not have_win_store and host_system != 'android'
@@ -32,8 +32,8 @@ if build_vlc and (host_system != 'darwin' or have_osx) and not have_win_store an
         )
 
         vlc_manifest = configure_file(
-            input: files('../extras/package/win32/vlc.exe.manifest.in'),
-            output: 'vlc.exe.manifest',
+            input: files('../extras/package/win32/hakone.exe.manifest.in'),
+            output: 'hakone.exe.manifest',
             configuration: rc_conf,
         )
 
@@ -46,7 +46,7 @@ if build_vlc and (host_system != 'darwin' or have_osx) and not have_win_store an
         )
     endif
 
-    executable('vlc',
+    executable('hakone',
         vlc_sources + vlc_win_extra,
         link_with: [libvlc, libvlccore],
         link_args: gc_sections_linkargs,
@@ -60,7 +60,7 @@ if build_vlc and (host_system != 'darwin' or have_osx) and not have_win_store an
     vlc_top_builddir_def = '-DTOP_BUILDDIR="@0@"'.format(vlc_build_root)
     vlc_top_srcdir_def = '-DTOP_SRCDIR="@0@"'.format(vlc_src_root)
 
-    executable('vlc-static',
+    executable('hakone-static',
         vlc_sources,
         link_with: [libvlc, libvlccore],
         link_args: gc_sections_linkargs,

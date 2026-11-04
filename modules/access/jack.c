@@ -59,16 +59,16 @@ static void Close( vlc_object_t * );
 
 #define PACE_TEXT N_( "Pace" )
 #define PACE_LONGTEXT N_( \
-    "Read the audio stream at VLC pace rather than Jack pace." )
+    "Read the audio stream at Hakone pace rather than Jack pace." )
 #define AUTO_CONNECT_TEXT N_( "Auto connection" )
 #define AUTO_CONNECT_LONGTEXT N_( \
-    "Automatically connect VLC input ports to available output ports." )
+    "Automatically connect Hakone input ports to available output ports." )
 #define CHANNELS_TEXT N_( "Channels" )
 #define CHANNELS_LONGTEXT N_( \
-    "Number of input channels VLC should expose to the jack server." )
+    "Number of input channels Hakone should expose to the jack server." )
 #define PORTS_TEXT N_( "Ports" )
 #define PORTS_LONGTEXT N_( \
-    "Output ports in jack that VLC should read from, URI-encoded and " \
+    "Output ports in jack that Hakone should read from, URI-encoded and " \
     "separated with a comma." )
 
 vlc_module_begin ()

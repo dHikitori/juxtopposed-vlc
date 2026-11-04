@@ -1194,8 +1194,8 @@ static int DrawStatus(intf_thread_t *intf)
 {
     intf_sys_t     *sys = intf->p_sys;
     vlc_playlist_t *playlist = sys->playlist;
-    const char *name = _("VLC media player");
-    const size_t name_len = strlen(name) + sizeof(PACKAGE_VERSION);
+    const char *name = _("Hakone Media Player");
+    const size_t name_len = strlen(name) + sizeof(HAKONE_VERSION);
     int y = 0;
     const char *repeat, *loop, *random;
 
@@ -1208,7 +1208,7 @@ static int DrawStatus(intf_thread_t *intf)
     attrset(A_REVERSE);
     if (sys->color) color_set(C_TITLE, NULL);
     DrawEmptyLine(y, 0, COLS);
-    mvnprintw(y++, padding / 2, COLS, "%s %s", name, PACKAGE_VERSION);
+    mvnprintw(y++, padding / 2, COLS, "%s %s", name, HAKONE_VERSION);
     if (sys->color) color_set(C_STATUS, NULL);
     attroff(A_REVERSE);
 

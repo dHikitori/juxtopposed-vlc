@@ -113,6 +113,15 @@ static int vlclua_version( lua_State *L )
 }
 
 /*****************************************************************************
+ * Get the Hakone version string
+ *****************************************************************************/
+static int vlclua_app_version( lua_State *L )
+{
+    lua_pushstring( L, HAKONE_VERSION_MESSAGE );
+    return 1;
+}
+
+/*****************************************************************************
  * Get the VLC copyright
  *****************************************************************************/
 static int vlclua_copyright( lua_State *L )
@@ -175,6 +184,7 @@ static int vlclua_action_id( lua_State *L )
  *****************************************************************************/
 static const luaL_Reg vlclua_misc_reg[] = {
     { "version", vlclua_version },
+    { "app_version", vlclua_app_version },
     { "copyright", vlclua_copyright },
     { "license", vlclua_license },
 

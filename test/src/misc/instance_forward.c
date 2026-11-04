@@ -38,7 +38,7 @@ int main(int argc, char **argv)
     pid_t child = fork();
     assert(child >= 0);
     if (!child) {
-        execl(TOP_BUILDDIR "/bin/vlc", "vlc", "--ignore-config", "--no-plugins-cache",
+        execl(TOP_BUILDDIR "/bin/hakone", "hakone", "--ignore-config", "--no-plugins-cache",
               "--no-media-library", "--one-instance", "--intf=dummy", (char *)NULL);
         _exit(127);
     }

@@ -67,7 +67,7 @@ Item {
     function completeSave(success, error) {
         saving = false
         if (success) { model.finish(true); panel.close() }
-        else errorMessage = error || qsTr("VLC cannot save this layout. Try again.")
+        else errorMessage = error || qsTr("Hakone cannot save this layout. Try again.")
     }
     function bounds(item) {
         root.x; root.y

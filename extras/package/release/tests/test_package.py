@@ -39,8 +39,8 @@ class PackageTests(unittest.TestCase):
 
     def test_macos_signs_nested_code_before_bundles_without_identity(self):
         with tempfile.TemporaryDirectory() as temp:
-            app = Path(temp) / 'VLC Juxtopposed.app'
-            launcher = self.make_bundle(app, 'vlc')
+            app = Path(temp) / 'Hakone.app'
+            launcher = self.make_bundle(app, 'hakone')
             framework = app / 'Contents/Frameworks/QtCore.framework'
             framework_main = self.make_bundle(framework, 'QtCore', framework=True)
             helper = framework / 'Helpers/Helper.app'
@@ -68,8 +68,8 @@ class PackageTests(unittest.TestCase):
 
     def test_macos_invalid_adhoc_signature_stops_packaging(self):
         with tempfile.TemporaryDirectory() as temp:
-            app = Path(temp) / 'VLC.app'
-            launcher = self.make_bundle(app, 'vlc')
+            app = Path(temp) / 'Hakone.app'
+            launcher = self.make_bundle(app, 'hakone')
             error = subprocess.CalledProcessError(1, ['codesign'])
             with mock.patch.object(package.subprocess, 'run', side_effect=error) as tool:
                 with self.assertRaises(subprocess.CalledProcessError):
@@ -82,7 +82,7 @@ class PackageTests(unittest.TestCase):
                 root = Path(temp)
                 stage, output, qt, sources = [root / p for p in ('stage', 'output', 'qt', 'sources')]
                 output.mkdir()
-                for name in ('bin/vlc', 'bin/vlc-addon-worker', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
+                for name in ('bin/hakone', 'bin/hakone-addon-worker', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
                              'libexec/vlc/vlc-qt-check', 'lib/libvlc.dylib',
                              'lib/vlc/plugins/gui/libqt_plugin.dylib'):
                     path = stage / name
@@ -90,16 +90,18 @@ class PackageTests(unittest.TestCase):
                     path.write_bytes(b'\xcf\xfa\xed\xfe')
                 for name in ('share/vlc', 'share/locale'):
                     (stage / name).mkdir(parents=True)
-                for name in ('share/vlc512x512.png', 'modules/gui/macosx/Resources/App-Icons/VLC.icns',
+                for name in ('share/vlc512x512.png', 'share/icons/hakone.icns',
                              'modules/gui/qt/fonts/LICENSE.txt', 'COPYING', 'COPYING.LIB',
                              'AUTHORS', 'THANKS', 'README.md'):
                     path = sources / name
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_bytes(b'fixture')
-                app = output / f'macos-{arch}/VLC Juxtopposed.app'
+                app = output / f'macos-{arch}/Hakone.app'
                 verified = False
                 sealed_info = None
                 signed_paths = []
+                zipped = False
+                imaged = []
 
                 def query(*args):
                     if args[0] == 'uname':
@@ -113,10 +115,10 @@ class PackageTests(unittest.TestCase):
                     raise AssertionError(args)
 
                 def execute(args, **kwargs):
-                    nonlocal verified, sealed_info
+                    nonlocal verified, sealed_info, zipped
                     self.assertTrue(kwargs['check'])
                     if str(args[0]).endswith('/macdeployqt'):
-                        worker = app / 'Contents/MacOS/vlc-addon-worker'
+                        worker = app / 'Contents/MacOS/hakone-addon-worker'
                         self.assertTrue(worker.is_file())
                         self.assertIn(f'-executable={worker}', args)
                     if args[0] == 'codesign':
@@ -133,17 +135,28 @@ class PackageTests(unittest.TestCase):
                         self.assertTrue(verified)
                         self.assertEqual((app / 'Contents/Info.plist').read_bytes(), sealed_info)
                         Path(args[-1]).touch()
+                        zipped = True
+                    if args[0] == '/fake/dmgbuild':
+                        # The disk image is made from the same sealed app as the ZIP.
+                        self.assertTrue(verified and zipped)
+                        self.assertEqual((app / 'Contents/Info.plist').read_bytes(), sealed_info)
+                        self.assertIn(f'app={app}', args)
+                        self.assertEqual(args[-2], 'Hakone')
+                        imaged.append(Path(args[-1]))
+                        Path(args[-1]).write_bytes(b'image')
 
                 with mock.patch.dict(package.os.environ, {'QT_ROOT_DIR': str(qt)}, clear=True), \
                         mock.patch.object(package, 'ROOT', sources), \
                         mock.patch.object(package, 'run', side_effect=query), \
+                        mock.patch.object(package.dmg, 'dmgbuild_command', return_value='/fake/dmgbuild'), \
                         mock.patch.object(package.subprocess, 'run', side_effect=execute):
                     archive = package.macos(stage, output, package.validate_tag(None)['version'], 'a' * 40)
                 self.assertTrue(archive.exists())
-                self.assertIn(app / 'Contents/MacOS/vlc-addon-worker', signed_paths)
-                self.assertLess(signed_paths.index(app / 'Contents/MacOS/vlc-addon-worker'), signed_paths.index(app))
+                self.assertEqual(imaged, [output / archive.name.replace('.zip', '.dmg')])
+                self.assertIn(app / 'Contents/MacOS/hakone-addon-worker', signed_paths)
+                self.assertLess(signed_paths.index(app / 'Contents/MacOS/hakone-addon-worker'), signed_paths.index(app))
                 audit = json.loads((output / f'macos-{arch}-dependency-audit.json').read_text())
-                self.assertIn('Contents/MacOS/vlc-addon-worker', audit)
+                self.assertIn('Contents/MacOS/hakone-addon-worker', audit)
                 metadata = json.loads((output / f'macos-{arch}-build.json').read_text())
                 self.assertEqual(metadata['signing'], 'ad-hoc; no Developer ID or notarization')
 
@@ -153,10 +166,28 @@ class PackageTests(unittest.TestCase):
             root = Path(temp)
             stage = root / 'stage'
             stage.mkdir()
-            for name in ('vlc.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll'):
+            for name in ('hakone.exe', 'hakone-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll',
+                         'vlc.win32.nsi', 'spad.nsi'):
                 (stage / name).write_bytes(b'fixture')
-            (stage / 'plugins').mkdir()
+            for name in ('plugins', 'NSIS', 'helpers', 'languages', 'sdk', 'share/vlc/addons'):
+                (stage / name).mkdir(parents=True)
+            (stage / 'NSIS/nsProcess.dll').write_bytes(b'fixture')
             output = root / 'output'
+            scripts = []
+
+            def makensis(command, check):
+                self.assertEqual(command[:2], ['makensis', '-V2'])
+                script = Path(command[2])
+                scripts.append(script.name)
+                # The installer stage holds the package without its portable
+                # profile or SDK, plus the NSIS scripts and helpers.
+                self.assertTrue((script.parent / 'hakone-addon-worker.exe').is_file())
+                self.assertTrue((script.parent / 'share/vlc/addons').is_dir())
+                self.assertTrue((script.parent / 'NSIS/nsProcess.dll').is_file())
+                self.assertFalse((script.parent / 'portable').exists())
+                self.assertFalse((script.parent / 'sdk').exists())
+                if script.name == 'vlc.win32.nsi':
+                    (output / f'hakone-{tag}-win64.exe').write_bytes(b'installer')
 
             def tool(*args):
                 if args[0] == 'git':
@@ -168,14 +199,19 @@ class PackageTests(unittest.TestCase):
                 raise AssertionError(args)
 
             argv = ['package.py', 'windows', str(stage), '--output', str(output), '--tag', tag]
-            with mock.patch.object(sys, 'argv', argv), mock.patch.object(package, 'run', side_effect=tool):
+            with mock.patch.object(sys, 'argv', argv), mock.patch.object(package, 'run', side_effect=tool), \
+                    mock.patch.object(package.subprocess, 'run', side_effect=makensis):
                 package.main()
-            archive = output / f'vlc-juxtopposed-{tag}-win64.zip'
+            self.assertEqual(scripts, ['spad.nsi', 'vlc.win32.nsi'])
+            self.assertFalse((output / 'nsis').exists())
+            archive = output / f'hakone-{tag}-win64.zip'
             self.assertTrue(archive.is_file())
             with zipfile.ZipFile(archive) as bundled:
-                self.assertIn('vlc-win64/portable/', bundled.namelist())
-                self.assertIn('vlc-win64/vlc-addon-worker.exe', bundled.namelist())
-                self.assertEqual(bundled.read('vlc-win64/SOURCE_COMMIT.txt'), ('a' * 40 + '\n').encode())
+                self.assertIn('hakone-win64/portable/', bundled.namelist())
+                self.assertIn('hakone-win64/hakone-addon-worker.exe', bundled.namelist())
+                for name in ('vlc.win32.nsi', 'spad.nsi', 'NSIS/', 'helpers/', 'languages/'):
+                    self.assertNotIn('hakone-win64/' + name, bundled.namelist())
+                self.assertEqual(bundled.read('hakone-win64/SOURCE_COMMIT.txt'), ('a' * 40 + '\n').encode())
             metadata = json.loads((output / 'windows-build.json').read_text())
             self.assertEqual(metadata['version'], tag)
             self.assertEqual(metadata['asset_name'], archive.name)
@@ -183,6 +219,54 @@ class PackageTests(unittest.TestCase):
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             self.assertEqual(metadata['sha256'], digest)
             self.assertEqual(archive.with_suffix('.zip.sha256').read_text(), f'{digest}  {archive.name}\n')
+            installer = output / f'hakone-{tag}-win64.exe'
+            digest = hashlib.sha256(b'installer').hexdigest()
+            self.assertEqual(metadata['installer'], dict(asset_name=installer.name, size=len(b'installer'),
+                                                         sha256=digest, package_type='nsis-installer'))
+            self.assertEqual(installer.with_suffix('.exe.sha256').read_text(), f'{digest}  {installer.name}\n')
+
+    def test_windows_installer_needs_the_nsis_scripts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stage = Path(temp) / 'stage'
+            stage.mkdir()
+            with self.assertRaisesRegex(RuntimeError, '-Dnsis=enabled'):
+                package.windows_installer(stage, Path(temp), '1.0.0-beta.1')
+
+    def test_macos_checksums_and_metadata_cover_zip_and_disk_image(self):
+        tag = package.validate_tag(None)['version']
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / 'output'
+
+            def fake_macos(stage, out, version, commit, reuse_qt):
+                (out / 'macos-arm64-build.json').write_text(json.dumps(dict(tag=version, platform='macos')))
+                archive = out / f'hakone-{version}-macos-arm64.zip'
+                archive.write_bytes(b'zip archive')
+                archive.with_suffix('.dmg').write_bytes(b'disk image')
+                return archive
+
+            def tool(*args):
+                if args[0] == 'git':
+                    return 'a' * 40
+                if args[0] == 'uname':
+                    return 'arm64'
+                raise AssertionError(args)
+
+            argv = ['package.py', 'macos', temp, '--output', str(output), '--tag', tag]
+            with mock.patch.object(sys, 'argv', argv), mock.patch.object(package, 'run', side_effect=tool), \
+                    mock.patch.object(package, 'macos', side_effect=fake_macos), \
+                    mock.patch('sys.stdout'):
+                package.main()
+            metadata = json.loads((output / 'macos-arm64-build.json').read_text())
+            archive, image = (output / f'hakone-{tag}-macos-arm64.{ext}' for ext in ('zip', 'dmg'))
+            # The ZIP stays the primary asset that update metadata refers to.
+            self.assertEqual(metadata['asset_name'], archive.name)
+            self.assertEqual(metadata['package_type'], 'portable-zip')
+            self.assertEqual(metadata['sha256'], hashlib.sha256(b'zip archive').hexdigest())
+            digest = hashlib.sha256(b'disk image').hexdigest()
+            self.assertEqual(metadata['disk_image'], dict(asset_name=image.name, size=len(b'disk image'),
+                                                          sha256=digest, package_type='drag-install-dmg'))
+            self.assertEqual((output / (image.name + '.sha256')).read_text(), f'{digest}  {image.name}\n')
+            self.assertTrue((output / (archive.name + '.sha256')).is_file())
 
     def test_wrong_version_rejected_before_packaging(self):
         with tempfile.TemporaryDirectory() as temp:

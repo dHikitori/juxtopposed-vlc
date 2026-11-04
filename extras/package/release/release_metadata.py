@@ -16,7 +16,7 @@ def release_metadata(version, root=ROOT):
     if not isinstance(overrides, dict) or overrides.keys() - {'product_name', 'package_prefix', 'subtitle'}:
         raise ValueError(f'{path}: expected only product_name, package_prefix and subtitle')
     metadata = dict(schema=1, version=version, generation=source_generation(root),
-                    product_name='VLC', package_prefix='vlc-juxtopposed', subtitle='')
+                    product_name='Hakone', package_prefix='hakone', subtitle='')
     metadata.update(overrides)
     for key, limit in (('product_name', 128), ('subtitle', 512)):
         value = metadata[key]

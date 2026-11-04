@@ -301,7 +301,7 @@ FocusScope {
         source: active ? "qrc:///qt/qml/VLC/Player/RedesignPlayerFavorite.qml" : ""
         onLoaded: {
             item.mediaUrl = Qt.binding(() => Player.url)
-            item.errorOccurred.connect(message => DialogsProvider.messageDialog(message, qsTr("VLC Media Player")))
+            item.errorOccurred.connect(message => DialogsProvider.messageDialog(message, qsTr("Hakone Media Player")))
         }
     }
     RedesignActionMenu {
@@ -470,7 +470,7 @@ FocusScope {
         maxVolume: MainCtx.maxVolume / 100
         buffering: Player.buffering
         statistics: Player.playbackStatistics
-        mediaTitle: Player.title || Player.name || qsTr("VLC Media Player")
+        mediaTitle: Player.title || Player.name || qsTr("Hakone Media Player")
         locationTitle: view.libraryItem ? view.libraryItem.locationTitle : qsTr("Home")
         timeText: started ? rootPlayer.clockText(Player.time) : "00:00:00"
         lengthText: started ? rootPlayer.clockText(Player.length) : "00:00:00"

@@ -318,7 +318,7 @@ void MediaLib::resyncFolder(const QUrl& url, QJSValue callback)
     if (!callback.isCallable()) return;
     runOnMLThread<QVariantMap>(this,
         [url](vlc_medialibrary_t* ml, QVariantMap& result) {
-            result = {{"success", false}, {"error", qtr("VLC cannot rescan this folder. Make sure that you can read the folder. Try again.")}};
+            result = {{"success", false}, {"error", qtr("Hakone cannot rescan this folder. Make sure that you can read the folder. Try again.")}};
             if (!url.isValid() || url.scheme().isEmpty()) return;
             const auto mrl = url.toEncoded();
             if (vlc_ml_reload_folder(ml, mrl.constData()) == VLC_SUCCESS)
@@ -344,7 +344,7 @@ void MediaLib::playlistTrackTargets(const MLItemId& id, QJSValue callback)
     if (!callback.isCallable()) return;
     runOnMLThread<QVariantMap>(this,
         [id](vlc_medialibrary_t* ml, QVariantMap& result) {
-            result = {{"success", false}, {"error", qtr("VLC cannot read this playlist. Select it again.")}};
+            result = {{"success", false}, {"error", qtr("Hakone cannot read this playlist. Select it again.")}};
             if (id.type != VLC_ML_PARENT_PLAYLIST || id.id <= 0) return;
             ml_unique_ptr<vlc_ml_playlist_t> playlist(vlc_ml_get_playlist(ml, id.id));
             if (!playlist) return;
@@ -478,7 +478,7 @@ void MediaLib::trackAssignmentRows(const QVariantMap& target, bool subtitles, QJ
     const bool automatic = !subtitles || var_InheritBool(m_intf, "sub-autodetect-file");
     runOnMLThread<QVariantMap>(this,
         [target, subtitles, automatic](vlc_medialibrary_t* ml, QVariantMap& result) {
-            result = {{"success", false}, {"error", qtr("VLC cannot read these files. Select them again.")}};
+            result = {{"success", false}, {"error", qtr("Hakone cannot read these files. Select them again.")}};
             QList<QUrl> urls;
             const auto scope = target.value("scope").toString();
             if (scope == "file") urls.append(target.value("url").toUrl());
@@ -520,7 +520,7 @@ void MediaLib::trackAssignmentRows(const QVariantMap& target, bool subtitles, QJ
                 const int status = vlc_ml_folder_get_track_rule(ml, folder.toEncoded().constData(), type, &value);
                 const auto definition = qfu(value); free(value);
                 result.insert("folderRule", definition); result.insert("automaticMatching", automatic);
-                if (status != VLC_SUCCESS) result.insert("ruleError", qtr("VLC cannot read the saved folder matches. Save again to replace them."));
+                if (status != VLC_SUCCESS) result.insert("ruleError", qtr("Hakone cannot read the saved folder matches. Save again to replace them."));
                 std::vector<vlc::medialibrary::trackrules::Pair> pairs;
                 if (!definition.isEmpty() && vlc::medialibrary::trackrules::decode(definition.toStdString(), pairs) && !pairs.empty()) {
                     hasFolderRule = true;
@@ -595,7 +595,7 @@ void MediaLib::trackAssignmentSources(const QUrl& folder, bool subtitles, QJSVal
     if (!callback.isCallable()) return;
     runOnMLThread<QVariantMap>(this,
         [folder, subtitles](vlc_medialibrary_t*, QVariantMap& result) {
-            result = {{"success", false}, {"error", qtr("VLC cannot read this folder. Select it again.")}};
+            result = {{"success", false}, {"error", qtr("Hakone cannot read this folder. Select it again.")}};
             if (!folder.isLocalFile() || !QFileInfo(folder.toLocalFile()).isDir()) return;
             const auto sources = trackSources(trackFiles(folder.toLocalFile(), subtitles), subtitles, folder.toLocalFile());
             result = {{"success", true}, {"error", QString()}, {"sources", sources}};
@@ -767,7 +767,7 @@ void MediaLib::saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles
                 const auto definition = rule.value("definition").toString();
                 if (!rule.value("folder").toUrl().isLocalFile()
                     || (!definition.isEmpty() && !vlc::medialibrary::trackrules::decode(definition.toStdString(), pairs))) {
-                    result["error"] = qtr("VLC cannot save these folder matches. Select the folder again."); return;
+                    result["error"] = qtr("Hakone cannot save these folder matches. Select the folder again."); return;
                 }
             }
             struct Edit { QUrl url; QStringList before; QStringList after; QStringList initial; };
@@ -783,7 +783,7 @@ void MediaLib::saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles
                 const auto initial = trackStrings(row.value("initialTracks", row.value("baseline")));
                 before.removeDuplicates(); after.removeDuplicates();
                 if (!url.isValid() || url.scheme().isEmpty() || seen.contains(url)) {
-                    result["error"] = qtr("VLC cannot save this selection. Select the files again."); return;
+                    result["error"] = qtr("Hakone cannot save this selection. Select the files again."); return;
                 }
                 seen.insert(url);
                 const auto uri = url.toEncoded();
@@ -792,17 +792,17 @@ void MediaLib::saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles
                     result["error"] = qtr("The saved tracks changed. Close this window and select the files again."); return;
                 }
                 if (!media && (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile())) {
-                    result["error"] = qtr("VLC cannot read this media: %1").arg(url.toDisplayString()); return;
+                    result["error"] = qtr("Hakone cannot read this media: %1").arg(url.toDisplayString()); return;
                 }
                 for (const auto& text : after) {
                     const QUrl track(text);
                     if (!track.isValid() || track.scheme().isEmpty() || text == trackString(url)) {
-                        result["error"] = qtr("VLC cannot use this track: %1").arg(text); return;
+                        result["error"] = qtr("Hakone cannot use this track: %1").arg(text); return;
                     }
                     if (media && media->p_files) {
                         for (const auto& file : ml_range_iterate<vlc_ml_file_t>(media->p_files)) {
                             if (trackString(QUrl(qfu(file.psz_mrl))) == text && file.i_type != type) {
-                                result["error"] = qtr("VLC already uses this file for another track: %1").arg(track.fileName()); return;
+                                result["error"] = qtr("Hakone already uses this file for another track: %1").arg(track.fileName()); return;
                             }
                         }
                     }
@@ -810,7 +810,7 @@ void MediaLib::saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles
                     if (before.contains(text) || initial.contains(text)) continue;
                     QFile file(track.toLocalFile());
                     if (!track.isLocalFile() || !QFileInfo(file).isFile() || !file.open(QIODevice::ReadOnly)) {
-                        result["error"] = qtr("VLC cannot read this track: %1").arg(track.toDisplayString()); return;
+                        result["error"] = qtr("Hakone cannot read this track: %1").arg(track.toDisplayString()); return;
                     }
                 }
                 if (!sameTracks(before, after) || !sameTracks(initial, after)
@@ -831,8 +831,8 @@ void MediaLib::saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles
                     pointers.data(), pointers.size()) : VLC_EGENERIC;
                 if (status != VLC_SUCCESS) {
                     result["error"] = status == VLC_ENOTSUP
-                        ? qtr("This VLC build cannot replace saved tracks.")
-                        : qtr("VLC cannot save the tracks for %1. Try again.").arg(edit.url.fileName());
+                        ? qtr("This Hakone build cannot replace saved tracks.")
+                        : qtr("Hakone cannot save the tracks for %1. Try again.").arg(edit.url.fileName());
                     return;
                 }
                 saved.append(QVariantMap{{"url", edit.url.toString(QUrl::FullyEncoded)},
@@ -843,7 +843,7 @@ void MediaLib::saveTrackAssignmentsImpl(const QVariantList& rows, bool subtitles
                 const auto folder = rule.value("folder").toUrl().toEncoded();
                 const auto definition = rule.value("definition").toString().toUtf8();
                 if (vlc_ml_folder_set_track_rule(ml, folder.constData(), type, definition.isEmpty() ? nullptr : definition.constData()) != VLC_SUCCESS) {
-                    result["error"] = qtr("VLC cannot save the folder matches. Try Save again."); return;
+                    result["error"] = qtr("Hakone cannot save the folder matches. Try Save again."); return;
                 }
                 result["folderRuleSaved"] = true; result["folderRule"] = QString::fromUtf8(definition);
             }
@@ -859,12 +859,12 @@ void MediaLib::requestPlaylistState(const MLItemId& id, bool update, bool favori
     if (!callback.isCallable()) return;
     runOnMLThread<QVariantMap>(this,
         [id, update, favorite](vlc_medialibrary_t* ml, QVariantMap& state) {
-            state = {{"success", false}, {"error", qtr("VLC cannot read this playlist. Select it again.")}};
+            state = {{"success", false}, {"error", qtr("Hakone cannot read this playlist. Select it again.")}};
             if (id.type != VLC_ML_PARENT_PLAYLIST || id.id <= 0) return;
             ml_unique_ptr<vlc_ml_playlist_t> playlist(vlc_ml_get_playlist(ml, id.id));
             if (!playlist) return;
             if (update && vlc_ml_playlist_set_favorite(ml, id.id, favorite) != VLC_SUCCESS) {
-                state["error"] = qtr("VLC cannot save this change. Try again.");
+                state["error"] = qtr("Hakone cannot save this change. Try again.");
                 return;
             }
             state = {{"success", true}, {"error", QString()}, {"id", id.toString()},
@@ -886,7 +886,7 @@ void MediaLib::savePlaylistDetails(const MLItemId& id, const QString& name, cons
     if (!callback.isCallable()) return;
     runOnMLThread<QVariantMap>(this,
         [id, name = name.trimmed(), cover](vlc_medialibrary_t* ml, QVariantMap& result) {
-            result = {{"success", false}, {"error", qtr("VLC cannot save this playlist. Try again.")}};
+            result = {{"success", false}, {"error", qtr("Hakone cannot save this playlist. Try again.")}};
             if (id.type != VLC_ML_PARENT_PLAYLIST || id.id <= 0 || name.isEmpty()) return;
             ml_unique_ptr<vlc_ml_playlist_t> playlist(vlc_ml_get_playlist(ml, id.id));
             if (!playlist) return;
@@ -907,7 +907,7 @@ void MediaLib::savePlaylistDetails(const MLItemId& id, const QString& name, cons
                 if (!cover.isEmpty()) {
                     image = PlaylistCoverStore::prepareImage(cover);
                     if (image.isEmpty()) {
-                        result["error"] = qtr("VLC cannot read or save this image. Select another image.");
+                        result["error"] = qtr("Hakone cannot read or save this image. Select another image.");
                         return;
                     }
                 }
@@ -918,7 +918,7 @@ void MediaLib::savePlaylistDetails(const MLItemId& id, const QString& name, cons
             if (changeName && vlc_ml_playlist_rename(ml, id.id, qtu(name)) != VLC_SUCCESS) return;
             if (metadata && !metadata->commit()) {
                 if (changeName && vlc_ml_playlist_rename(ml, id.id, qtu(oldName)) != VLC_SUCCESS)
-                    result["error"] = qtr("VLC saved the name but cannot save the thumbnail. Open the properties again to see the saved values.");
+                    result["error"] = qtr("Hakone saved the name but cannot save the thumbnail. Open the properties again to see the saved values.");
                 return;
             }
             saved = true;
@@ -973,7 +973,7 @@ void MediaLib::exportPlaylist(const MLItemId& id, const QUrl& file, const QByteA
     runOnMLThread<PlaylistExportResult>(receiver,
         [id, file, format, intf = m_intf](vlc_medialibrary_t* ml, PlaylistExportResult& result) {
             auto& error = result.error;
-            error = qtr("VLC cannot export this playlist. Select it again.");
+            error = qtr("Hakone cannot export this playlist. Select it again.");
             if (id.type != VLC_ML_PARENT_PLAYLIST || id.id <= 0 || !file.isLocalFile()) return;
             if (format != "export-xspf" && format != "export-m3u" && format != "export-m3u8" && format != "export-html") return;
             ml_unique_ptr<vlc_ml_playlist_t> source(vlc_ml_get_playlist(ml, id.id));
@@ -995,7 +995,7 @@ void MediaLib::exportPlaylist(const MLItemId& id, const QUrl& file, const QByteA
                 VLC_PLAYLIST_PREPARSING_DISABLED, 1, 0), vlc_playlist_Delete);
             if (!queue) return;
             result.failure = PlaylistExportResult::Failure::Destination;
-            error = qtr("VLC cannot save this file. Select another location.");
+            error = qtr("Hakone cannot save this file. Select another location.");
             const QFileInfo destination(file.toLocalFile());
             QTemporaryFile temporary(destination.dir().filePath(QStringLiteral(".vlc-export-XXXXXX")));
             if (!temporary.open()) return;
@@ -1029,7 +1029,7 @@ void MediaLib::addMediaTracks(const QUrl& url, const QList<QUrl>& tracks, bool s
         [url, tracks, subtitles](vlc_medialibrary_t* ml, TrackAddition& result) {
             if (!url.isValid() || url.scheme().isEmpty() ||
                 (url.isLocalFile() && !QFileInfo(url.toLocalFile()).isFile())) {
-                result.error = qtr("VLC cannot read this media. Select the file again.");
+                result.error = qtr("Hakone cannot read this media. Select the file again.");
                 return;
             }
             QList<QUrl> unique;
@@ -1038,7 +1038,7 @@ void MediaLib::addMediaTracks(const QUrl& url, const QList<QUrl>& tracks, bool s
                 QFile file(track.toLocalFile());
                 if (!track.isLocalFile() || track == url ||
                     !QFileInfo(file).isFile() || !file.open(QIODevice::ReadOnly)) {
-                    result.error = qtr("VLC cannot read this track: %1").arg(track.toDisplayString());
+                    result.error = qtr("Hakone cannot read this track: %1").arg(track.toDisplayString());
                     return;
                 }
                 if (!seen.contains(track)) { seen.insert(track); unique.push_back(track); }
@@ -1048,7 +1048,7 @@ void MediaLib::addMediaTracks(const QUrl& url, const QList<QUrl>& tracks, bool s
             ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, mrl.constData()));
             if (!media) media.reset(vlc_ml_new_external_media(ml, mrl.constData()));
             if (!media) {
-                result.error = qtr("VLC cannot save this change. Try again.");
+                result.error = qtr("Hakone cannot save this change. Try again.");
                 return;
             }
             const auto type = subtitles ? VLC_ML_FILE_TYPE_SUBTITLE : VLC_ML_FILE_TYPE_SOUNDTRACK;
@@ -1058,7 +1058,7 @@ void MediaLib::addMediaTracks(const QUrl& url, const QList<QUrl>& tracks, bool s
                     for (const auto& file : ml_range_iterate<vlc_ml_file_t>(media->p_files)) {
                         if (QUrl(qfu(file.psz_mrl)) != track) continue;
                         if (file.i_type != type) {
-                            result.error = qtr("VLC already uses this file for another track: %1").arg(track.fileName());
+                            result.error = qtr("Hakone already uses this file for another track: %1").arg(track.fileName());
                             return;
                         }
                         found = true;
@@ -1068,7 +1068,7 @@ void MediaLib::addMediaTracks(const QUrl& url, const QList<QUrl>& tracks, bool s
                 if (found) continue;
                 const auto uri = track.toEncoded();
                 if (vlc_ml_media_add_external_mrl(ml, media->i_id, uri.constData(), type) != VLC_SUCCESS) {
-                    result.error = qtr("VLC cannot save this track: %1").arg(track.fileName());
+                    result.error = qtr("Hakone cannot save this track: %1").arg(track.fileName());
                     return;
                 }
                 result.added.push_back(track);
@@ -1110,13 +1110,13 @@ void MediaLib::requestMediaState(const QUrl& url, MediaStateAction action, bool 
     const bool valid = url.isValid() && !url.scheme().isEmpty();
     runOnMLThread<Result>(this,
         [uri, valid, action, value](vlc_medialibrary_t* ml, Result& result) {
-            result.error = qtr("VLC cannot read this media. Select the file again.");
+            result.error = qtr("Hakone cannot read this media. Select the file again.");
             if (!valid) return;
             ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, uri.constData()));
             if (!media && action != MediaStateAction::Read) media.reset(vlc_ml_new_external_media(ml, uri.constData()));
             if (!media && action != MediaStateAction::Read) return;
             if (media) {
-                result.error = qtr("VLC cannot save this change. Try again.");
+                result.error = qtr("Hakone cannot save this change. Try again.");
                 if (action == MediaStateAction::Played && vlc_ml_media_set_played(ml, media->i_id, value) != VLC_SUCCESS) return;
                 if (action == MediaStateAction::Favorite && vlc_ml_media_set_favorite(ml, media->i_id, value) != VLC_SUCCESS) return;
                 result.played = action == MediaStateAction::Played ? value : media->i_playcount > 0;
@@ -1148,7 +1148,7 @@ void MediaLib::addLibraryFiles(const QList<QUrl>& urls, QJSValue callback)
                 QFile file(url.toLocalFile());
                 const QFileInfo info(file);
                 if (!url.isLocalFile() || !info.isFile() || !file.open(QIODevice::ReadOnly)) {
-                    result["error"] = qtr("VLC cannot read this file: %1").arg(url.toDisplayString()); return;
+                    result["error"] = qtr("Hakone cannot read this file: %1").arg(url.toDisplayString()); return;
                 }
                 const auto folder = QUrl::fromLocalFile(info.absolutePath());
                 auto key = folder.toString(QUrl::FullyEncoded);
@@ -1162,7 +1162,7 @@ void MediaLib::addLibraryFiles(const QList<QUrl>& urls, QJSValue callback)
                 const auto uri = folder.toEncoded();
                 if (vlc_ml_add_folder(ml, uri.constData()) != VLC_SUCCESS) {
                     result["folders"] = completed;
-                    result["error"] = qtr("VLC cannot add this folder: %1").arg(folder.toDisplayString(QUrl::PreferLocalFile)); return;
+                    result["error"] = qtr("Hakone cannot add this folder: %1").arg(folder.toDisplayString(QUrl::PreferLocalFile)); return;
                 }
                 completed.append(folder.toString(QUrl::FullyEncoded));
             }

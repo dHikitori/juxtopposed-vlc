@@ -103,7 +103,7 @@ for path in (package / 'lua').rglob('*.luac'):
     if not (source / path.relative_to(package).with_suffix('.lua')).is_file():
         path.unlink()
 PY
-[[ -f "$package/$launcher" && -f "$package/plugins/gui/libqt_plugin.dll" ]] || { echo 'The build did not produce VLC and its Qt plugin.' >&2; exit 1; }
+[[ -f "$package/$launcher" && -f "$package/plugins/gui/libqt_plugin.dll" ]] || { echo 'The build did not produce Hakone and its Qt plugin.' >&2; exit 1; }
 # VLC deliberately searches System32 for plugin dependencies. Contrib pkg-config
 # files that request a shared GCC runtime must use the static exception runtime.
 runtime_changes=$(python3 /host/scripts/local_files.py normalize-runtime "$build")
@@ -120,7 +120,7 @@ find "$package" -type f \( -name '*.dll' -o -name '*.exe' \) "${strip_args[@]}" 
     xargs -0 -r -n 32 x86_64-w64-mingw32-strip --strip-debug --preserve-dates
 touch /work/last-strip
 if [[ "${VLC_WINDOWS_VERIFIED_WORKER:-0}" == 1 ]]; then
-    python3 - "$package/vlc-addon-worker.exe" /work/build-info.json <<'PYWORKER'
+    python3 - "$package/hakone-addon-worker.exe" /work/build-info.json <<'PYWORKER'
 from pathlib import Path
 import hashlib,json,sys
 worker,metadata=map(Path,sys.argv[1:])

@@ -1,4 +1,4 @@
-vlc.desktop
-vlc-*.desktop
-org.videolan.vlc.appdata.xml
-org.videolan.vlc.appdata.xml.in
+/hakone.desktop
+/hakone-*.desktop
+org.hakone.hakone.appdata.xml
+org.hakone.hakone.appdata.xml.in

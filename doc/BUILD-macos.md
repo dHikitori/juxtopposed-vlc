@@ -1,11 +1,11 @@
-# Building this fork on macOS (Meson)
+# Building Hakone on macOS (Meson)
 
-These steps build the redesigned Qt interface from source on macOS with
+These steps build Hakone and its redesigned Qt interface from source on macOS with
 Homebrew dependencies and run it from the build tree. They were tested on
 Apple Silicon (arm64) with macOS 27, the Xcode Command Line Tools (full
 Xcode is not needed), Homebrew Qt 6.12.0, FFmpeg 8.0 and Meson 1.12.1.
 
-This is a development build, not a distributable `VLC.app`: it uses the
+This is a development build, not a distributable `Hakone.app`: it uses the
 Homebrew libraries on the machine that built it. On macOS the redesign is the
 Qt interface (`-I qt`), not the Cocoa `macosx` interface.
 
@@ -67,7 +67,7 @@ export PKG_CONFIG_PATH="$(brew --prefix qt)/lib/pkgconfig:$(brew --prefix)/lib/p
 
 git clone https://github.com/hakone-org/hakone.git
 cd hakone
-meson setup build --prefix="$HOME/.local/vlc-dev" \
+meson setup build --prefix="$HOME/.local/hakone-dev" \
     -Dqt=enabled -Dtests=disabled -Dbuildtype=release
 ninja -C build
 ```
@@ -82,19 +82,19 @@ tree (`/opt/homebrew` on Apple Silicon, `/usr/local` on Intel).
 
 ## Running from the build tree
 
-Use `build/bin/vlc-static`. It sets the plugin, library and `vlc-preparser`
-paths to the build tree itself. `build/bin/vlc` looks in the install prefix
-and exits with `VLC cannot start any interface` when nothing is installed
-there.
+Use `build/bin/hakone-static`. It sets the plugin, library and `vlc-preparser`
+paths to the build tree itself. `build/bin/hakone` looks in the install prefix
+and exits with `cannot start any interface. Exiting.` when nothing is
+installed there.
 
 ```sh
-build/bin/vlc-static -I qt /path/to/video.mp4
+build/bin/hakone-static -I qt /path/to/video.mp4
 ```
 
 A quick headless check that decoding works:
 
 ```sh
-build/bin/vlc-static -I dummy --no-video --aout=dummy --play-and-exit /path/to/video.mp4
+build/bin/hakone-static -I dummy --no-video --aout=dummy --play-and-exit /path/to/video.mp4
 ```
 
 Use `--no-video` for headless runs: `--vout=dummy` with the dummy interface

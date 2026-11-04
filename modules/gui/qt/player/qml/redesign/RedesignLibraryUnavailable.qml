@@ -12,7 +12,7 @@ RedesignLibraryView {
     sortFields: []
     showAddRow: category > 0 && category < 5
     addLabel: category === 3 ? qsTr("Open network stream") : qsTr("Open files")
-    emptyText: qsTr("The media library is unavailable. Check Library settings and restart VLC to use your library. You can still open files, folders or network streams.")
+    emptyText: qsTr("The media library is unavailable. Check Library settings and restart Hakone to use your library. You can still open files, folders or network streams.")
 
     function resetLocation(newCategory) {
         category = newCategory

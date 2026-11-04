@@ -849,8 +849,8 @@ ExtV4l2::ExtV4l2(qt_intf_t *intf, QWidget *parent) : QWidget(parent), p_intf(int
 void ExtV4l2::updateStatus()
 {
     m_status->setText(!m_device ? qtr("Open and play a camera to show its controls.")
-        : m_retry ? qtr("VLC cannot read the camera controls. Select Refresh to try again.")
-        : m_controlCount == 0 ? qtr("This camera has no controls for VLC.")
+        : m_retry ? qtr("Hakone cannot read the camera controls. Select Refresh to try again.")
+        : m_controlCount == 0 ? qtr("This camera has no controls for Hakone.")
         : qtr("Changes apply to the open camera."));
     m_status->setAccessibleName(m_status->text());
 }

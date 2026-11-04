@@ -35,7 +35,7 @@
 #include <vlc_charset.h>
 #include <vlc_memstream.h>
 
-#define VLCSERVICENAME "VLC media player"
+#define VLCSERVICENAME "Hakone Media Player"
 
 /*****************************************************************************
  * Module descriptor

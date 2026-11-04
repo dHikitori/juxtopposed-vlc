@@ -2,13 +2,21 @@ dnl Autoconf settings for vlc
 
 AC_COPYRIGHT([Copyright 1999-2026 VLC authors and VideoLAN])
 
-AC_INIT([vlc], [4.0.0-beta.5])
+AC_INIT([vlc], [4.0.0-dev])
+dnl The package version above is the LibVLC and core version, kept in step with
+dnl upstream VLC. Hakone's own version, codename and update generation follow.
 VERSION_MAJOR=4
 VERSION_MINOR=0
 VERSION_REVISION=0
 VERSION_EXTRA=0
-VERSION_DEV=beta.5
-UPDATE_GENERATION=0
+VERSION_DEV=dev
+HAKONE_VERSION=1.0.0-beta.1
+HAKONE_VERSION_MAJOR=1
+HAKONE_VERSION_MINOR=0
+HAKONE_VERSION_REVISION=0
+HAKONE_VERSION_DEV=beta.1
+HAKONE_CODENAME="Jiji"
+UPDATE_GENERATION=1
 
 VERSION_DATE=$(
     VERSION_PATTERN='^v?([[0-9]]+\.?)+(-[[0-9A-Za-z]]+(\.[[0-9A-Za-z]]+)*)?$'
@@ -4850,8 +4858,8 @@ dnl
 dnl  MacOS X sparkle update support
 dnl
 AC_ARG_ENABLE([sparkle],
-  AS_HELP_STRING([--enable-sparkle], [Sparkle update support for OS X (default enabled on Mac OS X)]))
-if test "${enable_sparkle}" != "no" -a "${HAVE_OSX}" = "1"
+  AS_HELP_STRING([--enable-sparkle], [Sparkle update support for OS X; needs an SUFeedURL in Info.plist (default disabled)]))
+if test "${enable_sparkle}" = "yes" -a "${HAVE_OSX}" = "1"
 then
   if test ! -d ${CONTRIB_DIR}/Sparkle.framework -a ! -d ${CONTRIB_DIR}/Frameworks/Sparkle.framework
   then
@@ -4860,7 +4868,7 @@ then
 
   AC_DEFINE([HAVE_SPARKLE], [1], [Define to 1 if sparkle is enabled.])
 fi
-AM_CONDITIONAL([HAVE_SPARKLE], [test "$enable_sparkle" != "no"])
+AM_CONDITIONAL([HAVE_SPARKLE], [test "$enable_sparkle" = "yes" -a "${HAVE_OSX}" = "1"])
 
 dnl
 dnl  MacOS X breakpad creash reporter support
@@ -5252,7 +5260,7 @@ dnl
 dnl  the VLC binary
 dnl
 AC_ARG_ENABLE([vlc],
-  AS_HELP_STRING([--enable-vlc], [build the VLC media player (default enabled)]))
+  AS_HELP_STRING([--enable-vlc], [build the Hakone Media Player executable (default enabled)]))
 AM_CONDITIONAL([BUILD_VLC], [test "${enable_vlc}" != "no" -a "$vlc_winstore_app" = "0"])
 
 dnl
@@ -5286,6 +5294,15 @@ VERSION_MESSAGE="${VERSION} ${CODENAME}"
 COPYRIGHT_MESSAGE="Copyright © ${COPYRIGHT_YEARS} the VideoLAN team"
 AC_DEFINE_UNQUOTED([VERSION_MESSAGE], "${VERSION_MESSAGE}", [Simple version string])
 AC_DEFINE_UNQUOTED([COPYRIGHT_MESSAGE], "${COPYRIGHT_MESSAGE}", [Copyright string])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION], "${HAKONE_VERSION}", [Hakone version])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_MESSAGE], "${HAKONE_VERSION} ${HAKONE_CODENAME}", [Hakone version and codename])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_MAJOR], ${HAKONE_VERSION_MAJOR}, [Hakone version major number])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_MINOR], ${HAKONE_VERSION_MINOR}, [Hakone version minor number])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_REVISION], ${HAKONE_VERSION_REVISION}, [Hakone version revision number])
+AC_SUBST([HAKONE_VERSION])
+AC_SUBST([HAKONE_VERSION_MAJOR])
+AC_SUBST([HAKONE_VERSION_MINOR])
+AC_SUBST([HAKONE_VERSION_REVISION])
 AC_DEFINE_UNQUOTED([COPYRIGHT_YEARS], "${COPYRIGHT_YEARS}", [The copyright years])
 AC_DEFINE_UNQUOTED([CONFIGURE_LINE], "${CONFIGURE_LINE}", [The ./configure command line])
 AC_DEFINE_UNQUOTED([PACKAGE_VERSION_MAJOR],${VERSION_MAJOR}, [version major number])
@@ -5357,7 +5374,7 @@ AC_CONFIG_FILES([
 
 AM_COND_IF([KDE_SOLID], [
   AC_CONFIG_FILES([
-    share/org.videolan.vlc.appdata.xml.in
+    share/org.hakone.hakone.appdata.xml.in
   ])
 ])
 
@@ -5371,7 +5388,7 @@ AM_COND_IF([HAVE_WIN32], [
     extras/package/win32/msi/config.wxi
     extras/package/win32/libvlc.dll.manifest
     extras/package/win32/libvlccore.dll.manifest
-    extras/package/win32/vlc.exe.manifest
+    extras/package/win32/hakone.exe.manifest
   ])
 ])
 
@@ -5417,13 +5434,14 @@ echo "
 libvlc configuration
 --------------------
 version               : ${VERSION}
+hakone version        : ${HAKONE_VERSION}
 system                : ${SYS}
 architecture          : ${ARCH}
 optimizations         : ${enable_optimizations}"
 if test "${enable_vlc}" != "no"; then
 echo "vlc aliases           :${ALIASES}"
 else
-echo "build vlc executable  : no"
+echo "build hakone executable: no"
 fi
 echo "
 To build vlc and its plugins, type \`$MAKE', or \`./compile' if you like nice colors."

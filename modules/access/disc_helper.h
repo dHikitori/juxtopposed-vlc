@@ -55,7 +55,7 @@ inline static int DiscProbeMacOSPermission( vlc_object_t *p_this, const char *ps
         vlc_dialog_display_error( p_this, _("Problem accessing a system resource"),
             _("Potentially, macOS blocks access to your disc. "
               "Please open \"System Preferences\" -> \"Security & Privacy\" "
-              "and allow VLC to access your external media in \"Files and Folders\" section."));
+              "and allow Hakone to access your external media in \"Files and Folders\" section."));
 
         return VLC_EGENERIC;
     }

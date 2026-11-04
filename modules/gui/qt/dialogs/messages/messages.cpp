@@ -303,7 +303,7 @@ void MessagesDialog::updateHistoryInfo()
     if (m_skippedMessages)
         text += QLatin1Char('\n') + qtr("Log messages not shown: %1").arg(QLocale().toString(m_skippedMessages));
     m_historyInfo->setText(text);
-    const auto help = qtr("This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again.");
+    const auto help = qtr("This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close Hakone. Start Hakone again.");
     m_historyInfo->setToolTip(QStringLiteral("<qt>%1</qt>").arg(help.toHtmlEscaped()));
     m_historyInfo->setAccessibleDescription(help);
     ui.saveLogButton->setEnabled(shown > 0);
@@ -402,7 +402,7 @@ bool MessagesDialog::save()
             else error = file.errorString();
         }
         const auto answer = DialogsProvider::getInstance()->messageDialog(
-            qtr("VLC cannot save the log.\n\nFile: %1\n\nError: %2\n\nThe log remains in this window.")
+            qtr("Hakone cannot save the log.\n\nFile: %1\n\nError: %2\n\nThe log remains in this window.")
                 .arg(selected, error), qtr("Save log"), QMessageBox::Yes | QMessageBox::Cancel,
             QMessageBox::Cancel, QMessageBox::Warning, this, qtr("Choose file"));
         if (!owner || answer != QMessageBox::Yes) return false;

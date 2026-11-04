@@ -40,8 +40,8 @@ msgstr ""
 "Program ureja ekipa VideoLAN; podrobnosti so zapisane v datoteki AUTHORS.\n"
 
 #: include/vlc_config_cat.h:33
-msgid "VLC preferences"
-msgstr "Možnosti VLC"
+msgid "Hakone preferences"
+msgstr "Možnosti Hakone"
 
 #: include/vlc_config_cat.h:35
 msgid "Select \"Advanced Options\" to see all options."
@@ -56,8 +56,8 @@ msgid "Interface"
 msgstr "Vmesnik"
 
 #: include/vlc_config_cat.h:39
-msgid "Settings for VLC's interfaces"
-msgstr "Nastavitve vmesnikov predvajalnika VLC"
+msgid "Settings for Hakone's interfaces"
+msgstr "Nastavitve vmesnikov predvajalnika Hakone"
 
 #: include/vlc_config_cat.h:41
 msgid "Main interfaces settings"
@@ -76,8 +76,8 @@ msgid "Control interfaces"
 msgstr "Vmesniki upravljanja"
 
 #: include/vlc_config_cat.h:47
-msgid "Settings for VLC's control interfaces"
-msgstr "Nastavitve vmesnikov upravljanja predvajalnika VLC"
+msgid "Settings for Hakone's control interfaces"
+msgstr "Nastavitve vmesnikov upravljanja predvajalnika Hakone"
 
 #: include/vlc_config_cat.h:49 include/vlc_config_cat.h:50
 #: modules/gui/macosx/VLCSimplePrefsController.m:230
@@ -229,7 +229,7 @@ msgstr "Filtri pretoka"
 #: include/vlc_config_cat.h:109
 msgid ""
 "Stream filters are special modules that allow advanced operations on the "
-"input side of VLC. Use with care..."
+"input side of Hakone. Use with care..."
 msgstr ""
 "Filtri pretoka so posebni moduli, ki omogočajo naprednejšo uporabno "
 "predstavnih vsebin. Nastavitve spreminjajte samo, če ste res prepričani v "
@@ -365,8 +365,8 @@ msgid "VOD"
 msgstr "VOD"
 
 #: include/vlc_config_cat.h:169
-msgid "VLC's implementation of Video On Demand"
-msgstr "Uvedba razširitve VLC za predvajanje Videa na zahtevo (VOD)"
+msgid "Hakone's implementation of Video On Demand"
+msgstr "Uvedba razširitve Hakone za predvajanje Videa na zahtevo (VOD)"
 
 #: include/vlc_config_cat.h:173 src/libvlc-module.c:2053
 #: src/playlist/engine.c:233 modules/demux/playlist/playlist.c:64
@@ -797,7 +797,7 @@ msgid ""
 "  udp://[[<source address>]@[<bind address>][:<bind port>]]\n"
 "                                 UDP stream sent by a streaming server\n"
 "  vlc://pause:<seconds>          Pause the playlist for a certain time\n"
-"  vlc://quit                     Special item to quit VLC\n"
+"  vlc://quit                     Special item to quit Hakone\n"
 "\n"
 msgstr ""
 "Uporaba: %s [možnost] [pretok] ...\n"
@@ -874,8 +874,8 @@ msgstr ""
 
 #: src/config/help.c:721
 #, c-format
-msgid "VLC version %s (%s)\n"
-msgstr "Različica VLC %s (%s)\n"
+msgid "Hakone version %s (%s)\n"
+msgstr "Različica Hakone %s (%s)\n"
 
 #: src/config/help.c:722
 #, c-format
@@ -923,7 +923,7 @@ msgstr "Kodek ni podprt"
 
 #: src/input/decoder.c:1878
 #, c-format
-msgid "VLC could not decode the format \"%4.4s\" (%s)"
+msgid "Hakone could not decode the format \"%4.4s\" (%s)"
 msgstr "Zapisa »%4.4s« (%s) ni mogoče odkodirati."
 
 #: src/input/decoder.c:1882
@@ -931,7 +931,7 @@ msgid "Unidentified codec"
 msgstr "Nedoločljiv kodek"
 
 #: src/input/decoder.c:1883
-msgid "VLC could not identify the audio or video codec"
+msgid "Hakone could not identify the audio or video codec"
 msgstr "Ni mogoče določiti zvokovnega oziroma video kodeka."
 
 #: src/input/decoder.c:1894
@@ -950,11 +950,11 @@ msgstr "Pretakanje / prekodiranje je spodletelo"
 
 #: src/input/decoder.c:1903
 #, c-format
-msgid "VLC could not open the %s module."
+msgid "Hakone could not open the %s module."
 msgstr "Ni mogoče odpreti modula %s."
 
 #: src/input/decoder.c:2184
-msgid "VLC could not open the decoder module."
+msgid "Hakone could not open the decoder module."
 msgstr "Ni mogoče odpreti enote odkodiranja."
 
 #: src/input/es_out.c:963 src/input/es_out.c:968 src/libvlc-module.c:239
@@ -1307,7 +1307,7 @@ msgstr "Vnosa ni mogoče odpreti"
 
 #: src/input/input.c:2658
 #, c-format
-msgid "VLC is unable to open the MRL '%s'. Check the log for details."
+msgid "Hakone is unable to open the MRL '%s'. Check the log for details."
 msgstr ""
 "Ni mogoče odpreti MRL »%s«. Podrobnosti so zabeležene v dnevniški datoteki."
 
@@ -1551,13 +1551,13 @@ msgstr "2:1 Dvojno"
 
 #: src/libvlc-module.c:64
 msgid ""
-"These options allow you to configure the interfaces used by VLC. You can "
+"These options allow you to configure the interfaces used by Hakone. You can "
 "select the main interface, additional interface modules, and define various "
 "related options."
 msgstr ""
 "Možnosti dovoljujejo spreminjanje vmesnikov, ki jih podpira predvajalnik "
-"VLC. Izbrati je mogoče glavni vmesnik in dodatne vmesnike ter prilagoditi "
-"različne nastavitve posameznega modula."
+"Hakone. Izbrati je mogoče glavni vmesnik in dodatne vmesnike ter "
+"prilagoditi različne nastavitve posameznega modula."
 
 #: src/libvlc-module.c:68
 msgid "Interface module"
@@ -1565,11 +1565,11 @@ msgstr "Moduli vmesnika"
 
 #: src/libvlc-module.c:70
 msgid ""
-"This is the main interface used by VLC. The default behavior is to "
+"This is the main interface used by Hakone. The default behavior is to "
 "automatically select the best module available."
 msgstr ""
-"Glavni vmesnik, ki ga uporablja predvajalnik VLC. Privzeto obnašanje omogoča "
-"samodejni izbor najprimernejše podprte enote."
+"Glavni vmesnik, ki ga uporablja predvajalnik Hakone. Privzeto obnašanje "
+"omogoča samodejni izbor najprimernejše podprte enote."
 
 #: src/libvlc-module.c:74 modules/control/ntservice.c:59
 msgid "Extra interface modules"
@@ -1577,20 +1577,20 @@ msgstr "Dodatni moduli vmesnika"
 
 #: src/libvlc-module.c:76
 msgid ""
-"You can select \"additional interfaces\" for VLC. They will be launched in "
-"the background in addition to the default interface. Use a colon separated "
-"list of interface modules. (common values are \"rc\" (remote control), \"http"
-"\", \"gestures\" ...)"
+"You can select \"additional interfaces\" for Hakone. They will be launched "
+"in the background in addition to the default interface. Use a colon "
+"separated list of interface modules. (common values are \"rc\" (remote "
+"control), \"http\", \"gestures\" ...)"
 msgstr ""
-"Predvajalnik VLC omogoča razširitev vmesnika z »dodatnimi vstavki«, ki se "
-"zaženejo v ozadju, pokažejo pa se v glavnem vmesniku. Vstavke je mogoče "
+"Predvajalnik Hakone omogoča razširitev vmesnika z »dodatnimi vstavki«, ki "
+"se zaženejo v ozadju, pokažejo pa se v glavnem vmesniku. Vstavke je mogoče "
 "določiti v ukazni vrstici spodaj, vrednosti pa morajo biti ločene z "
 "dvopičjem (priporočljivi vmesniki so na primer »rc« (oddaljen nadzor), "
 "»http«, »gestures« ...)."
 
 #: src/libvlc-module.c:83
-msgid "You can select control interfaces for VLC."
-msgstr "Izbrana možnost omogoči nadzorni vmesnik predvajalnika VLC."
+msgid "You can select control interfaces for Hakone."
+msgstr "Izbrana možnost omogoči nadzorni vmesnik predvajalnika Hakone."
 
 #: src/libvlc-module.c:85
 msgid "Verbosity (0,1,2)"
@@ -1609,7 +1609,7 @@ msgid "Default stream"
 msgstr "Privzeti pretok"
 
 #: src/libvlc-module.c:92
-msgid "This stream will always be opened at VLC startup."
+msgid "This stream will always be opened at Hakone startup."
 msgstr "Izbrani pretok bo vedno začet ob zagonu predvajalnika."
 
 #: src/libvlc-module.c:94
@@ -1667,11 +1667,11 @@ msgstr "Enota zvokovnega odvoda"
 
 #: src/libvlc-module.c:125
 msgid ""
-"This is the audio output method used by VLC. The default behavior is to "
+"This is the audio output method used by Hakone. The default behavior is to "
 "automatically select the best method available."
 msgstr ""
 "Vrednost določa način zvokovnega odvoda, ki ga privzeto uporablja "
-"predvajalnik VLC. Uporabljen je samodejni izbor najustreznejšega načina."
+"predvajalnik Hakone. Uporabljen je samodejni izbor najustreznejšega načina."
 
 #: src/libvlc-module.c:129
 #, fuzzy
@@ -1756,10 +1756,11 @@ msgstr "Zapomni si glasnost"
 
 #: src/libvlc-module.c:158
 msgid ""
-"The volume can be recorded and automatically restored next time VLC is used."
+"The volume can be recorded and automatically restored next time Hakone is "
+"used."
 msgstr ""
 "Glasnost je mogoče posneti in samodejno naložiti ob naslednjem zagonu "
-"predvajalnika VLC."
+"predvajalnika Hakone."
 
 #: src/libvlc-module.c:161
 msgid "Audio desynchronization compensation"
@@ -1938,8 +1939,8 @@ msgstr "Enota slikovnega izhoda"
 
 #: src/libvlc-module.c:255
 msgid ""
-"This is the the video output method used by VLC. The default behavior is to "
-"automatically select the best method available."
+"This is the the video output method used by Hakone. The default behavior is "
+"to automatically select the best method available."
 msgstr ""
 "Nastavitev določa način odvoda slike videa. Privzet je samodejni izbor "
 "najustreznejšega razpoložljivega načina."
@@ -2256,10 +2257,10 @@ msgstr "Omogoči spreminjanje videza vmesnika"
 
 #: src/libvlc-module.c:380
 msgid ""
-"VLC can avoid creating window caption, frames, etc... around the video, "
+"Hakone can avoid creating window caption, frames, etc... around the video, "
 "giving a \"minimal\" window."
 msgstr ""
-"Možnosti omogočajo nastavitev videza vmesnika predvajalnika VLC. Okno je "
+"Možnosti omogočajo nastavitev videza vmesnika predvajalnika Hakone. Okno je "
 "lahko na primer brez naslovne vrstice, brez okna videa in drugih elementov. "
 "Z nastavitvami je mogoče določiti »najmanjši« vmesnik."
 
@@ -2367,14 +2368,14 @@ msgstr "Izvorno razmerje velikosti"
 #: src/libvlc-module.c:433
 msgid ""
 "This forces the source aspect ratio. For instance, some DVDs claim to be "
-"16:9 while they are actually 4:3. This can also be used as a hint for VLC "
-"when a movie does not have aspect ratio information. Accepted formats are x:"
-"y (4:3, 16:9, etc.) expressing the global image aspect, or a float value "
-"(1.25, 1.3333, etc.) expressing pixel squareness."
+"16:9 while they are actually 4:3. This can also be used as a hint for "
+"Hakone when a movie does not have aspect ratio information. Accepted "
+"formats are x:y (4:3, 16:9, etc.) expressing the global image aspect, or a "
+"float value (1.25, 1.3333, etc.) expressing pixel squareness."
 msgstr ""
 "Izbira določa vsiljeno razmerje velikosti slike. Nekateri pogoni DVD "
 "javljajo privzeto vrednost razmerja kot 16:9, čeprav so dejansko v razmerju "
-"4:3. Možnost določa tudi privzet način prikazovanja v predvajalniku VLC, "
+"4:3. Možnost določa tudi privzet način prikazovanja v predvajalniku Hakone, "
 "kadar posnetki nimajo teh podatkov. Sprejeta razmerja so lahko x:y (4:3, "
 "16:9, ...) in določajo splošne vrednosti razmerij, ali pa plavajoča števila "
 "v obliki (1.25, 1.3333, ...), ki opredeljujejo kvadratnost točk."
@@ -2493,8 +2494,8 @@ msgid "Key press events"
 msgstr "Dogodki pritiska tipk"
 
 #: src/libvlc-module.c:489
-msgid "This enables VLC hotkeys from the (non-embedded) video window."
-msgstr "Omogoči vroče tipke predvajalnika VLC iz (nevključenega) okna videa."
+msgid "This enables Hakone hotkeys from the (non-embedded) video window."
+msgstr "Omogoči vroče tipke predvajalnika Hakone iz (nevključenega) okna videa."
 
 #: src/libvlc-module.c:491 modules/spu/remoteosd.c:91
 msgid "Mouse events"
@@ -3005,7 +3006,7 @@ msgstr "Prikazi na zaslonu (OSD)"
 
 #: src/libvlc-module.c:723
 msgid ""
-"VLC can display messages on the video. This is called OSD (On Screen "
+"Hakone can display messages on the video. This is called OSD (On Screen "
 "Display)."
 msgstr ""
 "Možnost omogoča prikaz sporočil na zaslonu (možnost OSD (On Screen Display)."
@@ -3016,11 +3017,11 @@ msgstr "Modul pretvarjanja besedila"
 
 #: src/libvlc-module.c:728
 msgid ""
-"VLC normally uses Freetype for rendering, but this allows you to use svg for "
-"instance."
+"Hakone normally uses Freetype for rendering, but this allows you to use svg "
+"for instance."
 msgstr ""
-"Predvajalnik VLC za prevajanje običajno uporablja Freetype, nastavitev pa "
-"omogoča tudi uporabo drugih načinov, na primer svg."
+"Predvajalnik Hakone za prevajanje običajno uporablja Freetype, nastavitev "
+"pa omogoča tudi uporabo drugih načinov, na primer svg."
 
 #: src/libvlc-module.c:730
 msgid "Subpictures source module"
@@ -3361,13 +3362,15 @@ msgstr "Prednostni seznam odkodirnikov"
 
 #: src/libvlc-module.c:904
 msgid ""
-"List of codecs that VLC will use in priority. For instance, 'dummy,a52' will "
-"try the dummy and a52 codecs before trying the other ones. Only advanced "
-"users should alter this option as it can break playback of all your streams."
+"List of codecs that Hakone will use in priority. For instance, 'dummy,a52' "
+"will try the dummy and a52 codecs before trying the other ones. Only "
+"advanced users should alter this option as it can break playback of all "
+"your streams."
 msgstr ""
-"Prednostni seznam odkodirnikov, ki jih uporabi predvajalnik VLC. Nastavite "
-"'dummy,a52' določi uporabo brez odkodirnika in uporabo odkodirnika a52 pred "
-"ostalimi. Spreminjanje teh nastavitev sicer ni priporočljivo."
+"Prednostni seznam odkodirnikov, ki jih uporabi predvajalnik Hakone. "
+"Nastavite 'dummy,a52' določi uporabo brez odkodirnika in uporabo "
+"odkodirnika a52 pred ostalimi. Spreminjanje teh nastavitev sicer ni "
+"priporočljivo."
 
 #: src/libvlc-module.c:909
 msgid "Preferred encoders list"
@@ -3485,10 +3488,11 @@ msgstr "Prednostni seznam paketnikov"
 
 #: src/libvlc-module.c:965
 msgid ""
-"This allows you to select the order in which VLC will choose its packetizers."
+"This allows you to select the order in which Hakone will choose its "
+"packetizers."
 msgstr ""
-"Možnost omogoča izbor zaporedja, v katerem bo predvajalnik VLC uporabljal "
-"paketnike."
+"Možnost omogoča izbor zaporedja, v katerem bo predvajalnik Hakone "
+"uporabljal paketnike."
 
 #: src/libvlc-module.c:968
 msgid "Mux module"
@@ -3643,7 +3647,7 @@ msgid "Use a plugins cache"
 msgstr "Uporabi predpomnilnik vstavkov"
 
 #: src/libvlc-module.c:1045
-msgid "Use a plugins cache which will greatly improve the startup time of VLC."
+msgid "Use a plugins cache which will greatly improve the startup time of Hakone."
 msgstr ""
 "Uporaba predpomnilnika vstavkov močno skrajša zagonski čas predvajalnika."
 
@@ -3654,7 +3658,7 @@ msgstr ""
 #: src/libvlc-module.c:1049
 msgid ""
 "Scan plugin directories for new plugins at startup. This increases the "
-"startup time of VLC."
+"startup time of Hakone."
 msgstr ""
 
 #: src/libvlc-module.c:1052
@@ -3664,7 +3668,7 @@ msgstr "Prednostni seznam paketnikov"
 
 #: src/libvlc-module.c:1054
 #, fuzzy
-msgid "List of keystores that VLC will use in priority."
+msgid "List of keystores that Hakone will use in priority."
 msgstr ""
 "Nastavitev omogoča izbor prednostnega seznama kodirnikov, ki jih uporablja "
 "predvajalnik."
@@ -3701,25 +3705,25 @@ msgstr "Dovoli le en sočasen zagon programa"
 
 #: src/libvlc-module.c:1070
 msgid ""
-"Allowing only one running instance of VLC can sometimes be useful, for "
-"example if you associated VLC with some media types and you don't want a new "
-"instance of VLC to be opened each time you open a file in your file manager. "
-"This option will allow you to play the file with the already running "
-"instance or enqueue it."
+"Allowing only one running instance of Hakone can sometimes be useful, for "
+"example if you associated Hakone with some media types and you don't want a "
+"new instance of Hakone to be opened each time you open a file in your file "
+"manager. This option will allow you to play the file with the already "
+"running instance or enqueue it."
 msgstr ""
 "Nastavitev omejitve na le en sočasen zagon predvajalnika ima nekaj "
 "prednosti. Ko predvajalnik določene vrste predstavnih datotek zažene prek "
 "programski vezi, najverjetneje ni zaželeno, da se vsakič odpre novo okno. "
-"Možnost omogoča predvajanje novega posnetka v istem oknu in postavitev novih "
-"predmetov v vrsto seznama predvajanja."
+"Možnost omogoča predvajanje novega posnetka v istem oknu in postavitev "
+"novih predmetov v vrsto seznama predvajanja."
 
 #: src/libvlc-module.c:1076
-msgid "VLC is started from file association"
-msgstr "Predvajalnik VLC je zagnan prek datotečne vezi"
+msgid "Hakone is started from file association"
+msgstr "Predvajalnik Hakone je zagnan prek datotečne vezi"
 
 #: src/libvlc-module.c:1078
-msgid "Tell VLC that it is being launched due to a file association in the OS"
-msgstr "Predvajalnik VLC je zagnan prek sistemske datotečne vezi."
+msgid "Tell Hakone that it is being launched due to a file association in the OS"
+msgstr "Predvajalnik Hakone je zagnan prek sistemske datotečne vezi."
 
 #: src/libvlc-module.c:1081 modules/gui/qt/ui/sprefs_interface.h:551
 msgid "Use only one instance when started from file manager"
@@ -3731,17 +3735,18 @@ msgstr "Povečaj prednost procesa"
 
 #: src/libvlc-module.c:1085
 msgid ""
-"Increasing the priority of the process will very likely improve your playing "
-"experience as it allows VLC not to be disturbed by other applications that "
-"could otherwise take too much processor time. However be advised that in "
-"certain circumstances (bugs) VLC could take all the processor time and "
-"render the whole system unresponsive which might require a reboot of your "
-"machine."
+"Increasing the priority of the process will very likely improve your "
+"playing experience as it allows Hakone not to be disturbed by other "
+"applications that could otherwise take too much processor time. However be "
+"advised that in certain circumstances (bugs) Hakone could take all the "
+"processor time and render the whole system unresponsive which might require "
+"a reboot of your machine."
 msgstr ""
 "Povečanje prednosti opravila bo najverjetneje izboljšalo predvajanje, saj "
 "dovoli predvajalniku nemoteno delovanje ob delovanju drugih programov, ki "
 "prav tako prevzemajo procesorsko moč. Bodite pozorni, da lahko v posebnih "
-"primerih (napake) VLC zasiči procesor in s tem povzroči neodzivnost sistema."
+"primerih (napake) Hakone zasiči procesor in s tem povzroči neodzivnost "
+"sistema."
 
 #: src/libvlc-module.c:1093 modules/gui/qt/ui/sprefs_interface.h:554
 msgid "Enqueue items into playlist in one instance mode"
@@ -3762,7 +3767,7 @@ msgid "Expose media player via D-Bus"
 msgstr "Posodobitve za predvajalnik VLC"
 
 #: src/libvlc-module.c:1099
-msgid "Allow other applications to control VLC using the D-Bus MPRIS protocol."
+msgid "Allow other applications to control Hakone using the D-Bus MPRIS protocol."
 msgstr ""
 
 #: src/libvlc-module.c:1108
@@ -3959,7 +3964,7 @@ msgstr "Uporabi zbirko predstavnih datotek"
 #: src/libvlc-module.c:1189
 msgid ""
 "The media library is automatically saved and reloaded each time you start "
-"VLC."
+"Hakone."
 msgstr ""
 "Zbirka predstavnih datotek se samodejno shrani in se ponovno naloži ob "
 "ponovnem zagonu predvajalnika."
@@ -3976,7 +3981,7 @@ msgstr ""
 "Seznam prikaže drevesno zgradbo za urejanje predmetov kot je vsebina mape."
 
 #: src/libvlc-module.c:1203
-msgid "These settings are the global VLC key bindings, known as \"hotkeys\"."
+msgid "These settings are the global Hakone key bindings, known as \"hotkeys\"."
 msgstr ""
 "Nastavitve predstavljajo splošna določila tipkovnih povezav imenovanih "
 "»hitre tipke«"
@@ -5433,19 +5438,19 @@ msgstr "Prejeta datoteka »%s« je bila okvarjena, zato je bila izbrisana."
 #: src/misc/update.c:723
 #, fuzzy
 msgid ""
-"The new version was successfully downloaded. Do you want to close VLC and "
-"install it now?"
+"The new version was successfully downloaded. Do you want to close Hakone "
+"and install it now?"
 msgstr ""
 "Nova različica programa je uspešno prejeta. Ali želite zapreti trenutno "
-"različico programa VLC in takoj namestiti novo?"
+"različico programa Hakone in takoj namestiti novo?"
 
 #: src/misc/update.c:726 modules/gui/macosx/VLCAddonsWindowController.m:199
 msgid "Install"
 msgstr "Namesti"
 
 #: src/misc/update.c:727
-msgid "Update VLC media player"
-msgstr "Posodobi predvajalnik VLC"
+msgid "Update Hakone Media Player"
+msgstr "Posodobi predvajalnik Hakone"
 
 #: src/playlist/engine.c:237 src/playlist/loadsave.c:159 lib/media_list.c:237
 #: modules/gui/macosx/VLCMainWindow.m:298
@@ -6843,9 +6848,9 @@ msgid "No video or audio device selected."
 msgstr "Ni izbrane zvokovne oz. slikovne naprave."
 
 #: modules/access/dshow/dshow.cpp:591
-msgid "VLC cannot open ANY capture device. Check the error log for details."
+msgid "Hakone cannot open ANY capture device. Check the error log for details."
 msgstr ""
-"VLC ne more odpreti nobene naprave za zajem. Preverite dnevnik napak za "
+"Hakone ne more odpreti nobene naprave za zajem. Preverite dnevnik napak za "
 "podrobnosti."
 
 #: modules/access/dshow/dshow.cpp:1053
@@ -7451,7 +7456,8 @@ msgstr "Napaka predvajanja"
 
 #: modules/access/dvdnav.c:297
 msgid ""
-"VLC cannot set the DVD's title. It possibly cannot decrypt the entire disc."
+"Hakone cannot set the DVD's title. It possibly cannot decrypt the entire "
+"disc."
 msgstr ""
 "Ni mogoče določiti DVD naslova. Najverjetneje ni mogoče dešifrirati "
 "celotnega diska."
@@ -7586,12 +7592,12 @@ msgid "Network interaction failed"
 msgstr "Neuspešno usklajevanje omrežja"
 
 #: modules/access/ftp.c:370
-msgid "VLC could not connect with the given server."
+msgid "Hakone could not connect with the given server."
 msgstr "Ni se mogoče povezati z želenim strežnikom."
 
 #: modules/access/ftp.c:386
-msgid "VLC's connection to the given server was rejected."
-msgstr "Povezava predvajalnika VLC z določenim strežnikom je bila zavrnjena."
+msgid "Hakone's connection to the given server was rejected."
+msgstr "Povezava predvajalnika Hakone z določenim strežnikom je bila zavrnjena."
 
 #: modules/access/ftp.c:538
 msgid "Your account was rejected."
@@ -7862,16 +7868,16 @@ msgid "Pace"
 msgstr "Ritem"
 
 #: modules/access/jack.c:61
-msgid "Read the audio stream at VLC pace rather than Jack pace."
-msgstr "Branje zvokovnega zapisa v ritmu VLC in ne v ritmu Jack."
+msgid "Read the audio stream at Hakone pace rather than Jack pace."
+msgstr "Branje zvokovnega zapisa v ritmu Hakone in ne v ritmu Jack."
 
 #: modules/access/jack.c:62 modules/gui/qt/components/open_panels.cpp:898
 msgid "Auto connection"
 msgstr "Samodejno povezovanje"
 
 #: modules/access/jack.c:64
-msgid "Automatically connect VLC input ports to available output ports."
-msgstr "Samodejna povezava predvajalnika VLC s prostimi odvodnimi vrati."
+msgid "Automatically connect Hakone input ports to available output ports."
+msgstr "Samodejna povezava predvajalnika Hakone s prostimi odvodnimi vrati."
 
 #: modules/access/jack.c:67
 msgid "JACK audio input"
@@ -7958,8 +7964,8 @@ msgstr "Kasenna RTSP narečje"
 #: modules/access/live555.cpp:74
 msgid ""
 "Kasenna servers use an old and nonstandard dialect of RTSP. With this "
-"parameter VLC will try this dialect, but then it cannot connect to normal "
-"RTSP servers."
+"parameter Hakone will try this dialect, but then it cannot connect to "
+"normal RTSP servers."
 msgstr ""
 "Kasenna strežniki uporabljajo staro in nestandardno RTSP narečje. Ob "
 "nastavitvi parametra bo predvajalnik poskušal nastavljeno narečje pri "
@@ -7972,10 +7978,10 @@ msgstr "WMServer RTSP narečje"
 #: modules/access/live555.cpp:79
 msgid ""
 "WMServer uses a nonstandard dialect of RTSP. Selecting this parameter will "
-"tell VLC to assume some options contrary to RFC 2326 guidelines."
+"tell Hakone to assume some options contrary to RFC 2326 guidelines."
 msgstr ""
 "Strežnik WMServer uporablja nestandardno vrsto protokola RTSP. Če izberete "
-"ta parameter, bo predvajalnik VLC prevzel nekatere možnosti, ki so v "
+"ta parameter, bo predvajalnik Hakone prevzel nekatere možnosti, ki so v "
 "nasprotju s smernicami RFC 2326."
 
 #: modules/access/live555.cpp:84
@@ -8106,7 +8112,7 @@ msgstr "Neuspešno branje datoteke"
 
 #: modules/access/mtp.c:168
 #, c-format
-msgid "VLC could not read the file: %s"
+msgid "Hakone could not read the file: %s"
 msgstr "Ni mogoče prebrati datoteke: %s"
 
 #: modules/access/nfs.c:49
@@ -8115,8 +8121,8 @@ msgstr ""
 
 #: modules/access/nfs.c:50
 msgid ""
-"If uid/gid are not specified in the url, VLC will automatically set a uid/"
-"gid."
+"If uid/gid are not specified in the url, Hakone will automatically set a "
+"uid/gid."
 msgstr ""
 
 #: modules/access/nfs.c:57
@@ -9222,13 +9228,13 @@ msgstr "Posnetki VDR"
 
 #: modules/access/vdr.c:380
 #, c-format
-msgid "VLC could not read the file (%s)."
-msgstr "Datoteke z VLC ni mogoče prebrati (%s)."
+msgid "Hakone could not read the file (%s)."
+msgstr "Datoteke z Hakone ni mogoče prebrati (%s)."
 
 #: modules/access/vdr.c:545
 #, c-format
-msgid "VLC could not open the file \"%s\" (%s)."
-msgstr "Datoteke »%s« (%s) z VLC ni mogoče odpreti."
+msgid "Hakone could not open the file \"%s\" (%s)."
+msgstr "Datoteke »%s« (%s) z Hakone ni mogoče odpreti."
 
 #: modules/access/vdr.c:820
 msgid "VDR Cut Marks"
@@ -10650,8 +10656,8 @@ msgstr "Zvokovna naprava ni nastavljena"
 
 #: modules/audio_output/coreaudio_common.c:446
 msgid ""
-"You should configure your speaker layout with \"Audio Midi Setup\" in /"
-"Applications/Utilities. VLC will output Stereo only."
+"You should configure your speaker layout with \"Audio Midi Setup\" in "
+"/Applications/Utilities. Hakone will output Stereo only."
 msgstr ""
 "Razporeditev zvočnikov je mogoče nastaviti med »Nastavitvami zvoka Midi« v "
 "meniju /Programi/Orodja. Predvajalnik bo predvajal le stereo zvok."
@@ -10827,7 +10833,7 @@ msgstr "Izbor zvokovne naprave"
 #: modules/audio_output/waveout.c:136
 msgid ""
 "Select special Audio device, or let windows decide (default), change needs "
-"VLC restart to apply."
+"Hakone restart to apply."
 msgstr ""
 "Izberite posebno zvokovno napravo ali pa prepustite nastavitev sistemu; "
 "spremembe bodo privzete ob ponovnem zagonu predvajalnika."
@@ -11420,14 +11426,14 @@ msgid ""
 "%s.\n"
 "If you don't know how to fix this, ask for support from your distribution.\n"
 "\n"
-"This is not an error inside VLC media player.\n"
+"This is not an error inside Hakone Media Player.\n"
 "Do not contact the VideoLAN project about this issue.\n"
 msgstr ""
 "Videti je, da je namestitev Libav/FFmpeg (libavcodec) brez kodirnika:\n"
 "%s.\n"
 "V primeru, da ni takoj jasno, kako napako odpraviti, poiščite pomoč.\n"
 "\n"
-"To ni napaka predvajalnika VLC.\n"
+"To ni napaka predvajalnika Hakone.\n"
 "Zaradi napake se obrnite na distributerja vašega operacijskega sistema.\n"
 
 #: modules/codec/avcodec/encoder.c:872
@@ -11448,7 +11454,7 @@ msgstr "podnapisi"
 
 #: modules/codec/avcodec/encoder.c:886
 #, c-format
-msgid "VLC could not open the %4.4s %s encoder."
+msgid "Hakone could not open the %4.4s %s encoder."
 msgstr "Ni mogoče odpreti kodirnika %4.4s %s."
 
 #: modules/codec/avcodec/vaapi.c:349
@@ -11780,11 +11786,11 @@ msgstr "MIDI sinteza ni nastavljena"
 #: modules/codec/fluidsynth.c:151
 msgid ""
 "A sound font file (.SF2) is required for MIDI synthesis.\n"
-"Please install a sound font and configure it from the VLC preferences "
+"Please install a sound font and configure it from the Hakone preferences "
 "(Input / Codecs > Audio codecs > FluidSynth).\n"
 msgstr ""
 "Za sintezo MIDI je zahtevana datoteka zvokovne pisave (.SF2).\n"
-"Namestiti je treba zvokovno pisavo in jo nastaviti med nastavitvami VLC "
+"Namestiti je treba zvokovno pisavo in jo nastaviti med nastavitvami Hakone "
 "(Vhod / Kodeki > Zvokovni kodeki > FluidSynth).\n"
 
 #: modules/codec/g711.c:46
@@ -11842,11 +11848,11 @@ msgstr "Oblikovani podnapisi"
 #: modules/codec/kate.c:192
 #, fuzzy
 msgid ""
-"Kate streams allow for text formatting. VLC partly implements this, but you "
-"can choose to disable all formatting. Note that this has no effect is "
+"Kate streams allow for text formatting. Hakone partly implements this, but "
+"you can choose to disable all formatting. Note that this has no effect is "
 "rendering via Tiger is enabled."
 msgstr ""
-"Pretok Kate omogoča oblikovanje besedila. Predvajalnik VLC delno že "
+"Pretok Kate omogoča oblikovanje besedila. Predvajalnik Hakone delno že "
 "vključuje to možnost, oblikovanje pa je mogoče tudi povsem izpustiti. "
 "Nastavitev se ne uveljavi, kadar je omogočeno izrisovanje preko vstavka "
 "Tiger."
@@ -12063,14 +12069,14 @@ msgstr ""
 msgid ""
 "Kate is a codec for text and image based overlays.\n"
 "The Tiger rendering library is needed to render complex Kate streams, but "
-"VLC can still render static text and image based subtitles if it is not "
+"Hakone can still render static text and image based subtitles if it is not "
 "available.\n"
-"Note that changing settings below will not take effect until a new stream is "
-"played. This will hopefully be fixed soon."
+"Note that changing settings below will not take effect until a new stream "
+"is played. This will hopefully be fixed soon."
 msgstr ""
 "Kate je kodek za besedilno in slikovno prekrivanje.\n"
 "Knjižnica za izrisovanje Tiger mora biti naložena za izrisovanje pretoka "
-"Kate, predvajalnik VLC pa lahko izrisuje statično besedilo in slike "
+"Kate, predvajalnik Hakone pa lahko izrisuje statično besedilo in slike "
 "podnapisov tudi, če knjižnica ni na voljo.\n"
 "Spremenjena nastavitev ne stopi v veljavo, dokler se ne začne predvajanje "
 "novega pretoka. Napaka bo najverjetneje odpravljena z naslednjo različico."
@@ -13213,11 +13219,11 @@ msgstr "CP1252"
 
 #: modules/codec/subsusf.c:45
 msgid ""
-"Some subtitle formats allow for text formatting. VLC partly implements this, "
-"but you can choose to disable all formatting."
+"Some subtitle formats allow for text formatting. Hakone partly implements "
+"this, but you can choose to disable all formatting."
 msgstr ""
-"Nekateri zapisi podnapisov omogočajo oblikovanje besedila. Predvajalnik VLC "
-"delno vključuje možnost, vendar lahko oblikovanje izpustite."
+"Nekateri zapisi podnapisov omogočajo oblikovanje besedila. Predvajalnik "
+"Hakone delno vključuje možnost, vendar lahko oblikovanje izpustite."
 
 #: modules/codec/subsusf.c:50
 msgid "USFSubs"
@@ -14558,8 +14564,8 @@ msgstr "Nadzorni vmesnik vodila D-Bus"
 #: modules/video_output/wayland/shell.c:348
 #: modules/video_output/wayland/xdg-shell.c:291
 #: modules/video_output/xcb/window.c:464
-msgid "VLC media player"
-msgstr "Predvajalnik VLC"
+msgid "Hakone Media Player"
+msgstr "Predvajalnik Hakone"
 
 #: modules/control/dummy.c:38 modules/control/oldrc.c:176
 msgid "Do not open a DOS command box interface"
@@ -14775,11 +14781,12 @@ msgstr "Hitrost: %.2fx"
 msgid ""
 "\n"
 "Warning: if you cannot access the GUI anymore, open a command-line window, "
-"go to the directory where you installed VLC and run \"vlc -I qt\"\n"
+"go to the directory where you installed Hakone and run \"hakone -I qt\"\n"
 msgstr ""
 "\n"
-"Opozorilo: v primeru, ko grafičnega vmesnika ni mogoče več odpreti, je treba "
-"odpreti okno konzole v mapi predvajalnika VLC in zagnati ukaz »vlc -I qt«.\n"
+"Opozorilo: v primeru, ko grafičnega vmesnika ni mogoče več odpreti, je "
+"treba odpreti okno konzole v mapi predvajalnika Hakone in zagnati ukaz »vlc "
+"-I qt«.\n"
 
 #: modules/control/lirc.c:47
 msgid "Change the lirc configuration file"
@@ -14822,8 +14829,8 @@ msgstr "Objavljaj glavni omrežni čas"
 
 #: modules/control/netsync.c:57
 msgid ""
-"When set, this VLC instance will act as the master clock for synchronization "
-"for clients listening"
+"When set, this Hakone instance will act as the master clock for "
+"synchronization for clients listening"
 msgstr ""
 "Izbrana možnost omogoči predvajalniku, da se navzven javlja glavni omrežni "
 "čas, ki se uporablja za usklajevanje povezanih odjemalcev."
@@ -14963,7 +14970,7 @@ msgstr ""
 msgid ""
 "By default the rc interface plugin will start a DOS command box. Enabling "
 "the quiet mode will not bring this command box but can also be pretty "
-"annoying when you want to stop VLC and no video window is open."
+"annoying when you want to stop Hakone and no video window is open."
 msgstr ""
 "Privzeto RC vmesnik zažene DOSovo ukazno vrstico. Omogočanje tihega načina "
 "ne prikaže ukaznega okna, vendar je hkrati zelo moteče, da ni mogoče "
@@ -16052,12 +16059,12 @@ msgstr "Določitev ID ES v PID"
 
 #: modules/demux/mpeg/ts.c:85
 msgid ""
-"Set the internal ID of each elementary stream handled by VLC to the same "
+"Set the internal ID of each elementary stream handled by Hakone to the same "
 "value as the PID in the TS stream, instead of 1, 2, 3, etc. Useful to do "
 "'#duplicate{..., select=\"es=<pid>\"}'."
 msgstr ""
 "Določi notranji ID vsakega osnovnega pretoka, ki ga predvaja predvajalnik "
-"VLC v enako vrednost, kot je PID v TS pretoku, namesto 1, 2, 3, ... "
+"Hakone v enako vrednost, kot je PID v TS pretoku, namesto 1, 2, 3, ... "
 "(uporabno pri podvojevanju '#duplicate{..., select=\"es=<pid>\"}'."
 
 #: modules/demux/mpeg/ts.c:90 modules/mux/mpeg/ts.c:173
@@ -16602,8 +16609,8 @@ msgstr "Diapozitivi (slike)"
 
 #: modules/gui/macosx/VLCAboutWindowController.m:99
 #: modules/gui/macosx/VLCMainMenu.m:330
-msgid "About VLC media player"
-msgstr "O predvajalniku VLC"
+msgid "About Hakone Media Player"
+msgstr "O predvajalniku Hakone"
 
 #: modules/gui/macosx/VLCAboutWindowController.m:102
 #: modules/gui/qt/dialogs/help.cpp:125
@@ -17106,11 +17113,12 @@ msgstr "Ločljivost"
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:166
 #: modules/gui/qt/ui/profiles.h:740
 msgid ""
-"You just need to fill one of the three following parameters, VLC will "
+"You just need to fill one of the three following parameters, Hakone will "
 "autodetect the other using the original aspect ratio"
 msgstr ""
-"Določiti morate le enega izmed naslednjih treh parametrov. Program samodejno "
-"zazna ostale vrednosti preko izvornega razmerja velikosti posnetka."
+"Določiti morate le enega izmed naslednjih treh parametrov. Program "
+"samodejno zazna ostale vrednosti preko izvornega razmerja velikosti "
+"posnetka."
 
 #: modules/gui/macosx/VLCConvertAndSaveWindowController.m:169
 #: modules/gui/macosx/VLCOutput.m:88 modules/gui/qt/ui/profiles.h:741
@@ -17366,11 +17374,11 @@ msgstr "Ohrani nedavne predmete"
 
 #: modules/gui/macosx/macosx.m:73
 msgid ""
-"By default, VLC keeps a list of the last 10 items. This feature can be "
+"By default, Hakone keeps a list of the last 10 items. This feature can be "
 "disabled here."
 msgstr ""
-"Privzeto predvajalnik VLC ohranja seznam zadnjih 10 predmetov. Možnost lahko "
-"onemogočite tukaj."
+"Privzeto predvajalnik Hakone ohranja seznam zadnjih 10 predmetov. Možnost "
+"lahko onemogočite tukaj."
 
 #: modules/gui/macosx/macosx.m:76
 #: modules/gui/macosx/VLCSimplePrefsController.m:311
@@ -17378,9 +17386,10 @@ msgid "Control playback with the Apple Remote"
 msgstr "Nadzor predvajanja z daljinskim upravljalnikom Apple"
 
 #: modules/gui/macosx/macosx.m:77
-msgid "By default, VLC can be remotely controlled with the Apple Remote."
+msgid "By default, Hakone can be remotely controlled with the Apple Remote."
 msgstr ""
-"Predvajalnik VLC privzeto podpira ukaze Applovega daljinskega upravljalnika."
+"Predvajalnik Hakone privzeto podpira ukaze Applovega daljinskega "
+"upravljalnika."
 
 #: modules/gui/macosx/macosx.m:79
 #: modules/gui/macosx/VLCSimplePrefsController.m:313
@@ -17389,25 +17398,25 @@ msgstr "Nadzor sistemske glasnosti z daljinskim upravljalnikom Apple"
 
 #: modules/gui/macosx/macosx.m:80
 msgid ""
-"By default, VLC will control its own volume with the Apple Remote. However, "
-"you can choose to control the global system volume instead."
+"By default, Hakone will control its own volume with the Apple Remote. "
+"However, you can choose to control the global system volume instead."
 msgstr ""
-"Privzeto je glasnost mogoče nadzorovati s predvajalnikom VLC, mogoče pa je "
-"izbrati tudi upravljanje s sistemskim nadzorom glasnosti."
+"Privzeto je glasnost mogoče nadzorovati s predvajalnikom Hakone, mogoče pa "
+"je izbrati tudi upravljanje s sistemskim nadzorom glasnosti."
 
 #: modules/gui/macosx/macosx.m:82
 #: modules/gui/macosx/VLCSimplePrefsController.m:314
-msgid "Display VLC status menu icon"
+msgid "Display Hakone status menu icon"
 msgstr ""
 
 #: modules/gui/macosx/macosx.m:83
 #, fuzzy
 msgid ""
-"By default, VLC will show the statusbar icon menu. However, you can choose "
-"to disable it (restart required)."
+"By default, Hakone will show the statusbar icon menu. However, you can "
+"choose to disable it (restart required)."
 msgstr ""
-"Privzeto je glasnost mogoče nadzorovati s predvajalnikom VLC, mogoče pa je "
-"izbrati tudi upravljanje s sistemskim nadzorom glasnosti."
+"Privzeto je glasnost mogoče nadzorovati s predvajalnikom Hakone, mogoče pa "
+"je izbrati tudi upravljanje s sistemskim nadzorom glasnosti."
 
 #: modules/gui/macosx/macosx.m:85
 msgid "Control playlist items with the Apple Remote"
@@ -17416,8 +17425,8 @@ msgstr ""
 
 #: modules/gui/macosx/macosx.m:86
 msgid ""
-"By default, VLC will allow you to switch to the next or previous item with "
-"the Apple Remote. You can disable this behavior with this option."
+"By default, Hakone will allow you to switch to the next or previous item "
+"with the Apple Remote. You can disable this behavior with this option."
 msgstr ""
 "Program privzeto omogočil prehod na predhodni ali naslednji predmet seznama "
 "predvajanja z daljinskim upravljalnikom Apple. Nastavitev onemogoči to "
@@ -17430,9 +17439,9 @@ msgstr "Nadzor predvajanja s predstavnimi tipkami"
 
 #: modules/gui/macosx/macosx.m:89
 msgid ""
-"By default, VLC can be controlled using the media keys on modern Apple "
+"By default, Hakone can be controlled using the media keys on modern Apple "
 "keyboards."
-msgstr "Privzeto VLC sprejme ukaze predstavnih tipk na Applovih tipkovnicah"
+msgstr "Privzeto Hakone sprejme ukaze predstavnih tipk na Applovih tipkovnicah"
 
 #: modules/gui/macosx/macosx.m:92
 msgid "Run VLC with dark interface style"
@@ -17453,13 +17462,13 @@ msgstr "Uporabi izvirni celozaslonski način."
 
 #: modules/gui/macosx/macosx.m:96
 msgid ""
-"By default, VLC uses the fullscreen mode known from previous Mac OS X "
+"By default, Hakone uses the fullscreen mode known from previous Mac OS X "
 "releases. It can also use the native fullscreen mode on Mac OS X 10.7 and "
 "later."
 msgstr ""
-"Privzeto VLC uporablja celozaslonski način, ki je poznan iz prejšnjih izdaj "
-"Mac OS X. Uporablja lahko tudi izvirni celozaslonski način na sistemu Mac OS "
-"X 10.7 in kasnejših."
+"Privzeto Hakone uporablja celozaslonski način, ki je poznan iz prejšnjih "
+"izdaj Mac OS X. Uporablja lahko tudi izvirni celozaslonski način na sistemu "
+"Mac OS X 10.7 in kasnejših."
 
 #: modules/gui/macosx/macosx.m:98 modules/gui/qt/qt.cpp:95
 msgid "Resize interface to the native video size"
@@ -17556,9 +17565,9 @@ msgid "Control external music players"
 msgstr "Nadziraj zunanje predvajalnike predstavnosti"
 
 #: modules/gui/macosx/macosx.m:129
-msgid "VLC will pause and resume supported music players on playback."
+msgid "Hakone will pause and resume supported music players on playback."
 msgstr ""
-"VLC bo ob predvajanju naredil premor in nadaljeval s predvajanjem na "
+"Hakone bo ob predvajanju naredil premor in nadaljeval s predvajanjem na "
 "podprtih prevajalnikih predstavnosti."
 
 #: modules/gui/macosx/macosx.m:131
@@ -17583,10 +17592,10 @@ msgstr "Nadaljuj s prevajanjem, kjer ste končali"
 
 #: modules/gui/macosx/macosx.m:140
 msgid ""
-"VLC will store playback positions of the last 30 items you played. If you re-"
-"open one of those, playback will continue."
+"Hakone will store playback positions of the last 30 items you played. If "
+"you re-open one of those, playback will continue."
 msgstr ""
-"VLC bo shranil mesto predvajanja za zadnjih 30 predvajanih predmetov. Če "
+"Hakone bo shranil mesto predvajanja za zadnjih 30 predvajanih predmetov. Če "
 "ponovno odprete enega od njih, se bo predvajanje nadaljevalo."
 
 #: modules/gui/macosx/macosx.m:145 modules/gui/qt/qt.cpp:206
@@ -17632,12 +17641,12 @@ msgid "Remove old preferences?"
 msgstr "Ali naj se počistijo stare možnosti?"
 
 #: modules/gui/macosx/VLCMain+OldPrefs.m:102
-msgid "We just found an older version of VLC's preferences files."
-msgstr "Zaznana je starejša različica nastavitvenih datotek predvajalnika VLC."
+msgid "We just found an older version of Hakone's preferences files."
+msgstr "Zaznana je starejša različica nastavitvenih datotek predvajalnika Hakone."
 
 #: modules/gui/macosx/VLCMain+OldPrefs.m:103
-msgid "Move To Trash and Relaunch VLC"
-msgstr "Premakni v smeti in ponovno zaženi VLC"
+msgid "Move To Trash and Relaunch Hakone"
+msgstr "Premakni v smeti in ponovno zaženi Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:240
 #, c-format
@@ -17677,8 +17686,8 @@ msgid "Services"
 msgstr "Storitve"
 
 #: modules/gui/macosx/VLCMainMenu.m:340
-msgid "Hide VLC"
-msgstr "Skrij VLC"
+msgid "Hide Hakone"
+msgstr "Skrij Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:341
 msgid "Hide Others"
@@ -17690,8 +17699,8 @@ msgid "Show All"
 msgstr "Pokaži vse"
 
 #: modules/gui/macosx/VLCMainMenu.m:343
-msgid "Quit VLC"
-msgstr "Končaj VLC"
+msgid "Quit Hakone"
+msgstr "Končaj Hakone"
 
 #: modules/gui/macosx/VLCMainMenu.m:345
 msgid "1:File"
@@ -17934,8 +17943,8 @@ msgid "Help"
 msgstr "Pomoč"
 
 #: modules/gui/macosx/VLCMainMenu.m:479
-msgid "VLC media player Help..."
-msgstr "Pomoč za predvajalnik VLC ..."
+msgid "Hakone Media Player Help..."
+msgstr "Pomoč za predvajalnik Hakone ..."
 
 #: modules/gui/macosx/VLCMainMenu.m:481
 msgid "Online Documentation..."
@@ -18217,11 +18226,11 @@ msgstr ""
 #: modules/gui/macosx/VLCOpenWindowController.m:190
 msgid ""
 "If you want to open a multicast stream, enter the respective IP address "
-"given by the stream provider. In unicast mode, VLC will use your machine's "
-"IP automatically.\n"
+"given by the stream provider. In unicast mode, Hakone will use your "
+"machine's IP automatically.\n"
 "\n"
-"To open a stream using a different protocol, just press Cancel to close this "
-"sheet."
+"To open a stream using a different protocol, just press Cancel to close "
+"this sheet."
 msgstr ""
 "V primeru, da želite odpreti pretok skupinskega pošiljanja, vnesite naslov "
 "IP ponudnika pretoka. V načinu pošiljanja posamezniku bo predvajalnik "
@@ -18492,7 +18501,7 @@ msgid "Error while saving meta"
 msgstr "Prišlo je do napake med shranjevanjem metapodatkov"
 
 #: modules/gui/macosx/VLCPlaylistInfo.m:358
-msgid "VLC was unable to save the meta data."
+msgid "Hakone was unable to save the meta data."
 msgstr "Ni mogoče shraniti metapodatkov."
 
 #: modules/gui/macosx/VLCRendererMenuController.m:72
@@ -19852,12 +19861,13 @@ msgstr "Maska slike"
 #: modules/gui/qt/components/extended_panels.cpp:624
 msgid ""
 "No v4l2 instance found.\n"
-"Please check that the device has been opened with VLC and is playing.\n"
+"Please check that the device has been opened with Hakone and is playing.\n"
 "\n"
 "Controls will automatically appear here."
 msgstr ""
 "Vstavek v4|2 ni nameščen ali pa ni zagnan.\n"
-"Naprava se mora zagnati med zagonom predvajalnika VLC in mora biti dejavna.\n"
+"Naprava se mora zagnati med zagonom predvajalnika Hakone in mora biti "
+"dejavna.\n"
 "\n"
 "V tem oknu bodo prikazane tipke za nadzor v4|2."
 
@@ -20200,8 +20210,8 @@ msgid ".*"
 msgstr ".*"
 
 #: modules/gui/qt/components/open_panels.cpp:894
-msgid "Use VLC pace"
-msgstr "Uporabi hitrost VLC"
+msgid "Use Hakone pace"
+msgstr "Uporabi hitrost Hakone"
 
 #: modules/gui/qt/components/open_panels.cpp:914
 msgid "TV - digital"
@@ -20496,7 +20506,7 @@ msgid "Higher latency"
 msgstr "Višja zakasnitev"
 
 #: modules/gui/qt/components/simple_preferences.cpp:695
-msgid "This is VLC's skinnable interface. You can download other skins at"
+msgid "This is Hakone's skinnable interface. You can download other skins at"
 msgstr "Vmesnik predvajalnika podpira preobleke, ki objavljene na spletišču"
 
 #: modules/gui/qt/components/simple_preferences.cpp:697
@@ -20562,7 +20572,7 @@ msgid "Create"
 msgstr "Ustvari"
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:627
-msgid "This muxer is not provided directly by VLC: It could be missing."
+msgid "This muxer is not provided directly by Hakone: It could be missing."
 msgstr "Zvijalnik ni neposredno na voljo: morda manjka."
 
 #: modules/gui/qt/components/sout/profile_selector.cpp:634
@@ -20874,16 +20884,16 @@ msgid "&No"
 msgstr "&Ne"
 
 #: modules/gui/qt/dialogs/help.cpp:222 modules/gui/qt/ui/update.h:147
-msgid "VLC media player updates"
-msgstr "Posodobitve za predvajalnik VLC"
+msgid "Hakone Media Player updates"
+msgstr "Posodobitve za predvajalnik Hakone"
 
 #: modules/gui/qt/dialogs/help.cpp:294
-msgid "A new version of VLC (%1.%2.%3%4) is available."
-msgstr "Na voljo je nova različica predvajalnika VLC (%1.%2.%3%4)."
+msgid "A new version of Hakone (%1.%2.%3%4) is available."
+msgstr "Na voljo je nova različica predvajalnika Hakone (%1.%2.%3%4)."
 
 #: modules/gui/qt/dialogs/help.cpp:319
-msgid "You have the latest version of VLC media player."
-msgstr "Nameščena je novejša različica predvajalnika VLC."
+msgid "You have the latest version of Hakone Media Player."
+msgstr "Nameščena je novejša različica predvajalnika Hakone."
 
 #: modules/gui/qt/dialogs/help.cpp:326
 msgid "An error occurred while checking for updates..."
@@ -21102,7 +21112,7 @@ msgid "No addons found"
 msgstr "Ni dodatkov, ki so skladni z dejavnim filtrom."
 
 #: modules/gui/qt/dialogs/plugins.cpp:813
-msgid "This addon has been installed manually. VLC can't manage it by itself."
+msgid "This addon has been installed manually. Hakone can't manage it by itself."
 msgstr ""
 "Ta dodatek je bil nameščen ročno, zato ga program ne more upravljati "
 "samodejno."
@@ -21190,9 +21200,9 @@ msgid "Preferences file could not be saved"
 msgstr "Datoteke z nastavitvami ni mogoče shraniti"
 
 #: modules/gui/qt/dialogs/preferences.cpp:337
-msgid "Are you sure you want to reset your VLC media player preferences?"
+msgid "Are you sure you want to reset your Hakone Media Player preferences?"
 msgstr ""
-"Ali ste prepričani, da želite povrniti nastavitve predvajalnika VLC na "
+"Ali ste prepričani, da želite povrniti nastavitve predvajalnika Hakone na "
 "privzete vrednosti?"
 
 #: modules/gui/qt/dialogs/sout.cpp:45 modules/gui/qt/ui/sout.h:201
@@ -21785,12 +21795,12 @@ msgid "&Playback"
 msgstr "&Predvajanje"
 
 #: modules/gui/qt/menus.cpp:1171
-msgid "&Hide VLC media player in taskbar"
-msgstr "&Skrij predvajalnik VLC v opravilni vrstici"
+msgid "&Hide Hakone Media Player in taskbar"
+msgstr "&Skrij predvajalnik Hakone v opravilni vrstici"
 
 #: modules/gui/qt/menus.cpp:1177
-msgid "Sho&w VLC media player"
-msgstr "&Pokaži predvajalnik VLC"
+msgid "Sho&w Hakone Media Player"
+msgstr "&Pokaži predvajalnik Hakone"
 
 #: modules/gui/qt/menus.cpp:1188
 msgid "&Open Media"
@@ -21831,21 +21841,21 @@ msgstr "Pokaži ikono na pladnju"
 
 #: modules/gui/qt/qt.cpp:87
 msgid ""
-"Show an icon in the systray allowing you to control VLC media player for "
+"Show an icon in the systray allowing you to control Hakone Media Player for "
 "basic actions."
 msgstr ""
-"Prikaže ikono predvajalnika v sistemski vrstici, prek nje pa tipke za osnovi "
-"nadzor predvajanja."
+"Prikaže ikono predvajalnika v sistemski vrstici, prek nje pa tipke za "
+"osnovi nadzor predvajanja."
 
 #: modules/gui/qt/qt.cpp:91
-msgid "Start VLC with only a systray icon"
+msgid "Start Hakone with only a systray icon"
 msgstr "Zaženi predvajalnik kot ikon v sistemski vrstici"
 
 #: modules/gui/qt/qt.cpp:92
 #, fuzzy
-msgid "VLC will start with just an icon in your taskbar."
+msgid "Hakone will start with just an icon in your taskbar."
 msgstr ""
-"Možnost omogoča zagon predvajalnika VLC pomanjšano, brez vidnega okna, v "
+"Možnost omogoča zagon predvajalnika Hakone pomanjšano, brez vidnega okna, v "
 "sistemski vrstici pa se pojavi ikona."
 
 #: modules/gui/qt/qt.cpp:101
@@ -21963,12 +21973,12 @@ msgstr "Izbor začetnega načina in videza"
 
 #: modules/gui/qt/qt.cpp:145
 msgid ""
-"Start VLC with:\n"
+"Start Hakone with:\n"
 " - normal mode\n"
 " - a zone always present to show information as lyrics, album arts...\n"
 " - minimal mode with limited controls"
 msgstr ""
-"Zagon VLC predvajalnika:\n"
+"Zagon Hakone predvajalnika:\n"
 "- v običajnem načinu\n"
 "- ikonskem načinu s prikazom podrobnosti besedil, podatkov ...\n"
 "- v poenostavljenem vmesniku"
@@ -22033,13 +22043,13 @@ msgstr "Prezri gumbe tipkovnice za prilagajanje glasnosti."
 msgid ""
 "With this option checked, the volume up, volume down and mute buttons on "
 "your keyboard will always change your system volume. With this option "
-"unchecked, the volume buttons will change VLC's volume when VLC is selected "
-"and change the system volume when VLC is not selected."
+"unchecked, the volume buttons will change Hakone's volume when Hakone is "
+"selected and change the system volume when Hakone is not selected."
 msgstr ""
 "Kadar je ta možnost označena, bodo gumbi za povečanje, pomanjšanje in "
 "utišanje glasnosti vedno vplivali na sistemski zvok. Kadar je ta možnost "
 "odznačena, bodo gumbi za glasnost vplivali na zvok predvajalnika, kadar je "
-"VLC izbran in na sistemski zvok, kadar ni izbran."
+"Hakone izbran in na sistemski zvok, kadar ni izbran."
 
 #: modules/gui/qt/qt.cpp:188
 #, fuzzy
@@ -22138,13 +22148,13 @@ msgstr ""
 "ne spreminjajte."
 
 #: modules/gui/skins2/src/skin_main.cpp:490
-msgid "Show a systray icon for VLC"
-msgstr "Pokaži ikono predvajalnika VLC na pladnju."
+msgid "Show a systray icon for Hakone"
+msgstr "Pokaži ikono predvajalnika Hakone na pladnju."
 
 #: modules/gui/skins2/src/skin_main.cpp:491
 #: modules/gui/skins2/src/skin_main.cpp:492
-msgid "Show VLC on the taskbar"
-msgstr "Pokaži VLC v opravilni vrstici"
+msgid "Show Hakone on the taskbar"
+msgstr "Pokaži Hakone v opravilni vrstici"
 
 #: modules/gui/skins2/src/skin_main.cpp:493
 msgid "Enable transparency effects"
@@ -22584,9 +22594,9 @@ msgid "Log to file"
 msgstr "Zabeleži dnevniški odvod"
 
 #: modules/logger/file.c:206
-msgid "Log all VLC messages to a text file."
+msgid "Log all Hakone messages to a text file."
 msgstr ""
-"Možnost omogoča beleženje vseh sporočil predvajalnika VLC v navedeno "
+"Možnost omogoča beleženje vseh sporočil predvajalnika Hakone v navedeno "
 "datoteko."
 
 #: modules/logger/file.c:208
@@ -23445,7 +23455,7 @@ msgstr "last.fm: overitev je spodletela"
 #: modules/misc/audioscrobbler.c:567
 msgid ""
 "last.fm username or password is incorrect. Please verify your settings and "
-"relaunch VLC."
+"relaunch Hakone."
 msgstr ""
 "Navedeno je nepravilno uporabniško ime ali geslo za last.fm. Preverite "
 "nastavitve predvajalnika. Program je treba znova zagnati."
@@ -27739,15 +27749,15 @@ msgstr "Zapis zajetih slik (png, jpg ...)"
 
 #: modules/video_filter/scene.c:63
 msgid ""
-"You can enforce the image width. By default (-1) VLC will adapt to the video "
-"characteristics."
+"You can enforce the image width. By default (-1) Hakone will adapt to the "
+"video characteristics."
 msgstr ""
 "Določiti je mogoče širino slike. Privzeta vrednost (-1) je samodejno "
 "prilagojena značilnostim slike."
 
 #: modules/video_filter/scene.c:68
 msgid ""
-"You can enforce the image height. By default (-1) VLC will adapt to the "
+"You can enforce the image height. By default (-1) Hakone will adapt to the "
 "video characteristics."
 msgstr ""
 "Določiti je mogoče višino slike. Privzeta vrednost (-1) je samodejno "
@@ -28464,8 +28474,8 @@ msgid "VLC"
 msgstr "VLC"
 
 #: modules/video_output/xcb/window.c:467
-msgid "VLC"
-msgstr "VLC"
+msgid "Hakone"
+msgstr "Hakone"
 
 #: modules/video_output/xcb/window.c:700
 msgid "X11 display"
@@ -29225,8 +29235,8 @@ msgstr "Čas:"
 
 #: share/lua/http/index.html:26 share/lua/http/mobile_browse.html:25
 #: share/lua/http/mobile_equalizer.html:25 share/lua/http/mobile_view.html:25
-msgid "VLC media player - Web Interface"
-msgstr "Predvajalnik VLC – spletni vmesnik"
+msgid "Hakone Media Player - Web Interface"
+msgstr "Predvajalnik Hakone – spletni vmesnik"
 
 #: share/lua/http/index.html:215
 msgid "Hide / Show Library"
@@ -29404,8 +29414,8 @@ msgid "Extra media"
 msgstr "Dodatna predstavna vsebina"
 
 #: modules/gui/qt/ui/open.h:277
-msgid "Complete MRL for VLC internal"
-msgstr "Celotni MRL za predvajalnik VLC"
+msgid "Complete MRL for Hakone internal"
+msgstr "Celotni MRL za predvajalnik Hakone"
 
 #: modules/gui/qt/ui/open.h:280
 msgid "Select the file"
@@ -30051,8 +30061,8 @@ msgid "Clear List"
 msgstr "Počisti seznam"
 
 #: modules/gui/qt/ui/update.h:148
-msgid "Check for VLC updates"
-msgstr "Preveri za posodobitve VLC"
+msgid "Check for Hakone updates"
+msgstr "Preveri za posodobitve Hakone"
 
 #: modules/gui/qt/ui/update.h:149
 msgid "Launching an update request..."
@@ -40226,5 +40236,5 @@ msgid "Choose a language for the interface. Changes apply at once. Text without 
 msgstr "Izberite jezik vmesnika. Spremembe se uveljavijo takoj. Neprevedeno besedilo je prikazano v angleščini."
 
 #. Redesign translation by Codex (first pass; review welcome).
-msgid "VLC cannot load this language."
-msgstr "VLC ne more naložiti tega jezika."
+msgid "Hakone cannot load this language."
+msgstr "Hakone ne more naložiti tega jezika."

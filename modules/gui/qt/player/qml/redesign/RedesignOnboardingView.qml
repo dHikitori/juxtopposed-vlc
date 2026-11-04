@@ -80,11 +80,11 @@ FocusScope {
         Item {
             objectName: "onboardingWelcome"
             anchors.fill: parent; visible: root.page === 0
-            RedesignIcon { objectName: "onboardingWelcomeCone"; x: 475; y: 116; width: 140; height: 140; name: "cone"; color: root.accentColor }
-            Label { x: 248; y: 286; width: 594; height: 50; text: qsTr("Welcome to VLC!"); color: "#eaeaea"; font.pixelSize: 32; horizontalAlignment: Text.AlignHCenter; leftPadding: -0.5; rightPadding: -leftPadding }
+            RedesignIcon { objectName: "onboardingWelcomeCone"; x: 475; y: 116; width: 140; height: 140; name: "logo"; color: root.accentColor }
+            Label { x: 248; y: 286; width: 594; height: 50; text: qsTr("Welcome to Hakone!"); color: "#eaeaea"; font.pixelSize: 32; horizontalAlignment: Text.AlignHCenter; leftPadding: -0.5; rightPadding: -leftPadding }
             Label {
                 x: 248; y: 366; width: 594; height: 84; lineHeight: 1.4; color: "#969696"
-                text: qsTr("VLC is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later.")
+                text: qsTr("Hakone is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later.")
             }
             Label { x: 248; y: 500; width: 594; text: qsTr("Select a media folder to start with"); font.pixelSize: 14; font.weight: Font.Normal }
             C.TextField {
@@ -141,7 +141,7 @@ FocusScope {
                 contentItem: Label {
                     focus: true
                     Keys.onEscapePressed: policy.close()
-                    text: qsTr("VLC does not collect personal data. If you allow online media information, VLC can request cover art and track details from online services. These requests can identify your media to those services. Clear the option to keep these requests off.")
+                    text: qsTr("Hakone does not collect personal data. If you allow online media information, Hakone can request cover art and track details from online services. These requests can identify your media to those services. Clear the option to keep these requests off.")
                     lineHeight: 1.4
                 }
             }

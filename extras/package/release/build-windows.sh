@@ -18,12 +18,12 @@ if [[ "$mode" == build ]]; then
 fi
 mkdir -p "$work"
 cd "$work"
-# Avoid -i: upstream also makes installers, whereas this release is portable.
+# Avoid -i: package.py builds the NSIS installer from the portable package instead.
 # Build patched contribs from source; upstream prebuilt contribs lack fork patches.
 # Target executables need a Windows host; Wine may not work under ARM emulation.
 export VLC_NO_EXE_WRAPPER=1
 export VLC_BUILD_TRACE=0
-export MCONFIGFLAGS="${MCONFIGFLAGS:-} -Dmedialibrary=enabled -Dtests=disabled -Dnsis=disabled -Dwix=disabled"
+export MCONFIGFLAGS="${MCONFIGFLAGS:-} -Dmedialibrary=enabled -Dtests=disabled -Dnsis=enabled -Dwix=disabled"
 unset VLC_USE_CACHED_DEPENDENCIES VLC_BUILD_DEPENDENCIES_ONLY
 if [[ "$mode" == --dependencies-only ]]; then
     : "${RELEASE_DEPS_CACHE_KEY:?A cache key is required for the separate dependency phase}"

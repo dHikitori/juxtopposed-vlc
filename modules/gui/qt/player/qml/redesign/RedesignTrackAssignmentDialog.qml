@@ -272,7 +272,7 @@ C.Dialog {
     function loadRows(request, result) {
         if (!visible || request !== requestId) return
         loading = false
-        if (!result.success) { rows = []; errorMessage = result.error || qsTr("VLC cannot read these files. Try again."); return }
+        if (!result.success) { rows = []; errorMessage = result.error || qsTr("Hakone cannot read these files. Try again."); return }
         sourceFolderCategory = result.folderCategory || 0
         rows = result.rows || []
         if (scopeIndex === 1) {
@@ -312,7 +312,7 @@ C.Dialog {
     function loadSources(request, result) {
         if (!visible || request !== sourceRequestId) return
         loadingSources = false
-        if (!result.success) { errorMessage = result.error || qsTr("VLC cannot read this folder. Try again."); return }
+        if (!result.success) { errorMessage = result.error || qsTr("Hakone cannot read this folder. Try again."); return }
         sources = result.sources || []; performMatching(matchSavedSources)
     }
     function performMatching(includeSaved = false) {
@@ -382,7 +382,7 @@ C.Dialog {
     function loadSearch(request, result) {
         if (!visible || request !== searchRequestId || !onlineMode) return
         searching = false
-        if (!result.success) { errorMessage = result.error || qsTr("VLC cannot search for subtitles. Try again."); return }
+        if (!result.success) { errorMessage = result.error || qsTr("Hakone cannot search for subtitles. Try again."); return }
         searchIdentities = result.identities || ({})
         errorMessage = result.warning || ""
         onlineSources = (result.sources || []).map(item => Object.assign({}, item, {url: sourceMappings[item.url] || item.url})); performMatching(true)
@@ -406,7 +406,7 @@ C.Dialog {
             providerSetup.close()
             providerCheckPending = true; runPendingProviderSearch()
         }
-        else providerSetup.errorMessage = error || qsTr("VLC cannot save the API key. Make sure that the API key is correct. Try again.")
+        else providerSetup.errorMessage = error || qsTr("Hakone cannot save the API key. Make sure that the API key is correct. Try again.")
     }
     function setTracks(url, selection) {
         const draft = drafts[url]
@@ -449,7 +449,7 @@ C.Dialog {
     function dropSources(urls, target = "") {
 
         if (!visible || saving || loading || loadingDrop) return false
-        if (!urls.length) { errorMessage = qsTr("VLC cannot read these files. Try again."); return false }
+        if (!urls.length) { errorMessage = qsTr("Hakone cannot read these files. Try again."); return false }
         const values = Array.from(urls, value => String(value))
         if (subtitles && values.every(url => /^https?:/i.test(url))) selectSource(2)
         else selectSource(0)
@@ -519,8 +519,8 @@ C.Dialog {
         if (completed.length) saved(completed, subtitles)
         if (result.success) accept()
         else {
-            errorMessage = (result.error || qsTr("VLC cannot save these tracks. Try again."))
-                + (completed.length ? "\n" + qsTr("VLC kept the changes that it saved. Try Save again for the other files.") : "")
+            errorMessage = (result.error || qsTr("Hakone cannot save these tracks. Try again."))
+                + (completed.length ? "\n" + qsTr("Hakone kept the changes that it saved. Try Save again for the other files.") : "")
             addonPicker.begin()
         }
     }
@@ -878,11 +878,11 @@ C.Dialog {
             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: root.theme.dp(20); anchors.topMargin: root.theme.dp(4)
             visible: text.length > 0
             text: root.errorMessage || (root.scopeIndex === 1
-                ? root.removeFolderRule ? qsTr("VLC will remove the saved folder matches.")
+                ? root.removeFolderRule ? qsTr("Hakone will remove the saved folder matches.")
                 : !root.folderRuleAutomatic ? qsTr("Automatic matching is off in Settings. These choices apply to the current files.")
-                : root.folderRuleDefinition.length || root.folderRuleNeedsPreparation ? qsTr("VLC will use these matches for new files in this folder.")
-                : qsTr("VLC will save these choices for the current files.")
-                : root.folderRuleChanged ? qsTr("VLC will also save the folder matches.") : "")
+                : root.folderRuleDefinition.length || root.folderRuleNeedsPreparation ? qsTr("Hakone will use these matches for new files in this folder.")
+                : qsTr("Hakone will save these choices for the current files.")
+                : root.folderRuleChanged ? qsTr("Hakone will also save the folder matches.") : "")
             textFormat: Text.PlainText; wrapMode: Text.WordWrap
             font.pixelSize: root.theme.dp(14); color: root.errorMessage.length ? root.theme.danger : root.theme.foreground
             Accessible.role: root.errorMessage.length ? Accessible.AlertMessage : Accessible.StaticText

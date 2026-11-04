@@ -721,7 +721,7 @@ SPrefsPanel::SPrefsPanel( qt_intf_t *_p_intf, QWidget *_parent,
 
 //            ui.defaultLabel->setFont( italicFont );
             ui.skinsLabel->setText(
-                    qtr( "This is VLC's skinnable interface. You can download other skins at" )
+                    qtr( "This is Hakone's skinnable interface. You can download other skins at" )
                     + QString( " <a href=\"https://www.videolan.org/vlc/skins.php\">" )
                     + qtr( "VLC skins website" ) + QString( "</a>." ) );
             ui.skinsLabel->setFont( italicFont );
@@ -1374,7 +1374,7 @@ void SPrefsPanel::configML()
 #include "util/registry.hpp"
 
 void SPrefsPanel::cleanLang() {
-    QSettings language(QStringLiteral("HKEY_CURRENT_USER\\Software\\VideoLAN\\VLC"), QSettings::NativeFormat);
+    QSettings language(QStringLiteral("HKEY_CURRENT_USER\\Software\\Hakone"), QSettings::NativeFormat);
     language.remove(QStringLiteral("Lang"));
     language.sync();
 }
@@ -1389,7 +1389,7 @@ void SPrefsPanel::saveLang() {
     else
     {
         QVLCRegistry qvReg( HKEY_CURRENT_USER );
-        qvReg.WriteRegistry( "Software\\VideoLAN\\VLC\\", "Lang", lang );
+        qvReg.WriteRegistry( "Software\\Hakone\\", "Lang", lang );
     }
 }
 
@@ -1397,7 +1397,7 @@ bool SPrefsPanel::addType( const char * psz_ext, QTreeWidgetItem* current,
                            QTreeWidgetItem* parent, QVLCRegistry *qvReg )
 {
     bool b_temp;
-    const char* psz_VLC = "VLC";
+    const char* psz_VLC = "Hakone";
     current = new QTreeWidgetItem( parent, QStringList( psz_ext ) );
 
     char* psz_reg = qvReg->ReadRegistry( psz_ext, "", "" );
@@ -1432,7 +1432,7 @@ void SPrefsPanel::assoDialog()
                                 NULL, CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARGS(&p_regui));
             if( SUCCEEDED(hr) )
-                p_regui->LaunchAdvancedAssociationUI(L"VLC" );
+                p_regui->LaunchAdvancedAssociationUI(L"Hakone" );
         }
         CoUninitialize();
     }
@@ -1577,17 +1577,17 @@ void SPrefsPanel::updateCheckBoxes(QTreeWidgetItem* item, int column)
 
 void addAsso( QVLCRegistry *qvReg, const char *psz_ext )
 {
-    QString s_path( "VLC" ); s_path += psz_ext;
+    QString s_path( "Hakone" ); s_path += psz_ext;
     QString s_path2 = s_path;
 
     /* Save a backup if already assigned */
     char *psz_value = qvReg->ReadRegistry( psz_ext, "", ""  );
 
     if( !EMPTY_STR(psz_value) && strcmp( qtu(s_path), psz_value ) )
-        qvReg->WriteRegistry( psz_ext, "VLC.backup", psz_value );
+        qvReg->WriteRegistry( psz_ext, "Hakone.backup", psz_value );
     free( psz_value );
 
-    /* Put a "link" to VLC.EXT as default */
+    /* Put a "link" to Hakone.EXT as default */
     qvReg->WriteRegistry( psz_ext, "", qtu( s_path ) );
 
     /* Create the needed Key if they weren't done in the installer */
@@ -1599,7 +1599,7 @@ void addAsso( QVLCRegistry *qvReg, const char *psz_ext )
 
         /* Get the installer path */
         QVLCRegistry qvReg2( HKEY_LOCAL_MACHINE );
-        QString str_temp = qvReg2.ReadRegistry( "Software\\VideoLAN\\VLC", "", "" );
+        QString str_temp = qvReg2.ReadRegistry( "Software\\Hakone", "", "" );
 
         if( str_temp.size() )
         {
@@ -1614,17 +1614,17 @@ void addAsso( QVLCRegistry *qvReg, const char *psz_ext )
 
 void delAsso( QVLCRegistry *qvReg, const char *psz_ext )
 {
-    QString s_path( "VLC"); s_path += psz_ext;
+    QString s_path( "Hakone" ); s_path += psz_ext;
     char *psz_value = qvReg->ReadRegistry( psz_ext, "", "" );
 
     if( psz_value && !strcmp( qtu(s_path), psz_value ) )
     {
         free( psz_value );
-        psz_value = qvReg->ReadRegistry( psz_ext, "VLC.backup", "" );
+        psz_value = qvReg->ReadRegistry( psz_ext, "Hakone.backup", "" );
         if( psz_value )
             qvReg->WriteRegistry( psz_ext, "", psz_value );
 
-        qvReg->DeleteValue( psz_ext, "VLC.backup" );
+        qvReg->DeleteValue( psz_ext, "Hakone.backup" );
     }
     free( psz_value );
 }

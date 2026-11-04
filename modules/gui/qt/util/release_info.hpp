@@ -47,7 +47,7 @@ struct Release
     QString notes;
     QUrl pageUrl;
     Asset asset;
-    QString productName = QStringLiteral("VLC");
+    QString productName = QStringLiteral("Hakone");
     QString subtitle;
 };
 

@@ -41,7 +41,7 @@ C.Dialog {
     }
     function finish(success, error = "") {
         if (success) close()
-        else errorMessage = error || qsTr("VLC cannot save this change. Make sure that the key is correct. Try again.")
+        else errorMessage = error || qsTr("Hakone cannot save this change. Make sure that the key is correct. Try again.")
     }
     onOpened: { errorMessage = ""; apiKeyField.forceActiveFocus(); Qt.callLater(revealKeyField) }
     onClosed: apiKeyField.text = ""
@@ -77,8 +77,8 @@ C.Dialog {
                 Text {
                     Layout.fillWidth: true
                     text: root.hasConsumerKey
-                        ? qsTr("This app can use OpenSubtitles without a personal key. You can add your own application API key here. VLC stores it in your profile.")
-                        : qsTr("Add your OpenSubtitles application API key. VLC stores it in your profile.")
+                        ? qsTr("This app can use OpenSubtitles without a personal key. You can add your own application API key here. Hakone stores it in your profile.")
+                        : qsTr("Add your OpenSubtitles application API key. Hakone stores it in your profile.")
                     textFormat: Text.PlainText; wrapMode: Text.WordWrap
                     font.pixelSize: root.theme.dp(14); color: root.theme.foreground
                 }

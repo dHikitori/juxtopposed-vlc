@@ -43,7 +43,7 @@ static void system_ConfigureDbus(libvlc_int_t *vlc, int argc,
 /* FIXME: could be replaced by using Unix sockets */
 #ifdef HAVE_DBUS
 # define MPRIS_APPEND "/org/mpris/MediaPlayer2/TrackList/Append"
-# define MPRIS_BUS_NAME "org.mpris.MediaPlayer2.vlc"
+# define MPRIS_BUS_NAME "org.mpris.MediaPlayer2.hakone"
 # define MPRIS_OBJECT_PATH "/org/mpris/MediaPlayer2"
 # define MPRIS_TRACKLIST_INTERFACE "org.mpris.MediaPlayer2.TrackList"
 
