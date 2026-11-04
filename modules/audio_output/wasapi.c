@@ -118,6 +118,8 @@ typedef struct aout_stream_sys
 
     uint8_t chans_table[AOUT_CHAN_MAX];
     uint8_t chans_to_reorder;
+    /** The pending block was partially played and is already reordered */
+    bool partial_block;
 
     vlc_fourcc_t format; /**< Sample format */
     unsigned rate; /**< Sample rate */
@@ -236,7 +238,10 @@ static HRESULT Play(aout_stream_t *s, block_t *block, vlc_tick_t date)
     if (sys->first_pts == VLC_TICK_INVALID)
         sys->first_pts = block->i_pts;
 
-    if (sys->chans_to_reorder)
+    /* A block that did not fit in the buffer is handed back to Play() for the
+     * remaining samples. Those were reordered by the first call already, and
+     * reordering them again scrambles the surround channels. */
+    if (sys->chans_to_reorder && !sys->partial_block)
         aout_ChannelReorder(block->p_buffer, block->i_buffer,
                           sys->chans_to_reorder, sys->chans_table, sys->format);
 
@@ -310,10 +315,12 @@ static HRESULT Play(aout_stream_t *s, block_t *block, vlc_tick_t date)
         block->i_length -= vlc_tick_from_samples(frames, sys->rate);
         /* Out of buffer space, keep the block and notify the owner */
         IAudioRenderClient_Release(render);
+        sys->partial_block = true;
         return S_FALSE;
     }
     IAudioRenderClient_Release(render);
 out:
+    sys->partial_block = false;
     block_Release(block);
 
     return hr;
@@ -360,6 +367,8 @@ static HRESULT Flush(aout_stream_t *s)
         hr = S_OK;
 
     sys->first_pts = VLC_TICK_INVALID;
+    /* The owner dropped any partially played block */
+    sys->partial_block = false;
     if (SUCCEEDED(hr))
     {
         msg_Dbg(s, "reset");
@@ -943,6 +952,7 @@ static HRESULT Start(aout_stream_t *s, audio_sample_format_t *restrict pfmt,
     *pfmt = fmt;
     sys->written = 0;
     sys->first_pts = VLC_TICK_INVALID;
+    sys->partial_block = false;
     s->sys = sys;
     s->play = Play;
     s->pause = Pause;
