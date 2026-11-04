@@ -166,10 +166,28 @@ class PackageTests(unittest.TestCase):
             root = Path(temp)
             stage = root / 'stage'
             stage.mkdir()
-            for name in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll'):
+            for name in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll',
+                         'vlc.win32.nsi', 'spad.nsi'):
                 (stage / name).write_bytes(b'fixture')
-            (stage / 'plugins').mkdir()
+            for name in ('plugins', 'NSIS', 'helpers', 'languages', 'sdk', 'share/vlc/addons'):
+                (stage / name).mkdir(parents=True)
+            (stage / 'NSIS/nsProcess.dll').write_bytes(b'fixture')
             output = root / 'output'
+            scripts = []
+
+            def makensis(command, check):
+                self.assertEqual(command[:2], ['makensis', '-V2'])
+                script = Path(command[2])
+                scripts.append(script.name)
+                # The installer stage holds the package without its portable
+                # profile or SDK, plus the NSIS scripts and helpers.
+                self.assertTrue((script.parent / 'vlc-addon-worker.exe').is_file())
+                self.assertTrue((script.parent / 'share/vlc/addons').is_dir())
+                self.assertTrue((script.parent / 'NSIS/nsProcess.dll').is_file())
+                self.assertFalse((script.parent / 'portable').exists())
+                self.assertFalse((script.parent / 'sdk').exists())
+                if script.name == 'vlc.win32.nsi':
+                    (output / f'hakone-{tag}-win64.exe').write_bytes(b'installer')
 
             def tool(*args):
                 if args[0] == 'git':
@@ -181,13 +199,18 @@ class PackageTests(unittest.TestCase):
                 raise AssertionError(args)
 
             argv = ['package.py', 'windows', str(stage), '--output', str(output), '--tag', tag]
-            with mock.patch.object(sys, 'argv', argv), mock.patch.object(package, 'run', side_effect=tool):
+            with mock.patch.object(sys, 'argv', argv), mock.patch.object(package, 'run', side_effect=tool), \
+                    mock.patch.object(package.subprocess, 'run', side_effect=makensis):
                 package.main()
+            self.assertEqual(scripts, ['spad.nsi', 'vlc.win32.nsi'])
+            self.assertFalse((output / 'nsis').exists())
             archive = output / f'hakone-{tag}-win64.zip'
             self.assertTrue(archive.is_file())
             with zipfile.ZipFile(archive) as bundled:
                 self.assertIn('hakone-win64/portable/', bundled.namelist())
                 self.assertIn('hakone-win64/vlc-addon-worker.exe', bundled.namelist())
+                for name in ('vlc.win32.nsi', 'spad.nsi', 'NSIS/', 'helpers/', 'languages/'):
+                    self.assertNotIn('hakone-win64/' + name, bundled.namelist())
                 self.assertEqual(bundled.read('hakone-win64/SOURCE_COMMIT.txt'), ('a' * 40 + '\n').encode())
             metadata = json.loads((output / 'windows-build.json').read_text())
             self.assertEqual(metadata['version'], tag)
@@ -196,6 +219,18 @@ class PackageTests(unittest.TestCase):
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             self.assertEqual(metadata['sha256'], digest)
             self.assertEqual(archive.with_suffix('.zip.sha256').read_text(), f'{digest}  {archive.name}\n')
+            installer = output / f'hakone-{tag}-win64.exe'
+            digest = hashlib.sha256(b'installer').hexdigest()
+            self.assertEqual(metadata['installer'], dict(asset_name=installer.name, size=len(b'installer'),
+                                                         sha256=digest, package_type='nsis-installer'))
+            self.assertEqual(installer.with_suffix('.exe.sha256').read_text(), f'{digest}  {installer.name}\n')
+
+    def test_windows_installer_needs_the_nsis_scripts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stage = Path(temp) / 'stage'
+            stage.mkdir()
+            with self.assertRaisesRegex(RuntimeError, '-Dnsis=enabled'):
+                package.windows_installer(stage, Path(temp), '1.0.0-beta.1')
 
     def test_macos_checksums_and_metadata_cover_zip_and_disk_image(self):
         tag = package.validate_tag(None)['version']

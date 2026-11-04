@@ -301,6 +301,13 @@
             <?if "$(var.HaveSkins)" = "yes" ?>
                 <ComponentGroupRef Id='CompSkinsGroup' />
             <?endif ?>
+            <ComponentGroupRef Id='CompHrtfsGroup' />
+            <!-- Bundled add-ons, third-party licenses, and the other top-level
+                 files of the portable package: the add-on worker, compiler
+                 runtimes and the Vulkan loader -->
+            <ComponentGroupRef Id='CompShareGroup' />
+            <ComponentGroupRef Id='CompLicensesGroup' />
+            <ComponentGroupRef Id='CompTopLevelGroup' />
 
             <Feature Id='FILEASSOCIATION' Title='File associations' Level='1' AllowAdvertise="no">
                 <Feature Id='VIDEOFILEASSOCIATION' Title='Video' Level='1' AllowAdvertise="no">

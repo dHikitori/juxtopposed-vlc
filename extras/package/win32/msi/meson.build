@@ -45,7 +45,7 @@ vlc_wix = configure_file(
     install_dir: '.',
 )
 
-heat_dirs = ['Plugins', 'Visualization']
+heat_dirs = ['Plugins', 'Visualization', 'Hrtfs', 'Share', 'Licenses']
 if wix_conf.get('ENABLE_NLS', 0) == 1
     heat_dirs += 'Locale'
 endif
@@ -78,6 +78,20 @@ foreach heat : heat_dirs
     )
     wxs_files += [ [ wxs, W_MSIBUILDDIR ] ]
 endforeach
+
+# Top-level files that product.wxs does not list itself
+top_level_wxs = custom_target(
+    command: [python3, files('msi-heat.py'), '--dir', prefix_path, '--top-level',
+        '--skip-listed', files('product.wxs'), '-cg', 'CompTopLevelGroup',
+        '-dr', 'APPLICATIONFOLDER', '-out', '@OUTPUT@'
+    ],
+    output: 'TopLevel.fragment.wxs',
+    depend_files: [files('msi-heat.py', 'product.wxs')],
+    build_always_stale: true,
+    build_by_default: false,
+    console: true,
+)
+wxs_files += [ [ top_level_wxs, W_MSIBUILDDIR ] ]
 
 compiled_wxs = []
 compiled_winpath = []

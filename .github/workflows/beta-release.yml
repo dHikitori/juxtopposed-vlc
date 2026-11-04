@@ -408,7 +408,7 @@ jobs:
         with:
           path: contrib/tarballs
           key: ${{ steps.deps-key.outputs.download_key }}
-      - name: Build and package portable archive
+      - name: Build and package portable archive and NSIS installer
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
           RELEASE_DEPS_CACHE_KEY: ${{ steps.deps-key.outputs.key }}
@@ -418,11 +418,13 @@ jobs:
           -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
           "$WINDOWS_BUILD_IMAGE"
           bash extras/package/release/build-windows.sh
+      # windows-smoke adds the MSI and uploads the complete win64 package.
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ needs.prepare.outputs.version }}-win64
+          name: ${{ needs.prepare.outputs.version }}-win64-build
           path: |
             build-release-output/*.zip
+            build-release-output/*.exe
             build-release-output/*.sha256
             build-release-output/*-build.json
           if-no-files-found: error
@@ -436,9 +438,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.prepare.outputs.version }}-win64
+          name: ${{ needs.prepare.outputs.version }}-win64-build
           path: downloads
-      - shell: pwsh
+      - name: Verify portable package
+        shell: pwsh
         run: |
           Expand-Archive downloads/hakone-${{ needs.prepare.outputs.version }}-win64.zip "$env:RUNNER_TEMP/relocated"
           $hakone = "$env:RUNNER_TEMP/relocated/hakone-win64/hakone.exe"
@@ -457,6 +460,48 @@ jobs:
             if ($messages -notmatch 'using audio decoder module') { throw 'Audio decoder did not start' }
             if ($messages -match 'failed to load component|QQmlApplicationEngine failed|is not installed|qml loading|Cannot load the (VLC|Hakone) interface|svg icon plugin is not found|Scene Graph Error|Failed to create RHI|Failed to initialize graphics backend') { throw 'Qt interface reported a startup failure' }
           }
+      - name: Find or install WiX 3
+        shell: pwsh
+        run: |
+          $wix = @($env:WIX, "${env:ProgramFiles(x86)}\WiX Toolset v3.14\") |
+            Where-Object { $_ -and (Test-Path (Join-Path $_ 'bin\candle.exe')) } | Select-Object -First 1
+          if (-not $wix) {
+            choco install wixtoolset --version 3.14.1 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'WiX 3.14.1 could not be installed' }
+            $wix = "${env:ProgramFiles(x86)}\WiX Toolset v3.14\"
+          }
+          & (Join-Path $wix 'bin\candle.exe') -? | Select-Object -First 1
+          "WIX_BIN=$(Join-Path $wix 'bin')" >> $env:GITHUB_ENV
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          # A clean copy: the portable check above wrote to its profile.
+          Expand-Archive downloads/hakone-$env:RELEASE_TAG-win64.zip "$env:RUNNER_TEMP/msi-package"
+          Remove-Item "$env:RUNNER_TEMP/msi-package/hakone-win64/portable" -Recurse -Force
+          python extras/package/release/build-msi.py "$env:RUNNER_TEMP/msi-package/hakone-win64" --output downloads --wix $env:WIX_BIN
+          if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }
+      - name: Install, run and uninstall both installers
+        shell: pwsh
+        run: >-
+          ./extras/package/release/test-windows-installers.ps1 -Downloads downloads -Tag $env:RELEASE_TAG
+          -Reference "$env:RUNNER_TEMP/msi-package/hakone-win64"
+      - name: Keep installer logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.version }}-win64-installer-logs
+          path: ${{ runner.temp }}/hakone-msi-*.log
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.version }}-win64
+          path: |
+            downloads/*.zip
+            downloads/*.exe
+            downloads/*.msi
+            downloads/*.sha256
+            downloads/*-build.json
+          if-no-files-found: error
 
   draft:
     needs: [prepare, reuse, macos, linux, windows, windows-smoke]

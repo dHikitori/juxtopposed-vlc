@@ -16,16 +16,22 @@ from release_metadata import append_metadata, release_metadata
 
 MACOS_ARM_RUNNERS = ('macos-15', 'macos-14', 'macos-26')
 
+# Extra downloads of the same app, as (metadata key, extension, label). The
+# archive remains the package that update metadata and in-app checks select.
+DISK_IMAGE = (('disk_image', 'dmg', 'disk image'),)
+INSTALLERS = (('installer', 'exe', 'installer'), ('msi', 'msi', 'MSI'))
+
 TARGETS = {
-    # Macs also publish a drag-to-install disk image of the same app. The ZIP
-    # remains the package that update metadata and in-app checks select.
-    'macos-arm64': dict(platform='macos', architecture='arm64', extension='zip', disk_image='dmg',
+    # Macs also publish a drag-to-install disk image.
+    'macos-arm64': dict(platform='macos', architecture='arm64', extension='zip', extras=DISK_IMAGE,
                         metadata='macos-arm64-build.json', job='macos (macos-15, arm64)'),
-    'macos-x86_64': dict(platform='macos', architecture='x86_64', extension='zip', disk_image='dmg',
+    'macos-x86_64': dict(platform='macos', architecture='x86_64', extension='zip', extras=DISK_IMAGE,
                          metadata='macos-x86_64-build.json', job='macos (macos-15-intel, x86_64)'),
-    'linux-x86_64': dict(platform='linux', architecture='x86_64', extension='tar.gz',
+    'linux-x86_64': dict(platform='linux', architecture='x86_64', extension='tar.gz', extras=(),
                          metadata='linux-build.json', job='linux'),
-    'win64': dict(platform='windows', architecture='x86_64', extension='zip',
+    # Windows also publishes NSIS and MSI installers. The windows-smoke job
+    # builds the MSI, tests both installers and uploads the complete package.
+    'win64': dict(platform='windows', architecture='x86_64', extension='zip', extras=INSTALLERS,
                   metadata='windows-build.json', job='windows-smoke'),
 }
 
@@ -193,13 +199,13 @@ def validate_package(directory, target, version, source):
         if metadata.get(key) != expected:
             raise ValueError(f'{target}: {key} must be {expected!r}, got {metadata.get(key)!r}')
     validate_asset(directory, f'{target}: archive', metadata, asset_name)
-    if spec.get('disk_image'):
-        image = metadata.get('disk_image')
-        image_name = f'hakone-{version}-{target}.{spec["disk_image"]}'
-        if not isinstance(image, dict) or image.get('asset_name') != image_name:
-            # Packages built before disk images existed cannot be reused.
-            raise ValueError(f'{target}: disk image {image_name!r} missing from package metadata; rebuild this target')
-        validate_asset(directory, f'{target}: disk image', image, image_name)
+    for key, extension, label in spec['extras']:
+        extra = metadata.get(key)
+        extra_name = f'hakone-{version}-{target}.{extension}'
+        if not isinstance(extra, dict) or extra.get('asset_name') != extra_name:
+            # Packages built before this download existed cannot be reused.
+            raise ValueError(f'{target}: {label} {extra_name!r} missing from package metadata; rebuild this target')
+        validate_asset(directory, f'{target}: {label}', extra, extra_name)
     return metadata
 
 
@@ -227,7 +233,7 @@ def file_digest(path):
 
 def target_asset_names(version, target):
     spec = TARGETS[target]
-    extensions = [spec['extension']] + ([spec['disk_image']] if spec.get('disk_image') else [])
+    extensions = [spec['extension']] + [extension for _, extension, _ in spec['extras']]
     return [f'hakone-{version}-{target}.{extension}' for extension in extensions]
 
 
@@ -275,10 +281,9 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
                              run_id=str(origin['run_id']),
                              asset_name=metadata['asset_name'], size=metadata['size'],
                              sha256=metadata['sha256']))
-        if TARGETS[name].get('disk_image'):
-            image = metadata['disk_image']
-            packages[-1]['disk_image'] = dict(asset_name=image['asset_name'], size=image['size'],
-                                              sha256=image['sha256'])
+        for key, _, _ in TARGETS[name]['extras']:
+            extra = metadata[key]
+            packages[-1][key] = dict(asset_name=extra['asset_name'], size=extra['size'], sha256=extra['sha256'])
     for package in packages:
         expected = f'{update_metadata["package_prefix"]}-{version}-{package["target"]}.{TARGETS[package["target"]]["extension"]}'
         if package['asset_name'] != expected:
@@ -288,7 +293,7 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
         name = package['target']
         directory = artifacts / f'{version}-{name}'
         filenames = [TARGETS[name]['metadata']]
-        for asset in [package, *([package['disk_image']] if 'disk_image' in package else [])]:
+        for asset in [package, *(package[key] for key, _, _ in TARGETS[name]['extras'])]:
             filenames.extend((asset['asset_name'], asset['asset_name'] + '.sha256'))
         if name.startswith('macos-'):
             audit = f'{name}-dependency-audit.json'
@@ -305,7 +310,7 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
     (output / 'SOURCE_COMMIT.txt').write_text(current + '\n')
     notes += '\n\n| Package | Binary source commit | Download |\n| --- | --- | --- |\n'
     for package in sorted(packages, key=lambda item: item['target'] != 'win64'):
-        links = '[download](#)' + (' · [disk image](#)' if 'disk_image' in package else '')
+        links = '[download](#)' + ''.join(f' · [{label}](#)' for _, _, label in TARGETS[package['target']]['extras'])
         notes += f'| {package["target"]} | `{package["source_commit"]}` | {links} |\n'
     (output / 'UPDATE_METADATA.json').write_text(json.dumps(update_metadata, indent=2) + '\n')
     (output / 'RELEASE_NOTES.md').write_text(append_metadata(notes, update_metadata))

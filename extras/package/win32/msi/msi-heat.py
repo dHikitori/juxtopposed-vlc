@@ -22,6 +22,7 @@ import argparse
 import os
 import pathlib
 import hashlib
+import re
 
 # Argument parsing
 parser = argparse.ArgumentParser(description="Generate WIX compatible wxs listing")
@@ -29,6 +30,10 @@ parser.add_argument('-d', "--dir", type=pathlib.Path, help='directory with files
 parser.add_argument('-out', type=argparse.FileType('w', encoding='UTF-8'), help="output file")
 parser.add_argument('-dr', "--directory-reference", help='directory reference')
 parser.add_argument('-cg', "--component-group", help='component group')
+parser.add_argument("--top-level", action='store_true',
+                    help='list only the files directly in --dir, into the directory reference itself')
+parser.add_argument("--skip-listed", type=pathlib.Path, action='append', default=[],
+                    help='leave out top-level files this .wxs already installs')
 args, remaining = parser.parse_known_args()
 
 # print(args.out)
@@ -79,9 +84,28 @@ def outputDir(top, parent: str, dir: str):
 
     args.out.write('                </Directory>\r\n')
 
+def outputTopLevel(top):
+    listed = set()
+    for wxs in args.skip_listed:
+        listed.update(name.lower() for name in
+                      re.findall(r'Source="\$\(var\.VlcInstallPrefix\)([^"\\/]+)"', wxs.read_text()))
+    for file in sorted(top.iterdir()):
+        if file.is_dir() or file.name.lower() in listed:
+            continue
+        if file.name.endswith(('.pdb', '.dll.a', '.nsi', '.wxi')):
+            continue
+        fileId = generate_id('cmp', file.name)
+        args.out.write('            <Component Id="{}" Guid="*">\r\n'.format(fileId))
+        fileIdList.append(fileId)
+        args.out.write('                <File Id="{}" Name="{}" KeyPath="yes" Source="$(var.VlcInstallPrefix){}"/>\r\n'.format(generate_id('fil', file.name), file.name, file.name))
+        args.out.write('            </Component>\r\n')
+
 print(args.dir.parent)
 print(args.dir.name)
-outputDir(args.dir, '', '')
+if args.top_level:
+    outputTopLevel(args.dir)
+else:
+    outputDir(args.dir, '', '')
 
 # args.out.write('            </Directory>\r\n')
 args.out.write('        </DirectoryRef>\r\n')

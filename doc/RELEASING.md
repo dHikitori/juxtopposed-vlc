@@ -4,7 +4,7 @@ The release pipeline builds four native targets:
 
 | Target | Download |
 | --- | --- |
-| Windows 10 (1809+) / 11, x86_64 | `hakone-<tag>-win64.zip` (portable `hakone-win64` folder with `hakone.exe`) |
+| Windows 10 (1809+) / 11, x86_64 | `hakone-<tag>-win64.zip` (portable `hakone-win64` folder with `hakone.exe`), `hakone-<tag>-win64.exe` (NSIS installer) or `hakone-<tag>-win64.msi` (MSI installer) |
 | macOS Apple Silicon | `hakone-<tag>-macos-arm64.dmg` (drag-to-install) or `hakone-<tag>-macos-arm64.zip` (`Hakone.app`) |
 | macOS Intel | `hakone-<tag>-macos-x86_64.dmg` (drag-to-install) or `hakone-<tag>-macos-x86_64.zip` (`Hakone.app`) |
 | Linux x86_64, glibc >= 2.35, GLIBCXX >= 3.4.30 | `hakone-<tag>-linux-x86_64.tar.gz` portable directory bundle |
@@ -94,6 +94,21 @@ Windows builds the pinned contrib sources rather than using upstream prebuilt
 libraries, which would omit those patches. Windows has no publisher signature.
 Its portable ZIP includes imported MinGW runtime DLLs and the Vulkan loader,
 with their license notices. Windows build metadata lists the external imports.
+
+Windows also publishes two installers of the same files, without the
+`portable` folder, which would put an installed copy in portable mode, or the
+SDK. Both install to `Program Files\Hakone`. The Docker build makes the NSIS
+installer, `hakone-<tag>-win64.exe`, from the portable folder after packaging it.
+The `windows-smoke` job then builds the MSI, `hakone-<tag>-win64.msi`, natively
+with WiX 3.14 using `extras/package/release/build-msi.py`. It uses the runner's
+WiX when present and otherwise installs version 3.14.1 with Chocolatey.
+`extras/package/release/test-windows-installers.ps1` then installs each
+installer silently, requires every package file and the version and module
+checks to pass from the installed copy, and uninstalls it. Only after these
+checks does the job upload the complete `<version>-win64` artifact; the
+Docker build's own upload is `<version>-win64-build`. The installers are
+listed with each package in the build metadata and the release checksums.
+Packages from runs before the installers existed cannot be reused.
 No signing credentials or OpenSubtitles app key are required.
 
 The optional repository Actions secret `OPENSUBTITLES_API_KEY` is passed only to
@@ -248,8 +263,9 @@ current release packaging commit, not every binary's source: the release notes
 and manifest list the sources individually. Metadata, manifests and dependency
 audits remain in the workflow's `<version>-complete` artifact. The draft release
 attaches only `SHA256SUMS.txt`, the four application archives, the two Mac disk
-images and their individual `.sha256` files. `SHA256SUMS.txt` covers only the
-application archives and disk images. No custom
+images, the two Windows installers and their individual `.sha256` files.
+`SHA256SUMS.txt` covers only the application archives, disk images and
+installers. No custom
 source archives are generated; releases use GitHub's automatic source downloads.
 
 **create_draft** is also available for full manual builds. It uses the checked-out
@@ -376,7 +392,8 @@ git push origin refs/tags/1.0.0-beta.1
 
 A pushed `1.0.0-beta.1` tag runs the same builds and creates a **draft prerelease** named
 `Hakone 1.0.0-beta.1`. It attaches only the four application
-archives, the two Mac disk images, their `.sha256` files and `SHA256SUMS.txt`. Build metadata stays in the
+archives, the two Mac disk images, the two Windows installers, their `.sha256`
+files and `SHA256SUMS.txt`. Build metadata stays in the
 workflow artifacts; source downloads are provided automatically by GitHub.
 The notes are taken from the tagged source and include its commit hash.
 Inspect and publish the draft
@@ -516,8 +533,10 @@ resulting ZIP on an actual Windows machine, including playback, the library,
 settings and a path with spaces. The GUI targets the Windows versions supported
 by [Qt 6.8](https://doc.qt.io/qt-6.8/supported-platforms.html#windows).
 The release wrapper disables Wine execution of VLC configuration probes and
-disables installer generation. This also permits cross-compilation under ARM
-Docker emulation when Wine cannot run Windows programs. Native executable
+builds the NSIS installer from the portable package rather than upstream's
+installer targets. This also permits cross-compilation under ARM
+Docker emulation when Wine cannot run Windows programs. The MSI is built only
+in CI, on Windows. Native executable
 validation remains a separate Windows CI job.
 That job launches the same portable profile twice and requires both Qt startup
 and audio decoding, covering first launch and cached graphics startup.
@@ -596,8 +615,8 @@ An asset must be uploaded, nonempty, and named exactly:
 
 The current workflow produces Windows x86_64, both native macOS packages, and
 Linux x86_64. Recognizing other target names does not claim CI builds for them.
-Source archives, SDKs, symbols, checksums and the Mac `.dmg` disk images are not
-eligible packages: names are matched exactly, so the checker keeps selecting the
+Source archives, SDKs, symbols, checksums, the Mac `.dmg` disk images and the
+Windows `.exe` and `.msi` installers are not eligible packages: names are matched exactly, so the checker keeps selecting the
 `.zip` for each Mac (current and earlier clients alike). Architecture
 matching follows the running binary; automatic migration from emulated to native
 builds is not enabled. Minimum OS/glibc requirements remain in release notes and

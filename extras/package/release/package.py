@@ -268,11 +268,20 @@ def write_checksum(path):
     return digest
 
 
+# The installer scripts and helpers that -Dnsis=enabled installs beside the app.
+NSIS_SUPPORT = ('vlc.win32.nsi', 'spad.nsi', 'NSIS', 'helpers', 'languages')
+
+
+def top_level_ignore(root, ignored):
+    """A copytree filter that leaves out names at the top of root only."""
+    return lambda directory, names: [n for n in names if n in ignored] if Path(directory) == root else []
+
+
 def windows(stage, output, tag, commit):
     target = output / 'hakone-win64'
     if target.exists():
         raise SystemExit(f'Remove the old package before rebuilding: {target}')
-    copy(stage, target)
+    shutil.copytree(stage, target, symlinks=True, ignore=top_level_ignore(stage, NSIS_SUPPORT))
     for required in ('hakone.exe', 'vlc-addon-worker.exe', 'libvlc.dll', 'libvlccore.dll', 'plugins'):
         if not (target / required).exists():
             raise RuntimeError(f'Windows installation missing {required}')
@@ -318,6 +327,30 @@ def windows(stage, output, tag, commit):
     return archive
 
 
+def windows_installer(stage, output, tag):
+    """Build the NSIS installer from the portable package's files."""
+    if not all((stage / name).exists() for name in NSIS_SUPPORT):
+        raise RuntimeError('The installation has no NSIS scripts; configure with -Dnsis=enabled')
+    package = output / 'hakone-win64'
+    work = output / 'nsis'
+    if work.exists():
+        raise SystemExit(f'Remove the old installer stage before rebuilding: {work}')
+    # The portable folder would switch an installed copy to portable mode.
+    shutil.copytree(package, work, symlinks=True, ignore=top_level_ignore(package, ('portable', 'sdk')))
+    for name in NSIS_SUPPORT:
+        copy(stage / name, work / name)
+    # spad-setup.exe handles Windows' "Set Program Access and Defaults" and is
+    # installed with the other executables. The main script writes its
+    # installer beside the stage, as hakone-<version>-win64.exe.
+    for script in ('spad.nsi', 'vlc.win32.nsi'):
+        subprocess.run(['makensis', '-V2', str(work / script)], check=True)
+    installer = output / f'hakone-{tag}-win64.exe'
+    if not installer.is_file():
+        raise RuntimeError(f'makensis did not write {installer.name}')
+    shutil.rmtree(work)
+    return installer
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('platform', choices=['macos', 'windows', 'linux'])
@@ -355,6 +388,11 @@ def main():
         image = disk_image_path(archive)
         package_metadata['disk_image'] = dict(asset_name=image.name, size=image.stat().st_size,
                                               sha256=write_checksum(image), package_type='drag-install-dmg')
+    else:
+        # The MSI is added later, on Windows, by build-msi.py.
+        installer = windows_installer(args.stage.resolve(), args.output.resolve(), args.tag)
+        package_metadata['installer'] = dict(asset_name=installer.name, size=installer.stat().st_size,
+                                             sha256=write_checksum(installer), package_type='nsis-installer')
     metadata_path.write_text(json.dumps(package_metadata, indent=2) + '\n')
     print(archive)
     if args.platform == 'macos':

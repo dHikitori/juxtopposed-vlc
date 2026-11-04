@@ -27,6 +27,8 @@ EXTRA_DIST = \
 	extras/package/release/dmg \
 	extras/package/release/build-native.sh \
 	extras/package/release/build-windows.sh \
+	extras/package/release/build-msi.py \
+	extras/package/release/test-windows-installers.ps1 \
 	extras/package/release/build-medialibrary.sh \
 	extras/package/release/package-linux.sh \
 	extras/package/release/bundle-linux-runtime.py \
@@ -38,6 +40,7 @@ EXTRA_DIST = \
 	extras/package/release/tests/test_native_build.py \
 	extras/package/release/tests/test_package.py \
 	extras/package/release/tests/test_dmg.py \
+	extras/package/release/tests/test_msi.py \
 	extras/package/release/tests/test_recovery.py \
 	extras/package/release/tests/test_dependency_cache.py \
 	doc/RELEASING.md \
