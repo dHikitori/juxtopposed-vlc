@@ -54,6 +54,7 @@ extern "C" char **environ;
 #include <QApplication>
 #include <QDialog>
 #include <QTimer>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <atomic>
 #include <QDate>
@@ -1179,6 +1180,7 @@ static void *Thread( void *obj )
 
     /* All the settings are in the .conf/.ini style */
 #ifdef _WIN32
+    bool portableConfig = false;
     char *cConfigDir = config_GetUserDir( VLC_CONFIG_DIR );
     if (likely(cConfigDir != nullptr))
     {
@@ -1189,6 +1191,8 @@ static void *Thread( void *obj )
         const QString organizationDir = QStringLiteral( "\\" QT_SETTINGS_ORGANIZATION );
         if( configDir.endsWith( organizationDir ) )
             configDir.chop( organizationDir.size() );
+        else
+            portableConfig = true;
         QSettings::setPath( QSettings::IniFormat, QSettings::UserScope, configDir );
     }
 #endif
@@ -1223,6 +1227,26 @@ static void *Thread( void *obj )
     }
 #endif
 #ifdef _WIN32
+    /* A portable folder keeps the settings file in a subfolder named after
+     * the settings organization, which was "vlc" before Hakone. The core only
+     * copies the %APPDATA% folders, so copy a portable folder's file here,
+     * when Hakone has none yet. */
+    if( portableConfig && !QFileInfo::exists( p_intf->mainSettings->fileName() ) )
+    {
+        QSettings legacy( QSettings::IniFormat, QSettings::UserScope,
+                          "vlc", "vlc-qt-interface" );
+        legacy.setFallbacksEnabled( false );
+        if( QFileInfo::exists( legacy.fileName() ) )
+        {
+            const QStringList keys = legacy.allKeys();
+            for( const QString &key : keys )
+                p_intf->mainSettings->setValue( key, legacy.value( key ) );
+            p_intf->mainSettings->sync();
+            msg_Info( p_intf, "copied interface settings from %s",
+                      qtu( legacy.fileName() ) );
+        }
+    }
+
     static const WCHAR moduleMarker = 0;
     HMODULE qtModule = nullptr;
     if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
