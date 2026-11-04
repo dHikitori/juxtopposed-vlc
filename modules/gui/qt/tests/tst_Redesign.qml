@@ -907,22 +907,26 @@ TestCase {
         tryCompare(popup, "visible", false)
         verify(previewEndSpy.count > 0)
     }
-    function test_seekPreviewKeepsItsOwnTimestampWhileLoadingAndStopsForAudio() {
+    // https://github.com/hakone-org/hakone/issues/34: the nearest prepared
+    // frame stands in while the hovered one decodes. The time stays the
+    // hovered time, and does not jump to the frame's.
+    function test_seekPreviewShowsHoveredTimeWhileLoadingAndStopsForAudio() {
         const slider = findChild(player, "seekBar")
         const popup = findChild(slider, "seekThumbnailPopup")
         mouseMove(slider, slider.width * .25, slider.height / 2)
         tryVerify(() => previewSpy.count > 0)
-        player.seekPreviewImagePosition = slider.previewPosition
+        const hovered = slider.previewPosition
+        player.seekPreviewImagePosition = hovered + .02
         player.seekPreviewImage = previewFixture
         tryCompare(popup, "visible", true)
         const time = findChild(popup.contentItem, "seekThumbnailTime")
-        const previousTime = time.text
+        compare(time.text, player.timeForPosition(hovered))
+        player.seekPreviewImagePosition = hovered
+        compare(time.text, player.timeForPosition(hovered))
         mouseMove(slider, slider.width * .75, slider.height / 2)
         verify(popup.visible)
-        compare(time.text, previousTime)
-        player.seekPreviewImagePosition = slider.previewPosition
-        verify(popup.visible)
-        verify(time.text !== previousTime)
+        compare(time.text, player.timeForPosition(slider.previewPosition))
+        verify(time.text !== player.timeForPosition(hovered))
         const before = previewSpy.count
         player.refreshSeekPreview()
         tryVerify(() => previewSpy.count > before)

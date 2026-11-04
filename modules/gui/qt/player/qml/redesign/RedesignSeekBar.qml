@@ -384,7 +384,9 @@ T.Slider {
                 objectName: "seekThumbnailTime"
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: parent.height - baselineOffset - root.theme.dp(3)
-                text: root.timeForPosition(root.previewImagePosition)
+                // The hovered time, not the frame's: until the frame for this
+                // time is decoded, the nearest prepared one stands in for it.
+                text: root.timeForPosition(root.previewPosition)
                 font.pixelSize: root.theme.dp(15); color: root.theme.foreground
             }
         }

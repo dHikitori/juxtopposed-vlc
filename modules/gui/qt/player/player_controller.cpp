@@ -2115,14 +2115,17 @@ bool PlayerControllerPrivate::startSeekPreview(vlc_tick_t bucket, bool backgroun
                     owner->m_seekSamplePoints.removeOne(time);
                     owner->m_seekSampleFailures = saved ? 0 : owner->m_seekSampleFailures + 1;
                 } else {
-                    if (saved) {
-                        owner->m_seekSampleFailures = 0;
+                    if (saved) owner->m_seekSampleFailures = 0;
+                    // The pointer moved on while this frame was decoded: show
+                    // the cached frame nearest to where it is now, which may be
+                    // this one, and decode the frame for that time.
+                    const double pending = std::exchange(owner->m_pendingSeekPosition, -1);
+                    if (pending >= 0) owner->q_func()->requestSeekPreview(pending);
+                    else if (saved) {
                         owner->m_seekPreview = imageUrl;
                         owner->m_seekPreviewPosition = double(decodedTime) / length;
                         emit owner->q_func()->seekPreviewChanged();
                     }
-                    const double pending = std::exchange(owner->m_pendingSeekPosition, -1);
-                    if (pending >= 0) owner->q_func()->requestSeekPreview(pending);
                 }
                 owner->updateSeekSampling();
             });
