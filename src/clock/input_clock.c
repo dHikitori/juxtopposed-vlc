@@ -138,6 +138,7 @@ struct input_clock_t
     bool    b_paused;
     float   rate;
     vlc_tick_t i_pts_delay;
+    vlc_tick_t i_pts_delay_target; /* last requested, maybe below i_pts_delay */
     vlc_tick_t i_pause_date;
 };
 
@@ -190,6 +191,7 @@ input_clock_t *input_clock_New(struct vlc_logger *logger, float rate)
 
     cl->rate = rate;
     cl->i_pts_delay = 0;
+    cl->i_pts_delay_target = 0;
     cl->b_paused = false;
     cl->i_pause_date = VLC_TICK_INVALID;
 
@@ -338,6 +340,10 @@ void input_clock_Reset( input_clock_t *cl )
     cl->ref = cl->last
         = clock_point_Create( VLC_TICK_INVALID, VLC_TICK_INVALID );
 
+    /* Buffering starts again: a delay lowered while playing applies now.
+     * Keeping the larger one would delay the restart by the difference. */
+    cl->i_pts_delay = cl->i_pts_delay_target;
+
     if (cl->listener.cbs != NULL && cl->listener.cbs->reset != NULL)
         cl->listener.cbs->reset(cl->listener.opaque);
 }
@@ -464,6 +470,13 @@ void input_clock_ChangeSystemOrigin( input_clock_t *cl, vlc_tick_t i_system )
 void input_clock_SetJitter( input_clock_t *cl,
                             vlc_tick_t i_pts_delay, int i_cr_average )
 {
+    /* The delay only increases while playing, since a smaller one would move
+     * the output dates back in time. It is lowered when the clock is reset,
+     * before buffering again. */
+    cl->i_pts_delay_target = i_pts_delay;
+    if( i_pts_delay < cl->i_pts_delay )
+        i_pts_delay = cl->i_pts_delay;
+
     /* Update late observations */
     const vlc_tick_t i_delay_delta = i_pts_delay - cl->i_pts_delay;
     vlc_tick_t pi_late[INPUT_CLOCK_LATE_COUNT];
@@ -482,11 +495,8 @@ void input_clock_SetJitter( input_clock_t *cl,
         cl->late.i_index = ( cl->late.i_index + 1 ) % INPUT_CLOCK_LATE_COUNT;
     }
 
-    /* TODO always save the value, and when rebuffering use the new one if smaller
-     * TODO when increasing -> force rebuffering
-     */
-    if( cl->i_pts_delay < i_pts_delay )
-        cl->i_pts_delay = i_pts_delay;
+    /* TODO when increasing -> force rebuffering */
+    cl->i_pts_delay = i_pts_delay;
 
     /* */
     if( i_cr_average < 10 )
