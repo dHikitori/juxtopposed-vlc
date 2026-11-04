@@ -674,7 +674,7 @@ void UpdateModel::startCheck(bool explicitCheck, bool inlineCheck)
         emit explicitCheckChanged();
     }
     d->release.reset();
-    auto installed = vlc::updates::Version::parse(QStringLiteral(PACKAGE_VERSION));
+    auto installed = vlc::updates::Version::parse(QStringLiteral(HAKONE_VERSION));
     if (installed)
         installed->generation = PACKAGE_UPDATE_GENERATION;
     d->status = installed ? Checking : CheckFailed;
@@ -927,7 +927,7 @@ void UpdateDialog::updateUI()
         break;
     case UpdateModel::UpToDate:
         ui.updateTitle->setText(qtr("No update is available"));
-        ui.updateSummary->setText(qtr("No newer compatible release is available for Hakone %1.").arg(QStringLiteral(PACKAGE_VERSION)));
+        ui.updateSummary->setText(qtr("No newer compatible release is available for Hakone %1.").arg(QStringLiteral(HAKONE_VERSION)));
         break;
     case UpdateModel::CheckFailed:
         ui.updateTitle->setText(qtr("Cannot check for updates"));
@@ -943,7 +943,7 @@ void UpdateDialog::updateUI()
         break;
     case UpdateModel::Unchecked:
         ui.updateTitle->setText(qtr("Hakone updates"));
-        ui.updateSummary->setText(qtr("Installed version: %1\nCheck for a new version of Hakone.").arg(QStringLiteral(PACKAGE_VERSION)));
+        ui.updateSummary->setText(qtr("Installed version: %1\nCheck for a new version of Hakone.").arg(QStringLiteral(HAKONE_VERSION)));
         break;
     }
     ui.updateFeedback->setVisible(available && m_feedback != None);

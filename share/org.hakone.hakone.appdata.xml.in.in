@@ -17,7 +17,7 @@
     <url type="homepage">https://hakone.org/</url>
     <url type="bugtracker">https://github.com/hakone-org/hakone/issues</url>
     <releases>
-        <release version="@VERSION@" date="@VERSION_DATE@" />
+        <release version="@HAKONE_VERSION@" date="@VERSION_DATE@" />
     </releases>
     <provides>
         <library>libvlc.so.@LIBVLC_ABI_MAJOR@</library>

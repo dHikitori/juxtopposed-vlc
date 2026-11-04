@@ -696,7 +696,8 @@ static void ListModules (libvlc_int_t *p_this, bool b_verbose)
 static void Version( void )
 {
     ShowConsole();
-    printf(_("Hakone version %s (%s)\n"), VERSION_MESSAGE, psz_vlc_changeset);
+    printf(_("Hakone version %s (%s)\n"), HAKONE_VERSION_MESSAGE, psz_vlc_changeset);
+    printf(_("LibVLC version %s\n"), VERSION_MESSAGE);
     printf(_("Compiled by %s on %s (%s)\n"), VLC_CompileBy(),
            VLC_CompileHost(), __DATE__" "__TIME__ );
     printf(_("Compiler: %s\n"), VLC_Compiler());
@@ -720,7 +721,7 @@ static void ShowConsole( void )
      * Unicode/locale subsystem. By default, we have the obsolecent OEM code
      * page (e.g. CP437 or CP850). */
     SetConsoleOutputCP (GetACP ());
-    SetConsoleTitle (TEXT("Hakone Media Player version ") TEXT(PACKAGE_VERSION));
+    SetConsoleTitle (TEXT("Hakone Media Player version ") TEXT(HAKONE_VERSION));
 
     freopen( "CONOUT$", "w", stderr );
     freopen( "CONIN$", "r", stdin );

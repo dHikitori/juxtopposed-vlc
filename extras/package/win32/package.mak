@@ -16,12 +16,12 @@ build-npapi: package-win-install
 endif
 
 if HAVE_ARM64
-WINVERSION=hakone-$(VERSION)-winarm64
+WINVERSION=hakone-$(HAKONE_VERSION)-winarm64
 else
 if HAVE_WIN64
-WINVERSION=hakone-$(VERSION)-win64
+WINVERSION=hakone-$(HAKONE_VERSION)-win64
 else
-WINVERSION=hakone-$(VERSION)-win32
+WINVERSION=hakone-$(HAKONE_VERSION)-win32
 endif
 endif
 

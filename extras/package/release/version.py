@@ -22,17 +22,18 @@ def parse_version(value):
 
 
 def source_version(root=ROOT):
-    meson = re.search(r"version:\s*'([^']+)'", (root / 'meson.build').read_text())
+    """Hakone's own version. LibVLC keeps the upstream project version."""
+    meson = re.search(r"^hakone_version = '([^']+)'$", (root / 'meson.build').read_text(), re.MULTILINE)
     configure = (root / 'configure.ac').read_text()
-    autoconf = re.search(r'AC_INIT\(\[vlc\],\s*\[([^]]+)\]\)', configure)
+    autoconf = re.search(r'^HAKONE_VERSION=(.*)$', configure, re.MULTILINE)
     if not meson or not autoconf or meson[1] != autoconf[1]:
-        raise ValueError('Meson and Autoconf application versions must agree')
+        raise ValueError('Meson and Autoconf Hakone versions must agree')
     info = parse_version(meson[1])
     for name, expected in (('MAJOR', info['major']), ('MINOR', info['minor']),
-                           ('REVISION', info['patch']), ('EXTRA', 0), ('DEV', info['prerelease'])):
-        value = re.search(rf'^VERSION_{name}=(.*)$', configure, re.MULTILINE)
+                           ('REVISION', info['patch']), ('DEV', info['prerelease'])):
+        value = re.search(rf'^HAKONE_VERSION_{name}=(.*)$', configure, re.MULTILINE)
         if not value or value[1].strip("\"'") != str(expected):
-            raise ValueError(f'Autoconf VERSION_{name} must match {info["version"]}')
+            raise ValueError(f'Autoconf HAKONE_VERSION_{name} must match {info["version"]}')
     info['generation'] = source_generation(root)
     return info
 

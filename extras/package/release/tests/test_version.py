@@ -126,8 +126,18 @@ class VersionTests(unittest.TestCase):
     def test_mismatched_build_definitions(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            (root / 'meson.build').write_text("project('VLC', version: '4.0.0-beta.4')")
-            (root / 'configure.ac').write_text('AC_INIT([vlc], [4.0.0-beta.3])')
+            (root / 'meson.build').write_text("project('VLC', version: '4.0.0-dev')\n"
+                                              "hakone_version = '1.0.0-beta.2'\n"
+                                              "vlc_update_generation = 1\n")
+            configure = ('AC_INIT([vlc], [4.0.0-dev])\nHAKONE_VERSION={}\nHAKONE_VERSION_MAJOR=1\n'
+                         'HAKONE_VERSION_MINOR=0\nHAKONE_VERSION_REVISION=0\nHAKONE_VERSION_DEV={}\n'
+                         'UPDATE_GENERATION=1\n')
+            (root / 'configure.ac').write_text(configure.format('1.0.0-beta.2', 'beta.2'))
+            self.assertEqual(version.source_version(root)['version'], '1.0.0-beta.2')
+            (root / 'configure.ac').write_text(configure.format('1.0.0-beta.1', 'beta.1'))
+            with self.assertRaises(ValueError):
+                version.source_version(root)
+            (root / 'configure.ac').write_text(configure.format('1.0.0-beta.2', 'beta.1'))
             with self.assertRaises(ValueError):
                 version.source_version(root)
 

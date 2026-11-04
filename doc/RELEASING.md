@@ -131,9 +131,9 @@ commit remain in the workflow artifacts. Inspect the candidate release source
 before creating a tag:
 
 ```sh
-git fetch origin tag 4.0.0-beta.4
-git log --oneline 4.0.0-beta.4..HEAD
-git diff 4.0.0-beta.4..HEAD -- .github/workflows extras/package/release doc/RELEASING.md doc/releases README.md
+git fetch origin tag 4.0.0-beta.5
+git log --oneline 4.0.0-beta.5..HEAD
+git diff 4.0.0-beta.5..HEAD -- .github/workflows extras/package/release doc/RELEASING.md doc/releases README.md
 ```
 
 Generated files go into ignored `build-release-*` and `contrib/contrib-*`
@@ -224,7 +224,7 @@ full run:
    recovery succeeds. Leave it unchecked to produce only the complete artifact.
 6. Start the workflow. It verifies and copies the reusable packages into this
    run, builds and tests the selected targets, and assembles
-   `4.0.0-beta.5-complete`. Inspect the downloads before publishing the draft.
+   `1.0.0-beta.1-complete`. Inspect the downloads before publishing the draft.
 
 Recovery requires the original run to use the same version and an ancestor of
 the current commit. Only release tooling (including the Windows build wrapper),
@@ -320,9 +320,10 @@ above the full release notes in the update window and notification pane.
 Assembly adds `schema: 1`, the exact version tag, and the compiled update
 generation automatically. These fields cannot be overridden by the JSON file.
 `vlc_update_generation` in `meson.build` and `UPDATE_GENERATION` in `configure.ac`
-must agree. Generation zero is the current value. Keep it unchanged for ordinary
-releases. If a later release starts a new version sequence, increase both values
-in its source before building. The updater compares generation first, then
+must agree. Generation one is the current value: it started with `1.0.0-beta.1`,
+when Hakone's own version sequence replaced the `4.0.0-beta.N` releases. Keep it
+unchanged for ordinary releases. If a later release starts a new version
+sequence, increase both values in its source before building. The updater compares generation first, then
 normal semantic versions; never decrease or reuse a generation for an older
 sequence. Stable builds continue to exclude prereleases across generations.
 
@@ -340,33 +341,41 @@ stable so existing clients can continue checking it.
 
 ### Tagging
 
-Before tagging, update `meson.build`'s project version and `configure.ac`'s
-`AC_INIT` / `VERSION_*` fields together. Add `doc/releases/<version>.md`, then run:
+Hakone's version is separate from the LibVLC version. The `meson.build` project
+version and `configure.ac`'s `AC_INIT` / `VERSION_*` fields are the LibVLC and
+core version, kept in step with upstream VLC; LibVLC, its plugins, Lua's
+`vlc.misc.version()` and the engine's network user agents report it. Release
+tags, packages, the updater and the app's own version displays use Hakone's
+version, and its codename is Jiji.
+
+Before tagging, update `hakone_version` in `meson.build` and `configure.ac`'s
+`HAKONE_VERSION` / `HAKONE_VERSION_*` fields together. Add
+`doc/releases/<version>.md`, then run:
 
 ```sh
-python3 extras/package/release/version.py 4.0.0-beta.5
+python3 extras/package/release/version.py 1.0.0-beta.1
 python3 -m unittest discover -s extras/package/release/tests
 ```
 
 The validator rejects old `beta-N` tags and tags that disagree with the compiled
-version. Use `4.0.0-beta.N`, `4.0.0-rc.N`, or `4.0.0` (stable). Published historical
-`beta-1` through `beta-3` tags remain intact. Create the annotated tag only after
+version. Use `1.0.0-beta.N`, `1.0.0-rc.N`, or `1.0.0` (stable). Published historical
+`beta-1` through `beta-3` and `4.0.0-beta.4` / `4.0.0-beta.5` tags remain intact. Create the annotated tag only after
 committing the reviewed release source:
 
 ```sh
-git tag -a 4.0.0-beta.5 -m 'Hakone 4.0.0-beta.5'
-git show 4.0.0-beta.5 --stat
+git tag -a 1.0.0-beta.1 -m 'Hakone 1.0.0-beta.1'
+git show 1.0.0-beta.1 --stat
 ```
 
 Once the source/tag is acceptable, explicitly push the branch and tag:
 
 ```sh
 git push origin HEAD
-git push origin refs/tags/4.0.0-beta.5
+git push origin refs/tags/1.0.0-beta.1
 ```
 
-A pushed `4.0.0-beta.5` tag runs the same builds and creates a **draft prerelease** named
-`Hakone 4.0.0-beta.5`. It attaches only the four application
+A pushed `1.0.0-beta.1` tag runs the same builds and creates a **draft prerelease** named
+`Hakone 1.0.0-beta.1`. It attaches only the four application
 archives, the two Mac disk images, their `.sha256` files and `SHA256SUMS.txt`. Build metadata stays in the
 workflow artifacts; source downloads are provided automatically by GitHub.
 The notes are taken from the tagged source and include its commit hash.
@@ -449,7 +458,7 @@ Use an Intel Mac for the Intel package or an Apple Silicon Mac for ARM. Optional
 modules are detected from the installed libraries; inspect Meson's summary.
 
 ```sh
-RELEASE_TAG=4.0.0-beta.5 JOBS=4 bash extras/package/release/build-native.sh
+RELEASE_TAG=1.0.0-beta.1 JOBS=4 bash extras/package/release/build-native.sh
 python3 extras/package/release/verify.py \
     'build-release-output/macos-arm64/Hakone.app/Contents/MacOS/hakone'
 ```

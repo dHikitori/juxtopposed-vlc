@@ -4,8 +4,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 !define PRODUCT_NAME "Hakone Media Player"
-!define VERSION @VERSION@
-!define PRODUCT_VERSION @VERSION@
+!define VERSION @HAKONE_VERSION@
+!define PRODUCT_VERSION @HAKONE_VERSION@
 !define PRODUCT_GROUP "Hakone"
 !define PRODUCT_PUBLISHER "Hakone"
 !define PRODUCT_WEB_SITE "https://hakone.org/"
@@ -792,9 +792,9 @@ Section -Post
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
     "Publisher" "${PRODUCT_PUBLISHER}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
-    "VersionMajor"  "@VERSION_MAJOR@"
+    "VersionMajor"  "@HAKONE_VERSION_MAJOR@"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" \
-    "VersionMinor" "@VERSION_MINOR@"
+    "VersionMinor" "@HAKONE_VERSION_MINOR@"
 SectionEnd
 
 ;;;;;;;;;;;;;;;;;;;;;;;;

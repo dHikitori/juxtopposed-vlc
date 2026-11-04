@@ -7,10 +7,10 @@
     <?define SupportURL = "https://hakone.org/" ?>
     <?define UpdatesURL = "https://hakone.org/" ?>
 
-    <?define VerMajor = "@VERSION_MAJOR@" ?>
-    <?define VerMinor = "@VERSION_MINOR@" ?>
-    <?define VerPatch = "@VERSION_REVISION@" ?>
-    <?define VerExtra = "@VERSION_EXTRA@" ?>
+    <?define VerMajor = "@HAKONE_VERSION_MAJOR@" ?>
+    <?define VerMinor = "@HAKONE_VERSION_MINOR@" ?>
+    <?define VerPatch = "@HAKONE_VERSION_REVISION@" ?>
+    <?define VerExtra = "0" ?>
     <?define Version = "$(var.VerMajor).$(var.VerMinor).$(var.VerPatch)" ?>
     <?define VersionLong = "$(var.Version).$(var.VerExtra)" ?>
 

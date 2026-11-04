@@ -224,7 +224,7 @@ void EpisodeMetadata::get(const QUrl& url, quint64 generation, std::function<voi
     }
     m_lastRequest.start();
     QNetworkRequest request(url);
-    request.setRawHeader("User-Agent", "Hakone/" PACKAGE_VERSION " (episode titles)");
+    request.setRawHeader("User-Agent", "Hakone/" HAKONE_VERSION " (episode titles)");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::SameOriginRedirectPolicy);
     request.setMaximumRedirectsAllowed(2); request.setTransferTimeout(8000);
     auto* reply = m_network.get(request); m_reply = reply;

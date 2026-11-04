@@ -463,7 +463,7 @@ static xml::Document make_server_identity(const char *uuid, const char *server_n
             ret.create_element("manufacturerURL", ret.create_text_node("https://videolan.org")),
             ret.create_element("modelDescription", ret.create_text_node("Hakone UPNP Media Server")),
             ret.create_element("modelName", ret.create_text_node("Hakone")),
-            ret.create_element("modelNumber", ret.create_text_node(PACKAGE_VERSION)),
+            ret.create_element("modelNumber", ret.create_text_node(HAKONE_VERSION)),
             ret.create_element("modelURL", ret.create_text_node("https://hakone.org/")),
             ret.create_element("serialNumber", ret.create_text_node("1")),
             ret.create_element("UDN", ret.create_text_node(uuid_attr.c_str())),

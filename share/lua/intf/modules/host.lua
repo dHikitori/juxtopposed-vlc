@@ -197,7 +197,7 @@ function host()
                          switch_status = switch_status,
                          append = append,
                        }
-        client:send( "Hakone Media Player "..vlc.misc.version().."\n" )
+        client:send( "Hakone Media Player "..vlc.misc.app_version().."\n" )
         clients[client] = client
         client:switch_status(status.password)
     end

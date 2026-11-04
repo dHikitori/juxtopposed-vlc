@@ -54,7 +54,7 @@ and the [add-on SDK](contrib-addons/sdk/README.md).
 - [macOS](doc/BUILD-macos.md)
 - [Windows](doc/BUILD-win32.md)
 
-Release packaging and the `4.0.0-beta.N` version scheme are described in
+Release packaging and the `1.0.0-beta.N` version scheme are described in
 [doc/RELEASING.md](doc/RELEASING.md).
 
 ## Contributing

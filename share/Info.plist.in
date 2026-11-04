@@ -21,7 +21,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Hakone</string>
 	<key>CFBundleShortVersionString</key>
-	<string>@VERSION@</string>
+	<string>@HAKONE_VERSION@</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleSignature</key>
@@ -35,7 +35,7 @@
 	<key>BreakpadURL</key>
 	<string>@BREAKPAD_URL@/reports</string>
 	<key>CFBundleVersion</key>
-	<string>@VERSION@</string>
+	<string>@HAKONE_VERSION@</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.video</string>
 	<key>LSMinimumSystemVersion</key>

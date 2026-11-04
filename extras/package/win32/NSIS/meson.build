@@ -111,7 +111,7 @@ if makensis.found()
     vlc_nsis = custom_target(
         command: [makensis, nsi_script_dir / 'vlc.win32.nsi'],
         input: vlc_nsi,
-        output: 'hakone-' + vlc_version + '-' + winstaller_suffix + '.exe', # real name but root build folder
+        output: 'hakone-' + hakone_version + '-' + winstaller_suffix + '.exe', # real name but root build folder
         build_by_default: false,
         console: true,
         depends: nsProcess)

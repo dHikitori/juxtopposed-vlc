@@ -34,8 +34,8 @@ endif
 sevenz = find_program('7z', required: false)
 if sevenz.found()
     sevenz_opts = ['-t7z', '-m0=lzma', '-mx=9', '-mfb=64', '-md=32m', '-ms=on']
-    release_7z = 'hakone-' + vlc_version + '-' + winstaller_suffix + '.7z'
-    debug_7z   = 'hakone-' + vlc_version + '-' + winstaller_suffix + '-debug.7z'
+    release_7z = 'hakone-' + hakone_version + '-' + winstaller_suffix + '.7z'
+    debug_7z   = 'hakone-' + hakone_version + '-' + winstaller_suffix + '-debug.7z'
 
     # generate a 7z from the "installed" and stripped folder
     package_win32_7zip = custom_target(

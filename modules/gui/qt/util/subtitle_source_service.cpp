@@ -499,7 +499,7 @@ QNetworkReply* SubtitleSourceService::request(const QUrl& url, const QByteArray&
                                               bool api, qint64 limit, ReplyCallback callback)
 {
     QNetworkRequest request(url);
-    request.setRawHeader("User-Agent", "Hakone v" PACKAGE_VERSION);
+    request.setRawHeader("User-Agent", "Hakone v" HAKONE_VERSION);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
         api ? QNetworkRequest::SameOriginRedirectPolicy : QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setMaximumRedirectsAllowed(5);

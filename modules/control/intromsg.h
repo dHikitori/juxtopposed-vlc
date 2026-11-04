@@ -28,7 +28,7 @@ static inline void intf_consoleIntroMsg(intf_thread_t *p_intf)
         freopen("CONIN$", "r", stdin);
     }
 
-    msg_rc("Hakone Media Player - %s", VERSION_MESSAGE);
+    msg_rc("Hakone Media Player - %s", HAKONE_VERSION_MESSAGE);
     msg_rc("%s", COPYRIGHT_MESSAGE);
     msg_rc(_("\nWarning: if you cannot access the GUI "
                      "anymore, open a command-line window, go to the "

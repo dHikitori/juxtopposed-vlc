@@ -59,7 +59,7 @@ void CheckCrashDump( const wchar_t* path )
         L"Hakone crash reporting", MB_YESNO);
     std::map<std::wstring, std::wstring> params;
     params[L"prod"] = L"Hakone";
-    params[L"ver"] = WIDEN(PACKAGE_VERSION);
+    params[L"ver"] = WIDEN(HAKONE_VERSION);
     do
     {
         std::wstringstream fullPath;

@@ -1528,7 +1528,7 @@ static void *Thread( void *obj )
 #endif
 
     app.setApplicationDisplayName( qtr("Hakone Media Player") );
-    app.setApplicationVersion( QString::fromUtf8(VERSION_MESSAGE) );
+    app.setApplicationVersion( QString::fromUtf8(HAKONE_VERSION_MESSAGE) );
 
     app.setWindowIcon( QVLCAppIcon() );
 

@@ -98,45 +98,45 @@ package-macosx-sdk: macos-install
 		| gzip -c > "$(top_builddir)/vlc-macos-sdk-$(VERSION).tar.gz"
 
 package-macosx: Hakone.app
-	rm -f "$(top_builddir)/hakone-$(VERSION).dmg"
+	rm -f "$(top_builddir)/hakone-$(HAKONE_VERSION).dmg"
 if HAVE_DMGBUILD
 	@echo "Packaging fancy DMG using dmgbuild"
 	cd "$(top_srcdir)/extras/package/macosx/dmg" && dmgbuild -s "dmg_settings.py" \
-		-D app="$(abs_top_builddir)/Hakone.app" "Hakone Media Player" "$(abs_top_builddir)/hakone-$(VERSION).dmg"
+		-D app="$(abs_top_builddir)/Hakone.app" "Hakone Media Player" "$(abs_top_builddir)/hakone-$(HAKONE_VERSION).dmg"
 else !HAVE_DMGBUILD
 	@echo "Packaging non-fancy DMG"
 	## Create directory for DMG contents
-	mkdir -p "$(top_builddir)/hakone-$(VERSION)"
+	mkdir -p "$(top_builddir)/hakone-$(HAKONE_VERSION)"
 	## Copy contents
-	cp -Rp "$(top_builddir)/Hakone.app" "$(top_builddir)/hakone-$(VERSION)/Hakone.app"
+	cp -Rp "$(top_builddir)/Hakone.app" "$(top_builddir)/hakone-$(HAKONE_VERSION)/Hakone.app"
 	## Symlink to Applications so users can easily drag-and-drop the App to it
-	$(LN_S) -f /Applications "$(top_builddir)/hakone-$(VERSION)/"
+	$(LN_S) -f /Applications "$(top_builddir)/hakone-$(HAKONE_VERSION)/"
 	## Create DMG
-	hdiutil create -srcfolder "$(top_builddir)/hakone-$(VERSION)" -volname "Hakone Media Player" \
-		-format UDBZ -fs HFS+ -o "$(top_builddir)/hakone-$(VERSION).dmg"
+	hdiutil create -srcfolder "$(top_builddir)/hakone-$(HAKONE_VERSION)" -volname "Hakone Media Player" \
+		-format UDBZ -fs HFS+ -o "$(top_builddir)/hakone-$(HAKONE_VERSION).dmg"
 	## Cleanup
-	rm -rf "$(top_builddir)/hakone-$(VERSION)"
+	rm -rf "$(top_builddir)/hakone-$(HAKONE_VERSION)"
 endif
 
 package-macosx-zip: Hakone.app
-	rm -f "$(top_builddir)/hakone-$(VERSION).zip"
-	mkdir -p $(top_builddir)/hakone-$(VERSION)/Goodies/
-	cp -Rp $(top_builddir)/Hakone.app $(top_builddir)/hakone-$(VERSION)/Hakone.app
-	cd $(srcdir); cp -R AUTHORS COPYING README.md THANKS NEWS $(abs_top_builddir)/hakone-$(VERSION)/Goodies/
-	zip -r -y -9 $(top_builddir)/hakone-$(VERSION).zip $(top_builddir)/hakone-$(VERSION)
-	rm -rf "$(top_builddir)/hakone-$(VERSION)"
+	rm -f "$(top_builddir)/hakone-$(HAKONE_VERSION).zip"
+	mkdir -p $(top_builddir)/hakone-$(HAKONE_VERSION)/Goodies/
+	cp -Rp $(top_builddir)/Hakone.app $(top_builddir)/hakone-$(HAKONE_VERSION)/Hakone.app
+	cd $(srcdir); cp -R AUTHORS COPYING README.md THANKS NEWS $(abs_top_builddir)/hakone-$(HAKONE_VERSION)/Goodies/
+	zip -r -y -9 $(top_builddir)/hakone-$(HAKONE_VERSION).zip $(top_builddir)/hakone-$(HAKONE_VERSION)
+	rm -rf "$(top_builddir)/hakone-$(HAKONE_VERSION)"
 
 package-macosx-release:
-	rm -f "$(top_builddir)/hakone-$(VERSION)-release.zip"
-	mkdir -p $(top_builddir)/hakone-$(VERSION)-release
-	cp -Rp $(top_builddir)/Hakone.app $(top_builddir)/hakone-$(VERSION)-release/
-	cp $(srcdir)/extras/package/macosx/dmg/* $(top_builddir)/hakone-$(VERSION)-release/
-	cp "$(srcdir)/extras/package/macosx/codesign.sh" $(top_builddir)/hakone-$(VERSION)-release/
-	cp "$(srcdir)/extras/package/macosx/vlc-hardening.entitlements" $(top_builddir)/hakone-$(VERSION)-release/
-	cp "$(pkglibexecdir)/vlc-cache-gen" $(top_builddir)/hakone-$(VERSION)-release/
-	install_name_tool -add_rpath "@executable_path/Hakone.app/Contents/Frameworks" $(top_builddir)/hakone-$(VERSION)-release/vlc-cache-gen
-	zip -r -y -9 $(top_builddir)/hakone-$(VERSION)-release.zip $(top_builddir)/hakone-$(VERSION)-release
-	rm -rf "$(top_builddir)/hakone-$(VERSION)-release"
+	rm -f "$(top_builddir)/hakone-$(HAKONE_VERSION)-release.zip"
+	mkdir -p $(top_builddir)/hakone-$(HAKONE_VERSION)-release
+	cp -Rp $(top_builddir)/Hakone.app $(top_builddir)/hakone-$(HAKONE_VERSION)-release/
+	cp $(srcdir)/extras/package/macosx/dmg/* $(top_builddir)/hakone-$(HAKONE_VERSION)-release/
+	cp "$(srcdir)/extras/package/macosx/codesign.sh" $(top_builddir)/hakone-$(HAKONE_VERSION)-release/
+	cp "$(srcdir)/extras/package/macosx/vlc-hardening.entitlements" $(top_builddir)/hakone-$(HAKONE_VERSION)-release/
+	cp "$(pkglibexecdir)/vlc-cache-gen" $(top_builddir)/hakone-$(HAKONE_VERSION)-release/
+	install_name_tool -add_rpath "@executable_path/Hakone.app/Contents/Frameworks" $(top_builddir)/hakone-$(HAKONE_VERSION)-release/vlc-cache-gen
+	zip -r -y -9 $(top_builddir)/hakone-$(HAKONE_VERSION)-release.zip $(top_builddir)/hakone-$(HAKONE_VERSION)-release
+	rm -rf "$(top_builddir)/hakone-$(HAKONE_VERSION)-release"
 
 package-translations:
 	mkdir -p "$(srcdir)/vlc-translations-$(VERSION)"

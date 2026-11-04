@@ -550,6 +550,21 @@
 /* Simple version string */
 #mesondefine VERSION_MESSAGE
 
+/* Hakone version */
+#mesondefine HAKONE_VERSION
+
+/* Hakone version and codename */
+#mesondefine HAKONE_VERSION_MESSAGE
+
+/* Hakone version major number */
+#mesondefine HAKONE_VERSION_MAJOR
+
+/* Hakone version minor number */
+#mesondefine HAKONE_VERSION_MINOR
+
+/* Hakone version revision number */
+#mesondefine HAKONE_VERSION_REVISION
+
 /* compiler */
 #mesondefine VLC_COMPILER
 

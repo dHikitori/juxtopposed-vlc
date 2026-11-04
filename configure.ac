@@ -2,13 +2,21 @@ dnl Autoconf settings for vlc
 
 AC_COPYRIGHT([Copyright 1999-2026 VLC authors and VideoLAN])
 
-AC_INIT([vlc], [4.0.0-beta.5])
+AC_INIT([vlc], [4.0.0-dev])
+dnl The package version above is the LibVLC and core version, kept in step with
+dnl upstream VLC. Hakone's own version, codename and update generation follow.
 VERSION_MAJOR=4
 VERSION_MINOR=0
 VERSION_REVISION=0
 VERSION_EXTRA=0
-VERSION_DEV=beta.5
-UPDATE_GENERATION=0
+VERSION_DEV=dev
+HAKONE_VERSION=1.0.0-beta.1
+HAKONE_VERSION_MAJOR=1
+HAKONE_VERSION_MINOR=0
+HAKONE_VERSION_REVISION=0
+HAKONE_VERSION_DEV=beta.1
+HAKONE_CODENAME="Jiji"
+UPDATE_GENERATION=1
 
 VERSION_DATE=$(
     VERSION_PATTERN='^v?([[0-9]]+\.?)+(-[[0-9A-Za-z]]+(\.[[0-9A-Za-z]]+)*)?$'
@@ -5286,6 +5294,15 @@ VERSION_MESSAGE="${VERSION} ${CODENAME}"
 COPYRIGHT_MESSAGE="Copyright © ${COPYRIGHT_YEARS} the VideoLAN team"
 AC_DEFINE_UNQUOTED([VERSION_MESSAGE], "${VERSION_MESSAGE}", [Simple version string])
 AC_DEFINE_UNQUOTED([COPYRIGHT_MESSAGE], "${COPYRIGHT_MESSAGE}", [Copyright string])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION], "${HAKONE_VERSION}", [Hakone version])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_MESSAGE], "${HAKONE_VERSION} ${HAKONE_CODENAME}", [Hakone version and codename])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_MAJOR], ${HAKONE_VERSION_MAJOR}, [Hakone version major number])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_MINOR], ${HAKONE_VERSION_MINOR}, [Hakone version minor number])
+AC_DEFINE_UNQUOTED([HAKONE_VERSION_REVISION], ${HAKONE_VERSION_REVISION}, [Hakone version revision number])
+AC_SUBST([HAKONE_VERSION])
+AC_SUBST([HAKONE_VERSION_MAJOR])
+AC_SUBST([HAKONE_VERSION_MINOR])
+AC_SUBST([HAKONE_VERSION_REVISION])
 AC_DEFINE_UNQUOTED([COPYRIGHT_YEARS], "${COPYRIGHT_YEARS}", [The copyright years])
 AC_DEFINE_UNQUOTED([CONFIGURE_LINE], "${CONFIGURE_LINE}", [The ./configure command line])
 AC_DEFINE_UNQUOTED([PACKAGE_VERSION_MAJOR],${VERSION_MAJOR}, [version major number])
@@ -5417,6 +5434,7 @@ echo "
 libvlc configuration
 --------------------
 version               : ${VERSION}
+hakone version        : ${HAKONE_VERSION}
 system                : ${SYS}
 architecture          : ${ARCH}
 optimizations         : ${enable_optimizations}"

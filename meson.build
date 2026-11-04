@@ -1,11 +1,15 @@
 project('VLC', ['c', 'cpp'],
-    version: '4.0.0-beta.5',
+    version: '4.0.0-dev',
     default_options: ['c_std=gnu17', 'cpp_std=c++17'],
     meson_version: '>=1.10.0')
 
 vlc_copyright_years = '1996-2026'
 vlc_version_codename = 'Otto Chriek'
-vlc_update_generation = 0
+# The project version above is the LibVLC and core version, kept in step with
+# upstream VLC. Hakone's own version, codename and update generation follow.
+hakone_version = '1.0.0-beta.1'
+hakone_version_codename = 'Jiji'
+vlc_update_generation = 1
 
 # LibVLC library (ABI) version
 # Format must be major.minor.micro
@@ -38,6 +42,15 @@ vlc_version_short = f'@vlc_version_major@.@vlc_version_minor@.@vlc_version_revis
 vlc_version = vlc_version_short + ((vlc_version_type != '') ? f'-@vlc_version_type@' : '')
 
 vlc_package_name = meson.project_name().to_lower()
+
+hakone_version_parts = hakone_version.split('-')[0].split('.')
+if hakone_version_parts.length() != 3
+    error(f'Unexpected Hakone version "@hakone_version@".',
+          'Expected a format of major.minor.patch[-prerelease]')
+endif
+hakone_version_major    = hakone_version_parts[0].to_int()
+hakone_version_minor    = hakone_version_parts[1].to_int()
+hakone_version_revision = hakone_version_parts[2].to_int()
 
 vlc_src_root = meson.current_source_dir()
 vlc_build_root = meson.current_build_dir()
@@ -1026,6 +1039,12 @@ cdata.set_quoted('PACKAGE_VERSION', vlc_version)
 cdata.set('PACKAGE_UPDATE_GENERATION', vlc_update_generation)
 cdata.set_quoted('VERSION_MESSAGE', f'@vlc_version@ @vlc_version_codename@')
 
+cdata.set_quoted('HAKONE_VERSION', hakone_version)
+cdata.set_quoted('HAKONE_VERSION_MESSAGE', f'@hakone_version@ @hakone_version_codename@')
+cdata.set('HAKONE_VERSION_MAJOR',    hakone_version_major)
+cdata.set('HAKONE_VERSION_MINOR',    hakone_version_minor)
+cdata.set('HAKONE_VERSION_REVISION', hakone_version_revision)
+
 cdata.set('VERSION_MAJOR',      vlc_version_major)
 cdata.set('VERSION_MINOR',      vlc_version_minor)
 cdata.set('VERSION_REVISION',   vlc_version_revision)
@@ -1233,6 +1252,7 @@ if host_system == 'windows'
     rc_conf = configuration_data()
     rc_conf.merge_from(cdata)
     rc_conf.set('VERSION', vlc_version)
+    rc_conf.set('HAKONE_VERSION', hakone_version)
     rc_conf.set('COPYRIGHT_YEARS', vlc_copyright_years)
 endif
 

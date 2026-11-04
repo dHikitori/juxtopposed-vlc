@@ -197,7 +197,7 @@ static const struct vlc_logger_operations log_ops = { MsgCallback, NULL };
     [saveFolderPanel setCanSelectHiddenExtension: NO];
     [saveFolderPanel setCanCreateDirectories: YES];
     [saveFolderPanel setAllowedFileTypes: [NSArray arrayWithObject:@"txt"]];
-    [saveFolderPanel setNameFieldStringValue:[NSString stringWithFormat: _NS("Hakone Debug Log (%s).txt"), VERSION_MESSAGE]];
+    [saveFolderPanel setNameFieldStringValue:[NSString stringWithFormat: _NS("Hakone Debug Log (%s).txt"), HAKONE_VERSION_MESSAGE]];
     [saveFolderPanel beginSheetModalForWindow: self.window completionHandler:^(NSInteger returnCode) {
         if (returnCode != NSModalResponseOK) {
             return;

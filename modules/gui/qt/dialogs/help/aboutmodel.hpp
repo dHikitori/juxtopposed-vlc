@@ -85,7 +85,7 @@ public:
 
     static QString getVersion()
     {
-        return QString::fromUtf8(VERSION_MESSAGE);
+        return QString::fromUtf8(HAKONE_VERSION_MESSAGE);
     }
 };
 

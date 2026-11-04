@@ -190,7 +190,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance,
         HANDLE sem = CreateSemaphore(NULL, 0, 1, NULL);
 
         libvlc_SetExitHandler(vlc->p_libvlc_int, vlc_kill, &sem);
-        libvlc_set_app_id (vlc, "hakone", PACKAGE_VERSION,
+        libvlc_set_app_id (vlc, "hakone", HAKONE_VERSION,
                            "hakone");
         libvlc_set_user_agent (vlc, "Hakone Media Player", "VLC/"PACKAGE_VERSION);
         libvlc_InternalAddIntf (vlc->p_libvlc_int, NULL);

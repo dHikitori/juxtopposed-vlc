@@ -168,7 +168,7 @@ int main(int argc, const char *argv[])
         /* This message clutters error logs. It is printed only on a TTY.
          * Fortunately, LibVLC prints version info with -vv anyway. */
         fprintf (stderr, "Hakone Media Player %s (revision %s)\n",
-                 libvlc_get_version(), libvlc_get_changeset());
+                 HAKONE_VERSION_MESSAGE, libvlc_get_changeset());
 
     sigset_t set;
 
@@ -245,7 +245,7 @@ int main(int argc, const char *argv[])
 
     int ret = 1;
     libvlc_SetExitHandler(vlc->p_libvlc_int, vlc_kill, &self);
-    libvlc_set_app_id (vlc, "hakone", PACKAGE_VERSION, "hakone");
+    libvlc_set_app_id (vlc, "hakone", HAKONE_VERSION, "hakone");
     libvlc_set_user_agent (vlc, "Hakone Media Player", "VLC/"PACKAGE_VERSION);
 
     if (libvlc_InternalAddIntf (vlc->p_libvlc_int, NULL))
