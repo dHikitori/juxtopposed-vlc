@@ -37,7 +37,7 @@ QtObject {
             case "credentials.use": summaries.push(qsTr("Use saved credentials only for these services: %1").arg(destinations([...new Set((scope.bindings || []).map(binding => binding.origin))]))); break
             case "storage.private": summaries.push(qsTr("Store a maximum of %1 MB of add-on data.").arg(Math.ceil(Number(scope.quotaBytes || 0) / (1024 * 1024)))); break
             case "library.read": summaries.push(qsTr("Read permitted media library items and their metadata.")); break
-            case "queue.read": summaries.push(qsTr("Read the current play queue.")); break
+            case "queue.read": summaries.push(qsTr("Read the current play queue, and whether its files are on this computer, without their file locations.")); break
             case "queue.modify": {
                 const actions = [...new Set((scope.operations || []).map(operation => queueActions[operation]).filter(Boolean))]
                 summaries.push(actions.length ? qsTr("Change the play queue: %1.").arg(actions.join(", ")) : qsTr("Change the play queue with its approved actions."))

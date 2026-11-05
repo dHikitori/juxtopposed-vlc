@@ -28,6 +28,41 @@ QString meta(input_item_t* item, vlc_meta_type_t type)
 }
 QString utf8(const char* value) { return QString::fromUtf8(value ? value : ""); }
 
+// The address that two queue items share when they play the same media, and
+// the local path for a file. Neither leaves the host: the projection sends a
+// keyed hash of the address and a flag for a file.
+void locate(input_item_t* media, Projections::QueueItem& item)
+{
+    char* uri = input_item_GetURI(media);
+    const QUrl url(QString::fromUtf8(uri ? uri : ""));
+    free(uri);
+    if (url.isEmpty() || !url.isValid()) return;
+    // file://server/share/… is a UNC path on Windows. Elsewhere a file URL
+    // with a host is not a path of this computer: it is not checked.
+    const auto host = url.host();
+#if defined(_WIN32)
+    const bool local = url.isLocalFile();
+#else
+    const bool local = url.isLocalFile() && (host.isEmpty() || host.compare(QLatin1String("localhost"), Qt::CaseInsensitive) == 0);
+#endif
+    if (!local) {
+        item.location = url.adjusted(QUrl::NormalizePathSegments).toString(QUrl::FullyEncoded).toUtf8();
+        return;
+    }
+    // Forward slashes on every system; Windows keeps "//server/share".
+    item.file = QDir::cleanPath(url.toLocalFile());
+    auto key = item.file;
+#if defined(_WIN32)
+    // Windows file names do not differ by case: C:/Music/a.mp3 is c:/music/A.MP3.
+    key = key.toCaseFolded();
+#elif defined(__APPLE__)
+    // macOS file names can come in decomposed (NFD) or composed (NFC) form
+    // for the same file; compare the composed form.
+    key = key.normalized(QString::NormalizationForm_C);
+#endif
+    item.location = QStringLiteral("file:").toUtf8() + key.toUtf8();
+}
+
 struct LibraryQuery {
     QString collection, pattern;
     int offset = 0, limit = 0;
@@ -117,8 +152,32 @@ vlc::addons::AddonGuestProjections* mountAddonGuestSources(qt_intf_t* intf, Main
             item.album = meta(media, vlc_meta_Album);
             const auto duration = input_item_GetDuration(media);
             item.durationMs = duration == VLC_TICK_INVALID || duration < 0 ? -1 : MS_FROM_VLC_TICK(duration);
+            locate(media, item);
             result.items.append(item);
         }
+        vlc_playlist_Unlock(playlist);
+        return result;
+    };
+    Projections::QueueRemover remove;
+    if (playlist) remove = [playlist](const std::function<bool(const QByteArray&)>& selected) -> std::optional<Projections::QueueRemoval> {
+        // One pass from the end under the lock, so each index stays correct;
+        // each run of adjacent items is one removal and one model change.
+        Projections::QueueRemoval result;
+        vlc_playlist_Lock(playlist);
+        size_t end = 0, count = 0;
+        const auto flush = [&] {
+            if (count) vlc_playlist_Remove(playlist, end - count, count);
+            result.removed += int(count); count = 0;
+        };
+        for (size_t i = vlc_playlist_Count(playlist); i-- > 0;) {
+            vlc_playlist_item_t* entry = vlc_playlist_Get(playlist, i);
+            if (!selected(QByteArray::number(qulonglong(vlc_playlist_item_GetId(entry))))) { flush(); continue; }
+            if (!count) end = i + 1;
+            else if (end - count != i + 1) { flush(); end = i + 1; }
+            ++count;
+        }
+        flush();
+        result.total = qint64(vlc_playlist_Count(playlist));
         vlc_playlist_Unlock(playlist);
         return result;
     };
@@ -151,8 +210,8 @@ vlc::addons::AddonGuestProjections* mountAddonGuestSources(qt_intf_t* intf, Main
         free(uri);
         return url;
     };
-    if (!projections->mount(services, std::move(queue), std::move(library), std::move(media)))
-        msg_Warn(intf, "Cannot offer every read-only add-on projection");
+    if (!projections->mount(services, std::move(queue), std::move(library), std::move(media), std::move(remove)))
+        msg_Warn(intf, "Cannot offer every add-on queue, library and media projection");
     return projections;
 }
 

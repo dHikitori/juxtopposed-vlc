@@ -13,6 +13,7 @@ These guides describe the host contracts for add-on authors. Start with
 | [Visualizer scene](visualizer-scene.md) and [parameters](visualizer-parameters.md) | Data-only music scenes that the host draws from bounded audio analysis. |
 | [Discovery source](discovery-sources.md) | Browse, search and pages with host references, and playback through the host. |
 | [Metadata completion](metadata-completion.md) | NoMatch results, host observations and the HTTP 404/410 policy. |
+| [Play queue](queue.md) | Read the queue with opaque IDs and address keys, check its local files, and remove items. |
 | [Typed UI selections](typed-ui-selections.md) | Typed subtitle and playlist bodies with core confirmation. |
 | [Shared playback sessions](sessions.md) | Sessions that follow playback across players. |
 | [Private storage](storage.md) | Private key/value storage, account partitions, migrations and recovery snapshots. |
