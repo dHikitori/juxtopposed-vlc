@@ -3504,8 +3504,12 @@ void PlayerController::playSeriesEpisode(const QUrl& url, bool fromStart)
 {
     Q_D(PlayerController);
     if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) return;
-    const auto uri = url.toEncoded();
-    const auto item = SharedInputItem(input_item_New(uri.constData(), nullptr), false);
+    // The MRL the core writes for the file, as when it is opened any other
+    // way, so resume and history find the same media library entry.
+    const auto path = QDir::toNativeSeparators(url.toLocalFile()).toUtf8();
+    const auto uri = vlc::wrap_cptr(vlc_path2uri(path.constData(), nullptr));
+    if (!uri) return;
+    const auto item = SharedInputItem(input_item_New(uri.get(), nullptr), false);
     if (!item) return;
     input_item_AddOption(item.get(), fromStart ? "restore-playback-pos=0" : "restore-playback-pos=2", VLC_INPUT_OPTION_TRUSTED);
     d->p_intf->p_mainPlaylistController->append(QVector<vlc::playlist::Media>{vlc::playlist::Media{item.get()}}, true);

@@ -11,6 +11,10 @@
 // Local series discovery is independent of playback and never parses media or
 // contacts a metadata provider. Call scan() on a worker, not the interface thread.
 namespace SeriesDiscovery {
+// One form for a local file URL. The player writes characters such as ( and )
+// percent-encoded ("Show%20%282006%29"), QUrl::fromLocalFile does not, and
+// QUrl compares the two forms as different addresses.
+inline QUrl fileUrl(const QUrl& url) { return url.isLocalFile() ? QUrl::fromLocalFile(url.toLocalFile()) : url; }
 using Identity = MediaIdentity::Identity;
 struct Episode {
     Identity identity;

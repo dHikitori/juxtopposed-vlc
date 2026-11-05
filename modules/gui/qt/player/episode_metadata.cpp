@@ -13,14 +13,26 @@
 #include <QUrlQuery>
 #include <QTimer>
 #include <vlc_cxx_helpers.hpp>
+#include <vlc_url.h>
 
 namespace {
 struct Title { QUrl url; QString title; QUrl source; };
 
+// The media library keys a local file by the MRL the core writes
+// (vlc_path2uri), which percent-encodes characters such as ( and ) that QUrl
+// leaves as they are. Look files up, and add them, in that form.
+QByteArray libraryMrl(const QUrl& url)
+{
+    if (!url.isLocalFile()) return url.toEncoded();
+    const auto path = QDir::toNativeSeparators(url.toLocalFile()).toUtf8();
+    const auto mrl = vlc::wrap_cptr(vlc_path2uri(path.constData(), nullptr));
+    return mrl ? QByteArray(mrl.get()) : url.toEncoded();
+}
+
 Title cached(vlc_medialibrary_t* ml, const QUrl& url, const QVariantMap& metadata = {})
 {
     Title result {url, {}, {}};
-    ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, url.toEncoded().constData()));
+    ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, libraryMrl(url).constData()));
     if (!media || media->p_podcast) return result;
     char* value = nullptr;
     if (vlc_ml_media_get_playback_state(ml, media->i_id, VLC_ML_PLAYBACK_STATE_APP_SPECIFIC, &value) == VLC_SUCCESS && value) {
@@ -130,7 +142,7 @@ void EpisodeMetadata::readCached(const QList<QUrl>& urls)
     m_ctx->getMediaLibrary()->runOnMLThread<QList<Title>>(this,
         [batch, current, metadata](vlc_medialibrary_t* ml, QList<Title>& result) {
             for (const auto& url : batch) if (url.isLocalFile())
-                result.append(cached(ml, url, url == current ? metadata : QVariantMap()));
+                result.append(cached(ml, url, SeriesDiscovery::fileUrl(url) == SeriesDiscovery::fileUrl(current) ? metadata : QVariantMap()));
         }, [this, generation, remaining](quint64, const QList<Title>& result) {
             --m_cacheReads;
             if (generation != m_generation) { schedule(); return; }
@@ -201,8 +213,8 @@ void EpisodeMetadata::save(const QUrl& url, const QVariantMap& metadata, const Q
     if (bytes.isEmpty()) return;
     m_ctx->getMediaLibrary()->runOnMLThread<bool>(this,
         [url, bytes](vlc_medialibrary_t* ml, bool& saved) {
-            ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, url.toEncoded().constData()));
-            if (!media) media.reset(vlc_ml_new_external_media(ml, url.toEncoded().constData()));
+            ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, libraryMrl(url).constData()));
+            if (!media) media.reset(vlc_ml_new_external_media(ml, libraryMrl(url).constData()));
             if (!media || media->p_podcast) return;
             char* value = nullptr;
             if (vlc_ml_media_get_playback_state(ml, media->i_id, VLC_ML_PLAYBACK_STATE_APP_SPECIFIC, &value) != VLC_SUCCESS) return;

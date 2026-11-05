@@ -51,8 +51,9 @@ QList<SeriesModel::Sibling> SeriesModel::siblings() const
     }
     return result;
 }
-void SeriesModel::requestArtwork(const QUrl& url)
+void SeriesModel::requestArtwork(const QUrl& input)
 {
+    const auto url = SeriesDiscovery::fileUrl(input);
     for (const auto& row : m_rows)
         if (row.feedIndex < 0 && row.episode.urls.contains(url)) {
             if (m_requestedArtwork.contains(url)) return;
@@ -60,8 +61,9 @@ void SeriesModel::requestArtwork(const QUrl& url)
         }
 }
 
-void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
+void SeriesModel::setCurrent(const QUrl& input, const QVariantMap& metadata)
 {
+    const auto url = SeriesDiscovery::fileUrl(input);
     if (m_current == url && m_metadata == metadata) return;
     const auto target = SeriesDiscovery::identify(url, metadata);
     const bool same = !m_current.isEmpty() && ((!target.feedUrl.isEmpty() && target.feedUrl == m_target.feedUrl)
@@ -90,8 +92,9 @@ void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
     if (!retained && available() && target.feedUrl.isEmpty()) scan();
 }
 
-void SeriesModel::refresh(const QUrl& folder)
+void SeriesModel::refresh(const QUrl& input)
 {
+    const auto folder = SeriesDiscovery::fileUrl(input);
     // A manual retry also searches deeper when the previous scan was partial.
     // Keep the larger bounded scope for subsequent directory updates.
     if (folder.isEmpty() && m_limited) m_extended = true;
@@ -209,8 +212,9 @@ void SeriesModel::requestStates()
     if (!urls.isEmpty()) emit watchStatesRequested(urls, m_serial);
 }
 void SeriesModel::loadStates() { m_requestedStates.clear(); requestStates(); }
-void SeriesModel::setProgress(const QUrl& url, qreal progress)
+void SeriesModel::setProgress(const QUrl& input, qreal progress)
 {
+    const auto url = SeriesDiscovery::fileUrl(input);
     if (url != m_current && !m_requestedStates.contains(url)) return;
     const auto bounded = std::isfinite(progress) ? std::clamp(progress, qreal(0), qreal(1)) : 0;
     auto key = url;
@@ -220,19 +224,22 @@ void SeriesModel::setProgress(const QUrl& url, qreal progress)
     m_states[key].progress = bounded;
     if (url != m_current) emit siblingsChanged();
 }
-void SeriesModel::setPlayed(const QUrl& url, bool played)
+void SeriesModel::setPlayed(const QUrl& input, bool played)
 {
+    const auto url = SeriesDiscovery::fileUrl(input);
     if (!m_requestedStates.contains(url) || m_states.value(url).played == played) return;
     m_states[url].played = played; emit siblingsChanged();
 }
-void SeriesModel::setArtwork(const QUrl& url, const QString& artwork)
+void SeriesModel::setArtwork(const QUrl& input, const QString& artwork)
 {
+    const auto url = SeriesDiscovery::fileUrl(input);
     if (!m_requestedArtwork.contains(url)) return;
     m_states[url].artwork = artwork; emit siblingsChanged();
 }
 
-void SeriesModel::setEpisodeTitle(const QUrl& url, const QString& title, const QUrl& source)
+void SeriesModel::setEpisodeTitle(const QUrl& input, const QString& title, const QUrl& source)
 {
+    const auto url = SeriesDiscovery::fileUrl(input);
     if (!m_requestedStates.contains(url) && url != m_current) return;
     const auto cleaned = MediaIdentity::episodeTitle(url, {{"episodeTitle", title}}, false);
     if (cleaned.isEmpty()) return;

@@ -183,6 +183,27 @@ private slots:
         model.refresh(); QTRY_VERIFY(!model.loading());
         QCOMPARE(sibling(model, second).title, "Embedded name");
     }
+    // The player writes ( and ) percent-encoded; the folder scan does not.
+    // Both forms are one file.
+    void playerUrlsMatchScannedFilesWhateverTheirEncoding() {
+        QTemporaryDir base;
+        QVERIFY(QDir().mkpath(base.path() + "/Show (2006)/Season 01"));
+        const auto first = QUrl::fromLocalFile(base.path() + "/Show (2006)/Season 01/Show (2006) S01E01.mkv");
+        const auto second = QUrl::fromLocalFile(base.path() + "/Show (2006)/Season 01/Show (2006) S01E02.mkv");
+        for (const auto& url : {first, second}) { QFile file(url.toLocalFile()); QVERIFY(file.open(QIODevice::WriteOnly)); }
+        const QUrl player(first.toString(QUrl::FullyEncoded).replace("(", "%28").replace(")", "%29"), QUrl::StrictMode);
+        QVERIFY(player.toString(QUrl::FullyEncoded).contains("%28"));
+        QVERIFY(player != first); // QUrl compares the two forms as different addresses.
+        SeriesModel model; model.setCurrent(player, {});
+        QTRY_VERIFY(!model.loading());
+        QCOMPARE(urls(model), (QList<QUrl>{first, second}));
+        QVERIFY(sibling(model, first).current); QCOMPARE(sibling(model, first).version, 0);
+        model.setProgress(player, .4); QCOMPARE(sibling(model, first).progress, .4);
+        model.setEpisodeTitle(player, "Pilot"); QCOMPARE(sibling(model, first).title, "Pilot");
+        // The same file again, in the scan's form, is the same media.
+        model.setCurrent(first, {});
+        QCOMPARE(urls(model), (QList<QUrl>{first, second})); QVERIFY(sibling(model, first).current);
+    }
     void destructionDuringScanIsSafe() {
         QTemporaryDir base;
         const auto url = QUrl::fromLocalFile(base.path() + "/Show.S01E01.mkv");
