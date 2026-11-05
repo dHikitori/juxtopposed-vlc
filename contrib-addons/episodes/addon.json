@@ -3,7 +3,7 @@
   "id": "org.videolan.episodes",
   "name": "Episodes",
   "version": "1.1.0",
-  "publisher": "Hakone reference add-ons",
+  "publisher": "Hakone core",
   "license": "GPL-2.0-or-later",
   "source": "https://github.com/hakone-org/addon-episodes.git",
   "api": {

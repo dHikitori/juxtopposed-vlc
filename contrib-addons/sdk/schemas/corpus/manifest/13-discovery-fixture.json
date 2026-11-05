@@ -6,7 +6,7 @@
     "id": "org.hakone.discovery-fixture",
     "name": "Discovery fixture (synthetic)",
     "version": "0.1.0",
-    "publisher": "Hakone reference add-ons",
+    "publisher": "Hakone core",
     "license": "GPL-2.0-or-later",
     "source": "https://github.com/hakone-org/addon-discovery-fixture.git",
     "api": {

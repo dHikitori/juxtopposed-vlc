@@ -3,7 +3,7 @@
   "id": "org.videolan.french-tv",
   "name": "French TV logos",
   "version": "0.1.1",
-  "publisher": "Hakone reference add-ons",
+  "publisher": "Hakone core",
   "license": "GPL-2.0-or-later",
   "source": "https://github.com/hakone-org/addon-french-tv.git",
   "api": {

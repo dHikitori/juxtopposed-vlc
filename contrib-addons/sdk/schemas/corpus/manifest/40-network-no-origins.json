@@ -6,7 +6,7 @@
     "id": "org.videolan.tvmaze",
     "name": "TVmaze episode titles",
     "version": "0.3.0",
-    "publisher": "Hakone reference add-ons",
+    "publisher": "Hakone core",
     "license": "GPL-2.0-or-later",
     "source": "https://github.com/hakone-org/addon-tvmaze.git",
     "api": {

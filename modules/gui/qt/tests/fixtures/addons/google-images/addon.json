@@ -3,7 +3,7 @@
   "id": "org.videolan.google-images",
   "name": "Google Images artwork",
   "version": "0.1.1",
-  "publisher": "Hakone reference add-ons",
+  "publisher": "Hakone core",
   "license": "GPL-2.0-or-later",
   "source": "https://github.com/hakone-org/addon-google-images.git",
   "api": {
