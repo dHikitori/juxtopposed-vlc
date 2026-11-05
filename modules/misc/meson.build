@@ -191,7 +191,11 @@ if xcb_dep.found()
 endif
 
 # DBUS
-if dbus_dep.found()
+# Not on Apple systems, which have no session bus to inhibit through:
+# iokit_inhibit does it on macOS. There, connecting makes libdbus run
+# launchctl, after which the main thread blocks SIGCHLD; Qt then never
+# learns that a helper process exited, and quitting waits on add-on work.
+if dbus_dep.found() and host_system != 'darwin'
     vlc_modules += {
         'name' : 'dbus_screensaver',
         'sources' : files('inhibit/dbus.c'),

@@ -85,7 +85,10 @@ libdbus_screensaver_plugin_la_SOURCES = misc/inhibit/dbus.c
 libdbus_screensaver_plugin_la_CFLAGS = $(AM_CFLAGS) $(DBUS_CFLAGS)
 libdbus_screensaver_plugin_la_LIBADD = $(DBUS_LIBS)
 if HAVE_DBUS
+if !HAVE_DARWIN
+# On Apple systems, iokit_inhibit (see meson.build).
 misc_PLUGINS += libdbus_screensaver_plugin.la
+endif
 endif
 
 libwl_idle_inhibit_plugin_la_SOURCES = misc/inhibit/wl-idle-inhibit.c
