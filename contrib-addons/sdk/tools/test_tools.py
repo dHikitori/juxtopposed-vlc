@@ -4,6 +4,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -185,6 +186,27 @@ class SdkTests(unittest.TestCase):
         if app.is_file():
             self.assertEqual(pinned, app.read_text().strip())
         self.assertRegex((SDK / "VERSION").read_text().strip(), r"^\d+\.\d+\.\d+$")
+
+    def test_markdown_links_work_in_the_mirror(self):
+        """hakone-org/addon-sdk has only this folder: a relative link must stay
+        in it and name a file or folder that exists. Link to the rest of
+        hakone-org/hakone with a full https://github.com/... address."""
+        link = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)")
+        problems = []
+        for page in sorted(SDK.rglob("*.md")):
+            if "target" in page.relative_to(SDK).parts:
+                continue
+            for match in link.finditer(page.read_text(encoding="utf-8")):
+                target = match.group(1).split("#")[0]
+                if not target or re.match(r"^[a-z][a-z0-9+.-]*:", target):
+                    continue
+                resolved = (page.parent / target).resolve()
+                where = f"{page.relative_to(SDK)}: {match.group(1)}"
+                if resolved != SDK and SDK not in resolved.parents:
+                    problems.append(f"{where} leaves the SDK folder")
+                elif not resolved.exists():
+                    problems.append(f"{where} does not exist")
+        self.assertEqual(problems, [])
 
 
 if __name__ == "__main__":

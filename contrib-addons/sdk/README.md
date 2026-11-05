@@ -31,7 +31,7 @@ hakone-org/hakone. `VERSION` is the SDK version; a release has the tag
 
 Declare each contract and operation that the package uses. A declared permission does not mean that the host has a handler for that function. The host capability view reports the available functions. Unsupported functions fail before a core operation starts.
 
-Use the [bundled packages](../README.md#bundled-add-ons) to inspect complete package files. Keep credentials out of package files, ordinary settings values, worker state, and saved media references. Use the generated host settings form for secret replacement or deletion.
+Use the [bundled packages](https://github.com/hakone-org/hakone/blob/master/contrib-addons/README.md#bundled-add-ons) to inspect complete package files. Keep credentials out of package files, ordinary settings values, worker state, and saved media references. Use the generated host settings form for secret replacement or deletion.
 
 ## Package names
 
