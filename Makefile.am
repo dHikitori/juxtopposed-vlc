@@ -43,6 +43,8 @@ EXTRA_DIST = \
 	extras/package/release/tests/test_msi.py \
 	extras/package/release/tests/test_recovery.py \
 	extras/package/release/tests/test_dependency_cache.py \
+	extras/package/release/tests/test_addon_sdk_mirror.py \
+	extras/package/release/addon_sdk_mirror.py \
 	doc/RELEASING.md \
 	extras/package/npapi.am
 

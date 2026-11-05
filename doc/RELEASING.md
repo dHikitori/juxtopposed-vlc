@@ -450,6 +450,30 @@ user key in a CI secret, package artifact or worker environment. Data-only
 resources and settings operate without the worker. Executable providers cannot
 run without the worker.
 
+## Add-on SDK releases
+
+`contrib-addons/sdk` is the add-on SDK. The workflow
+`.github/workflows/addon-sdk-mirror.yml` copies it to the read-only mirror
+[hakone-org/addon-sdk](https://github.com/hakone-org/addon-sdk), where add-on
+repositories get the Rust crate and the reusable check and release workflows
+(see `contrib-addons/sdk/releasing.md`).
+
+- A push to master that changes the SDK syncs the mirror's `master` branch.
+- To release the SDK, set `contrib-addons/sdk/VERSION`, commit, and push the
+  tag `sdk-v<VERSION>`. The mirror gets `v<VERSION>`, and the major tag
+  (`v1`) moves to it. A release tag never moves; the job refuses a second
+  release of the same version with other files.
+- The add-on workflows build the worker from `modules/gui/qt/addons/worker`
+  at `sdk-v<VERSION>`, with the Rust version in
+  `contrib-addons/sdk/rust-version.txt`. Keep that file the same as
+  `addon-rust-version.txt`; the SDK tool tests check it.
+- Raise the major version only for a change that breaks the workflows' inputs
+  or the crate's API.
+
+The job needs the secret `ADDON_SDK_DEPLOY_KEY`: the private half of a deploy
+key with write access on hakone-org/addon-sdk. Without it the job runs the SDK
+tool tests and reports that it did not publish.
+
 ## Local macOS build
 
 Install the media prerequisites from [BUILD-macos.md](BUILD-macos.md), plus

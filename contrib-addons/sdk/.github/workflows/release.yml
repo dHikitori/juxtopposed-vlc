@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Reusable workflow: release a Hakone add-on when its manifest version changes.
+#
+#   on:
+#     push:
+#       branches: [master]
+#       paths: [addon.json]
+#     workflow_dispatch:
+#   jobs:
+#     release:
+#       uses: hakone-org/addon-sdk/.github/workflows/release.yml@v1
+#       permissions:
+#         contents: write
+#
+# The app installs a release from the files of the tagged commit, so a built
+# module (dist/addon.wasm) must be in that commit. This workflow builds it,
+# commits the declared files that the branch does not track on a commit on
+# top of the branch head, tags that commit v<version> and pushes only the
+# tag. The branch keeps only source. A version that has a tag is skipped.
+#
+# This file is in hakone-org/hakone at contrib-addons/sdk/.github/workflows,
+# and hakone-org/addon-sdk mirrors that folder.
+name: Release add-on
+
+on:
+  workflow_call:
+    inputs:
+      sdk-ref:
+        description: The addon-sdk ref for the tools; use the same ref as in "uses".
+        type: string
+        default: v1
+      rust-version:
+        description: The Rust toolchain. Empty uses the version that the app pins.
+        type: string
+        default: ''
+      worker-tests:
+        type: boolean
+        default: true
+      github-release:
+        description: Also make a GitHub release for the tag (it has no files; the tag is the release).
+        type: boolean
+        default: true
+      runs-on:
+        type: string
+        default: ubuntu-24.04
+    outputs:
+      tag:
+        value: ${{ jobs.release.outputs.tag }}
+      released:
+        value: ${{ jobs.release.outputs.released }}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hakone-addon-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      released: ${{ steps.tag.outputs.released || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: addon
+      - id: version
+        name: Find the release tag
+        working-directory: addon
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("addon.json"))["version"])')
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if [ -n "$(git ls-remote --tags --refs origin "refs/tags/v$version")" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$version is released already. Change version in addon.json to release again."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.version.outputs.exists == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: hakone-org/addon-sdk
+          ref: ${{ inputs.sdk-ref }}
+          path: .hakone-addon-sdk
+          persist-credentials: false
+      - if: steps.version.outputs.exists == 'false'
+        uses: ./.hakone-addon-sdk/actions/check
+        with:
+          package: addon
+          tag: ${{ steps.version.outputs.tag }}
+          rust-version: ${{ inputs.rust-version }}
+          worker-tests: ${{ inputs.worker-tests }}
+      - id: tag
+        if: steps.version.outputs.exists == 'false'
+        name: Tag the release with its built files
+        working-directory: addon
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 -B ../.hakone-addon-sdk/tools/release.py . --push --output "$GITHUB_OUTPUT"
+      - if: steps.tag.outputs.released == 'true' && inputs.github-release
+        name: Make the GitHub release
+        working-directory: addon
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes "Install this release in Hakone from the repository and the tag $TAG. The tagged commit has the built module."

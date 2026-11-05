@@ -56,6 +56,12 @@ install does. With `--ui` it also applies the settings form rules. Exit
 status 0 means every package is valid. It does not run the module; the
 install still runs the self-test.
 
+## Package check for CI
+
+`tools/check-package.py` applies the schemas and the install rules that do
+not need the app, for a CI job without an app build. The validator above
+stays the authority. See [Build and release](releasing.md).
+
 ## Preview
 
 ```sh

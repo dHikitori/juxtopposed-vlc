@@ -3,8 +3,17 @@
 These guides describe the host contracts for add-on authors. Start with
 [Author tools](authoring-tools.md) and the [templates](templates).
 
+This folder is `contrib-addons/sdk` in
+[hakone-org/hakone](https://github.com/hakone-org/hakone).
+[hakone-org/addon-sdk](https://github.com/hakone-org/addon-sdk) is a
+read-only mirror of it for add-on repositories, with the Rust crate, the
+reusable workflows and the tools at its root. Send changes and issues to
+hakone-org/hakone. `VERSION` is the SDK version; a release has the tag
+`sdk-v<VERSION>` here and `v<VERSION>` on the mirror.
+
 | Guide | What it covers |
 | --- | --- |
+| [Build and release](releasing.md) | The release tag, the built module, the reusable check and release workflows, and the package check. |
 | [Author tools](authoring-tools.md) | The schemas, the generated Rust contract types, the package validator, the preview tool and the templates. |
 | [Rust message SDK](message-v1/README.md) | Typed input views, owned ABI buffers, pending calls and bounded output for a Wasm worker. |
 | [UI document](ui-document.md) | Bounded JSON views that the host renders at declared hooks. Packages do not supply QML or JavaScript. |

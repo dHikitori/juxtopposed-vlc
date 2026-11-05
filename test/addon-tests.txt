@@ -113,6 +113,7 @@ addon_validate_examples                         profile     meson
 addon_validate_refuses                          profile     meson
 addon_schema_corpus_python                      profile     meson
 addon_schema_rust_drift                         profile     meson
+addon_sdk_tools                                 profile     meson
 addon_templates                                 profile     meson
 addon_preview                                   ui          meson
 addon_preview_theme                             ui          meson

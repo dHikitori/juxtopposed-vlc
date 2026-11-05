@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Reusable workflow: test, build and check a Hakone add-on.
+#
+#   jobs:
+#     check:
+#       uses: hakone-org/addon-sdk/.github/workflows/check.yml@v1
+#
+# This file is in hakone-org/hakone at contrib-addons/sdk/.github/workflows,
+# and hakone-org/addon-sdk mirrors that folder.
+name: Check add-on
+
+on:
+  workflow_call:
+    inputs:
+      sdk-ref:
+        description: The addon-sdk ref for the tools; use the same ref as in "uses".
+        type: string
+        default: v1
+      rust-version:
+        description: The Rust toolchain. Empty uses the version that the app pins.
+        type: string
+        default: ''
+      worker-tests:
+        description: Run tests/test_worker.py in the add-on worker when the package has it.
+        type: boolean
+        default: true
+      runs-on:
+        type: string
+        default: ubuntu-24.04
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: addon
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: hakone-org/addon-sdk
+          ref: ${{ inputs.sdk-ref }}
+          path: .hakone-addon-sdk
+          persist-credentials: false
+      - uses: ./.hakone-addon-sdk/actions/check
+        with:
+          package: addon
+          rust-version: ${{ inputs.rust-version }}
+          worker-tests: ${{ inputs.worker-tests }}

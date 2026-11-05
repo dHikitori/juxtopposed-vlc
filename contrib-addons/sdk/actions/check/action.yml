@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+name: Check a Hakone add-on
+description: >-
+  Test, build and check a Hakone add-on package: cargo test, ./build.sh, the
+  package checks against the published schemas and install rules, and the
+  package's own worker tests in the real add-on worker.
+inputs:
+  package:
+    description: The package folder, the root of the add-on repository checkout.
+    default: .
+  tag:
+    description: A release tag to check against the manifest version (v<version>). Empty for no check.
+    default: ''
+  rust-version:
+    description: The Rust toolchain. Empty uses the version that the app builds bundled add-ons with.
+    default: ''
+  worker-tests:
+    description: Run tests/test_worker.py with the add-on worker when the package has it.
+    default: 'true'
+  core-repository:
+    description: The Hakone source repository that has the add-on worker.
+    default: hakone-org/hakone
+  worker-ref:
+    description: The ref of the worker source. Empty uses sdk-v<the SDK VERSION>.
+    default: ''
+outputs:
+  version:
+    description: The manifest version.
+    value: ${{ steps.manifest.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - id: manifest
+      name: Read the manifest
+      shell: bash
+      working-directory: ${{ inputs.package }}
+      env:
+        SDK: ${{ github.action_path }}/../..
+      run: |
+        version=$(python3 -c 'import json; print(json.load(open("addon.json"))["version"])')
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        if [ -f Cargo.toml ]; then echo "rust=true" >> "$GITHUB_OUTPUT"; else echo "rust=false" >> "$GITHUB_OUTPUT"; fi
+        if [ -f tests/test_worker.py ] && [ "${{ inputs.worker-tests }}" = "true" ]; then
+          echo "worker=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "worker=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "sdk-version=$(cat "$SDK/VERSION")" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare the Python tools
+      shell: bash
+      run: |
+        python3 -m venv "$RUNNER_TEMP/hakone-addon-venv"
+        "$RUNNER_TEMP/hakone-addon-venv/bin/python" -m pip install --quiet --disable-pip-version-check jsonschema==4.23.0
+        echo "HAKONE_ADDON_PYTHON=$RUNNER_TEMP/hakone-addon-venv/bin/python" >> "$GITHUB_ENV"
+
+    - name: Install Rust
+      if: steps.manifest.outputs.rust == 'true' || steps.manifest.outputs.worker == 'true'
+      shell: bash
+      env:
+        SDK: ${{ github.action_path }}/../..
+      run: |
+        version="${{ inputs.rust-version }}"
+        [ -n "$version" ] || version=$(cat "$SDK/rust-version.txt")
+        rustup toolchain install "$version" --profile minimal --target wasm32-unknown-unknown
+        echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
+        echo "RUSTUP_AUTO_INSTALL=0" >> "$GITHUB_ENV"
+
+    - name: Restore the Cargo cache
+      if: steps.manifest.outputs.rust == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ${{ inputs.package }}/target
+        key: hakone-addon-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles(format('{0}/Cargo.lock', inputs.package)) }}
+
+    - name: Test and build the module
+      if: steps.manifest.outputs.rust == 'true'
+      shell: bash
+      working-directory: ${{ inputs.package }}
+      run: |
+        cargo test --locked
+        if [ -x build.sh ]; then ./build.sh; else sh build.sh; fi
+
+    - name: Check the package
+      shell: bash
+      env:
+        SDK: ${{ github.action_path }}/../..
+      run: |
+        args=("${{ inputs.package }}")
+        [ -z "${{ inputs.tag }}" ] || args+=(--tag "${{ inputs.tag }}")
+        "$HAKONE_ADDON_PYTHON" -B "$SDK/tools/check-package.py" "${args[@]}"
+
+    - name: Restore the worker
+      if: steps.manifest.outputs.worker == 'true'
+      id: worker-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/hakone-addon-worker/bin
+        key: hakone-addon-worker-${{ runner.os }}-${{ runner.arch }}-${{ inputs.core-repository }}-${{ inputs.worker-ref || format('sdk-v{0}', steps.manifest.outputs.sdk-version) }}
+
+    - name: Build the worker
+      if: steps.manifest.outputs.worker == 'true' && steps.worker-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        ref="${{ inputs.worker-ref }}"
+        [ -n "$ref" ] || ref="sdk-v${{ steps.manifest.outputs.sdk-version }}"
+        source="$RUNNER_TEMP/hakone-addon-worker/source"
+        # Only the worker folder of the app source, at the SDK's release.
+        git clone --quiet --depth 1 --filter=blob:none --sparse --branch "$ref" \
+          "https://github.com/${{ inputs.core-repository }}.git" "$source"
+        git -C "$source" sparse-checkout set modules/gui/qt/addons/worker
+        cargo build --locked --release --manifest-path "$source/modules/gui/qt/addons/worker/Cargo.toml" \
+          --target-dir "$RUNNER_TEMP/hakone-addon-worker/target"
+        mkdir -p "$RUNNER_TEMP/hakone-addon-worker/bin"
+        cp "$RUNNER_TEMP/hakone-addon-worker/target/release/hakone-addon-worker" "$RUNNER_TEMP/hakone-addon-worker/bin/"
+
+    - name: Run the worker tests
+      if: steps.manifest.outputs.worker == 'true'
+      shell: bash
+      working-directory: ${{ inputs.package }}
+      run: |
+        "$HAKONE_ADDON_PYTHON" -B tests/test_worker.py --worker "$RUNNER_TEMP/hakone-addon-worker/bin/hakone-addon-worker"

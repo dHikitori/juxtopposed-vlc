@@ -1998,6 +1998,9 @@ if qt6_dep.found()
     # The schemas, their generated Rust types and the author templates.
     test('addon_schema_corpus_python', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/schemas/check-corpus.py'],
         suite: ['qt', 'addons', addon_test_labels['addon_schema_corpus_python']], timeout: 60)
+    # The SDK's package check and release tools (contrib-addons/sdk/tools).
+    test('addon_sdk_tools', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/tools/test_tools.py'],
+        suite: ['qt', 'addons', addon_test_labels['addon_sdk_tools']], timeout: 60)
     test('addon_schema_rust_drift', prog_python, args: ['-B', meson.project_source_root() / 'contrib-addons/sdk/schemas/generate-rust.py', '--check'],
         suite: ['qt', 'addons', addon_test_labels['addon_schema_rust_drift']], timeout: 30)
     if addon_worker_dependencies != []
