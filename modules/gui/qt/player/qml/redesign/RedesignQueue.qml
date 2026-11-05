@@ -15,6 +15,13 @@ FocusScope {
         addonRegistry.revision
         return addonRegistry.commands.filter(entry => entry.document.hook === "queue.item.actions@1").slice(0, 8)
     }
+    // Queue buttons (queue.actions@1): an add-on icon in the header that
+    // opens one of its player panels, such as a playlist cleaner.
+    readonly property var addonButtons: {
+        if (!addonRegistry) return []
+        addonRegistry.revision
+        return addonRegistry.commands.filter(entry => entry.document.hook === "queue.actions@1" && !!entry.iconMarkup).slice(0, 2)
+    }
     property Component videoBackdropContent
     property bool singleClickActivate: false
     property var hierarchyModel: null
@@ -143,6 +150,18 @@ FocusScope {
                 Layout.fillWidth: true
                 text: qsTr("%n item", "%n items", root.itemCount) + (root.totalDurationText.length > 0 ? " - " + root.totalDurationText : "")
                 elide: Text.ElideRight; color: theme.playerLabel; font.pixelSize: theme.dp(14)
+            }
+            Repeater {
+                model: root.addonButtons
+                QueueToolButton {
+                    required property var modelData
+                    objectName: "queueAddonButton"
+                    Layout.rightMargin: theme.dp(4)
+                    iconMarkup: modelData.iconMarkup
+                    text: modelData.document.label || modelData.name || ""
+                    tooltipTextFormat: Text.PlainText
+                    onClicked: if (root.addonRegistry) root.addonRegistry.triggerCommand(modelData.id, {})
+                }
             }
             QueueToolButton { objectName: "queueSortButton"; Layout.rightMargin: theme.dp(4); iconName: "sort"; text: qsTr("Sort queue"); enabled: root.itemCount > 1 && root.sortChoices.length > 0; onClicked: sortMenu.toggleFrom(this) }
             QueueToolButton { objectName: "queueRepeatButton"; Layout.rightMargin: theme.dp(4); iconName: "queue-repeat"; selectedIconName: "queue-repeat-active"; text: qsTr("Repeat"); selected: root.repeating; onClicked: root.repeatRequested() }

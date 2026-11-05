@@ -460,6 +460,63 @@ private slots:
         QVERIFY(!mutate([](QJsonObject& panel, QJsonArray&) { panel.insert("label", ""); }));
         QVERIFY(!mutate([](QJsonObject&, QJsonArray& list) { auto command = list[1].toObject(); command.insert("placement", "above"); list.replace(1, command); }));
     }
+    // A queue button (queue.actions@1) is a command that names a panel of
+    // its own package: it carries the panel's icon and opens the panel.
+    static void queueButtonPackage(const QString& path) {
+        panelPackage(path, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 6h16\" stroke=\"#000\"/></svg>");
+        QFile file(path + QStringLiteral("/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
+        auto manifest = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        auto contributions = manifest.value("contributions").toArray();
+        contributions.append(QJsonObject{{"id", "sweep"}, {"type", "ui.command"}, {"contract", "ui@1"}, {"hook", "queue.actions@1"},
+            {"label", "Clean up the queue"}, {"icon", "icon.svg"}, {"command", "episodes"}});
+        manifest.insert("contributions", contributions);
+        auto files = manifest.value("files").toArray(); files.append("locales/fr.json"); manifest.insert("files", files);
+        manifest.insert("locales", QJsonObject{{"default", "fr"}, {"files", QJsonObject{{"fr", "locales/fr.json"}}}});
+        QDir(path).mkpath("locales");
+        write(path + QStringLiteral("/locales/fr.json"), R"({"sweep.label": "Nettoyer la file d’attente"})");
+        auto permissions = manifest.value("permissions").toObject(); auto required = permissions.value("required").toObject();
+        required.insert("ui.contribute", QJsonObject{{"hooks", QJsonArray{"player.panels@1", "queue.actions@1"}}});
+        permissions.insert("required", required); manifest.insert("permissions", permissions);
+        write(path + QStringLiteral("/addon.json"), QJsonDocument(manifest).toJson());
+    }
+    void queueButtonsAreCheckedAndOpenTheirPanel() {
+        QTemporaryDir source, storage; queueButtonPackage(source.path());
+        QFile file(source.path() + QStringLiteral("/addon.json")); QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto manifest = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        const auto mutate = [&](auto change) {
+            auto copy = manifest; auto contributions = copy.value("contributions").toArray();
+            auto button = contributions.last().toObject(); change(button); contributions.replace(contributions.size() - 1, button);
+            copy.insert("contributions", contributions); Manifest parsed; QString error;
+            return Manifest::parse(QJsonDocument(copy).toJson(), &parsed, &error);
+        };
+        QVERIFY(mutate([](QJsonObject&) {}));
+        QVERIFY(!mutate([](QJsonObject& button) { button.remove("icon"); }));
+        QVERIFY(!mutate([](QJsonObject& button) { button.insert("command", "play"); }));
+        QVERIFY(!mutate([](QJsonObject& button) { button.insert("command", "missing"); }));
+        QVERIFY(!mutate([](QJsonObject& button) { button.insert("label", " "); }));
+        QVERIFY(!mutate([](QJsonObject& button) { button.remove("command"); button.insert("route", "episodes"); }));
+
+        const QLocale previous; QLocale::setDefault(QLocale(QStringLiteral("fr_FR")));
+        const auto restore = qScopeGuard([previous] { QLocale::setDefault(previous); });
+        AddonManager manager(storage.path());
+        QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled("org.example.panel", true));
+        auto catalogue = std::make_unique<AddonCatalogueView>(&manager, m_lifetime->handle());
+        int invokes = 0;
+        AddonUiRegistry registry(&manager, {[&](const QString&, const QString& operation, const QVariantMap&) {
+            if (operation != QLatin1String("context")) ++invokes; return QStringLiteral("r%1").arg(invokes); }, [](const QString&) {}});
+        QTRY_VERIFY(catalogue->isCurrent()); QTRY_VERIFY(registry.available());
+        QVariantMap button;
+        for (const auto& value : registry.commands())
+            if (value.toMap().value("document").toMap().value("hook") == QLatin1String("queue.actions@1")) button = value.toMap();
+        QCOMPARE(button.value("id").toString(), QStringLiteral("org.example.panel/sweep"));
+        QVERIFY(button.value("iconMarkup").toString().contains("COLOR"));
+        QCOMPARE(button.value("document").toMap().value("label").toString(), QStringLiteral("Nettoyer la file d’attente"));
+        QSignalSpy panels(&registry, &AddonUiRegistry::panelRequested);
+        QVERIFY(registry.triggerCommand("org.example.panel/sweep", {}));
+        QCOMPARE(panels.size(), 1); QCOMPARE(panels.first().first().toString(), QStringLiteral("org.example.panel/episodes"));
+        // No worker command runs for the button itself.
+        QCOMPARE(invokes, 0);
+    }
     void explicitReplacementAndSafeRouteCommand() {
         QTemporaryDir source, storage; package(source.path()); AddonManager manager(storage.path());
         QVERIFY(manager.installLocalPackage(source.path(), true)); QVERIFY(manager.setEnabled(QStringLiteral("org.example.ui"), true));

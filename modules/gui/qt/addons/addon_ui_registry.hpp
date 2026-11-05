@@ -88,6 +88,8 @@ signals:
     void documentsChanged();
     void routeRequested(const QString& route, const QVariantMap& parameters);
     void modalRequested(const QString& contribution, const QVariantMap& parameters);
+    // A queue button asked for this player panel (package/contribution).
+    void panelRequested(const QString& panel);
     void commandCompleted(const QString& command, bool success, const QVariantMap& result);
     void sessionChanged(const QString& sessionId);
     void sessionFailed(const QString& sessionId);

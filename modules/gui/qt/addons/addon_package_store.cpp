@@ -659,6 +659,14 @@ bool credentialSettingsValid(const Manifest& manifest, const QJsonObject& schema
     return true;
 }
 
+// A contribution whose icon the app shows: a player panel, or a queue button.
+bool hasShownIcon(const Contribution& contribution)
+{
+    return contribution.type == QLatin1String("ui.panel")
+        || (contribution.type == QLatin1String("ui.command")
+            && contribution.document.value(QStringLiteral("hook")).toString() == QLatin1String("queue.actions@1"));
+}
+
 // A worker command names its operation in "command"; the worker runs only
 // operations that the contribution lists (sdk/ui-document.md). The catalogue
 // does not repeat this check, so a release installed before it still loads.
@@ -668,7 +676,8 @@ bool validateCommandOperations(const Manifest& manifest, QString* error)
         if (contribution.type != QLatin1String("ui.command") || contribution.document.contains(QStringLiteral("route"))) continue;
         const auto command = contribution.document.value(QStringLiteral("command")).toString();
         const auto* target = manifest.contribution(command);
-        if (command.isEmpty() || command.contains(QLatin1Char('/')) || (target && target->type == QLatin1String("ui.modal"))) continue;
+        if (command.isEmpty() || command.contains(QLatin1Char('/'))
+            || (target && (target->type == QLatin1String("ui.modal") || target->type == QLatin1String("ui.panel")))) continue;
         if (!contribution.operations.contains(command))
             return fail(error, QStringLiteral("The UI command \"%1\" must list \"%2\" in its operations.").arg(contribution.id, command));
     }
@@ -2222,10 +2231,11 @@ bool PackageStore::readDisplayCatalogue(const StoreAuthorityToken& queued,const 
                 localeNeeded|=!theme;
             }
         }
-        // Panel icons are small and always shown, like the selected theme.
+        // Panel and queue button icons are small and always shown, like the
+        // selected theme.
         for(const auto& contribution:row.package.manifest.contributions) {
             const auto icon=contribution.document.value(QStringLiteral("icon")).toString();
-            if(contribution.type!=QLatin1String("ui.panel") || !row.package.manifest.files.contains(icon))continue;
+            if(!hasShownIcon(contribution) || !row.package.manifest.files.contains(icon))continue;
             const auto found=contents.constFind(icon);
             if(found==contents.cend() || found->size()>panelIcon::MaximumBytes)continue;
             const auto markup=panelIcon::markup(*found);

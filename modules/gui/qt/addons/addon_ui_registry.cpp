@@ -25,6 +25,7 @@ const QMap<QString, QStringList>& hooks()
         {QStringLiteral("subtitles.results.sections@1"), {QStringLiteral("ui.section")}},
         {QStringLiteral("subtitles.search.content@1"), {QStringLiteral("ui.replacement")}},
         {QStringLiteral("queue.item.actions@1"), {QStringLiteral("ui.command")}},
+        {QStringLiteral("queue.actions@1"), {QStringLiteral("ui.command")}},
         {QStringLiteral("player.actions@1"), {QStringLiteral("ui.command")}},
         {QStringLiteral("dialog.add-to-playlist.content@1"), {QStringLiteral("ui.replacement")}},
         {QStringLiteral("settings.addons.sections@1"), {QStringLiteral("ui.section")}},
@@ -408,6 +409,12 @@ bool AddonUiRegistry::dispatch(const QString& id, const QVariantMap& arguments, 
     if (m_entries.value(modalId).value("document").toMap().value("type").toString() == QLatin1String("ui.modal")) {
         if (!modalId.startsWith(entry.value("packageId").toString() + '/')) return false;
         return openModal(modalId, arguments);
+    }
+    // A command that names a player panel of its own package opens it (a
+    // queue button). The player decides: it shows only an available panel.
+    if (type(m_entries.value(modalId)) == QLatin1String("ui.panel")) {
+        if (!modalId.startsWith(entry.value("packageId").toString() + '/')) return false;
+        const QPointer<AddonUiRegistry> alive(this); emit panelRequested(modalId); return alive;
     }
     // The UI language, so a worker can choose its text, as in "fr-CA".
     QVariantMap context{{"arguments", arguments}, {"locale", QLocale().name().replace(QLatin1Char('_'), QLatin1Char('-'))}};

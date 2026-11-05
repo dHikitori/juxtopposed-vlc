@@ -88,6 +88,13 @@ FocusScope {
             } else rootPlayer.addonPanelRegistry.refreshPanels()
         }
     }
+    Connections {
+        target: rootPlayer.addonPanelRegistry
+        ignoreUnknownSignals: true
+        // A queue button (queue.actions@1) opens its package's player panel
+        // in place of the queue.
+        function onPanelRequested(panel) { if (view.panelOpen !== panel) view.togglePanel(panel) }
+    }
     property string seriesFeedUrl: seriesModel.feed.toString()
     onSeriesFeedUrlChanged: seriesFeed.setSources(seriesFeedUrl ? [{mrl: seriesFeedUrl}] : [])
     NetworkPlaylistModel {

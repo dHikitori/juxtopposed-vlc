@@ -15,7 +15,7 @@ QtObject {
         const playbackActions = {play: qsTr("play"), pause: qsTr("pause"), stop: qsTr("stop"), seek: qsTr("seek"), rate: qsTr("change speed"), setRate: qsTr("change speed"), setPosition: qsTr("seek")}
         const hooks = {"home.sections@1": qsTr("Home sections"), "home.content@1": qsTr("Home content"), "library.navigation@1": qsTr("Library navigation"),
             "media.details.sections@1": qsTr("Media details"), "subtitles.results.sections@1": qsTr("Subtitle search results"), "subtitles.search.content@1": qsTr("Subtitle search"),
-            "queue.item.actions@1": qsTr("Queue actions"), "player.actions@1": qsTr("Player controls"), "player.panels@1": qsTr("Player panels and their buttons"), "dialog.add-to-playlist.content@1": qsTr("Add-to-playlist picker"),
+            "queue.item.actions@1": qsTr("Queue actions"), "queue.actions@1": qsTr("Queue buttons"), "player.actions@1": qsTr("Player controls"), "player.panels@1": qsTr("Player panels and their buttons"), "dialog.add-to-playlist.content@1": qsTr("Add-to-playlist picker"),
             "settings.addons.sections@1": qsTr("Add-on settings"), "actions.subtitles.open@1": qsTr("Open subtitle search"), "visualizer.surface@1": qsTr("Visualizer")}
         for (const name of Object.keys(permissions || {}).sort()) {
             const scope = permissions[name] || {}

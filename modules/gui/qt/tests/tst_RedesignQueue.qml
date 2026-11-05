@@ -236,6 +236,33 @@ TestCase {
         mouseClick(button)
         tryCompare(menu, "visible", false)
     }
+    QtObject {
+        id: fakeAddonRegistry
+        property int revision: 0
+        property var triggered: []
+        readonly property string icon: "<path d=\"M4 6h16\" fill=\"none\" stroke=\"COLOR\" stroke-width=\"1.5\"/>"
+        property var commands: [
+            {id: "org.example.cleaner/sweep", name: "Cleaner", iconMarkup: icon, document: {hook: "queue.actions@1", label: "Clean up the queue"}},
+            {id: "org.example.cleaner/other", name: "Other", iconMarkup: icon, document: {hook: "queue.item.actions@1", label: "Other"}},
+            {id: "org.example.cleaner/plain", name: "Plain", iconMarkup: "", document: {hook: "queue.actions@1", label: "No icon"}}]
+        function triggerCommand(id, args) { triggered = triggered.concat([id]); return true }
+    }
+    function test_addonQueueButtonOpensItsCommand() {
+        queue.addonRegistry = fakeAddonRegistry
+        try {
+            const button = findChild(queue, "queueAddonButton")
+            verify(button)
+            // Only queue.actions@1 commands with an icon get a header button.
+            compare(queue.addonButtons.length, 1)
+            compare(button.text, "Clean up the queue")
+            compare(button.tooltipTextFormat, Text.PlainText)
+            verify(button.iconMarkup.length > 0)
+            mouseClick(button)
+            compare(fakeAddonRegistry.triggered, ["org.example.cleaner/sweep"])
+        } finally {
+            queue.addonRegistry = null
+        }
+    }
     function test_rightClickSelectsRowAtClickPosition_data() {
         return [{tag: "first", index: 0}, {tag: "scrolled", index: 12}]
     }

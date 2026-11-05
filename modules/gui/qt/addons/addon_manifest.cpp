@@ -415,6 +415,14 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
                 || (item.contains("header") && !rowId.match(item.value("header").toString()).hasMatch()))
                 return fail(error, QStringLiteral("The player panel declaration is not correct."));
         }
+        if (contribution.type == QLatin1String("ui.command") && item.value("hook").toString() == QLatin1String("queue.actions@1")) {
+            // A queue button: an icon in the queue header that opens a player
+            // panel of the same package (checked below), with its tooltip.
+            const auto label = item.value("label").toString();
+            if (!item.value("icon").toString().endsWith(QLatin1String(".svg")) || !item.value("command").isString()
+                || item.contains("route") || label.trimmed().isEmpty() || label.size() > 128)
+                return fail(error, QStringLiteral("The queue button declaration is not correct."));
+        }
         for (const auto& key : {QStringLiteral("resource"), QStringLiteral("view"), QStringLiteral("theme"), QStringLiteral("scene"), QStringLiteral("icon")})
             if (item.contains(key) && (!item.value(key).isString() || !requiredResource(item.value(key).toString(),result.files,error))) return false;
         if (item.contains("assets")) {
@@ -434,6 +442,12 @@ bool Manifest::parse(const QByteArray& bytes, Manifest* output, QString* error)
         if ((contribution.type == QStringLiteral("metadata.provider") || contribution.type == QStringLiteral("discovery.source") || contribution.type == QStringLiteral("session.controller")) && result.runtimeEntry.isEmpty())
             return fail(error, QStringLiteral("The executable contribution needs a runtime."));
         result.contributions.append(contribution);
+    }
+    for (const auto& contribution : result.contributions) {
+        if (contribution.type != QLatin1String("ui.command") || contribution.document.value("hook").toString() != QLatin1String("queue.actions@1")) continue;
+        const auto* panel = result.contribution(contribution.document.value("command").toString());
+        if (!panel || panel->type != QLatin1String("ui.panel"))
+            return fail(error, QStringLiteral("A queue button must open a player panel of the same package."));
     }
     for (const auto& contribution : result.contributions) {
         if (contribution.type != QLatin1String("ui.panel")) continue;

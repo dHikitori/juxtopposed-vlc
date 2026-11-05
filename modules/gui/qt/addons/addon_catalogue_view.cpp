@@ -164,7 +164,10 @@ std::shared_ptr<const AddonCatalogueView::Data> AddonCatalogueView::project(Disp
             // A panel can translate its name and label with the messages
             // "<contribution>.name" and "<contribution>.label".
             auto document=contribution.document;
-            if(contribution.type==QLatin1String("ui.panel"))
+            // A queue button has the same messages for its tooltip.
+            const bool queueButton=contribution.type==QLatin1String("ui.command")
+                && contribution.document.value(QStringLiteral("hook")).toString()==QLatin1String("queue.actions@1");
+            if(contribution.type==QLatin1String("ui.panel") || queueButton)
                 for(const auto& field:{QStringLiteral("name"),QStringLiteral("label")}) {
                     const auto message=row.messages.value(contribution.id+QLatin1Char('.')+field);
                     if(message.isString() && !message.toString().trimmed().isEmpty() && message.toString().size()<=128)

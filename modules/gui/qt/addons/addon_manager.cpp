@@ -985,7 +985,9 @@ QVariantList AddonManager::contributionsOfType(const QString& type, bool include
                 {"accountReference", account}, {"configured", configured(package)},
                 {"cachePartition", QString(QString::fromLatin1(package.digest) + ':' + QString::number(package.generation) + sessionPartition(id))}};
             const auto icon = contribution.document.value("icon").toString();
-            if (type == QLatin1String("ui.panel") && package.manifest.files.contains(icon)) {
+            const bool shown = type == QLatin1String("ui.panel")
+                || (type == QLatin1String("ui.command") && contribution.document.value("hook").toString() == QLatin1String("queue.actions@1"));
+            if (shown && package.manifest.files.contains(icon)) {
                 QFile file(QDir(package.directory).filePath(icon));
                 if (file.open(QIODevice::ReadOnly) && file.size() <= panelIcon::MaximumBytes)
                     entry.insert(QStringLiteral("iconMarkup"), panelIcon::markup(file.readAll()));

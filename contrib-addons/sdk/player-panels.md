@@ -46,6 +46,33 @@ The bundled [Episodes](../episodes) package is a complete panel.
   header (see below).
 - The permission `ui.contribute` must list `player.panels@1`.
 
+## Open the panel from the queue
+
+A package can also put a button for its panel in the queue's header, next
+to Sort, Repeat and Shuffle. The button is a `ui.command` on the hook
+`queue.actions@1` whose `command` names a `ui.panel` of the same package:
+
+```json
+{
+  "id": "sweep",
+  "type": "ui.command",
+  "contract": "ui@1",
+  "hook": "queue.actions@1",
+  "label": "Clean up the queue",
+  "icon": "icons/cleaner.svg",
+  "command": "cleaner"
+}
+```
+
+- `icon` (required) follows the [panel icon](#icon) rules. `label` is the
+  tooltip and screen reader text; translate it with the message
+  `<id>.label`.
+- A click opens the panel in place of the queue, as the panel's own button
+  does. The panel's context command runs as usual. The button lists no
+  `operations`: it starts no worker command.
+- `ui.contribute` must list `queue.actions@1`. The queue shows at most two
+  of these buttons.
+
 ## Header and layout
 
 Without `header`, the frame shows `name` as the title with the close
