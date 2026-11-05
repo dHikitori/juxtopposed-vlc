@@ -16,7 +16,7 @@ int main(int argc, char** argv)
     vlc::addons::AddonManager manager(directory.path());
     manager.setWorkerExecutable(app.arguments()[2]);
     if (!manager.installLocalPackage(app.arguments()[1], true)
-        || !manager.setEnabled(QStringLiteral("org.videolan.tvmaze"), true)) {
+        || !manager.setEnabled(QStringLiteral("org.hakone.tvmaze"), true)) {
         QTextStream(stdout) << "The TVmaze package setup failed: " << manager.errorMessage() << '\n';
         return 1;
     }

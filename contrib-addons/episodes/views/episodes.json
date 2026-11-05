@@ -23,7 +23,7 @@
             },
             "icon": "chevron-left",
             "action": {
-              "command": "org.videolan.episodes/seasons"
+              "command": "org.hakone.episodes/seasons"
             }
           },
           {
@@ -41,7 +41,7 @@
             },
             "icon": "chevron-down",
             "action": {
-              "command": "org.videolan.episodes/seasons"
+              "command": "org.hakone.episodes/seasons"
             }
           },
           {
@@ -59,7 +59,7 @@
             },
             "enabled": false,
             "action": {
-              "command": "org.videolan.episodes/seasons"
+              "command": "org.hakone.episodes/seasons"
             }
           },
           {
@@ -76,7 +76,7 @@
                 },
                 "icon": "refresh",
                 "action": {
-                  "command": "org.videolan.episodes/refresh"
+                  "command": "org.hakone.episodes/refresh"
                 }
               },
               {
@@ -88,7 +88,7 @@
                   "bind": "state.files"
                 },
                 "action": {
-                  "command": "org.videolan.episodes/refresh",
+                  "command": "org.hakone.episodes/refresh",
                   "arguments": {
                     "folder": true
                   }
@@ -103,7 +103,7 @@
                   "bind": "state.files"
                 },
                 "action": {
-                  "command": "org.videolan.episodes/identify"
+                  "command": "org.hakone.episodes/identify"
                 }
               }
             ]
@@ -148,7 +148,7 @@
           },
           "navigates": true,
           "primaryAction": {
-            "command": "org.videolan.episodes/season",
+            "command": "org.hakone.episodes/season",
             "arguments": {
               "season": {
                 "bind": "item.key"
@@ -168,7 +168,7 @@
         },
         "icon": "chevron-left",
         "action": {
-          "command": "org.videolan.episodes/less"
+          "command": "org.hakone.episodes/less"
         }
       },
       {
@@ -189,7 +189,7 @@
           "bind": "state.more"
         },
         "moreAction": {
-          "command": "org.videolan.episodes/more"
+          "command": "org.hakone.episodes/more"
         },
         "moreText": {
           "message": "episodes.next"
@@ -221,7 +221,7 @@
             "bind": "item.artwork"
           },
           "primaryAction": {
-            "command": "org.videolan.episodes/expand",
+            "command": "org.hakone.episodes/expand",
             "arguments": {
               "key": {
                 "bind": "item.key"
@@ -255,7 +255,7 @@
                 "message": "episode.source"
               },
               "action": {
-                "command": "org.videolan.episodes/source",
+                "command": "org.hakone.episodes/source",
                 "arguments": {
                   "key": {
                     "bind": "item.sourceKey"
@@ -280,7 +280,7 @@
                 "message": "episode.version"
               },
               "action": {
-                "command": "org.videolan.episodes/expand",
+                "command": "org.hakone.episodes/expand",
                 "arguments": {
                   "key": {
                     "bind": "item.key"
@@ -319,7 +319,7 @@
                     "bind": "item.playEnabled"
                   },
                   "action": {
-                    "command": "org.videolan.episodes/play",
+                    "command": "org.hakone.episodes/play",
                     "arguments": {
                       "key": {
                         "bind": "item.playKey"
@@ -335,7 +335,7 @@
                   },
                   "icon": "replay",
                   "action": {
-                    "command": "org.videolan.episodes/play",
+                    "command": "org.hakone.episodes/play",
                     "arguments": {
                       "key": {
                         "bind": "item.playKey"
@@ -357,7 +357,7 @@
               },
               "icon": "video",
               "action": {
-                "command": "org.videolan.episodes/play",
+                "command": "org.hakone.episodes/play",
                 "arguments": {
                   "key": {
                     "bind": "item.videoKey"

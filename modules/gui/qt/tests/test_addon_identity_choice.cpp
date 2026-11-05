@@ -13,10 +13,10 @@
 
 using namespace vlc::addons;
 namespace {
-const QString Provider = QStringLiteral("org.videolan.tvmaze/episodes");
+const QString Provider = QStringLiteral("org.hakone.tvmaze/episodes");
 QVariantMap registration()
 {
-    return {{"id", Provider}, {"packageId", "org.videolan.tvmaze"}, {"name", "TVmaze"}, {"enabled", true},
+    return {{"id", Provider}, {"packageId", "org.hakone.tvmaze"}, {"name", "TVmaze"}, {"enabled", true},
         {"configured", true}, {"features", QStringList{"video.details", "video.identity"}},
         {"mediaKinds", QStringList{"episode"}}, {"operations", QStringList{"identify", "enrich"}},
         {"cachePartition", "release-1:account-1:settings-1"}};

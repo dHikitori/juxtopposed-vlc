@@ -40,6 +40,10 @@
 #include "maininterface/addon_guest_sources.hpp"
 #include "addons/addon_media_siblings.hpp"
 #include <QFileDialog>
+#include <QScopeGuard>
+
+#include <memory>
+
 #ifdef VLC_ADDON_TEST_DRIVER
 #include "addons/addon_test_driver.hpp"
 #endif
@@ -459,9 +463,9 @@ void MainUI::registerQMLTypes()
             // art scripts serve artwork until the native metadata owner is on.
             // Profiles that already have these add-ons keep them.
             for (const auto& entry : QList<QPair<QString,QString>>{
-                    {QStringLiteral("tvmaze"),QStringLiteral("org.videolan.tvmaze")},
+                    {QStringLiteral("tvmaze"),QStringLiteral("org.hakone.tvmaze")},
                     {QStringLiteral("thesubtitledb"),QStringLiteral("org.hakone.thesubtitledb")},
-                    {QStringLiteral("episodes"),QStringLiteral("org.videolan.episodes")}}) {
+                    {QStringLiteral("episodes"),QStringLiteral("org.hakone.episodes")}}) {
                 bundledAddons.append({entry.second,
                     installedRoot.isEmpty()?QString():QDir(installedRoot).filePath(entry.first),
                     QDir(QStringLiteral(VLC_ADDON_REFERENCE_BUILD_ROOT)).filePath(entry.first)});
@@ -477,6 +481,34 @@ void MainUI::registerQMLTypes()
                         msg_Warn(m_intf,"Cannot prepare bundled add-on %s: %s",qtu(id),qtu(error));
                     }
                 });
+            // Episodes and TVmaze were first bundled as org.videolan.*, though
+            // they were never VLC add-ons. Remove the copies that the app
+            // installed under those IDs, one at a time, after the bundled
+            // packages are ready. A disabled copy leaves its successor disabled.
+            // A copy installed by the user from a source stays.
+            const auto retireRenamed=[owner=QPointer<vlc::addons::AddonManager>(addonManager),
+                                      active=std::make_shared<bool>(false)] {
+                // The calls below report changes, which call this again.
+                if(*active || !owner || owner->distributionBootstrapInProgress() || owner->busy() || owner->writing())return;
+                *active=true;const auto done=qScopeGuard([active] { *active=false; });
+                static const QList<QPair<QString,QString>> renamed{
+                    {QStringLiteral("org.videolan.episodes"),QStringLiteral("org.hakone.episodes")},
+                    {QStringLiteral("org.videolan.tvmaze"),QStringLiteral("org.hakone.tvmaze")}};
+                const auto rows=owner->packages();
+                for(const auto& [previous,current]:renamed)
+                    for(const auto& value:rows) {
+                        const auto row=value.toMap();
+                        if(row.value(QStringLiteral("id")).toString()!=previous)continue;
+                        if(!row.value(QStringLiteral("installed")).toBool() || !row.value(QStringLiteral("distributionSource")).toBool()
+                            || row.value(QStringLiteral("developerSource")).toBool() || row.value(QStringLiteral("removing")).toBool())break;
+                        if(!row.value(QStringLiteral("enabled")).toBool())owner->setEnabled(current,false);
+                        if(!owner)return;
+                        owner->uninstall(previous,true);
+                        return;
+                    }
+            };
+            connect(addonManager, &vlc::addons::AddonManager::distributionBootstrapChanged, this, retireRenamed);
+            connect(addonManager, &vlc::addons::AddonManager::revisionChanged, this, retireRenamed);
             if(!addonManager->beginDistributionBootstrap(std::move(bundledAddons)))
                 msg_Warn(m_intf,"Cannot start bundled add-on preparation: %s",qtu(addonManager->errorMessage()));
             auto* displayCatalogue = new vlc::addons::AddonCatalogueView(addonManager,

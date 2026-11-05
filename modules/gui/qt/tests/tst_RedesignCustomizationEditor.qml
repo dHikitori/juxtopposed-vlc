@@ -153,7 +153,7 @@ TestCase {
                            ["previous", 20, 1039, 30, 28], ["play", 58, 1036, 54, 34],
                            ["next", 120, 1039, 30, 28], ["timeline", 170, 1035, 1364, 36],
                            ["volume", 1549, 1035, 130, 36], ["audio", 1694, 1037, 30, 32],
-                           ["subtitles", 1736, 1037, 30, 32], ["settings", 1778, 1037, 30, 32], ["addon:org.videolan.episodes/episodes", 1828, 1037, 30, 32],
+                           ["subtitles", 1736, 1037, 30, 32], ["settings", 1778, 1037, 30, 32], ["addon:org.hakone.episodes/episodes", 1828, 1037, 30, 32],
                            ["queue", 1870, 1037, 30, 32]])
             outlineMatches(...row, data.scale)
         // Caption width follows the application's font and translated text.

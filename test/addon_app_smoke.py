@@ -39,7 +39,7 @@ import tempfile
 import time
 from pathlib import Path
 
-BUNDLED = ('org.videolan.tvmaze', 'org.hakone.thesubtitledb', 'org.videolan.episodes')
+BUNDLED = ('org.hakone.tvmaze', 'org.hakone.thesubtitledb', 'org.hakone.episodes')
 # The examples are not bundled.
 UNBUNDLED = ('org.videolan.musicbrainz', 'org.videolan.lastfm', 'org.videolan.french-tv',
              'org.videolan.google-images', 'org.hakone.radio-browser')
@@ -392,7 +392,7 @@ def run(args):
                 shutil.copyfile(args.episode, show / 'Show.S06.1080p.WebRip.H264' / 'Show.S06E01.1080p.WebRip.H264.mkv')
                 first.send(f'add {(season / "Show - S01E01 - Minimum Viable Product.mkv").as_uri()}')
                 wait_for('series playback', first.playing, args.timeout)
-                panel = 'org.videolan.episodes/episodes'
+                panel = 'org.hakone.episodes/episodes'
 
                 def episodes_button():
                     report = first.drive('panels', args.timeout)

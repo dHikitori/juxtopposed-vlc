@@ -1116,6 +1116,6 @@ FocusScope {
             title: titleControl, minimize: minimizeButton, maximize: maximizeButton, fullscreen: fullscreenButton, close: closeButton,
             previous: previousButton, play: playButton, next: nextButton, timeline: timelineControl,
             mute: muteButton, volume: volumeSlider, audio: audioButton, subtitles: subtitleButton,
-            settings: playbackSettingsButton, "addon:org.videolan.episodes/episodes": episodesButton, queue: queueButton})
+            settings: playbackSettingsButton, "addon:org.hakone.episodes/episodes": episodesButton, queue: queueButton})
     }
 }

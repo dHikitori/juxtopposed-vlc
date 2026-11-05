@@ -78,7 +78,7 @@ TestCase {
     // from the package state stay literal in rows, tabs and tooltips.
     function test_panelTitlesChoicesAndTooltipsStayLiteral() {
         const title = markup(), show = markup(), filename = markup()
-        const expand = {command: "org.videolan.episodes/expand"}
+        const expand = {command: "org.hakone.episodes/expand"}
         const view = createTemporaryObject(panelViewComponent, test, {registeredCommands: [expand.command]})
         verify(view !== null)
         view.document = {contract: "ui@1", id: "episodes", root: {type: "Page", children: [

@@ -54,9 +54,9 @@ TestCase {
     }
     function test_defaultEpisodesButtonSitsBetweenSettingsAndQueue() {
         verify(!item("episodesButton").visible)
-        player.addonPanels = [{id: "org.videolan.episodes/episodes", name: "Episodes", label: "Show the other episodes", available: true,
+        player.addonPanels = [{id: "org.hakone.episodes/episodes", name: "Episodes", label: "Show the other episodes", available: true,
             iconMarkup: "<path d=\"M4 6h16\" stroke=\"COLOR\"/>"}]
-        compare(player.layoutModel.layout.zones.footerRight.slice(-3), ["settings", "addon:org.videolan.episodes/episodes", "queue"])
+        compare(player.layoutModel.layout.zones.footerRight.slice(-3), ["settings", "addon:org.hakone.episodes/episodes", "queue"])
         compare(item("episodesButton").iconMarkup, "<path d=\"M4 6h16\" stroke=\"COLOR\"/>")
         tryVerify(() => item("episodesButton").visible
             && point("playbackSettingsButton").x + item("playbackSettingsButton").width <= point("episodesButton").x

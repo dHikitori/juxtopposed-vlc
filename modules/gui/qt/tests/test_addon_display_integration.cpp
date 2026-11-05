@@ -50,9 +50,9 @@ QList<DistributionBootstrapEntry> bundles()
 {
     QList<DistributionBootstrapEntry> result;
     for(const auto& pair:QList<QPair<QString,QString>>{
-        {"tvmaze","org.videolan.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
+        {"tvmaze","org.hakone.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
         {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},
-        {"radio-browser","org.hakone.radio-browser"},{"episodes","org.videolan.episodes"},{"thesubtitledb","org.hakone.thesubtitledb"}})
+        {"radio-browser","org.hakone.radio-browser"},{"episodes","org.hakone.episodes"},{"thesubtitledb","org.hakone.thesubtitledb"}})
         result.append({pair.second,{},packageRoot(pair.first)});
     return result;
 }
@@ -205,7 +205,7 @@ private slots:
         QTemporaryDir profile;AddonManager manager(profile.path());QVERIFY(manager.beginDistributionBootstrap(bundles()));
         AddonCatalogueView view(&manager,lifetime->handle());AddonPackageSummaries summary(&manager,lifetime->handle());summary.refresh();
         QTRY_VERIFY_WITH_TIMEOUT(view.isCurrent() && summary.isCurrent(),15000);QVERIFY(summary.retainedAvailable());
-        const auto id=QStringLiteral("org.videolan.tvmaze"),stamp=manager.displaySettingsStamp(id);QVERIFY(!stamp.isEmpty());
+        const auto id=QStringLiteral("org.hakone.tvmaze"),stamp=manager.displaySettingsStamp(id);QVERIFY(!stamp.isEmpty());
         const auto ticket=manager.prepareDisplaySettings(id);QVERIFY(!ticket.isEmpty());QVERIFY(summary.isCurrent());QVERIFY(summary.retainedAvailable());QCOMPARE(manager.displaySettingsState(id),QStringLiteral("pending"));
         QTRY_VERIFY(view.isCurrent() && manager.displaySettingsState(id)==QLatin1String("ready"));QCOMPARE(manager.displaySettingsStamp(id),stamp);
         AddonManager other(profile.path());QVERIFY(other.setEnabled(QStringLiteral("org.videolan.musicbrainz"),false));
@@ -313,7 +313,7 @@ private slots:
     void validBackupKeepsRichLegacySummaryButNoContributionsOrStrictAuthority(){
         QTemporaryDir profile;AddonManager manager(profile.path());QVERIFY(manager.beginDistributionBootstrap(bundles()));
         AddonCatalogueView view(&manager,lifetime->handle());QTRY_VERIFY_WITH_TIMEOUT(!manager.distributionBootstrapInProgress() && view.isCurrent(),15000);
-        const auto id=QStringLiteral("org.videolan.tvmaze"),path=profile.filePath(QStringLiteral("packages/")+id+QStringLiteral("/state.json"));
+        const auto id=QStringLiteral("org.hakone.tvmaze"),path=profile.filePath(QStringLiteral("packages/")+id+QStringLiteral("/state.json"));
         const auto backup=read(path+QStringLiteral(".backup"));QVERIFY(!backup.isEmpty());
         PackageStore store(profile.path());store.invalidateAuthority();QVERIFY(write(path,QByteArray("broken current state")));
         QTRY_VERIFY_WITH_TIMEOUT(view.isCurrent(),5000);

@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "id": "org.videolan.tvmaze",
+  "id": "org.hakone.tvmaze",
   "name": "TVmaze episode titles",
   "version": "0.3.0",
   "publisher": "Hakone core",

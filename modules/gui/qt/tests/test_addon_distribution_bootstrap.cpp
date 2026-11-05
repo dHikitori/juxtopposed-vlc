@@ -92,8 +92,8 @@ private slots:
     void eightRealBundlesPublishOnceOnTheOwner() {
         QTemporaryDir profile;AddonManager manager(profile.path());QSignalSpy state(&manager,&AddonManager::distributionBootstrapChanged),revision(&manager,&AddonManager::revisionChanged);
         QList<DistributionBootstrapEntry> entries;
-        for(const auto& item:QList<QPair<QString,QString>>{{"tvmaze","org.videolan.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
-            {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},{"radio-browser","org.hakone.radio-browser"},{"thesubtitledb","org.hakone.thesubtitledb"},{"episodes","org.videolan.episodes"}})
+        for(const auto& item:QList<QPair<QString,QString>>{{"tvmaze","org.hakone.tvmaze"},{"musicbrainz","org.videolan.musicbrainz"},{"lastfm","org.videolan.lastfm"},
+            {"french-tv","org.videolan.french-tv"},{"google-images","org.videolan.google-images"},{"radio-browser","org.hakone.radio-browser"},{"thesubtitledb","org.hakone.thesubtitledb"},{"episodes","org.hakone.episodes"}})
             entries.append({item.second,QString{},packageRoot(item.first)});
         connect(&manager,&AddonManager::distributionBootstrapChanged,this,[&]{QCOMPARE(QThread::currentThread(),manager.thread());});
         QVERIFY(manager.beginDistributionBootstrap(entries));QVERIFY(manager.distributionBootstrapInProgress());QCOMPARE(manager.distributionBootstrapGeneration(),quint64(1));QCOMPARE(revision.size(),0);

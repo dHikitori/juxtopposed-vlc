@@ -50,8 +50,8 @@ TestCase {
         RedesignAddonUpdates { parent: testCase; ctx: settings }
     }
     function updates() {
-        return [{id: "org.videolan.episodes", name: "Episodes", installedVersion: "1.0.2", version: "1.0.3", enabled: true, newPermissions: {}},
-                {id: "org.videolan.tvmaze", name: "TVMaze", installedVersion: "0.3.0", version: "0.4.0", enabled: false,
+        return [{id: "org.hakone.episodes", name: "Episodes", installedVersion: "1.0.2", version: "1.0.3", enabled: true, newPermissions: {}},
+                {id: "org.hakone.tvmaze", name: "TVMaze", installedVersion: "0.3.0", version: "0.4.0", enabled: false,
                  newPermissions: {"network.http": {origins: ["https://api.tvmaze.com"]}}}]
     }
     function init() {
@@ -73,26 +73,26 @@ TestCase {
     function test_updatesWithoutNewPermissionsInstallTogetherOthersNeedApproval() {
         const item = prompt()
         tryVerify(() => item.opened)
-        compare(findChild(item.contentItem, "addonUpdateVersions_org.videolan.episodes").text, "1.0.2 → 1.0.3")
-        verify(!findChild(item.contentItem, "addonUpdatePermissions_org.videolan.episodes").visible)
-        const permissions = findChild(item.contentItem, "addonUpdatePermissions_org.videolan.tvmaze")
+        compare(findChild(item.contentItem, "addonUpdateVersions_org.hakone.episodes").text, "1.0.2 → 1.0.3")
+        verify(!findChild(item.contentItem, "addonUpdatePermissions_org.hakone.episodes").visible)
+        const permissions = findChild(item.contentItem, "addonUpdatePermissions_org.hakone.tvmaze")
         verify(permissions.visible); verify(permissions.text.includes("api.tvmaze.com"))
-        compare(findChild(item.contentItem, "addonUpdateApply_org.videolan.tvmaze").caption, "Approve and update")
+        compare(findChild(item.contentItem, "addonUpdateApply_org.hakone.tvmaze").caption, "Approve and update")
         // "Update the others" leaves the update with new permissions alone.
         compare(findChild(item.contentItem, "addonUpdatesAll").caption, "Update the others")
         click(item, "addonUpdatesAll")
-        compare(manager.stages, ["org.videolan.episodes"])
-        compare(findChild(item.contentItem, "addonUpdateStatus_org.videolan.episodes").text, "Updating…")
+        compare(manager.stages, ["org.hakone.episodes"])
+        compare(findChild(item.contentItem, "addonUpdateStatus_org.hakone.episodes").text, "Updating…")
         manager.complete()
         compare(manager.approvals.length, 1)
-        compare(manager.approvals[0].id, "org.videolan.episodes"); compare(manager.approvals[0].enable, true)
-        tryCompare(findChild(item.contentItem, "addonUpdateStatus_org.videolan.episodes"), "text", "Updated")
+        compare(manager.approvals[0].id, "org.hakone.episodes"); compare(manager.approvals[0].enable, true)
+        tryCompare(findChild(item.contentItem, "addonUpdateStatus_org.hakone.episodes"), "text", "Updated")
         verify(!findChild(item.contentItem, "addonUpdatesAll").visible)
         // Its own approval; the add-on stays off as it was.
-        click(item, "addonUpdateApply_org.videolan.tvmaze")
-        compare(manager.stages[1], "org.videolan.tvmaze")
+        click(item, "addonUpdateApply_org.hakone.tvmaze")
+        compare(manager.stages[1], "org.hakone.tvmaze")
         manager.complete()
-        compare(manager.approvals[1].id, "org.videolan.tvmaze"); compare(manager.approvals[1].enable, false)
+        compare(manager.approvals[1].id, "org.hakone.tvmaze"); compare(manager.approvals[1].enable, false)
         tryVerify(() => item.finished)
         verify(findChild(item.contentItem, "addonUpdatesDone").visible)
         click(item, "addonUpdatesDone")
@@ -104,7 +104,7 @@ TestCase {
         tryVerify(() => item.opened)
         click(item, "addonUpdatesLater")
         tryVerify(() => !item.opened)
-        compare(JSON.parse(settings.values["Redesign/AddonUpdatesDismissed"]), {"org.videolan.episodes": "1.0.3", "org.videolan.tvmaze": "0.4.0"})
+        compare(JSON.parse(settings.values["Redesign/AddonUpdatesDismissed"]), {"org.hakone.episodes": "1.0.3", "org.hakone.tvmaze": "0.4.0"})
         compare(manager.stages.length, 0)
         item = prompt(); wait(50)
         verify(!item.opened)
@@ -128,12 +128,12 @@ TestCase {
         const item = prompt()
         tryVerify(() => item.opened)
         manager.refuseStage = true
-        click(item, "addonUpdateApply_org.videolan.episodes")
-        tryCompare(findChild(item.contentItem, "addonUpdateStatus_org.videolan.episodes"), "text", "The app package changed.")
-        verify(findChild(item.contentItem, "addonUpdateApply_org.videolan.episodes").visible)
+        click(item, "addonUpdateApply_org.hakone.episodes")
+        tryCompare(findChild(item.contentItem, "addonUpdateStatus_org.hakone.episodes"), "text", "The app package changed.")
+        verify(findChild(item.contentItem, "addonUpdateApply_org.hakone.episodes").visible)
         manager.refuseStage = false
-        click(item, "addonUpdateApply_org.videolan.episodes")
+        click(item, "addonUpdateApply_org.hakone.episodes")
         manager.complete()
-        tryCompare(findChild(item.contentItem, "addonUpdateStatus_org.videolan.episodes"), "text", "Updated")
+        tryCompare(findChild(item.contentItem, "addonUpdateStatus_org.hakone.episodes"), "text", "Updated")
     }
 }

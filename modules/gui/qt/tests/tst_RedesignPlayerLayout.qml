@@ -89,7 +89,7 @@ TestCase {
     function test_groupMovesUseOriginalInsertionBoundary() {
         layout.begin()
         verify(layout.moveGroup(["mute", "volume"], "footerRight", 7))
-        compare(layout.layout.zones.footerRight, ["audio", "subtitles", "settings", "addon:org.videolan.episodes/episodes", "queue", "mute", "volume"])
+        compare(layout.layout.zones.footerRight, ["audio", "subtitles", "settings", "addon:org.hakone.episodes/episodes", "queue", "mute", "volume"])
         verify(layout.moveGroup(["mute", "volume"], "footerRight", 0))
         compare(layout.layout, layout.defaults())
         verify(layout.moveGroup(["mute", "volume"], "above", 0))

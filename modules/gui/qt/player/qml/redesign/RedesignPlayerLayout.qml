@@ -9,7 +9,7 @@ QtObject {
     // zone appears there until the user removes it in the editor.
     property var panels: []
     // The bundled Episodes panel replaces the built-in "episodes" control.
-    readonly property string episodesPanel: "addon:org.videolan.episodes/episodes"
+    readonly property string episodesPanel: "addon:org.hakone.episodes/episodes"
     property var stored: defaults()
     property var draft: defaults()
     readonly property var layout: editing ? draft : placed(stored)

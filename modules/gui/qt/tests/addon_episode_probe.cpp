@@ -16,7 +16,7 @@ int main(int argc, char** argv)
     if (!directory.isValid()) return 2;
     vlc::addons::AddonManager manager(directory.filePath(QStringLiteral("addons")));
     manager.setWorkerExecutable(app.arguments()[2]);
-    if (!manager.ensureDistributionPackage(app.arguments()[1], QStringLiteral("org.videolan.tvmaze"))) {
+    if (!manager.ensureDistributionPackage(app.arguments()[1], QStringLiteral("org.hakone.tvmaze"))) {
         QTextStream(stdout) << "The distribution package import failed: " << manager.errorMessage() << '\n'; return 1;
     }
     AddonMetadataService metadata(&manager); metadata.setAutomaticNetworkAllowed(true);

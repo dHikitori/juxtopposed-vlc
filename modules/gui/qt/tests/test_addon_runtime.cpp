@@ -398,7 +398,7 @@ private slots:
         QVERIFY(manager.installLocalPackage(directory, true));
         const auto descriptor = manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap();
         const auto account = descriptor.value("accountReference").toString(); QVERIFY(account.startsWith(QStringLiteral("public:")));
-        QVERIFY(manager.saveAddonSettings(QStringLiteral("org.videolan.tvmaze"), {}, {}));
+        QVERIFY(manager.saveAddonSettings(QStringLiteral("org.hakone.tvmaze"), {}, {}));
         QCOMPARE(manager.contributionsOfType(QStringLiteral("metadata.provider"), true).first().toMap().value("accountReference").toString(), account);
     }
 
