@@ -9,6 +9,8 @@
 #include <cstring>
 #include <limits>
 #include <vlc/vlc.h>
+#include <vlc_common.h>
+#include <vlc_modules.h>
 #include "../../../../lib/libvlc_internal.h"
 #include "../player/audio_waveform_scanner.hpp"
 
@@ -103,6 +105,19 @@ private slots:
     void readsAmplitudeOverTheWholeTrack() {
         QFETCH(int, bits);QFETCH(int, channels);QFETCH(bool, floating);writeWav(bits, channels, floating);
         const auto result = scan(source());QCOMPARE(result.status, AudioWaveformScan::Complete);QCOMPARE(result.peaks.size(), 16);
+        for (int i = 0; i < result.peaks.size(); ++i) {
+            const float expected = i < 4 ? 0 : i < 8 ? .25 : i < 12 ? .8 : .5;
+            QVERIFY2(std::abs(result.peaks[i] - expected) < .025, qPrintable(QStringLiteral("bin %1: actual %2, expected %3").arg(i).arg(result.peaks[i]).arg(expected)));
+        }
+    }
+    // FLAC sizes its output buffers from the decoder's own audio format,
+    // which the scanner must prepare as the core's decoder owner does.
+    void readsFlacWhoseDecoderSizesItsOwnBuffers() {
+        if (!module_exists("flac") || !module_exists("flacsys")) QSKIP("This build has no FLAC decoder.");
+        const auto path = QFINDTESTDATA("fixtures/waveform-steps.flac");
+        QVERIFY(!path.isEmpty());
+        auto request = source();request.uri = QUrl::fromLocalFile(path).toEncoded();
+        const auto result = scan(request);QCOMPARE(result.status, AudioWaveformScan::Complete);QCOMPARE(result.peaks.size(), 16);
         for (int i = 0; i < result.peaks.size(); ++i) {
             const float expected = i < 4 ? 0 : i < 8 ? .25 : i < 12 ? .8 : .5;
             QVERIFY2(std::abs(result.peaks[i] - expected) < .025, qPrintable(QStringLiteral("bin %1: actual %2, expected %3").arg(i).arg(result.peaks[i]).arg(expected)));

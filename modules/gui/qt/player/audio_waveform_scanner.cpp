@@ -105,8 +105,15 @@ struct Output : es_out_t
                 auto* owner = reinterpret_cast<AudioDecoder*>(decoder);
                 std::lock_guard<std::mutex> lock(owner->output->mutex);
                 if (owner->filters) { aout_FiltersDelete(decoder, owner->filters); owner->filters = nullptr; }
+                // As the core's decoder owner does: a decoder such as FLAC
+                // sizes its buffers (decoder_NewAudioBuffer) from these.
+                decoder->fmt_out.audio.i_format = decoder->fmt_out.i_codec;
                 auto input = decoder->fmt_out.audio;
-                input.i_format = decoder->fmt_out.i_codec;
+                aout_FormatPrepare(&input);
+                if (!input.i_bytes_per_frame || !input.i_frame_length) return VLC_EGENERIC;
+                decoder->fmt_out.audio.i_bytes_per_frame = input.i_bytes_per_frame;
+                decoder->fmt_out.audio.i_bitspersample = input.i_bitspersample;
+                decoder->fmt_out.audio.i_frame_length = input.i_frame_length;
                 owner->format = input;
                 owner->format.i_format = VLC_CODEC_FL32;
                 owner->format.channel_type = AUDIO_CHANNEL_TYPE_BITMAP;

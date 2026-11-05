@@ -3595,6 +3595,7 @@ test_audio_waveform_scanner_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_audio_waveform_scanner_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_audio_waveform_scanner
 TESTS += test_audio_waveform_scanner
+EXTRA_DIST += tests/fixtures/waveform-steps.flac
 
 
 # test_ml_model
