@@ -1,0 +1,59 @@
+name: Nix flake
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['[0-9]*.[0-9]*.[0-9]*']
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - 'nix/**'
+      - .github/workflows/nix.yml
+      - extras/package/release/addon-rust-version.txt
+      - 'contrib/src/medialibrary/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.system }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            sandbox = true
+      - name: Check flake outputs
+        run: nix flake check --no-build --all-systems
+      - name: Build
+        run: nix build -L .#packages.${{ matrix.system }}.hakone
+      - name: Install playback test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg xvfb xauth
+      - name: Verify version, add-on worker and playback
+        run: |
+          version=$(nix eval --raw .#packages.${{ matrix.system }}.hakone.version)
+          python3 extras/package/release/verify.py --expected-version "$version" --without-update-check result/bin/hakone
+      # Nix's Mesa is not on a non-NixOS runner, so check the Qt interface with
+      # the software scene graph only.
+      - name: Verify Qt interface (software rendering)
+        run: >-
+          QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software xvfb-run -a
+          python3 extras/package/release/verify.py --gui --video --without-update-check result/bin/hakone
