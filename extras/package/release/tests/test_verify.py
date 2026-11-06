@@ -48,7 +48,14 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(gui_calls[0].kwargs['env'], gui_calls[1].kwargs['env'])
         self.assertIn('playback smoke checks passed', output.getvalue())
 
-    def run_gui(self, outputs, require_opengl=False, diagnostics=None, capture=None):
+    def test_update_notification_option_follows_the_build(self):
+        gui = [args for args in self.run_gui(['', '']) if '-I' in args and 'qt' in args]
+        self.assertTrue(all('--no-qt-updates-notif' in args for args in gui))
+        gui = [args for args in self.run_gui(['', ''], without_update_check=True) if '-I' in args and 'qt' in args]
+        self.assertEqual(len(gui), 2)
+        self.assertFalse(any('--no-qt-updates-notif' in args for args in gui))
+
+    def run_gui(self, outputs, require_opengl=False, diagnostics=None, capture=None, without_update_check=False):
         calls = []
         def command(args, **kwargs):
             calls.append(args)
@@ -70,6 +77,8 @@ class VerifyTests(unittest.TestCase):
             argv.append('--require-opengl')
         if diagnostics:
             argv.extend(['--diagnostics-dir', str(diagnostics)])
+        if without_update_check:
+            argv.append('--without-update-check')
         with mock.patch.object(sys, 'argv', argv), mock.patch.object(subprocess, 'run', side_effect=command), \
              contextlib.redirect_stdout(capture if capture is not None else io.StringIO()):
             runpy.run_path(str(SCRIPTS / 'verify.py'), run_name='__main__')

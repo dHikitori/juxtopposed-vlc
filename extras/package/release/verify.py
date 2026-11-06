@@ -19,6 +19,8 @@ parser.add_argument('--video', action='store_true', help='With --gui, also requi
 parser.add_argument('--gui-runs', type=int, default=2, help='Repeat GUI startup with the same cache (default: 2)')
 parser.add_argument('--require-opengl', action='store_true', help='Require the Qt Quick OpenGL renderer, not the software scene graph')
 parser.add_argument('--diagnostics-dir', type=Path, help='Keep process output, including failed starts, in this directory')
+parser.add_argument('--without-update-check', action='store_true',
+                    help='The build has no update checker (update-check=disabled, as in the Nix build)')
 args = parser.parse_args()
 if args.video and not args.gui:
     parser.error('--video requires --gui')
@@ -103,7 +105,10 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
         print(f'GUI startup {attempt + 1}/{args.gui_runs}', flush=True)
         gui = checked_run([executable, '--ignore-config', '--no-media-library',
             '--no-metadata-network-access', '-I', 'qt', *([] if args.video else ['--no-video']), '--aout=dummy',
-            '--no-qt-privacy-ask', '--no-qt-updates-notif', '--play-and-exit',
+            # Without an update checker the option does not exist, and Hakone
+            # rejects unknown options.
+            '--no-qt-privacy-ask', *([] if args.without_update_check else ['--no-qt-updates-notif']),
+            '--play-and-exit',
             *(['--qt-verbose'] if args.require_opengl else []), '-vv', str(sample)], phase=f'gui-{attempt + 1}', env=env,
             timeout=60, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         print(gui.stdout)
