@@ -2252,8 +2252,10 @@ vlc_module_begin ()
 #endif
 #ifdef HAVE_DBUS
     add_bool( "dbus", false, DBUS_TEXT, DBUS_LONGTEXT )
+        change_volatile()
 #endif
     add_bool( "media-library", false, ML_TEXT, ML_LONGTEXT )
+        change_volatile()
     /* Empty preserves a pre-existing platform preference. Explicit auto is
      * persisted so System can override a legacy Windows/macOS selection. */
     add_string("language", "", N_("Interface language"),

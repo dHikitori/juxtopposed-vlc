@@ -641,6 +641,7 @@ check_functions = [
     ['fork',             '#include <unistd.h>'],
     ['getmntent_r',      '#include <mntent.h>'],
     ['getpwuid_r',       '#include <pwd.h>'],
+    ['getrandom',        '#include <sys/random.h>'],
     ['isatty',           '#include <unistd.h>'],
     ['isatty',           '#include <io.h>'],
     ['memalign',         '#include <malloc.h>'],

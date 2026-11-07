@@ -67,7 +67,7 @@ Further notes:
   including private headers). `-Dqt=enabled` turns a missing
   or incomplete Qt into a configure error instead of a
   silently skipped UI.
-- `medialibrary` needs an external `medialibrary >= 0.13`
+- `medialibrary` needs an external `medialibrary` 0.14 (`>= 0.14.0`, `< 0.15.0`)
   via pkg-config. It is not installed by this baseline and
   not in the package list above, so the baseline disables it
   explicitly; provide a compatible pkg-config package to

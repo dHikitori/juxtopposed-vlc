@@ -9,9 +9,11 @@ Track links remain unique per source media, so the same track can be shared
 by several media and also have its own main-media record.
 
 ---
+diff --git a/src/File.cpp b/src/File.cpp
+index 19b6e7d3..ada46370 100644
 --- a/src/File.cpp
 +++ b/src/File.cpp
-@@ -486,11 +486,14 @@
+@@ -486,11 +486,14 @@ std::shared_ptr<File> File::createFromExternalMedia( MediaLibraryPtr ml, int64_t
                                                       int64_t fileSize, time_t insertionDate )
  {
      assert( mediaId > 0 );
@@ -31,7 +33,7 @@ by several media and also have its own main-media record.
      if ( existing != nullptr )
          return nullptr;
  
-@@ -637,8 +640,8 @@
+@@ -637,8 +640,8 @@ std::shared_ptr<File> File::fromExternalMrl( MediaLibraryPtr ml, const std::stri
          return nullptr;
      }
      static const std::string req = "SELECT * FROM " + File::Table::Name +

@@ -12,6 +12,7 @@ record and its first title in one transaction. Preserve existing titles.
 ---
 diff --git a/include/medialibrary/AddonPlaylist.h b/include/medialibrary/AddonPlaylist.h
 new file mode 100644
+index 00000000..3ec48151
 --- /dev/null
 +++ b/include/medialibrary/AddonPlaylist.h
 @@ -0,0 +1,32 @@
@@ -48,9 +49,10 @@ new file mode 100644
 +                            const std::string& title, int64_t& id) noexcept;
 +}
 diff --git a/include/medialibrary/meson.build b/include/medialibrary/meson.build
+index ef0e5eb6..d650733c 100644
 --- a/include/medialibrary/meson.build
 +++ b/include/medialibrary/meson.build
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,7 @@ medialib_headers = [
          'IMediaLibrary.h',
          'IMovie.h',
          'IPlaylist.h',
@@ -59,9 +61,10 @@ diff --git a/include/medialibrary/meson.build b/include/medialibrary/meson.build
          'IShow.h',
          'IVideoTrack.h',
 diff --git a/medialibrary.pc.in b/medialibrary.pc.in
+index 7581aeaf..d24b0dfc 100644
 --- a/medialibrary.pc.in
 +++ b/medialibrary.pc.in
-@@ -2,6 +2,7 @@
+@@ -2,6 +2,7 @@ prefix=@prefix@
  exec_prefix=@exec_prefix@
  libdir=${prefix}/lib
  includedir=${prefix}/include
@@ -70,9 +73,10 @@ diff --git a/medialibrary.pc.in b/medialibrary.pc.in
  Name: medialibrary
  Description: cross platform medialibrary
 diff --git a/meson.build b/meson.build
+index 2e55731f..b77f0dad 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -200,6 +200,32 @@
+@@ -177,6 +177,32 @@ if not get_option('tests').disabled()
      suite: ['unittest', 'Media'],
    )
  
@@ -105,7 +109,7 @@ diff --git a/meson.build b/meson.build
  endif
  
  # Exercise the lock independently of the parser backend and shared-library exports.
-@@ -226,5 +252,6 @@
+@@ -203,5 +229,6 @@ pkg = import('pkgconfig')
  pkg.generate(libraries: medialib,
    version: meson.project_version(),
    name: 'medialibrary',
@@ -115,6 +119,7 @@ diff --git a/meson.build b/meson.build
  )
 diff --git a/src/AddonPlaylist.cpp b/src/AddonPlaylist.cpp
 new file mode 100644
+index 00000000..cd1cdaf5
 --- /dev/null
 +++ b/src/AddonPlaylist.cpp
 @@ -0,0 +1,240 @@
@@ -359,9 +364,10 @@ new file mode 100644
 +}
 +}
 diff --git a/src/File.cpp b/src/File.cpp
+index ada46370..e5bc928e 100644
 --- a/src/File.cpp
 +++ b/src/File.cpp
-@@ -633,7 +633,9 @@
+@@ -633,7 +633,9 @@ std::shared_ptr<File> File::fromExternalMrl( MediaLibraryPtr ml, const std::stri
      std::string scheme;
      try
      {
@@ -373,9 +379,10 @@ diff --git a/src/File.cpp b/src/File.cpp
      catch ( const fs::errors::UnhandledScheme& )
      {
 diff --git a/src/meson.build b/src/meson.build
+index 3394428b..535fbf16 100644
 --- a/src/meson.build
 +++ b/src/meson.build
-@@ -14,6 +14,7 @@
+@@ -14,6 +14,7 @@ medialib_src = [
    'MediaLibrary.cpp',
    'Movie.cpp',
    'Playlist.cpp',
@@ -385,6 +392,7 @@ diff --git a/src/meson.build b/src/meson.build
    'Thumbnail.cpp',
 diff --git a/test/unittest/AddonPlaylistTests.cpp b/test/unittest/AddonPlaylistTests.cpp
 new file mode 100644
+index 00000000..5a07aae6
 --- /dev/null
 +++ b/test/unittest/AddonPlaylistTests.cpp
 @@ -0,0 +1,350 @@

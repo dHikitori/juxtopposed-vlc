@@ -320,7 +320,10 @@ FocusScope {
 
             layer.enabled: MainCtx.backdropBlurEnabled &&
                            (GraphicsInfo.shaderType === GraphicsInfo.RhiShader) &&
-                           (miniPlayer.visible || !!loaderUpdatePane.item?.visible)
+                           (miniPlayer.visible ||
+                            !!loaderUpdatePane.item?.visible ||
+                            sidebar.needExternalBackgroundProvider ||
+                            playlistLoader.needExternalBackgroundProvider)
 
             // Blurring requires to access neighbour pixels, thus the source texture should be bigger than
             // the effect so that the effect have access to the neighbor pixels for the pixels near the
@@ -391,22 +394,53 @@ FocusScope {
 
                 blending: stackViewParent.color.a < (1.0 - Number.EPSILON)
 
+                effectRects: {
+                    let ret = []
+
+                    if (miniPlayer.visible || loaderUpdatePane.item?.visible)
+                        ret.push(bottomEffectRect)
+
+                    if (sidebar.needExternalBackgroundProvider)
+                        ret.push(leftEffectRect)
+
+                    if (playlistLoader.needExternalBackgroundProvider)
+                        ret.push(rightEffectRect)
+
+                    return ret
+                }
+
+                // For mini player and update pane:
                 // Each pass of the blur effect also suffers from the border neighbour pixel issue mentioned
                 // above, making all the borders problematic, to a less considerable extent. For that reason,
                 // we extend both the top and the bottom edges and use viewport to prevent overdraw:
-                effectRect: Qt.rect(-stackView.x,
-                                    stackView.height - stackViewParent.edgeExtension,
-                                    stackViewParent.width + 2 * stackViewParent.edgeExtension,
-                                    loaderUpdatePane.height + miniPlayer.height + 2 * stackViewParent.edgeExtension)
+                readonly property rect bottomEffectRect: Qt.rect(-stackView.x,
+                                                                 stackView.height - stackViewParent.edgeExtension,
+                                                                 stackViewParent.width + 2 * stackViewParent.edgeExtension,
+                                                                 loaderUpdatePane.height + miniPlayer.height + 2 * stackViewParent.edgeExtension)
+
+                // For side navigation pane when screen is small:
+                // We don't care edge extension here, since it becomes obvious only when the main view is scrolled (relevant with mini player).
+                readonly property rect leftEffectRect: Qt.rect(stackViewParent.edgeExtension,
+                                                               0.0,
+                                                               sidebar.width,
+                                                               sidebar.height)
+
+                // For side playlist pane when screen is small:
+                // We don't care edge extension here, since it becomes obvious only when the main view is scrolled (relevant with mini player).
+                readonly property rect rightEffectRect: Qt.rect(stackViewParent.edgeExtension +
+                                                                (sidebar.needExternalBackgroundProvider ? playlistLoader.x
+                                                                                                        : (playlistLoader.x - sidebar.width)),
+                                                                0.0,
+                                                                playlistLoader.width,
+                                                                playlistLoader.height)
 
                 // WARNING: We are not using `sourceVisualRect` because it is not trivial to guarantee that
                 //          the visual (`ShaderEffect`) scene graph sizing and sub-texturing are synchronized.
                 //          This can cause the visual to deviate from 1:1 representation of the texture
                 //          momentarily, leading to sizing glitches during initialization and animations.
 
-                effect: frostedGlassEffect
-
-                Widgets.FrostedGlassEffect {
+                // NOTE: This is a `Component`, the effect item is instantiated by `PartialEffect`:
+                effect: Widgets.FrostedGlassEffect {
                     id: frostedGlassEffect
 
                     ColorContext {
@@ -418,6 +452,12 @@ FocusScope {
                     backgroundColor: (ready ? "transparent" : stackViewParent.color)
                     tint: frostedTheme.bg.secondary
 
+                    // We only care about edge extension in mini player (by checking if `index` is 0),
+                    // since it becomes obvious only when the main view is scrolled:
+                    required property int index
+
+                    readonly property bool forBottomArea: (miniPlayer.visible || !!loaderUpdatePane.item?.visible) && (index === 0)
+
                     // Prevent overdraw (the extension margin should not be painted).
                     // This also saves video memory compared to solely using visual rect.
                     // Note that viewport rect does not cover edge extension in y-axis
@@ -427,16 +467,17 @@ FocusScope {
                     // view mode). Since we don't do texture extension in y-axis, we
                     // don't need to cover the edge extension in y-axis, which allows
                     // us to save some video memory (as opposed to `visualRect`).
-                    viewportRect: Qt.rect(stackView.x,
-                                          stackViewParent.edgeExtension,
-                                          stackView.width + (2 * stackViewParent.edgeExtension),
-                                          height - (2 * stackViewParent.edgeExtension))
+                    viewportRect: forBottomArea ? Qt.rect(stackView.x,
+                                                          stackViewParent.edgeExtension,
+                                                          stackView.width + (2 * stackViewParent.edgeExtension),
+                                                          height - (2 * stackViewParent.edgeExtension))
+                                                : Qt.rect(0.0, 0.0, 0.0, 0.0)
 
-                    visualRect: (stackView.width < stackViewParent.width) ? Qt.rect(stackViewParent.edgeExtension,
-                                                                                    viewportRect.y,
-                                                                                    width - (2 * stackViewParent.edgeExtension),
-                                                                                    viewportRect.height)
-                                                                          : Qt.rect(0, 0, 0, 0)
+                    visualRect: forBottomArea ? Qt.rect(stackViewParent.edgeExtension,
+                                                        viewportRect.y,
+                                                        width - (2 * stackViewParent.edgeExtension),
+                                                        viewportRect.height)
+                                              : Qt.rect(0, 0, 0, 0)
                 }
             }
 
@@ -523,7 +564,7 @@ FocusScope {
             }
         }
 
-        Rectangle {
+        MouseArea {
             id: smallScreenOverlay
 
             // overlay for smallscreens
@@ -536,18 +577,22 @@ FocusScope {
             height: parent.height - g_mainDisplay.displayMargin
 
             visible: VLCStyle.isScreenSmall && (playlistLoader.shown || (sidebar.visible && (sidebar.state === "expanded")))
-            color: "black"
-            opacity: 0.4
 
-            MouseArea {
+            hoverEnabled: true
+            onClicked:  pannelVisiblity.hideVisiblePanels()
+
+            // Capture WheelEvents before they reach stackView
+            onWheel: (wheel) => {
+                wheel.accepted = true
+            }
+
+            Rectangle {
                 anchors.fill: parent
-                hoverEnabled: true
-                onClicked:  pannelVisiblity.hideVisiblePanels()
+                anchors.leftMargin: sidebar.visible ? sidebar.width : 0.0
+                anchors.rightMargin: playlistLoader.shown ? playlistLoader.width : 0.0
 
-                // Capture WheelEvents before they reach stackView
-                onWheel: (wheel) => {
-                    wheel.accepted = true
-                }
+                color: "black"
+                opacity: 0.4
             }
         }
 
@@ -580,7 +625,12 @@ FocusScope {
 
             safeAreaLeftMargin: VLCStyle.applicationHorizontalMargin
 
-            useAcrylic: (VLCStyle.isScreenSmall ? (sidebar.state === "") : true) // See `694d51a7` for the reasoning.
+            useAcrylic: (VLCStyle.isScreenSmall ? (sidebar.state === "" && !sidebarTransition.running) : true) // See `694d51a7` for the reasoning.
+
+            // Otherwise `stackViewParent`'s layer effect becomes the background provider
+            background.visible: useAcrylic || (!MainCtx.backdropBlurRequested() || (GraphicsInfo.shaderType !== GraphicsInfo.RhiShader))
+
+            readonly property bool needExternalBackgroundProvider: (visible && !background?.visible)
 
             NavigationBarContextMenu {
                 id: navigationBarContextMenu
@@ -707,6 +757,8 @@ FocusScope {
 
             readonly property bool shown: (status === Loader.Ready) && item.visible
 
+            readonly property bool needExternalBackgroundProvider: (shown && !item?.background?.visible)
+
             onVisibleChanged: {
                 if (!visible) {
                     stackView.focus = true
@@ -762,6 +814,9 @@ FocusScope {
                 useAcrylic: !VLCStyle.isScreenSmall
 
                 view.fadingEdge.pixelAlignedForDPR: !miniPlayer.visible
+
+                // Otherwise `stackViewParent`'s layer effect becomes the background provider
+                background.visible: useAcrylic || (!MainCtx.backdropBlurRequested() || (GraphicsInfo.shaderType !== GraphicsInfo.RhiShader))
 
                 Navigation.parentItem: g_mainDisplay
                 Navigation.upItem: localTopbar

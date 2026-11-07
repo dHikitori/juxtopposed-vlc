@@ -11,9 +11,37 @@ after a short lock, verifies that sustained contention times out, and checks
 that the connection can write again after the reader releases its lock.
 
 ---
+diff --git a/meson.build b/meson.build
+index 2ef905d0..aed3e391 100644
+--- a/meson.build
++++ b/meson.build
+@@ -155,6 +155,21 @@ subdir('src')
+ # Ideally we shouldn't need an option to build tests, but we need
+ # https://github.com/mesonbuild/meson/issues/2518
+ # to be fixed first
++# SQLite connection tests do not need a libvlc parser backend.
++if not get_option('tests').disabled()
++  sqlite_busy_test = executable('sqlite_busy_tests', 'test/unittest/SqliteBusyTests.cpp',
++    link_with: [medialib],
++    include_directories: includes,
++    dependencies: [sqlite_dep, threads_dep],
++    build_by_default: false,
++  )
++  test('Sqlite.BusyTimeout', sqlite_busy_test,
++    args: [meson.current_build_dir() / 'sqlite-contention'],
++    timeout: 15,
++    suite: ['unittest', 'Sqlite'],
++  )
++endif
++
+ if libvlcpp_dep.found() and not get_option('tests').disabled()
+   subdir('test')
+ endif
+diff --git a/src/database/SqliteConnection.cpp b/src/database/SqliteConnection.cpp
+index fdaf6b60..29bc543f 100644
 --- a/src/database/SqliteConnection.cpp
 +++ b/src/database/SqliteConnection.cpp
-@@ -109,6 +109,12 @@
+@@ -118,6 +118,12 @@ Connection::Handle Connection::handle()
      res = sqlite3_extended_result_codes( dbConnection, 1 );
      if ( res != SQLITE_OK )
          errors::mapToException( "<enabling extended errors>", "", res );
@@ -26,9 +54,11 @@ that the connection can write again after the reader releases its lock.
      // Don't use public wrapper, they need to be able to call getConn, which
      // would result from a recursive call and a deadlock from here.
      setPragma( dbConnection, "foreign_keys", "1" );
+diff --git a/src/database/SqliteTools.cpp b/src/database/SqliteTools.cpp
+index 5e4c73b5..c553331f 100644
 --- a/src/database/SqliteTools.cpp
 +++ b/src/database/SqliteTools.cpp
-@@ -187,7 +187,10 @@
+@@ -187,7 +187,10 @@ Row Statement::row()
              return Row( m_stmt.get() );
          else if ( res == SQLITE_DONE )
              return Row{};
@@ -40,6 +70,9 @@ that the connection can write again after the reader releases its lock.
                      m_isCommit == true ) &&
                    errors::isInnocuous( res ) && maxRetries-- > 0 )
              continue;
+diff --git a/test/unittest/SqliteBusyTests.cpp b/test/unittest/SqliteBusyTests.cpp
+new file mode 100644
+index 00000000..aff60ecf
 --- /dev/null
 +++ b/test/unittest/SqliteBusyTests.cpp
 @@ -0,0 +1,92 @@
@@ -135,27 +168,3 @@ that the connection can write again after the reader releases its lock.
 +        return 0;
 +    } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 +}
---- a/meson.build
-+++ b/meson.build
-@@ -178,6 +178,21 @@
- # Ideally we shouldn't need an option to build tests, but we need
- # https://github.com/mesonbuild/meson/issues/2518
- # to be fixed first
-+# SQLite connection tests do not need a libvlc parser backend.
-+if not get_option('tests').disabled()
-+  sqlite_busy_test = executable('sqlite_busy_tests', 'test/unittest/SqliteBusyTests.cpp',
-+    link_with: [medialib],
-+    include_directories: includes,
-+    dependencies: [sqlite_dep, threads_dep],
-+    build_by_default: false,
-+  )
-+  test('Sqlite.BusyTimeout', sqlite_busy_test,
-+    args: [meson.current_build_dir() / 'sqlite-contention'],
-+    timeout: 15,
-+    suite: ['unittest', 'Sqlite'],
-+  )
-+endif
-+
- if libvlc_dep.found() and not get_option('tests').disabled()
-   subdir('test')
- endif

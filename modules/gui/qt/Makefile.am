@@ -1753,7 +1753,7 @@ libqml_module_player_a_QML = \
 	player/qml/LyricsFlickable.qml \
 	player/qml/MiniPlayer.qml \
 	player/qml/PIPPlayer.qml \
-	player/qml/Player.qml \
+	player/qml/PlayerView.qml \
 	player/qml/PlayerControlLayout.qml \
 	player/qml/PlayerPlaylistVisibilityFSM.qml \
 	player/qml/PlayerToolbarVisibilityFSM.qml \
@@ -2333,18 +2333,8 @@ endif
 endif
 endif
 
-base_model_test_SOURCES = tests/test_base_model.cpp \
-        util/base_model.cpp util/base_model.hpp util/base_model_p.hpp
-
-nodist_base_model_test_SOURCES = util/base_model.moc.cpp \
-        util/listcache.moc.cpp \
-        util/locallistcacheloader.moc.cpp
-
-base_model_test_CXXFLAGS = $(AM_CXXFLAGS) $(QT_CFLAGS) -fPIC $(CXXFLAGS_qt)
-base_model_test_LDADD = $(QT_LIBS) $(LIBS_qt)
-base_model_test_LDFLAGS = $(AM_LDFLAGS) $(QT_LDFLAGS)
-check_PROGRAMS = base_model_test
-TESTS = base_model_test
+check_PROGRAMS =
+TESTS =
 
 if HAVE_WIN32
 test_qt_win32_emutls_SOURCES = tests/test_win32_emutls.cpp util/win32_emutls.cpp
@@ -3596,6 +3586,24 @@ test_audio_waveform_scanner_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_audio_waveform_scanner
 TESTS += test_audio_waveform_scanner
 EXTRA_DIST += tests/fixtures/waveform-steps.flac
+# base_model_test
+
+base_model_test_SOURCES = tests/test_base_model.cpp \
+        util/base_model.cpp util/base_model.hpp util/base_model_p.hpp
+
+nodist_base_model_test_SOURCES = tests/test_base_model.moc \
+        util/base_model.moc.cpp \
+        util/listcache.moc.cpp \
+        util/locallistcacheloader.moc.cpp
+
+BUILT_SOURCES += tests/test_base_model.moc
+CLEANFILES += tests/test_base_model.moc
+base_model_test_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+base_model_test_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+base_model_test_LDADD = $(QT_QTEST_COMMON_ldadd)
+base_model_test_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += base_model_test
+TESTS += base_model_test
 
 
 # test_ml_model

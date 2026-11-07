@@ -644,7 +644,8 @@ void DiscOpenPanel::updateContext(int c)
 bool DiscOpenPanel::defaultSkipDiscMenus() const
 {
     return context == OpenPanel::CONTEXT_BATCH ||
-        (ui.bdRadioButton->isChecked() && !var_InheritBool(p_intf, "bluray-menu"));
+        (ui.bdRadioButton->isChecked() &&
+         (!var_Type(p_intf, "bluray-menu") || !var_InheritBool(p_intf, "bluray-menu")));
 }
 
 DiscOpenPanel::~DiscOpenPanel()
@@ -704,6 +705,8 @@ void DiscOpenPanel::updateButtons()
     }
     else if ( ui.bdRadioButton->isChecked() )
     {
+        // Without the Blu-ray module there are no menus to offer.
+        const bool dvdsimpleEnable = var_Type( p_intf, "bluray-menu" ) != 0;
         if( m_discType != BRD )
         {
             setDrive( psz_dvddiscpath );
@@ -714,7 +717,7 @@ void DiscOpenPanel::updateButtons()
         ui.chapterLabel->hide();
         ui.chapterSpin->hide();
         ui.diskOptionBox_2->hide();
-        ui.dvdsimple->setEnabled( true );
+        ui.dvdsimple->setEnabled( dvdsimpleEnable );
     }
     else if ( ui.vcdRadioButton->isChecked() )
     {
