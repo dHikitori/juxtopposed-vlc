@@ -10,6 +10,7 @@
 #include <vlc_tick.h>
 #include <vlc_fs.h>
 #include "../../../lib/libvlc_internal.h"
+#include "../../libvlc/test.h"
 #undef NDEBUG
 #include <assert.h>
 #include <stdatomic.h>
@@ -251,8 +252,15 @@ int main(void)
 #ifndef _WIN32
     alarm(20);
 #endif
+    test_setup();
+    /* Each case starts its own libvlc. Keep one instance alive so the plugin
+     * bank loads once: on macOS each plugin load costs seconds. */
+    const char *keep_args[] = {"--ignore-config", "--no-media-library"};
+    libvlc_instance_t *keep = libvlc_new(ARRAY_SIZE(keep_args), keep_args);
+    assert(keep != NULL);
     test_fanout(); test_backend_switch(); test_inflight();
     test_concurrent_changes(); test_slow_backend(); test_file_backend(); test_shutdown();
+    libvlc_release(keep);
     puts("7 log-observer scenarios passed");
     return 0;
 }

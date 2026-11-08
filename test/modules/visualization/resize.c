@@ -451,6 +451,11 @@ int main(void)
     vlc_timer_t timer;
     assert(vlc_timer_create(&timer, Timeout, NULL) == 0);
     vlc_timer_schedule(timer, false, VLC_TICK_FROM_SEC(45), 0);
+    /* Each case starts its own libvlc. Keep one instance alive so the plugin
+     * bank loads once: on macOS each plugin load costs seconds. */
+    const char *keep_args[] = {"--ignore-config", "--no-media-library"};
+    libvlc_instance_t *keep = libvlc_new(ARRAY_SIZE(keep_args), keep_args);
+    assert(keep != NULL);
 #ifdef VISUAL_RESIZE_TEST_GL
 # ifdef VISUAL_RESIZE_TEST_PROJECTM
     const char *effect = "projectm";
@@ -460,6 +465,7 @@ int main(void)
     if (!test_resize(effect, false))
     {
         vlc_timer_destroy(timer);
+        libvlc_release(keep);
         assert(getenv("VLC_TEST_REQUIRE_GL") == NULL);
         return 77;
     }
@@ -481,5 +487,6 @@ int main(void)
     fprintf(stderr, "scope: converted display resize and recovery passed\n");
 #endif
     vlc_timer_destroy(timer);
+    libvlc_release(keep);
     return 0;
 }

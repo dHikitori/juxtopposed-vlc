@@ -7,6 +7,7 @@
 #include <vlc_log_observer.h>
 #include <vlc_fs.h>
 #include "../../../lib/libvlc_internal.h"
+#include "../../libvlc/test.h"
 #undef NDEBUG
 #include <assert.h>
 #include <unistd.h>
@@ -78,9 +79,13 @@ static void check(const char *mode, const char *level, int verbose, int log_verb
 
 int main(void)
 {
-#ifndef _WIN32
-    alarm(30);
-#endif
+    test_init();
+    /* Each scenario starts its own libvlc. Keep one instance alive so the
+     * plugin bank loads once: on macOS each plugin load costs seconds. */
+    const char *keep_args[] = {"--ignore-config", "--no-media-library",
+                               "--no-metadata-network-access"};
+    libvlc_instance_t *keep = libvlc_new(ARRAY_SIZE(keep_args), keep_args);
+    assert(keep);
     const char *modes[] = {"text", "html"};
     const struct {const char *level; unsigned mask;} levels[] = {
         {"errors", ERROR}, {"warnings", ERROR | WARN}, {"info", INFO | ERROR | WARN},
@@ -104,6 +109,7 @@ int main(void)
         check(modes[m], "invalid", 1, -1, true, INFO | ERROR | WARN);
         check(modes[m], "debug", 2, 3, false, 0);
     }
+    libvlc_release(keep);
     puts("52 file-logger scenarios passed");
     return 0;
 }

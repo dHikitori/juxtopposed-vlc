@@ -73,6 +73,16 @@ foreach vlc_test: vlc_tests
         continue
     endif
 
+    # test.h aborts a test after 10 seconds unless VLC_TEST_TIMEOUT says
+    # otherwise. On macOS each libvlc instance spends seconds loading plugins,
+    # so ordinary tests take 6-9 seconds and cross that alarm whenever the
+    # suite runs in parallel: there, let it fire just before meson's timeout.
+    test_timeout = vlc_test.get('timeout', 30)
+    if host_system == 'darwin'
+        common_args += '-DVLC_TEST_DEFAULT_TIMEOUT=@0@'.format(
+            test_timeout > 15 ? test_timeout - 5 : test_timeout)
+    endif
+
     moc_sources = []
     # Qt tests (the ones with moc input) need the Qt header workaround the
     # Qt module uses, and the Qt module macros (qt_test_flags in
@@ -110,7 +120,7 @@ foreach vlc_test: vlc_tests
                 test_wrapper,
                 args: [test_exe],
                 env: vlc_test.get('env', []),
-                timeout: vlc_test.get('timeout', 30),
+                timeout: test_timeout,
                 suite: [vlc_test.get('suite', []), 'test', addon_test_labels.get(vlc_test['name'], [])],
                 depends: [test_modules_deps])
         else
@@ -121,7 +131,7 @@ foreach vlc_test: vlc_tests
         test(vlc_test['name'],
             test_exe,
             env: vlc_test.get('env', []),
-            timeout: vlc_test.get('timeout', 30),
+            timeout: test_timeout,
             suite: [vlc_test.get('suite', []), 'test', addon_test_labels.get(vlc_test['name'], [])],
             depends: [test_modules_deps])
     endif

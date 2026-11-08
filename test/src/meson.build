@@ -122,6 +122,9 @@ vlc_tests += {
     'sources': files('input/addon_source_playback.c'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlc, libvlccore],
+    # Preparser children each load every plugin: about 20 seconds on macOS.
+    'env': ['VLC_TEST_TIMEOUT=60'],
+    'timeout': 90,
 }
 
 vlc_tests += {
@@ -129,6 +132,9 @@ vlc_tests += {
     'sources': files('misc/medialibrary_work.c'),
     'suite': ['src', 'test_src', 'addons'],
     'link_with': [libvlc, libvlccore],
+    # Preparser children each load every plugin: about 20 seconds on macOS.
+    'env': ['VLC_TEST_TIMEOUT=60'],
+    'timeout': 90,
 }
 
 vlc_tests += {
@@ -191,6 +197,9 @@ vlc_tests += {
     'sources': files('config/language.c'),
     'suite': ['src', 'test_src'],
     'link_with': [libvlc, libvlccore],
+    # Twelve child processes each load every plugin without a cache.
+    'env': ['VLC_TEST_TIMEOUT=90'],
+    'timeout': 120,
 }
 
 vlc_tests += {
@@ -359,7 +368,10 @@ vlc_tests += {
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
     'c_args' : ['-DTEST_NET'],
-    'module_depends' : vlc_plugins_targets.keys()
+    'module_depends' : vlc_plugins_targets.keys(),
+    # Reads a 20 MB sample from streams.videolan.org: the time depends on the
+    # network, not on the code.
+    'timeout' : 120,
 }
 endif
 
@@ -597,6 +609,10 @@ vlc_tests += {
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
     'module_depends' : ['medialibrary'],
+    # Two libvlc instances, each loading every plugin: about 6 seconds alone
+    # on macOS, close to test.h's 10-second alarm when the suite runs in parallel.
+    'env' : ['VLC_TEST_TIMEOUT=60'],
+    'timeout' : 90,
 }
 
 vlc_tests += {
