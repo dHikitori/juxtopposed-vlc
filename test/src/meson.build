@@ -918,7 +918,8 @@ vlc_tests += {
 
 vlc_tests += {
     'name': 'test_src_player_timer_seek_length',
-    'sources': files('player/timer_seek_length.c', '../../src/player/timer.c'),
+    'sources': files('player/timer_seek_length.c', '../../src/player/timer.c',
+                     '../../src/player/addon_session_state.c'),
     'include_directories': include_directories('../../src'),
     'suite': ['src', 'test_src'],
     'link_with': [libvlccore],

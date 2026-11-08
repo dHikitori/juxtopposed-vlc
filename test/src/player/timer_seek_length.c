@@ -64,6 +64,10 @@ static void CheckPausedStop(bool clock_point, bool pending_seek)
     vlc_list_init(&player->mainloop.stopping_inputs);
     vlc_list_init(&player->mainloop.joinable_inputs);
     vlc_player_InitTimer(player);
+    /* Stopping records the operation for add-on sessions. */
+    player->addon_session = vlc_addon_session_state_New(
+        (vlc_addon_session_id){0, 1}, NULL);
+    assert(player->addon_session);
     struct vlc_player_input input = {
         .player = player, .started = true, .state = VLC_PLAYER_STATE_PAUSED,
         .position = .1f, .ml.stop_position = -1.f,
@@ -91,6 +95,8 @@ static void CheckPausedStop(bool clock_point, bool pending_seek)
     assert(fabs(input.ml.stop_position - (clock_point ? .4 : .1)) < .000001);
     vlc_list_remove(&input.node);
     vlc_player_DestroyTimer(player);
+    vlc_addon_session_state_Close(player->addon_session);
+    vlc_addon_session_state_Release(player->addon_session);
     free(player);
 }
 int main(void)
