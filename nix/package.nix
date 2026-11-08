@@ -7,6 +7,8 @@
   lib,
   stdenv,
   src,
+  # The unfiltered source tree, for files read while evaluating.
+  flakeRoot,
   version,
   medialibrary,
   rustToolchain,
@@ -99,11 +101,14 @@ let
   # Every Cargo project the build compiles: the native add-on worker and the
   # bundled WebAssembly add-ons (see modules/gui/qt/meson.build). None has git
   # dependencies, so each lock file is vendored without a hash to maintain.
+  # Read them from the flake's own tree, not from `src`: `nix flake check
+  # --no-build` only computes the filtered copy's store path, so reading
+  # from it fails until something has built it.
   cargoLockFiles = [
-    (src + "/modules/gui/qt/addons/worker/Cargo.lock")
-    (src + "/contrib-addons/episodes/Cargo.lock")
-    (src + "/contrib-addons/thesubtitledb/Cargo.lock")
-    (src + "/contrib-addons/tvmaze/Cargo.lock")
+    (flakeRoot + "/modules/gui/qt/addons/worker/Cargo.lock")
+    (flakeRoot + "/contrib-addons/episodes/Cargo.lock")
+    (flakeRoot + "/contrib-addons/thesubtitledb/Cargo.lock")
+    (flakeRoot + "/contrib-addons/tvmaze/Cargo.lock")
   ];
   cargoVendor = symlinkJoin {
     name = "hakone-cargo-vendor";

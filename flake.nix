@@ -63,6 +63,7 @@
           };
         in
         pkgs.callPackage ./nix/package.nix {
+          flakeRoot = ./.;
           inherit
             src
             version
