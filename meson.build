@@ -775,7 +775,11 @@ endif
 
 # Check all functions in libcompat_functions array
 foreach f : libcompat_functions
-    if cc.has_function(f[0], prefix: vlc_conf_prefix + f[1], dependencies: [rt_lib, socket_libs])
+    # Apple's aligned_alloc() fails for alignments below sizeof(void *),
+    # which C11 allows. Use the compat one, as configure.ac does.
+    if f[0] == 'aligned_alloc' and host_system == 'darwin'
+        libcompat_sources += f[0] + '.c'
+    elif cc.has_function(f[0], prefix: vlc_conf_prefix + f[1], dependencies: [rt_lib, socket_libs])
         cdata.set('HAVE_' + f[0].underscorify().to_upper(), 1)
     else
         libcompat_sources += f[0] + '.c'
@@ -1203,7 +1207,11 @@ if gcrypt_dep.found()
 endif
 
 # The core and launcher also use D-Bus for single-instance forwarding.
-dbus_dep = dependency('dbus-1', version: '>= 1.6.0', required: get_option('dbus'))
+# Apple systems have no session bus, and connecting makes libdbus run
+# launchctl and block SIGCHLD (see modules/misc/meson.build), so a Homebrew
+# D-Bus is only used there when asked for.
+dbus_dep = dependency('dbus-1', version: '>= 1.6.0',
+    required: get_option('dbus').disable_auto_if(host_system == 'darwin'))
 if dbus_dep.found()
     cdata.set('HAVE_DBUS', 1)
 endif

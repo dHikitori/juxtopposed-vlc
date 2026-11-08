@@ -1327,6 +1327,8 @@ AC_ARG_ENABLE([dbus],
   AS_HELP_STRING([--enable-dbus],
     [compile D-Bus message bus support (default enabled)]))
 have_dbus="no"
+dnl Apple systems have no session bus: only use a D-Bus that is asked for.
+AS_IF([test "${SYS}" = "darwin" && test -z "${enable_dbus}"], [enable_dbus="no"])
 AS_IF([test "${enable_dbus}" != "no"], [
   PKG_CHECK_MODULES(DBUS, [dbus-1 >= 1.6.0], [
     have_dbus="yes"
