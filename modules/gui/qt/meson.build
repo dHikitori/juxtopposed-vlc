@@ -2095,7 +2095,11 @@ if qt6_dep.found()
                 'cpp_args': ['-DVLC_ADDON_SOURCE_ROOT="' + meson.project_source_root() + '"', '-DVLC_ADDON_BUNDLED_ROOT="' + bundled_addon_root + '"', '-DVLC_ADDON_NATIVE_BUILD_ROOT="' + meson.project_build_root() + '"', '-DVLC_ADDON_VISUALIZER_PROCESS_FIXTURE="' + addon_visualizer_process.full_path() + '"'] + (native_stream ? ['-DVLC_ADDON_NATIVE_STREAM_TESTS'] : []) + display_defines,
                 'link_args': qt_link_args + display_links,
                 'depends': [addon_worker_dependencies, addon_visualizer_process, bundled_addon_targets],
-                'env': addon_worker_environment,
+                # macOS sun_path holds 103 bytes, and its per-user $TMPDIR
+                # (/var/folders/...) leaves no room for a socket name inside a
+                # temporary runtime directory.
+                'env': host_system == 'darwin' and addon_test.startswith('store_profile')
+                    ? addon_worker_environment + {'TMPDIR': '/tmp'} : addon_worker_environment,
             }
         endforeach
         vlc_tests += {
