@@ -87,6 +87,7 @@ signals:
     void infoReady(quint64 serial, const QVariantMap& info);
 private:
     void scheduleRefresh();
+    void scheduleRescan();
     void scan();
     void replaceEntries(const QFileInfoList& entries);
     void requestWatchStates();
@@ -126,6 +127,8 @@ private:
     bool m_sortNeeded = false;
     bool m_sortReversed = false;
     bool m_refreshPending = false;
+    bool m_rescanPending = false;
+    bool m_reloadPending = false;
     bool m_forceReset = false;
 };
 #endif
