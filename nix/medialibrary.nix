@@ -17,12 +17,12 @@
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "medialibrary";
-  version = "0.13.2";
+  version = "0.14.1";
 
   src = fetchurl {
     url = "https://code.videolan.org/videolan/medialibrary/-/archive/${finalAttrs.version}/medialibrary-${finalAttrs.version}.tar.bz2";
     # Same archive as contrib/src/medialibrary/SHA512SUMS.
-    hash = "sha256-rNqV2ujzV88epscaw5eSNVVdrl/vXTPSGNFNHl1yloI=";
+    hash = "sha256-duW1OWyyEMYa3dA/BrSdWWGpaXOzqrYrGVrF6uJdmKY=";
   };
 
   patches = map (name: patchDir + "/${name}") [

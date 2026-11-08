@@ -203,6 +203,8 @@ let
       # which only silences a timer warning when the player exits. Patching
       # it would rebuild Qt Declarative and every Qt module that uses it.
       qt6.qtdeclarative
+      # WebP and other artwork formats, as in the release builds.
+      qt6.qtimageformats
       qt6.qtsvg
       qt6.qtwayland
       qt6.qtshadertools
