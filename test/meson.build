@@ -75,10 +75,11 @@ foreach vlc_test: vlc_tests
 
     moc_sources = []
     # Qt tests (the ones with moc input) need the Qt header workaround the
-    # Qt module uses (qt_yield_flags in modules/gui/qt/meson.build).
+    # Qt module uses, and the Qt module macros (qt_test_flags in
+    # modules/gui/qt/meson.build).
     qt_test_args = []
     if (vlc_test.has_key('moc_headers') or vlc_test.has_key('moc_sources')) and qt6_dep.found()
-        qt_test_args = get_variable('qt_yield_flags', [])
+        qt_test_args = get_variable('qt_test_flags', [])
         moc_sources += qt6.preprocess(
             moc_headers: vlc_test.get('moc_headers', []),
             moc_sources: vlc_test.get('moc_sources', []),

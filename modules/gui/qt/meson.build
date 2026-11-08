@@ -320,6 +320,14 @@ if host_machine.system() == 'darwin' and qt6_dep.found()
     # The platform compositor messages the native video view directly.
     qt_link_args += '-lobjc'
 endif
+# Flags for the Qt tests. Qt's pkg-config files define QT_<MODULE>_LIB, and
+# QtTest only declares its GUI helpers (qWaitForWindowExposed, mouse and key
+# events) under QT_GUI_LIB and QT_WIDGETS_LIB. The qmake (config-tool) method
+# used on macOS does not define them.
+qt_test_flags = qt_yield_flags
+if qt6_dep.found() and qt6_dep.type_name() == 'config-tool'
+    qt_test_flags += ['-DQT_GUI_LIB', '-DQT_WIDGETS_LIB']
+endif
 
 if qt6_dep.found()
     if not z_dep.found()

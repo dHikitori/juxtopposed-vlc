@@ -55,7 +55,13 @@ struct AddonSourceTlsFixture {
         const auto cert=files.filePath(QStringLiteral("certificate.pem")),secret=files.filePath(QStringLiteral("fixture-key.pem"));
         QProcess process; process.start(executable,{QStringLiteral("req"),QStringLiteral("-x509"),QStringLiteral("-newkey"),QStringLiteral("rsa:2048"),
             QStringLiteral("-nodes"),QStringLiteral("-days"),QStringLiteral("2"),QStringLiteral("-subj"),QStringLiteral("/CN=media.example.test"),
-            QStringLiteral("-addext"),QStringLiteral("subjectAltName=DNS:media.example.test"),QStringLiteral("-keyout"),secret,QStringLiteral("-out"),cert});
+            QStringLiteral("-addext"),QStringLiteral("subjectAltName=DNS:media.example.test"),
+            // A server certificate, not a CA: macOS trust evaluation refuses
+            // a self-signed CA certificate as the TLS server's own.
+            QStringLiteral("-addext"),QStringLiteral("basicConstraints=critical,CA:FALSE"),
+            QStringLiteral("-addext"),QStringLiteral("keyUsage=critical,digitalSignature,keyEncipherment"),
+            QStringLiteral("-addext"),QStringLiteral("extendedKeyUsage=serverAuth"),
+            QStringLiteral("-keyout"),secret,QStringLiteral("-out"),cert});
         if(!process.waitForFinished(10000) || process.exitCode()!=0) return false;
         QFile certFile(cert),keyFile(secret); if(!certFile.open(QIODevice::ReadOnly) || !keyFile.open(QIODevice::ReadOnly)) return false;
         certificate=QSslCertificate(certFile.readAll()); key=QSslKey(keyFile.readAll(),QSsl::Rsa);

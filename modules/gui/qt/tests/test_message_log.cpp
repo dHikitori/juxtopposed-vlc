@@ -182,7 +182,10 @@ private slots:
         view.setTextCursor(selected); view.ensureCursorVisible();
         view.verticalScrollBar()->setValue(view.verticalScrollBar()->value() - 2);
         QCoreApplication::processEvents();
-        const auto viewport = view.cursorForPosition(QPoint(0, 0));
+        // Wrapped lines can have fractional tops, and the view scrolls by whole
+        // lines: probe inside the first line rather than on its edge, and allow
+        // the old top to differ by a rounded pixel.
+        const auto viewport = view.cursorForPosition(QPoint(0, 2));
         const QString firstText = viewport.block().text(), selection = view.textCursor().selectedText();
         const int firstOffset = viewport.positionInBlock(), top = view.cursorRect(viewport).top();
         const QString clipboard = QStringLiteral("Do not change the clipboard");
@@ -194,10 +197,11 @@ private slots:
         QCoreApplication::processEvents();
         QCOMPARE(view.document()->blockCount(), MessageLogHistoryLines);
         QCOMPARE(view.textCursor().selectedText(), selection);
-        const auto current = view.cursorForPosition(QPoint(0, 0));
+        const auto current = view.cursorForPosition(QPoint(0, 2));
         QCOMPARE(current.block().text(), firstText);
         QCOMPARE(current.positionInBlock(), firstOffset);
-        QCOMPARE(view.cursorRect(current).top(), top);
+        QVERIFY2(qAbs(view.cursorRect(current).top() - top) <= 1,
+                 qPrintable(QStringLiteral("%1 != %2").arg(view.cursorRect(current).top()).arg(top)));
         QCOMPARE(QApplication::clipboard()->text(), clipboard);
     }
     void discardedViewportStopsAtOldestRetainedLine()
