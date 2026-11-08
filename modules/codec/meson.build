@@ -473,7 +473,8 @@ vlc_modules += {
     'sources' : webvtt_sources,
     'include_directories' : include_directories('webvtt'),
     'plugin_dir' : 'codec',
-    'enabled': get_option('css_engine').require(flex.found() and bison.found()).allowed()
+    # The CSS engine is optional (HAVE_CSS): without Flex and Bison, WebVTT
+    # still decodes, demuxes and muxes, only without cue styling.
 }
 
 ## Xiph.org codecs
