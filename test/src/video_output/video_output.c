@@ -145,7 +145,10 @@ static int OpenConverter(filter_t *filter)
             filter->fmt_out.video.i_width, filter->fmt_out.video.i_height);
 
     struct vout_scenario *scenario = &vout_scenarios[current_scenario];
-    assert(scenario->converter_setup != NULL);
+    /* The core also probes converters, for example the subpicture scalers
+     * of every video output. Leave those to the real modules. */
+    if (scenario->converter_setup == NULL)
+        return VLC_EGENERIC;
     scenario->converter_setup(filter);
 
     static const struct vlc_filter_operations ops = {
@@ -319,6 +322,9 @@ int main( int argc, char **argv )
         "-vvv", "--vout=dummy", "--aout=dummy", "--text-renderer=dummy",
         "--no-auto-preparse", dec_dev_arg,
         "--no-spu", "--no-osd",
+        /* The media title is independent of --no-osd. The mocked pictures
+         * have no pixels to blend it into. */
+        "--no-video-title-show",
     };
 
     libvlc_instance_t *vlc = libvlc_new(ARRAY_SIZE(args), args);

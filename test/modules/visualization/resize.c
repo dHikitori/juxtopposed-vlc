@@ -279,7 +279,7 @@ static bool test_resize(const char *effect, bool converted)
     vlc_sem_init(&frame_event, 0);
     const char *args[] = {
         "--ignore-config", "--no-plugins-cache", "--no-media-library", "--no-auto-preparse",
-        "--no-spu", "--no-osd", "--aout=dummy", "--clock-master=monotonic",
+        "--no-spu", "--no-osd", "--no-video-title-show", "--aout=dummy", "--clock-master=monotonic",
         goom ? "--audio-visual=goom" : projectm ? "--audio-visual=projectm" : gl ? "--audio-visual=glspectrum" : "--audio-visual=visual", "--vout=resize-test,none",
         /* These preferences apply to video, but must not affect visualizers. */
         "--no-autoscale", "--zoom=2", "--align=5", "--fit=2",
