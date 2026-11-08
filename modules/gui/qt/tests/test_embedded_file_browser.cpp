@@ -23,18 +23,26 @@ class TestEmbeddedFileBrowser : public QObject
             if (view->isVisible() && qobject_cast<QFileSystemModel*>(view->model())) return view;
         return nullptr;
     }
-    bool clickFile(EmbeddedFileBrowser& browser, const QString& name, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+    // Where a file's row is, once the model has listed it; empty until then.
+    QRect fileRect(EmbeddedFileBrowser& browser, const QString& name)
     {
         auto* view = fileView(browser);
-        if (!view) return false;
+        if (!view) return {};
         auto* model = qobject_cast<QFileSystemModel*>(view->model());
         const auto index = model->index(directory.filePath(name));
-        if (!index.isValid()) return false;
+        if (!index.isValid()) return {};
         view->scrollTo(index);
         QCoreApplication::processEvents();
-        const auto rect = view->visualRect(index);
+        return view->visualRect(index);
+    }
+    bool fileShown(EmbeddedFileBrowser& browser, const QString& name) { return !fileRect(browser, name).isEmpty(); }
+    // Not for QTRY_*: those evaluate their expression again after it holds,
+    // which would click twice.
+    bool clickFile(EmbeddedFileBrowser& browser, const QString& name, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+    {
+        const auto rect = fileRect(browser, name);
         if (rect.isEmpty()) return false;
-        QTest::mouseClick(view->viewport(), Qt::LeftButton, modifiers, rect.center());
+        QTest::mouseClick(fileView(browser)->viewport(), Qt::LeftButton, modifiers, rect.center());
         return true;
     }
     QLineEdit* nameEdit(EmbeddedFileBrowser& browser)
@@ -65,7 +73,7 @@ private slots:
         host.resize(800, 600); host.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host));
         QSignalSpy changed(&browser, &EmbeddedFileBrowser::selectionChanged);
-        QTRY_VERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
+        QTRY_VERIFY(fileShown(browser, QStringLiteral("First file.mkv"))); QVERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
         QTRY_COMPARE(browser.selectedMediaUrls(), QList<QUrl>{QUrl::fromLocalFile(directory.filePath("First file.mkv"))});
         const auto firstChanges = changed.size();
         QVERIFY(clickFile(browser, QStringLiteral("Second file.mkv"), Qt::ControlModifier));
@@ -85,7 +93,7 @@ private slots:
         browser.setDirectory(directory.path());
         host.resize(800, 600); host.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host));
-        QTRY_VERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
+        QTRY_VERIFY(fileShown(browser, QStringLiteral("First file.mkv"))); QVERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
         browser.clearSelection();
         QVERIFY(browser.selectedMediaUrls().isEmpty());
         auto* edit = nameEdit(browser);
@@ -111,7 +119,7 @@ private slots:
         QVERIFY(browser.testOption(QFileDialog::DontUseNativeDialog));
         QVERIFY(browser.testOption(QFileDialog::ReadOnly));
         for (auto* buttons : browser.findChildren<QDialogButtonBox*>()) QVERIFY(!buttons->isVisible());
-        QTRY_VERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
+        QTRY_VERIFY(fileShown(browser, QStringLiteral("First file.mkv"))); QVERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
         QSignalSpy activated(&browser, &EmbeddedFileBrowser::filesActivated);
         QSignalSpy cancelled(&browser, &EmbeddedFileBrowser::cancelRequested);
         QVERIFY(QMetaObject::invokeMethod(&browser, "accept"));
@@ -130,7 +138,7 @@ private slots:
         browser.setDirectory(directory.path());
         host.resize(800, 600); host.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host));
-        QTRY_VERIFY(clickFile(browser, QStringLiteral("Folder")));
+        QTRY_VERIFY(fileShown(browser, QStringLiteral("Folder"))); QVERIFY(clickFile(browser, QStringLiteral("Folder")));
         QSignalSpy activated(&browser, &EmbeddedFileBrowser::filesActivated);
         QVERIFY(QMetaObject::invokeMethod(&browser, "accept"));
         QCOMPARE(browser.directory().absolutePath(), directory.filePath("Folder"));
@@ -146,7 +154,7 @@ private slots:
         browser.setDirectory(directory.path());
         host.resize(800, 600); host.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host));
-        QTRY_VERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
+        QTRY_VERIFY(fileShown(browser, QStringLiteral("First file.mkv"))); QVERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
         QSignalSpy selected(&browser, &QFileDialog::filesSelected);
         QSignalSpy activated(&browser, &EmbeddedFileBrowser::filesActivated);
         int accepted = 0;
@@ -177,7 +185,7 @@ private slots:
         QSignalSpy activated(&browser, &EmbeddedFileBrowser::filesActivated);
         QVERIFY(QMetaObject::invokeMethod(&browser, "accept"));
         QCOMPARE(activated.size(), 1);
-        QTRY_VERIFY(clickFile(browser, QStringLiteral("Second file.mkv")));
+        QTRY_VERIFY(fileShown(browser, QStringLiteral("Second file.mkv"))); QVERIFY(clickFile(browser, QStringLiteral("Second file.mkv")));
         QTRY_COMPARE(browser.selectedMediaUrls(), QList<QUrl>{QUrl::fromLocalFile(directory.filePath("Second file.mkv"))});
         browser.selectUrls(urls);
         browser.clearSelection();

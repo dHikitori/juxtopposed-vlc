@@ -128,8 +128,9 @@ TestCase {
             compare(icon.implicitWidth, 24)
             compare(icon.implicitHeight, 24)
             if (data.shown) {
-                fuzzyCompare(icon.width, size, 1)
-                fuzzyCompare(icon.height, size, 1)
+                // The layout polishes asynchronously; wait for it under load.
+                tryVerify(() => Math.abs(icon.width - size) <= 1, 5000, "width " + icon.width + " != " + size)
+                tryVerify(() => Math.abs(icon.height - size) <= 1, 5000, "height " + icon.height + " != " + size)
             }
             icon.visible = !icon.visible
             icon.name = icon.name === "folder" ? "playlist" : "folder"

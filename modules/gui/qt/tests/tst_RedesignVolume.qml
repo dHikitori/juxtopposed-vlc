@@ -87,9 +87,14 @@ TestCase {
         const control = slider()
         tryCompare(findChild(control, "volumeConeFill"), "status", Image.Ready)
         verify(waitForRendering(control))
-        const image = testImages.grabWindow(testCase)
-        const filled = image.point(control, 10, 14), empty = image.point(control, 80, 14)
-        verify(image.green(filled.x, filled.y) > 100, "The filled cone must be visible")
+        // Under load the first frame can predate the loaded fill: grab again
+        // until it shows, then check the unfilled part of that same frame.
+        let image = null, filled = null, empty = null
+        tryVerify(() => {
+            image = testImages.grabWindow(testCase)
+            filled = image.point(control, 10, 14); empty = image.point(control, 80, 14)
+            return image.green(filled.x, filled.y) > 100
+        }, 5000, "The filled cone must be visible")
         verify(image.red(empty.x, empty.y) < 20, "The unfilled cone must stay dark")
     }
     function test_updatesKeepTheLoadedArtworkAndShowActualVolume() {
