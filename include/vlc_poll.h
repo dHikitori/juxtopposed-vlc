@@ -92,6 +92,19 @@ static inline int vlc_poll (struct pollfd *fds, unsigned nfds, int timeout)
 
 # define poll(u,n,t) vlc_poll(u, n, t)
 
+#elif defined (__APPLE__)
+# include <poll.h>
+/* Darwin only tells the kernel about a cancellation request that arrives while
+ * cancellation is enabled. One made while it was disabled stays pending in user
+ * space, and a later poll() then blocks as if there were none. Act on it first,
+ * as poll() would; it is a cancellation point either way. */
+static inline int vlc_poll(struct pollfd *fds, unsigned nfds, int timeout)
+{
+    vlc_testcancel();
+    return poll(fds, nfds, timeout);
+}
+# define poll(u,n,t) vlc_poll(u, n, t)
+
 #else /* POSIX threads */
 
 #endif
