@@ -483,6 +483,8 @@ private slots:
         Server server(certificate,key,[](const auto&) { return ok("ID3body"); }); auto source=spec();
         source.live=[capture] { return true; }; source.authorize=[capture] { return true; }; capture.reset();
         auto proxy=prepare(std::move(source),fixture(server)); QVERIFY(proxy);
+        // A moved-from std::function can keep its callable (libc++).
+        source.live={}; source.authorize={};
         QVERIFY(lifetime->finalGuard(3000)); QVERIFY(proxy->waitStopped(0)); QVERIFY(destroyed->load());
         // The external native lease can still hold this stopped proxy.
         QVERIFY(proxy); proxy->cancel();

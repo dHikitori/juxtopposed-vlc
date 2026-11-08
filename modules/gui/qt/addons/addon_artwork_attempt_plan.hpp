@@ -70,7 +70,9 @@ public:
     // Run on joined background work. The returned plan has no credential reader
     // or secret bytes. A blocked slot can still permit later positive attempts;
     // it permanently prevents a final negative certificate for this plan.
-    static std::shared_ptr<const ArtworkAttemptPlan> capture(Capture, QString* error = nullptr);
+    // Consumes the capture: its callbacks, including the credential reader, are
+    // released when capture() returns, even in the caller's moved-from object.
+    static std::shared_ptr<const ArtworkAttemptPlan> capture(Capture&&, QString* error = nullptr);
     bool current() const noexcept;
     bool hasBlockedSlot() const noexcept;
     const QByteArray subject, requestDigest, rawCatalogueDigest, planDigest;

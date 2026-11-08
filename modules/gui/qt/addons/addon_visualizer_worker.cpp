@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_visualizer_worker.hpp"
+#include <utility>
 #include "addon_visualizer_parameters.hpp"
 #include <QJsonDocument>
 #include <QMutex>
@@ -27,14 +28,16 @@ void AddonVisualizerWorker::close()
     if (m_closing) return;
     m_closing = true; m_timer.stop(); m_pending = 0; ++m_generation; m_values = {};
     { QMutexLocker lock(&m_reply->mutex); m_reply->owner = nullptr; }
-    auto cancel = std::move(m_cancel), close = std::move(m_backend.close); m_backend.invoke = {};
+    auto cancel = std::exchange(m_cancel, {}), close = std::exchange(m_backend.close, {}); m_backend.invoke = {};
     if (cancel) cancel(); if (close) close();
 }
 void AddonVisualizerWorker::resetTimeline()
 {
     if (m_closing) return;
     ++m_generation; m_pending = 0; m_values = {}; m_lastRequest = m_lastResult = -1;
-    auto cancel = std::move(m_cancel); QPointer<AddonVisualizerWorker> guard(this);
+    // std::exchange empties the member: a moved-from std::function need not
+    // be empty (libc++ copies small callables), and the destructor calls it.
+    auto cancel = std::exchange(m_cancel, {}); QPointer<AddonVisualizerWorker> guard(this);
     if (cancel) cancel(); if (guard) emit parametersChanged();
 }
 void AddonVisualizerWorker::poll()
@@ -43,7 +46,7 @@ void AddonVisualizerWorker::poll()
     QPointer<AddonVisualizerWorker> guard(this); const auto now = m_clock();
     if (!m_values.isEmpty() && m_lastResult >= 0 && now - m_lastResult >= 2000) { m_values = {}; emit parametersChanged(); if (!guard) return; }
     if (m_pending && now - m_started >= (m_coldRequest ? 2000 : 500)) {
-        m_pending = 0; auto cancel = std::move(m_cancel); if (cancel) cancel(); if (guard) failed();
+        m_pending = 0; auto cancel = std::exchange(m_cancel, {}); if (cancel) cancel(); if (guard) failed();
     }
 }
 bool AddonVisualizerWorker::update(const QJsonObject& context)

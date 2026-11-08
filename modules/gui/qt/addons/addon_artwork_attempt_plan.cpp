@@ -123,8 +123,12 @@ bool ArtworkAttemptPlan::current() const noexcept
 bool ArtworkAttemptPlan::hasBlockedSlot() const noexcept
 { return std::any_of(attempts.cbegin(), attempts.cend(), [](const Slot& slot) { return slot.blocked; }); }
 
-std::shared_ptr<const ArtworkAttemptPlan> ArtworkAttemptPlan::capture(Capture input, QString* error)
+std::shared_ptr<const ArtworkAttemptPlan> ArtworkAttemptPlan::capture(Capture&& source, QString* error)
 {
+    Capture input = std::move(source);
+    // A moved-from std::function need not be empty (libc++ copies small
+    // callables). Do not leave the credential reader alive in the caller.
+    source.credentialReader = {}; source.clock = {}; source.live = {};
     const auto fail = [error](const QString& message) -> std::shared_ptr<const ArtworkAttemptPlan> {
         if (error) *error = message;
         return {};
