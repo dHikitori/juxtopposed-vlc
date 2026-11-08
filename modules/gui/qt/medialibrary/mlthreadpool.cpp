@@ -117,6 +117,22 @@ bool ThreadRunner::tryTake(RunOnThreadBaseRunner* task)
 }
 
 
+void ThreadRunner::removeObjectTaskLocked(const QObject* object, quint64 taskId)
+{
+    // Not QMultiMap::remove(key, value): before Qt 6.9 it scans forward from
+    // std::multimap::find(), and libc++ may return any of the equal keys.
+    // Entries before it were kept, and their target's destruction then
+    // found tasks that had already finished.
+    for (auto it = m_objectTasks.lowerBound(object);
+         it != m_objectTasks.end() && it.key() == object; )
+    {
+        if (it.value() == taskId)
+            it = m_objectTasks.erase(it);
+        else
+            ++it;
+    }
+}
+
 RunOnThreadBaseRunner* ThreadRunner::getNextTaskFromQueue(const QString& queueName)
 {
     QMutexLocker lock(&m_serialTaskLock);
@@ -205,7 +221,7 @@ void ThreadRunner::cancelTask(const QObject* object, quint64 taskId)
     tryTake(task);
     task->release();
     m_runningTasks.remove(taskId);
-    m_objectTasks.remove(object, taskId);
+    removeObjectTaskLocked(object, taskId);
     if (m_objectTasks.count(object) == 0)
         disconnect(object, &QObject::destroyed, this, &ThreadRunner::runOnThreadTargetDestroyed);
 }
@@ -221,7 +237,7 @@ void ThreadRunner::runOnThreadDone(RunOnThreadBaseRunner* runner, quint64 target
     const auto owner = std::shared_ptr<RunOnThreadBaseRunner>(runner, [](auto* task) { task->release(); });
 
     m_runningTasks.remove(target);
-    m_objectTasks.remove(object, target);
+    removeObjectTaskLocked(object, target);
     if (m_objectTasks.count(object) == 0)
         disconnect(object, &QObject::destroyed, this, &ThreadRunner::runOnThreadTargetDestroyed);
 
