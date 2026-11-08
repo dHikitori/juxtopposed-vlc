@@ -530,10 +530,11 @@ TestCase {
     function test_rendererRejectsDuplicateKeysAndKeepsLastValidState() {
         view.document = viewDocument({type: "List", id: "stations", items: {bind: "state.stations"}, keyField: "ref",
             itemTemplate: {type: "MediaCard", title: {bind: "item.title"}, primaryAction: {command: "org.example.radio/play", arguments: {item: {bind: "item.ref"}}}}})
-        view.state = {stations: [{ref: "one", title: "One"}]}; wait(50)
-        verify(view.valid, view.errorMessage)
-        view.state = {stations: [{ref: "same", title: "One"}, {ref: "same", title: "Two"}]}; wait(50)
-        verify(!view.valid); compare(view.acceptedState.stations.length, 1)
+        // State is applied on a short throttle timer; wait for it instead of a fixed delay.
+        view.state = {stations: [{ref: "one", title: "One"}]}
+        tryVerify(() => view.valid && JSON.stringify(view.acceptedState) === JSON.stringify(view.state), 5000, view.errorMessage)
+        view.state = {stations: [{ref: "same", title: "One"}, {ref: "same", title: "Two"}]}
+        tryVerify(() => !view.valid); compare(view.acceptedState.stations.length, 1)
         compare(view.acceptedState.stations[0].ref, "one")
     }
     function test_rendererImagesRequireHostAssetHandles() {
@@ -578,8 +579,9 @@ TestCase {
         verify(view.valid)
         const node = findChild(view, "addonViewRoot")
         verify(!node.enabled)
-        view.state = {available: true}; wait(50)
-        verify(node.enabled)
+        view.state = {available: true}
+        // State is applied on a short throttle timer; wait for it instead of a fixed delay.
+        tryVerify(() => node.enabled)
         view.registeredCommands = []
         verify(!view.valid)
     }
