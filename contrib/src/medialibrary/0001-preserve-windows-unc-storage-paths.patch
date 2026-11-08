@@ -10,6 +10,8 @@ its library when run directly from a WSL network share. Drive and POSIX paths
 keep their existing behavior.
 
 ---
+diff --git a/src/utils/Directory.cpp b/src/utils/Directory.cpp
+index a0ff15ad..1d1e5317 100644
 --- a/src/utils/Directory.cpp
 +++ b/src/utils/Directory.cpp
 @@ -52,6 +52,7 @@
@@ -20,7 +22,7 @@ keep their existing behavior.
  
  namespace medialibrary
  {
-@@ -118,6 +119,57 @@
+@@ -118,6 +119,57 @@ std::string toAbsolute( const std::string& path )
  bool mkdir( const std::string& path )
  {
      assert( path.empty() == false );

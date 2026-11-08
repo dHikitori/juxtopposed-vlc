@@ -602,7 +602,9 @@ TestCase {
         }
         const oldWidth = expanded.widths[0]
         library.scaleFactor = 1.25
-        tryVerify(() => expanded.widths[0] > oldWidth * 1.2)
+        // Pixel sizes are whole numbers (17.5 becomes 17) and glyph advances
+        // are rounded, so text grows by a little less than the scale factor.
+        tryVerify(() => expanded.widths[0] >= oldWidth * 1.15)
         for (let i = 0; i < 4; ++i) verify(!findChild(expanded, "libraryPath" + i).contentItem.truncated)
     }
     function test_categoryHeadingUsesRegularSourceWeight() {

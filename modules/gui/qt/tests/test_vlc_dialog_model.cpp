@@ -493,7 +493,8 @@ private slots:
             replied = true;
         });
         QVERIFY(QTest::qWaitFor([&replied](){ return replied == true; }));
-        QCOMPARE(m_canceledSpy->count(), 1);
+        // The cancellation reaches the UI thread through a queued signal.
+        QTRY_COMPARE(m_canceledSpy->count(), 1);
 
         QCOMPARE(m_loginSpy->count(), 0);
         QCOMPARE(m_questionSpy->count(), 0);

@@ -22,7 +22,7 @@ RUN bash -c 'source /tmp/vlc-addon-rust/setup-addon-rust.sh && vlc_setup_addon_r
 ENV PATH=/root/.cargo/bin:$PATH
 RUN pip3 install --no-cache-dir meson==1.12.1 aqtinstall==3.3.0 \
     && aqt install-qt linux desktop 6.8.3 linux_gcc_64 \
-       -O /opt/qt -m qtshadertools qtwaylandcompositor
+       -O /opt/qt -m qtshadertools qtwaylandcompositor qtimageformats
 ENV QT_ROOT_DIR=/opt/qt/6.8.3/gcc_64
 ENV PATH=/opt/qt/6.8.3/gcc_64/bin:$PATH
 ENV PKG_CONFIG_PATH=/opt/qt/6.8.3/gcc_64/lib/pkgconfig

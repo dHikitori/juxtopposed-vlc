@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "addon_store_profile_socket.hpp"
+#include <chrono>
+#include <thread>
 #include <functional>
 #include <QCryptographicHash>
 #include <QDir>
@@ -169,7 +171,14 @@ QByteArray endpointSecret(const QString& root)
     const auto path = secretPath(root);
     for (int attempt = 0; attempt < 2; ++attempt) {
         bool missing = false;
-        const auto existing = readSecret(path, &missing);
+        auto existing = readSecret(path, &missing);
+        // A concurrent first publication links the complete file, then
+        // removes its temporary name: until then the file has two links and
+        // readSecret() refuses it. Give that publication a moment to finish.
+        for (int retry = 0; retry < 50 && !missing && !validSecret(existing); ++retry) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            existing = readSecret(path, &missing);
+        }
         if (validSecret(existing)) return existing;
         // A damaged secret is not replaced here. Other processes can still
         // use its name; replacement belongs to whole-profile recovery.

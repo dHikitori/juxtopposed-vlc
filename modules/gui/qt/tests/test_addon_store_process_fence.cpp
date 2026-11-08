@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QTest>
+#include <utility>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFile>
@@ -112,7 +113,8 @@ private slots:
         auto lease = Fence::acquire(file, Fence::Mode::Peer, &status); QVERIFY(lease);
         std::function<void()> native = [lease] {}; lease.reset();
         Child blocked; QCOMPARE(blocked.start(file, Fence::Mode::Replacement), QByteArray("busy")); QVERIFY(blocked.release());
-        std::thread release([capture = std::move(native)]() mutable { capture = {}; }); release.join();
+        // std::exchange: a moved-from std::function can keep its callable (libc++).
+        std::thread release([capture = std::exchange(native, {})]() mutable { capture = {}; }); release.join();
         Child admitted; QCOMPARE(admitted.start(file, Fence::Mode::Replacement), QByteArray("acquired")); QVERIFY(admitted.release());
     }
     void childHelpersDoNotInheritThePeerFence() {

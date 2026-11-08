@@ -33,7 +33,8 @@
 
 #include "qt.hpp"
 
-#include "dialogs/dialogs_provider.hpp"
+#include "widgets/native/qvlcframe.hpp"
+#include "util/redesign_widget_theme.hpp"
 
 class ModelRecoveryAgent
 {
@@ -43,6 +44,7 @@ class ModelRecoveryAgent
     QTimer m_timer;
     bool m_conditionDismissInitialDirtiness = false;
     std::unique_ptr<QLockFile> m_lockFile;
+    std::unique_ptr<QMessageBox> m_question;
 
 public:
     // NOTE: settings and model must outlive the instance of this class.
@@ -52,7 +54,6 @@ public:
     {
         assert(settings);
         assert(model);
-        const QPointer<T> modelGuard(model);
         settings->sync();
         if (settings->contains(m_key))
         {
@@ -70,21 +71,24 @@ public:
                 const QFileInfo fileInfo(m_recoveryFileName);
                 if (fileInfo.size() > 0)
                 {
+                    m_question = std::make_unique<QMessageBox>();
                     const auto name = modelIdentifier == QStringLiteral("Playlist") ? qtr("play queue") : modelIdentifier;
-                    const auto choice = DialogsProvider::getInstance()->messageDialog(qtr("Hakone did not close normally.\nRestore the %1 saved on %2?").arg(name,
-                                                                                                                              fileInfo.lastModified().toString()),
-                                                                      qtr("Restore saved items"),
-                                                                      (QMessageBox::Yes | QMessageBox::No),
-                                                                      QMessageBox::Yes,
-                                                                      QMessageBox::Question);
-                    // The modal dialog runs a nested event loop. Shutdown can
-                    // destroy the controllers before it returns.
-                    if (!modelGuard || !m_settings) throw std::exception();
-                    if (choice == QMessageBox::Yes)
-                    {
-                        model->append(m_recoveryFileName);
-                        m_conditionDismissInitialDirtiness = true;
-                    }
+                    m_question->setText(qtr("Hakone did not close normally.\nRestore the %1 saved on %2?").arg(name, fileInfo.lastModified().toString()));
+                    m_question->setWindowTitle(qtr("Restore saved items"));
+                    m_question->setIcon(QMessageBox::Question);
+                    m_question->setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+                    m_question->setDefaultButton(QMessageBox::Yes);
+                    m_question->setWindowModality(Qt::ApplicationModal);
+
+                    QObject::connect(m_question.get(), &QDialog::finished, m_question.get(), [this, model]() {
+                        if (m_question->standardButton(m_question->clickedButton()) == QMessageBox::Yes)
+                        {
+                            model->append(m_recoveryFileName);
+                            m_conditionDismissInitialDirtiness = true;
+                        }
+                        m_question.release()->deleteLater();
+                        startMonitoring(model);
+                    });
                 }
             }
         }
@@ -108,7 +112,44 @@ public:
             settings->sync();
         }
 
-        if (!modelGuard || !m_settings) throw std::exception();
+        if (!m_question)
+            startMonitoring(model);
+    }
+
+    void prompt(qt_intf_t *p_intf)
+    {
+        if (!m_question)
+            return;
+        QVLCDialog::setWindowTransientParent(m_question.get(), nullptr, p_intf);
+        applyRedesignWidgetTheme(m_question.get(), p_intf->p_mi);
+        m_question->show();
+    }
+
+    ~ModelRecoveryAgent()
+    {
+        if (m_question)
+            return;
+
+        if (!m_recoveryFileName.isEmpty())
+        {
+            QFile::remove(m_recoveryFileName);
+        }
+
+        assert(m_settings);
+
+        m_settings->sync();
+
+        if (m_settings->value(m_key) == m_recoveryFileName)
+        {
+            m_settings->remove(m_key);
+            m_settings->sync();
+        }
+    }
+
+private:
+    template<class T>
+    void startMonitoring(T* model)
+    {
         m_timer.setInterval(10000); // 10 seconds
         m_timer.setSingleShot(true);
 
@@ -156,24 +197,6 @@ public:
         QObject::connect(model, &T::itemsMoved, &m_timer, QOverload<>::of(&QTimer::start));
         QObject::connect(model, &T::itemsRemoved, &m_timer, QOverload<>::of(&QTimer::start));
         QObject::connect(model, &T::itemsUpdated, &m_timer, QOverload<>::of(&QTimer::start));
-    }
-
-    ~ModelRecoveryAgent()
-    {
-        if (!m_recoveryFileName.isEmpty())
-        {
-            QFile::remove(m_recoveryFileName);
-        }
-
-        assert(m_settings);
-
-        m_settings->sync();
-
-        if (m_settings->value(m_key) == m_recoveryFileName)
-        {
-            m_settings->remove(m_key);
-            m_settings->sync();
-        }
     }
 };
 

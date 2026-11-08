@@ -49,7 +49,7 @@ if libxml2_dep.found()
 endif
 
 # Keep the medialibrary manifest entry when disabled so dependent tests are skipped.
-medialibrary_dep = dependency('medialibrary', version: '>= 0.13', required: get_option('medialibrary'), method: 'pkg-config')
+medialibrary_dep = dependency('medialibrary', version: ['>= 0.14.0', '< 0.15.0'], required: get_option('medialibrary'), method: 'pkg-config')
 medialibrary_addon_playlist_cas = false
 if medialibrary_dep.found()
     medialibrary_addon_playlist_cas = medialibrary_dep.get_variable(pkgconfig: 'addon_playlist_cas', default_value: '0') == '1'

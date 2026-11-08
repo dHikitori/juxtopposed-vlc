@@ -379,8 +379,8 @@ TestCase {
             {type: "Text", id: "label", text: {bind: "state.title"}},
             {type: "Button", id: "play", text: "Play", action: {command: "org.example.radio/play", arguments: {item: {bind: "state.ref"}}}}
         ]})
-        view.state = {title: "<b>Untrusted title</b>", ref: "station-1"}; wait(50)
-        verify(view.valid, view.errorMessage)
+        view.state = {title: "<b>Untrusted title</b>", ref: "station-1"}
+        tryVerify(() => view.valid && JSON.stringify(view.acceptedState) === JSON.stringify(view.state), 5000, view.errorMessage)
         const label = findChild(view, "addonNode_label")
         compare(findChild(label, "addonText").textFormat, Text.PlainText)
         const node = findChild(view, "addonNode_play")
@@ -412,12 +412,13 @@ TestCase {
             episodes: [{key: "a", number: "1", title: "Pilot", mark: "Now playing", progress: 0.5, expanded: true, artwork: "media:abc",
                         versions: [{key: "v0", label: "Show.S01E01.mkv"}, {key: "v1", label: "Show.S01E01.1080p.mkv"}], version: "v0"},
                        {key: "b", number: "2", title: "Second", mark: "", progress: 0, artwork: "", versions: [], version: ""}]}
-        wait(60)
-        verify(view.valid, view.errorMessage)
+        // State is applied on a short throttle timer; wait for it instead of a fixed delay.
+        tryVerify(() => view.valid && JSON.stringify(view.acceptedState) === JSON.stringify(view.state), 5000, view.errorMessage)
         tryVerify(() => !!findChild(view, "addonTab_2"))
         mouseClick(findChild(view, "addonTab_2"))
         compare(commandSpy.signalArguments[commandSpy.count - 1][0], "org.example.radio/season")
         compare(commandSpy.signalArguments[commandSpy.count - 1][1].season, 2)
+        tryVerify(() => !!findChild(view, "addonMediaRow_b"))
         mouseClick(findChild(view, "addonMediaRow_b"))
         compare(commandSpy.signalArguments[commandSpy.count - 1][1].key, "b")
         // A closed row leaves "expanded" out: the argument is left out, not null.
@@ -439,8 +440,8 @@ TestCase {
         compare(view.hostArtworkFor("https://example.org/a.png"), "")
         compare(view.assetFor("media:abc"), "")
         // Tab entries need different keys and labels.
-        view.state = Object.assign({}, view.acceptedState, {seasons: [{key: 1, label: "One"}, {key: 1, label: "Again"}]}); wait(60)
-        verify(!view.valid)
+        view.state = Object.assign({}, view.acceptedState, {seasons: [{key: 1, label: "One"}, {key: 1, label: "Again"}]})
+        tryVerify(() => !view.valid)
         for (const bad of [
                 {type: "Tabs", items: [{key: 1, label: "One"}], text: "Seasons", action: command("season")},
                 {type: "Tabs", items: {bind: "state.seasons"}, text: "Seasons"},
@@ -469,8 +470,8 @@ TestCase {
         view.state = {show: "Show", season: "Season 1", file: "Show.S01E01.1080p.mkv",
             versions: [{key: "a", label: "A"}, {key: "b", label: "B"}],
             seasons: [{key: 1, label: "Season 1", icon: "check", current: true}, {key: 2, label: "Season 2", icon: "", current: false}]}
-        wait(60)
-        verify(view.valid, view.errorMessage)
+        // State is applied on a short throttle timer; wait for it instead of a fixed delay.
+        tryVerify(() => view.valid && JSON.stringify(view.acceptedState) === JSON.stringify(view.state), 5000, view.errorMessage)
         // A growing child takes the free width on one line.
         const heading = findChild(view, "addonNode_heading"), more = findChild(view, "addonNode_more")
         verify(heading.width > more.width * 3, heading.width + " " + more.width)
@@ -529,10 +530,11 @@ TestCase {
     function test_rendererRejectsDuplicateKeysAndKeepsLastValidState() {
         view.document = viewDocument({type: "List", id: "stations", items: {bind: "state.stations"}, keyField: "ref",
             itemTemplate: {type: "MediaCard", title: {bind: "item.title"}, primaryAction: {command: "org.example.radio/play", arguments: {item: {bind: "item.ref"}}}}})
-        view.state = {stations: [{ref: "one", title: "One"}]}; wait(50)
-        verify(view.valid, view.errorMessage)
-        view.state = {stations: [{ref: "same", title: "One"}, {ref: "same", title: "Two"}]}; wait(50)
-        verify(!view.valid); compare(view.acceptedState.stations.length, 1)
+        // State is applied on a short throttle timer; wait for it instead of a fixed delay.
+        view.state = {stations: [{ref: "one", title: "One"}]}
+        tryVerify(() => view.valid && JSON.stringify(view.acceptedState) === JSON.stringify(view.state), 5000, view.errorMessage)
+        view.state = {stations: [{ref: "same", title: "One"}, {ref: "same", title: "Two"}]}
+        tryVerify(() => !view.valid); compare(view.acceptedState.stations.length, 1)
         compare(view.acceptedState.stations[0].ref, "one")
     }
     function test_rendererImagesRequireHostAssetHandles() {
@@ -577,8 +579,9 @@ TestCase {
         verify(view.valid)
         const node = findChild(view, "addonViewRoot")
         verify(!node.enabled)
-        view.state = {available: true}; wait(50)
-        verify(node.enabled)
+        view.state = {available: true}
+        // State is applied on a short throttle timer; wait for it instead of a fixed delay.
+        tryVerify(() => node.enabled)
         view.registeredCommands = []
         verify(!view.valid)
     }

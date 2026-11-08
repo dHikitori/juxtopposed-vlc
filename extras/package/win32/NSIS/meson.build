@@ -27,7 +27,7 @@ nsProcess_sources = files('nsProcess/nsProcess.c', 'nsProcess/nsis/pluginapi.c')
 nsProcess_src = []
 nsProcess_obj = []
 nsProcess_i686_gcc = false
-if host_machine.cpu_family() != 'x86'
+if host_machine.cpu_family() != 'x86' and host_machine.cpu_family() != 'x86_64'
     # nsProcess.dll needs to be a 32-bit DLL
     if cc.get_id() == 'gcc'
         # GCC cannot retarget, so the i686 MinGW compiler builds the whole DLL

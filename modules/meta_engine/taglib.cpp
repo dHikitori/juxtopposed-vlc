@@ -183,6 +183,19 @@ File* VLCTagLib::ExtResolver<T>::createFileFromStream(IOStream* s, bool, AudioPr
 static VLCTagLib::ExtResolver<MPEG::File> aacresolver(".aac");
 static bool b_extensions_registered = false;
 
+/* TagLib keeps resolvers in a process-wide list, and libtag can outlive this
+ * plugin (macOS keeps it loaded after the plugin is unloaded). Drop our
+ * registration when the plugin image goes away, or the next instance would
+ * walk a pointer into unmapped memory. */
+static struct ResolverRegistrationGuard
+{
+    ~ResolverRegistrationGuard()
+    {
+        if( b_extensions_registered )
+            FileRef::clearFileTypeResolvers();
+    }
+} resolver_registration_guard;
+
 // taglib is not thread safe
 static vlc::threads::mutex taglib_lock;
 

@@ -78,6 +78,7 @@ private:
 
     RunOnThreadBaseRunner* getNextTaskFromQueue(const QString& queueName);
     bool processQueueLocked(const QString& queueName);
+    void removeObjectTaskLocked(const QObject* object, quint64 taskId);
 
 private:
     QThreadPool m_threadPool;
@@ -181,7 +182,7 @@ quint64 ThreadRunner::runOnThread(const QObject* obj,
     m_objectTasks.insert(obj, taskId);
     if (!start(runnable, queue)) {
         m_runningTasks.remove(taskId);
-        m_objectTasks.remove(obj,taskId);
+        removeObjectTaskLocked(obj, taskId);
         if (m_objectTasks.count(obj)==0)
             disconnect(obj,&QObject::destroyed,this,&ThreadRunner::runOnThreadTargetDestroyed);
         runnable->release();

@@ -378,7 +378,7 @@ Item {
                     return Player.isInteractive ? "qrc:///qt/qml/VLC/Player/MinimalView.qml"
                                                 : "qrc:///qt/qml/VLC/Player/RedesignPlayer.qml"
                 case  MainCtx.MAININTERFACE_MODE_PLAYER:
-                    return Player.isInteractive ? "qrc:///qt/qml/VLC/Player/Player.qml"
+                    return Player.isInteractive ? "qrc:///qt/qml/VLC/Player/PlayerView.qml"
                                                 : "qrc:///qt/qml/VLC/Player/RedesignPlayer.qml"
                 default:
                     console.error("unexpected interface mode", MainCtx.effectiveMainInterfaceMode)

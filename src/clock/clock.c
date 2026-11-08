@@ -29,6 +29,7 @@
 #include <vlc_aout.h>
 #include <assert.h>
 #include <limits.h>
+#include <math.h>
 #include <vlc_tracer.h>
 #include <vlc_vector.h>
 #include "clock.h"
@@ -235,8 +236,10 @@ static vlc_tick_t ComputeOffset(vlc_clock_main_t *main,
     if (main->first_pcr.system != VLC_TICK_INVALID)
         start_stream = start_system = 0;
 
+    /* Round, rather than truncate, so that a product computed with a fused
+     * multiply-add (the arm64 default) gives the same tick. */
     return system_now
-        - ((vlc_tick_t) ((ts - start_stream) * ctx->coeff / rate))
+        - (vlc_tick_t) llround((ts - start_stream) * ctx->coeff / rate)
         - start_system;
 }
 
@@ -272,7 +275,7 @@ static vlc_tick_t context_stream_to_system(const struct vlc_clock_context *ctx,
     if (ctx->last.system == VLC_TICK_INVALID)
         return VLC_TICK_INVALID;
 
-    return ((vlc_tick_t) ((ts - ctx->start_time.stream) * ctx->coeff / ctx->rate))
+    return (vlc_tick_t) llround((ts - ctx->start_time.stream) * ctx->coeff / ctx->rate)
             + ctx->offset
             + ctx->start_time.system;
 }

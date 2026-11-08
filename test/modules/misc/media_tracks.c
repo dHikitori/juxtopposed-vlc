@@ -262,6 +262,12 @@ int main(int argc, char **argv)
     char *subtitle = vlc_path2uri(path, NULL);
     assert(subtitle);
 
+    /* The library is opened twice. Keep one LibVLC instance alive so the
+     * plugin bank loads once: on macOS each plugin load costs seconds. */
+    const char *keep_args[] = {"--quiet", "--ignore-config", "--no-media-library"};
+    libvlc_instance_t *keep = libvlc_new(ARRAY_SIZE(keep_args), keep_args);
+    assert(keep);
+
     libvlc_instance_t *instance = open_library();
     vlc_medialibrary_t *ml = vlc_ml_instance_get(instance->p_libvlc_int);
     assert(ml);
@@ -331,6 +337,7 @@ int main(int argc, char **argv)
     free(subtitle);
     free(path);
     free(directory);
+    libvlc_release(keep);
     /* Retain only this test's database and file under the build directory for
      * inspection. The test runner supplies the process timeout. */
     fprintf(stderr, "Track replacement, validation, restart and disk preservation passed\n");

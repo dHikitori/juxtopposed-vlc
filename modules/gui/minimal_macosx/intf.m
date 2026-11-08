@@ -190,6 +190,13 @@ static const struct vlc_window_operations ops = {
 
 int WindowOpen(vlc_window_t *p_wnd)
 {
+    /* The window operations wait for the main thread. Without an
+     * NSApplication running there, as in a plain LibVLC process, they would
+     * never return: let another window provider (or none) handle it. */
+    if (NSApp == nil) {
+        msg_Dbg(p_wnd, "cannot create video output window without NSApplication");
+        return VLC_EGENERIC;
+    }
     p_wnd->type = VLC_WINDOW_TYPE_NSOBJECT;
     p_wnd->ops = &ops;
     return VLC_SUCCESS;

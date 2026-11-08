@@ -130,8 +130,19 @@ private slots:
         qputenv("XDG_RUNTIME_DIR", QFile::encodeName(deep));
         const auto fallback = E::forProfile(profile.path());
         QVERIFY(fallback);
+#ifdef Q_OS_DARWIN
+        // macOS tries the per-user temporary directory before /tmp.
+        char user[1024] = {};
+        const auto length = confstr(_CS_DARWIN_USER_TEMP_DIR, user, sizeof(user));
+        QVERIFY(length > 0 && length <= sizeof(user));
+        const auto userParent = QDir(QDir::cleanPath(QFile::decodeName(user))).filePath(QStringLiteral("hakone")) + QLatin1Char('/');
+        QVERIFY2(fallback->address().startsWith(userParent)
+                 || fallback->address().startsWith(QDir(QStringLiteral("/tmp")).canonicalPath() + QStringLiteral("/hakone-")),
+                 qPrintable(fallback->address()));
+#else
         QVERIFY2(fallback->address().startsWith(QDir(QStringLiteral("/tmp")).canonicalPath() + QStringLiteral("/hakone-")),
                  qPrintable(fallback->address()));
+#endif
         // A short runtime directory is still the first choice.
         QTemporaryDir shortRuntime; QVERIFY(shortRuntime.isValid());
         QVERIFY(QFile::setPermissions(shortRuntime.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));

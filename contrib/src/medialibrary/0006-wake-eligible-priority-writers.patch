@@ -10,9 +10,33 @@ A regression queues a non-priority reader before a priority writer, then
 releases the last active reader and requires both workers to finish.
 
 ---
+diff --git a/meson.build b/meson.build
+index dc4e4c39..2e55731f 100644
+--- a/meson.build
++++ b/meson.build
+@@ -179,6 +179,17 @@ if not get_option('tests').disabled()
+ 
+ endif
+ 
++# Exercise the lock independently of the parser backend and shared-library exports.
++if not get_option('tests').disabled()
++  swmr_priority_test = executable('swmr_priority_tests',
++    ['test/unittest/SWMRLockPriorityTests.cpp', 'src/utils/SWMRLock.cpp'],
++    include_directories: includes, dependencies: [threads_dep], build_by_default: false,
++  )
++  test('SWMR.PriorityWriterWakeup', swmr_priority_test,
++    timeout: 15, suite: ['unittest', 'SWMR'],
++  )
++endif
++
+ if libvlcpp_dep.found() and not get_option('tests').disabled()
+   subdir('test')
+ endif
+diff --git a/src/utils/SWMRLock.cpp b/src/utils/SWMRLock.cpp
+index 4a067c63..2ebc0b6d 100644
 --- a/src/utils/SWMRLock.cpp
 +++ b/src/utils/SWMRLock.cpp
-@@ -54,7 +54,10 @@
+@@ -54,7 +54,10 @@ void SWMRLock::unlock_read()
      std::unique_lock<compat::Mutex> lock( m_lock );
      --m_nbReader;
      if ( m_nbReader == 0 && m_nbWriterWaiting > 0 )
@@ -24,6 +48,9 @@ releases the last active reader and requires both workers to finish.
  }
  
  void SWMRLock::lock_write()
+diff --git a/test/unittest/SWMRLockPriorityTests.cpp b/test/unittest/SWMRLockPriorityTests.cpp
+new file mode 100644
+index 00000000..e2c0841b
 --- /dev/null
 +++ b/test/unittest/SWMRLockPriorityTests.cpp
 @@ -0,0 +1,65 @@
@@ -92,23 +119,3 @@ releases the last active reader and requires both workers to finish.
 +    }
 +    std::cout << "50 priority-writer handoffs completed\n";
 +}
---- a/meson.build
-+++ b/meson.build
-@@ -202,6 +202,17 @@
- 
- endif
- 
-+# Exercise the lock independently of the parser backend and shared-library exports.
-+if not get_option('tests').disabled()
-+  swmr_priority_test = executable('swmr_priority_tests',
-+    ['test/unittest/SWMRLockPriorityTests.cpp', 'src/utils/SWMRLock.cpp'],
-+    include_directories: includes, dependencies: [threads_dep], build_by_default: false,
-+  )
-+  test('SWMR.PriorityWriterWakeup', swmr_priority_test,
-+    timeout: 15, suite: ['unittest', 'SWMR'],
-+  )
-+endif
-+
- if libvlc_dep.found() and not get_option('tests').disabled()
-   subdir('test')
- endif

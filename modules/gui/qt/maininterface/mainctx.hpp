@@ -75,6 +75,7 @@ class UpdateModel;
 #endif
 struct vlc_preparser_t;
 class ThreadRunner;
+class ModelRecoveryAgent;
 
 namespace vlc {
 namespace addons { class AddonAppShutdown; }
@@ -552,6 +553,8 @@ protected:
 #endif
 
     ThreadRunner* m_threadRunner = nullptr;
+
+    std::unique_ptr<ModelRecoveryAgent> m_playlistRecoveryAgent;
 
 public slots:
     void toggleToolbarMenu();

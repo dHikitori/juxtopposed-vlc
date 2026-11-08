@@ -52,7 +52,7 @@ void vlc_player_session_Record(vlc_player_t *player,
     vlc_player_assert_locked(player);
     vlc_addon_session_state_Record(player->addon_session, origin, operation);
     // State methods have released their mutex before the FIFO wake.
-    if (player->input != NULL)
+    if (player->input != NULL && player->input->thread != NULL)
         input_SessionWake(player->input->thread);
 }
 

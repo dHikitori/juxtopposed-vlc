@@ -62,6 +62,23 @@ void sortEntries(QFileInfoList& entries, const QString& sort, bool reversed,
 }
 }
 
+namespace {
+// Same paths, types, sizes and modification times: nothing to show again.
+bool sameFiles(const QFileInfoList& a, const QFileInfoList& b)
+{
+    if (a.size() != b.size()) return false;
+    const auto key = [](const QFileInfo& file) {
+        return file.absoluteFilePath() + QLatin1Char('\0') + (file.isDir() ? QLatin1Char('d') : QLatin1Char('f'))
+            + QString::number(file.size()) + QLatin1Char(':') + QString::number(file.lastModified().toMSecsSinceEpoch());
+    };
+    QStringList left, right;
+    for (const auto& file : a) left.append(key(file));
+    for (const auto& file : b) right.append(key(file));
+    left.sort(); right.sort();
+    return left == right;
+}
+}
+
 RedesignFolderModel::RedesignFolderModel(QObject* parent)
     : QAbstractListModel(parent)
 {
@@ -71,6 +88,10 @@ RedesignFolderModel::RedesignFolderModel(QObject* parent)
     connect(m_results.get(), &RedesignFolderScanResult::ready, this,
         [this](quint64 serial, const QFileInfoList& entries) {
             if (serial != m_serial) return;
+            // A directory change can report the files already listed, for
+            // example a late event for files created before the folder opened,
+            // or another application's metadata file. Keep the view as it is.
+            if (!std::exchange(m_reloadPending, false) && sameFiles(entries, m_allEntries)) return;
             m_allEntries = entries;
             m_forceReset = true;
             if (m_audioMetadataEnabled) requestAudioMetadata();
@@ -86,7 +107,7 @@ RedesignFolderModel::RedesignFolderModel(QObject* parent)
             if (m_sortNeeded) QTimer::singleShot(0, this, &RedesignFolderModel::startSort);
         });
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this,
-        &RedesignFolderModel::scheduleRefresh);
+        &RedesignFolderModel::scheduleRescan);
 }
 
 void RedesignFolderModel::setFolder(const QUrl& folder)
@@ -240,16 +261,21 @@ void RedesignFolderModel::setAudioMetadataPending(bool pending)
 
 void RedesignFolderModel::requestAudioMetadata()
 {
-    const auto serial = ++m_audioMetadataSerial;
+    // A directory change rescans the folder without clearing what was already
+    // requested (refresh() and setFolder() do). Ask only for new files: an
+    // unrelated change must not re-read the metadata of the whole folder.
     QList<QUrl> urls;
     for (const auto& file : std::as_const(m_allEntries)) {
         if (file.isDir()) continue;
         const auto url = QUrl::fromLocalFile(file.absoluteFilePath());
+        if (m_metadataRequested.contains(url)) continue;
         urls.append(url);
         m_metadataRequested.insert(url);
     }
-    setAudioMetadataPending(!urls.isEmpty());
-    if (!urls.isEmpty()) emit audioMetadataRequested(urls, serial);
+    if (urls.isEmpty()) return;
+    const auto serial = ++m_audioMetadataSerial;
+    setAudioMetadataPending(true);
+    emit audioMetadataRequested(urls, serial);
 }
 
 void RedesignFolderModel::finishAudioMetadata(quint64 serial)
@@ -457,8 +483,22 @@ QVariant RedesignFolderModel::get(int row, const QString& role) const
     return {};
 }
 
+void RedesignFolderModel::scheduleRescan()
+{
+    // Unlike a refresh, a rescan keeps the current listing and its pending
+    // metadata and watch-state requests until the files actually change.
+    if (m_refreshPending || m_rescanPending)
+        return;
+    m_rescanPending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_rescanPending = false;
+        scan();
+    });
+}
+
 void RedesignFolderModel::scheduleRefresh()
 {
+    m_reloadPending = true;
     ++m_serial;
     ++m_watchRequestSerial;
     ++m_audioMetadataSerial;

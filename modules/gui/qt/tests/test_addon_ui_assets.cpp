@@ -365,7 +365,10 @@ private slots:
             return AddonUiAssets::decodeImage(bytes, suffix, options, error);
         };
         auto* assets = new AddonUiAssets(backend, {});
-        QVERIFY(assets->openSession("pending", "example/view")); QTRY_VERIFY(control->entered.available() > 0);
+        QVERIFY(assets->openSession("pending", "example/view"));
+        // Both global decode slots must be blocked inside decode: a job that has
+        // not reached it yet sees the retirement below and frees its slot early.
+        QTRY_COMPARE(control->entered.available(), 2);
         QCOMPARE(assets->statistics().value("globalJobs").toInt(), 2);
         QElapsedTimer elapsed; elapsed.start();
         if (destroy) { delete assets; assets = nullptr; } else assets->close();
@@ -633,7 +636,14 @@ private slots:
 int main(int argc, char** argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen"); qputenv("QT_QUICK_BACKEND", "software");
-    QGuiApplication app(argc, argv); AddonTestApplicationWork work; work.start();
+    QGuiApplication app(argc, argv);
+    // Qt picks the scene-graph backend lazily, without a lock, on first use.
+    // Here an asynchronous image can make that first use on Qt's image reader
+    // thread while a test creates its window, and the window then falls back
+    // to the threaded Metal loop, which crashes on offscreen windows. Settle
+    // the choice on this thread before any test runs.
+    { QQuickWindow settleSceneGraphBackend; }
+    AddonTestApplicationWork work; work.start();
     TestAddonUiAssets test; return QTest::qExec(&test, argc, argv);
 }
 #include "test_addon_ui_assets.moc"

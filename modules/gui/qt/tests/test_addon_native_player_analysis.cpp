@@ -125,7 +125,19 @@ constexpr const char* secondSource = "mock://video_track_count=0;audio_track_cou
 class TestAddonNativePlayerAnalysis : public QObject
 {
     Q_OBJECT
+    libvlc_instance_t* keep = nullptr;
 private slots:
+    void initTestCase() {
+        // Each case starts its own LibVLC. Keep one instance alive so the
+        // plugin bank loads once: on macOS each plugin load costs seconds.
+#ifdef VLC_ADDON_NATIVE_BUILD_ROOT
+        const auto scopedModules = qgetenv("VLC_TEST_PLUGIN_PATH");
+        qputenv("VLC_PLUGIN_PATH", scopedModules.isEmpty() ? QByteArray(VLC_ADDON_NATIVE_BUILD_ROOT "/modules") : scopedModules);
+#endif
+        const char* args[]{"--ignore-config", "--quiet", "--no-media-library", "--no-metadata-network-access"};
+        keep = libvlc_new(ARRAY_SIZE(args), args); QVERIFY(keep);
+    }
+    void cleanupTestCase() { if (keep) libvlc_release(keep); keep = nullptr; }
     void ordinaryPlaybackDoesNotInstallAnUnusedObserver() {
         NativePlayer native; QVERIFY(native.player); QVERIFY(native.analysis); QVERIFY(native.start(firstSource));
 #ifdef HAKONE_ANALYSIS_OBSERVER_WRAP

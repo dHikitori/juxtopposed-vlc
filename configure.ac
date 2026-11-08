@@ -880,7 +880,7 @@ dnl Check for system libs needed
 need_libc=false
 
 dnl Check for usual libc functions
-AC_CHECK_FUNCS([accept4 dup3 fcntl flock fstatat fstatvfs fork getmntent_r getenv getpwuid_r isatty memalign mkostemp mmap open_memstream newlocale pipe2 posix_fadvise qsort_r setlocale uselocale wordexp])
+AC_CHECK_FUNCS([accept4 dup3 fcntl flock fstatat fstatvfs fork getmntent_r getenv getpwuid_r getrandom isatty memalign mkostemp mmap open_memstream newlocale pipe2 posix_fadvise qsort_r setlocale uselocale wordexp])
 AC_REPLACE_FUNCS([aligned_alloc asprintf atof atoll dirfd fdopendir flockfile fsync getdelim getpid gmtime_r lfind lldiv localtime_r memrchr nrand48 poll posix_memalign readv recvmsg rewind sendmsg setenv strcasecmp strcasestr strdup strlcpy strndup strnlen strnstr strsep strtof strtok_r strtoll swab tdestroy tfind timegm timespec_get strverscmp vasprintf writev])
 AC_CHECK_FUNC(fdatasync,,
   [AC_DEFINE(fdatasync, fsync, [Alias fdatasync() to fsync() if missing.])
@@ -1327,6 +1327,8 @@ AC_ARG_ENABLE([dbus],
   AS_HELP_STRING([--enable-dbus],
     [compile D-Bus message bus support (default enabled)]))
 have_dbus="no"
+dnl Apple systems have no session bus: only use a D-Bus that is asked for.
+AS_IF([test "${SYS}" = "darwin" && test -z "${enable_dbus}"], [enable_dbus="no"])
 AS_IF([test "${enable_dbus}" != "no"], [
   PKG_CHECK_MODULES(DBUS, [dbus-1 >= 1.6.0], [
     have_dbus="yes"
@@ -5157,7 +5159,7 @@ dnl Libnotify notification plugin
 dnl
 PKG_ENABLE_MODULES_VLC([NOTIFY], [], [libnotify], [libnotify notification], [auto])
 
-PKG_ENABLE_MODULES_VLC([MEDIALIBRARY], [medialibrary], [medialibrary >= 0.13.0], (medialibrary support), [auto])
+PKG_ENABLE_MODULES_VLC([MEDIALIBRARY], [medialibrary], [medialibrary >= 0.14.0 medialibrary < 0.15.0], (medialibrary support), [auto])
 vlc_addon_playlist_cas=no
 AS_IF([$PKG_CONFIG --exists medialibrary], [
   vlc_addon_playlist_cas=`$PKG_CONFIG --variable=addon_playlist_cas medialibrary`

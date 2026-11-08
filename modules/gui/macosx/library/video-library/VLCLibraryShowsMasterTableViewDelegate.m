@@ -1,9 +1,9 @@
 /*****************************************************************************
- * VLCLibraryVideoGroupDescriptor.h: MacOS X interface module
+ * VLCLibraryShowsMasterTableViewDelegate.m: MacOS X interface module
  *****************************************************************************
- * Copyright (C) 2022 VLC authors and VideoLAN
+ * Copyright (C) 2026 VLC authors and VideoLAN
  *
- * Authors: Claudio Cambra <developer@claudiocambra.com>
+ * Authors: Serhii Bykov <esphynox@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,22 +20,27 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
-#import <Cocoa/Cocoa.h>
+#import "VLCLibraryShowsMasterTableViewDelegate.h"
 
-#import "library/VLCLibraryDataTypes.h"
+#import "library/VLCLibraryTableCellView.h"
 
-NS_ASSUME_NONNULL_BEGIN
+@implementation VLCLibraryShowsMasterTableViewDelegate
 
-@interface VLCLibraryVideoCollectionViewGroupDescriptor : NSObject
+- (instancetype)init
+{
+    self = [super init];
+    if (self) {
+        self.cellViewIdentifier = @"VLCLibraryShowsMasterTableCellViewIdentifier";
+    }
+    return self;
+}
 
-@property (readonly) VLCMediaLibraryParentGroupType group;
-@property (readonly) SEL libraryModelDataSelector;
-@property (readonly) NSMethodSignature *libraryModelDataMethodSignature;
-@property (readonly) NSString *name;
-@property (readonly) BOOL isHorizontalBarCollectionView;
+- (void)configureCellView:(NSView<VLCLibraryTableCellViewProtocol> *)cellView
+{
+    [super configureCellView:cellView];
 
-- (instancetype)initWithVLCVideoLibraryGroup:(const VLCMediaLibraryParentGroupType)group;
+    VLCLibraryTableCellView * const libraryCellView = (VLCLibraryTableCellView *)cellView;
+    libraryCellView.representedImageAspectRatio = VLCLibraryTableCellImageAspectRatioVideo;
+}
 
 @end
-
-NS_ASSUME_NONNULL_END

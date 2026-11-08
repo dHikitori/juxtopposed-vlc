@@ -259,7 +259,13 @@ private slots:
         const auto cert=files.filePath(QStringLiteral("certificate.pem")),secret=files.filePath(QStringLiteral("fixture-key.pem"));
         QProcess process; process.start(executable,{QStringLiteral("req"),QStringLiteral("-x509"),QStringLiteral("-newkey"),QStringLiteral("rsa:2048"),
             QStringLiteral("-nodes"),QStringLiteral("-days"),QStringLiteral("2"),QStringLiteral("-subj"),QStringLiteral("/CN=media.example"),
-            QStringLiteral("-addext"),QStringLiteral("subjectAltName=DNS:media.example,DNS:cdn.example"),QStringLiteral("-keyout"),secret,QStringLiteral("-out"),cert});
+            QStringLiteral("-addext"),QStringLiteral("subjectAltName=DNS:media.example,DNS:cdn.example"),
+            // A server certificate, not a CA: macOS trust evaluation refuses
+            // a self-signed CA certificate as the TLS server's own.
+            QStringLiteral("-addext"),QStringLiteral("basicConstraints=critical,CA:FALSE"),
+            QStringLiteral("-addext"),QStringLiteral("keyUsage=critical,digitalSignature,keyEncipherment"),
+            QStringLiteral("-addext"),QStringLiteral("extendedKeyUsage=serverAuth"),
+            QStringLiteral("-keyout"),secret,QStringLiteral("-out"),cert});
         QVERIFY(process.waitForFinished(10000)); QCOMPARE(process.exitCode(),0);
         QFile certFile(cert),keyFile(secret); QVERIFY(certFile.open(QIODevice::ReadOnly)); QVERIFY(keyFile.open(QIODevice::ReadOnly));
         certificate=QSslCertificate(certFile.readAll()); key=QSslKey(keyFile.readAll(),QSsl::Rsa); QVERIFY(!certificate.isNull()); QVERIFY(!key.isNull());
@@ -483,6 +489,8 @@ private slots:
         Server server(certificate,key,[](const auto&) { return ok("ID3body"); }); auto source=spec();
         source.live=[capture] { return true; }; source.authorize=[capture] { return true; }; capture.reset();
         auto proxy=prepare(std::move(source),fixture(server)); QVERIFY(proxy);
+        // A moved-from std::function can keep its callable (libc++).
+        source.live={}; source.authorize={};
         QVERIFY(lifetime->finalGuard(3000)); QVERIFY(proxy->waitStopped(0)); QVERIFY(destroyed->load());
         // The external native lease can still hold this stopped proxy.
         QVERIFY(proxy); proxy->cancel();

@@ -3,6 +3,7 @@
 # include <config.h>
 #endif
 #include "addon_metadata_service.hpp"
+#include <utility>
 #include "addon_metadata_choices.hpp"
 #include "../../../../src/preparser/metadata_local.h"
 #include <vlc_metadata_backend.h>
@@ -395,7 +396,8 @@ void AddonMetadataService::setProviderPlan(QObject* lifetime, ProviderPlan plan)
     if (m_closed || !lifetime || !plan) return;
     const auto mutation = m_artworkRegistry->mutation();
     if (!mutation) return;
-    const auto retired = std::move(m_providerPlan);
+    // Not std::move: a moved-from std::function need not be empty (libc++).
+    const auto retired = std::exchange(m_providerPlan, {});
     m_planOwner = lifetime; m_providerPlan = std::move(plan);
     invalidate();
 }
@@ -404,7 +406,8 @@ void AddonMetadataService::clearProviderPlan(QObject* exactOwner)
     if (m_planOwner != exactOwner) return;
     const auto mutation = m_artworkRegistry->mutation();
     if (!mutation && !m_closed) return;
-    const auto retired = std::move(m_providerPlan);
+    // Not std::move: a moved-from std::function need not be empty (libc++).
+    const auto retired = std::exchange(m_providerPlan, {});
     m_planOwner.clear(); invalidate();
 }
 std::optional<AddonMetadataService::ArtworkRegistrations> AddonMetadataService::captureArtworkRegistrations() const
@@ -850,7 +853,7 @@ void AddonMetadataService::shutdown()
     m_closed = true;
     retireIdentityTargets();
     if (!guard) return;
-    const auto retiredPlan = std::move(m_providerPlan);
+    const auto retiredPlan = std::exchange(m_providerPlan, {});
     m_planOwner.clear(); m_nativeOwner.clear(); m_artworkContext.clear(); m_providerImages.clear();
     { std::lock_guard<std::mutex> guard(m_core->lock); m_core->owner = nullptr; }
     if (m_coreBackend) vlc_metadata_backend_Close(m_coreBackend);

@@ -17,6 +17,9 @@
 *****************************************************************************/
 
 #include <QtQuickTest>
+#include <QFontDatabase>
+#include <QFontInfo>
+#include <QGuiApplication>
 #include <QQmlContext>
 #include <QQmlNetworkAccessManagerFactory>
 #include <QQuickImageProvider>
@@ -210,6 +213,16 @@ QObject *TestImages::grabWindow(QQuickItem *item) const
 
 void Setup::applicationAvailable()
 {
+    // The offscreen platform defaults to the "Sans Serif" family. Where it
+    // does not exist (macOS), the first lookup warns about populating font
+    // aliases, inside whichever test happens to render text first. Resolve
+    // it here, before the tests, and use the family it resolves to.
+    QFont font = QGuiApplication::font();
+    if (!QFontDatabase::hasFamily(font.family()))
+    {
+        font.setFamily(QFontInfo(font).family());
+        QGuiApplication::setFont(font);
+    }
     m_addonWork = std::make_unique<AddonTestApplicationWork>();
     m_addonWork->start();
 }

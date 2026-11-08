@@ -190,7 +190,7 @@ jobs:
         continue-on-error: true
         with:
           path: build-release-qt
-          key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools
+          key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools-qtimageformats
       - name: Install pinned Qt SDK
         env:
           QT_CACHE_RESTORE_RESULT: ${{ steps.qt-restore.outcome }}
@@ -201,11 +201,12 @@ jobs:
           fi
           if [[ ! -x "$sdk/bin/qmake" ]] ||
              [[ "$("$sdk/bin/qmake" -query QT_VERSION 2>/dev/null || true)" != "$QT_VERSION" ]] ||
-             [[ ! -f "$sdk/lib/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake" ]]; then
+             [[ ! -f "$sdk/lib/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake" ]] ||
+             [[ ! -f "$sdk/plugins/imageformats/libqwebp.dylib" ]]; then
             rm -rf build-release-qt
             python3 -m venv build-release-tools
             build-release-tools/bin/pip install "aqtinstall==$AQT_VERSION"
-            build-release-tools/bin/aqt install-qt mac desktop "$QT_VERSION" clang_64 -O build-release-qt -m qtshadertools
+            build-release-tools/bin/aqt install-qt mac desktop "$QT_VERSION" clang_64 -O build-release-qt -m qtshadertools qtimageformats
           fi
           echo "QT_ROOT_DIR=$sdk" >> "$GITHUB_ENV"
       - name: Save pinned Qt SDK
@@ -214,7 +215,7 @@ jobs:
         continue-on-error: true
         with:
           path: build-release-qt
-          key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools
+          key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools-qtimageformats
       - name: Install pinned disk image tools
         run: |
           python3 -m venv "$RUNNER_TEMP/dmg-tools"

@@ -250,6 +250,11 @@ static void Run(bool hardware, bool paused, unsigned scale)
 int main(void)
 {
     vlc_sem_init(&event, 0);
+    /* Each case starts its own libvlc. Keep one instance alive so the plugin
+     * bank loads once: on macOS each plugin load costs seconds. */
+    const char *keep_args[] = {"--ignore-config", "--no-media-library"};
+    libvlc_instance_t *keep = libvlc_new(ARRAY_SIZE(keep_args), keep_args);
+    assert(keep != NULL);
     for (unsigned scale = 1; scale <= 2; ++scale)
     {
         Run(true, false, scale);
@@ -257,5 +262,6 @@ int main(void)
         Run(false, false, scale);
         Run(false, true, scale);
     }
+    libvlc_release(keep);
     return 0;
 }

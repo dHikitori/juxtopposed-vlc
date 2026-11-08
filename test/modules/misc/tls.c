@@ -169,6 +169,12 @@ int main(void)
     vlc_tls_ServerDelete(server_creds);
     libvlc_release(vlc);
 
+#ifdef __APPLE__
+    /* The SecureTransport client has priority over GnuTLS and trusts the
+     * keychain, not --gnutls-dir-trust: the test CA cannot be accepted. */
+    return 77;
+#endif
+
     /*** Tests with test certs database - server cert accepted. ***/
     vlc = libvlc_new(ARRAY_SIZE(test_cert_argv) - 1, test_cert_argv);
     if (vlc == NULL)

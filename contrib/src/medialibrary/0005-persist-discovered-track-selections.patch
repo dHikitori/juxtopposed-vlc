@@ -7,9 +7,11 @@ an empty selection from discovery defaults. Cover managed tracks, rollback,
 independent categories, restart persistence and URI serialization.
 
 ---
+diff --git a/include/medialibrary/IMedia.h b/include/medialibrary/IMedia.h
+index c15e4309..6a1e9646 100644
 --- a/include/medialibrary/IMedia.h
 +++ b/include/medialibrary/IMedia.h
-@@ -97,8 +97,10 @@
+@@ -97,8 +97,10 @@ public:
  
          // Various
          ApplicationSpecific = 250,
@@ -21,7 +23,7 @@ independent categories, restart persistence and URI serialization.
  
      /**
       * @brief The ProgressResult enum describes the result for setLastPosition
-@@ -502,13 +504,23 @@
+@@ -507,13 +509,23 @@ public:
  };
  
  #define MEDIALIBRARY_HAS_EXTERNAL_TRACK_REPLACEMENT 1
@@ -46,9 +48,11 @@ independent categories, restart persistence and URI serialization.
 +                        std::vector<std::string>& mrls );
 +
  }
+diff --git a/src/Media.cpp b/src/Media.cpp
+index 4be29515..3ac926b3 100644
 --- a/src/Media.cpp
 +++ b/src/Media.cpp
-@@ -1225,6 +1225,52 @@
+@@ -1238,6 +1238,52 @@ FilePtr Media::addExternalMrl( const std::string& mrl, IFile::Type type )
      return res;
  }
  
@@ -101,7 +105,7 @@ independent categories, restart persistence and URI serialization.
  bool setExternalTracks( IMedia& media, IFile::Type type, const std::vector<std::string>& mrls )
  {
      auto* concrete = dynamic_cast<Media*>( &media );
-@@ -1251,18 +1297,29 @@
+@@ -1264,18 +1310,29 @@ bool Media::setExternalMrls( IFile::Type type, const std::vector<std::string>& m
          std::vector<FilePtr> removed;
          for ( const auto& file : previous )
          {
@@ -134,7 +138,7 @@ independent categories, restart persistence and URI serialization.
          auto transaction = m_ml->getConn()->newTransaction();
          for ( const auto& mrl : mrls )
          {
-@@ -1276,7 +1333,14 @@
+@@ -1289,7 +1346,14 @@ bool Media::setExternalMrls( IFile::Type type, const std::vector<std::string>& m
          for ( const auto& file : removed )
              if ( std::static_pointer_cast<File>( file )->destroy() == false )
                  return false;
@@ -149,9 +153,11 @@ independent categories, restart persistence and URI serialization.
          m_files = std::move( replacement );
          return true;
      }
+diff --git a/test/unittest/ExternalTrackAssignments.cpp b/test/unittest/ExternalTrackAssignments.cpp
+index 9814e0f4..28a4795f 100644
 --- a/test/unittest/ExternalTrackAssignments.cpp
 +++ b/test/unittest/ExternalTrackAssignments.cpp
-@@ -96,6 +96,38 @@
+@@ -96,6 +96,38 @@ int main(int argc, char** argv) {
          media=ml->media(id); other=ml->media(otherId);
          check(tracks(media,IFile::Type::Subtitles).empty(),"Removal survives restart");
          check(tracks(other,IFile::Type::Subtitles)==std::vector<std::string>{kept},"Shared track retained on other media");

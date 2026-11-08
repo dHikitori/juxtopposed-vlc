@@ -10,9 +10,11 @@ protected files, partial insertion/deletion failures, cache and database
 rollback, restart persistence and disk-file preservation.
 
 ---
+diff --git a/include/medialibrary/IMedia.h b/include/medialibrary/IMedia.h
+index 96aa8f6e..c15e4309 100644
 --- a/include/medialibrary/IMedia.h
 +++ b/include/medialibrary/IMedia.h
-@@ -501,4 +501,14 @@
+@@ -506,4 +506,14 @@ public:
      virtual const std::string& description() const = 0;
  };
  
@@ -27,17 +29,28 @@ rollback, restart persistence and disk-file preservation.
 +                        const std::vector<std::string>& mrls );
 +
  }
---- a/src/Media.h
-+++ b/src/Media.h
-@@ -284,6 +284,8 @@
-         virtual FilePtr addFile( const std::string& mrl, IFile::Type fileType ) override;
-         virtual FilePtr addExternalMrl( const std::string& mrl, IFile::Type type ) override;
-         bool removeFile( File& file );
-+        bool setExternalMrls( IFile::Type type,
-+                              const std::vector<std::string>& mrls );
+diff --git a/meson.build b/meson.build
+index aed3e391..dc4e4c39 100644
+--- a/meson.build
++++ b/meson.build
+@@ -168,6 +168,15 @@ if not get_option('tests').disabled()
+     timeout: 15,
+     suite: ['unittest', 'Sqlite'],
+   )
++  external_track_test = executable('external_track_assignments', 'test/unittest/ExternalTrackAssignments.cpp',
++    link_with: [medialib], include_directories: includes,
++    dependencies: [sqlite_dep, threads_dep], build_by_default: false,
++  )
++  test('Media.ExternalTrackAssignments', external_track_test,
++    args: [meson.current_build_dir() / 'track-assignments'], timeout: 15,
++    suite: ['unittest', 'Media'],
++  )
++
+ endif
  
-         virtual Query<IBookmark> bookmarks( const QueryParameters* params ) const override;
-         virtual BookmarkPtr bookmark( int64_t time ) const override;
+ if libvlcpp_dep.found() and not get_option('tests').disabled()
+diff --git a/src/Media.cpp b/src/Media.cpp
+index 3028d696..4be29515 100644
 --- a/src/Media.cpp
 +++ b/src/Media.cpp
 @@ -27,6 +27,7 @@
@@ -48,12 +61,10 @@ rollback, restart persistence and disk-file preservation.
  
  #include "Album.h"
  #include "Artist.h"
-@@ -1222,6 +1223,73 @@
-     if ( m_files.empty() == false )
-         m_files.push_back( res );
+@@ -1237,6 +1238,73 @@ FilePtr Media::addExternalMrl( const std::string& mrl, IFile::Type type )
      return res;
-+}
-+
+ }
+ 
 +bool setExternalTracks( IMedia& media, IFile::Type type, const std::vector<std::string>& mrls )
 +{
 +    auto* concrete = dynamic_cast<Media*>( &media );
@@ -119,9 +130,27 @@ rollback, restart persistence and disk-file preservation.
 +        LOG_ERROR( "Failed to replace external track files: ", error.what() );
 +        return false;
 +    }
- }
- 
++}
++
  bool Media::removeFile( File& file )
+ {
+     if ( file.destroy() == false )
+diff --git a/src/Media.h b/src/Media.h
+index 5e821808..f99f26e1 100644
+--- a/src/Media.h
++++ b/src/Media.h
+@@ -287,6 +287,8 @@ class Media : public IMedia,
+         virtual FilePtr addFile( const std::string& mrl, IFile::Type fileType ) override;
+         virtual FilePtr addExternalMrl( const std::string& mrl, IFile::Type type ) override;
+         bool removeFile( File& file );
++        bool setExternalMrls( IFile::Type type,
++                              const std::vector<std::string>& mrls );
+ 
+         virtual Query<IBookmark> bookmarks( const QueryParameters* params ) const override;
+         virtual BookmarkPtr bookmark( int64_t time ) const override;
+diff --git a/test/unittest/ExternalTrackAssignments.cpp b/test/unittest/ExternalTrackAssignments.cpp
+new file mode 100644
+index 00000000..9814e0f4
 --- /dev/null
 +++ b/test/unittest/ExternalTrackAssignments.cpp
 @@ -0,0 +1,102 @@
@@ -227,21 +256,3 @@ rollback, restart persistence and disk-file preservation.
 +        return 0;
 +    } catch (const std::exception& error) { std::cerr<<error.what()<<'\n'; return 1; }
 +}
---- a/meson.build
-+++ b/meson.build
-@@ -191,6 +191,15 @@
-     timeout: 15,
-     suite: ['unittest', 'Sqlite'],
-   )
-+  external_track_test = executable('external_track_assignments', 'test/unittest/ExternalTrackAssignments.cpp',
-+    link_with: [medialib], include_directories: includes,
-+    dependencies: [sqlite_dep, threads_dep], build_by_default: false,
-+  )
-+  test('Media.ExternalTrackAssignments', external_track_test,
-+    args: [meson.current_build_dir() / 'track-assignments'], timeout: 15,
-+    suite: ['unittest', 'Media'],
-+  )
-+
- endif
- 
- if libvlc_dep.found() and not get_option('tests').disabled()

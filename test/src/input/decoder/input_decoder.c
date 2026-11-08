@@ -477,6 +477,9 @@ int main( int argc, char **argv )
         "--aout=dummy",
         "--no-auto-preparse",
         "--no-osd",
+        /* The media title is independent of --no-osd, and the CC text
+         * renderer expects only captions. */
+        "--no-video-title-show",
     };
 
     libvlc_instance_t *vlc = libvlc_new(ARRAY_SIZE(args), args);

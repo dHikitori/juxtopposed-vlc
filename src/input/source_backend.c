@@ -37,6 +37,10 @@ struct vlc_source_backend {
     struct transport *issued;
     size_t issued_count;
     size_t transport_count;
+    /* Transports that finish() is releasing outside the lock. Close() waits
+     * for them, so that every transport is revoked once it returns. */
+    size_t releasing;
+    vlc_cond_t released;
     struct vlc_source_backend_operations ops;
     void *opaque;
 };
@@ -117,6 +121,7 @@ vlc_source_backend_t *vlc_source_backend_New(const struct vlc_source_backend_ope
     vlc_source_backend_t *backend = calloc(1, sizeof(*backend));
     if (backend == NULL) return NULL;
     vlc_atomic_rc_init(&backend->refs); vlc_mutex_init(&backend->lock);
+    vlc_cond_init(&backend->released);
     backend->ops = *ops; backend->opaque = opaque;
     return backend;
 }
@@ -247,9 +252,15 @@ static bool finish(vlc_source_job_t *job, int status, struct vlc_source_result *
     if (job->next != NULL) job->next->previous = job->previous;
     --backend->active;
     if (status == VLC_SUCCESS) job->result = *result;
+    if (transport != NULL) ++backend->releasing;
     vlc_mutex_unlock(&backend->lock);
     if (status != VLC_SUCCESS) release_result(result);
-    release_transports(transport);
+    if (transport != NULL) {
+        release_transports(transport);
+        vlc_mutex_lock(&backend->lock);
+        if (--backend->releasing == 0) vlc_cond_broadcast(&backend->released);
+        vlc_mutex_unlock(&backend->lock);
+    }
     job->ended(job, status, job->userdata);
     if (cancel && backend->ops.cancel != NULL) backend->ops.cancel(backend->opaque, job);
     vlc_source_job_Release(job); // Active-list reference.
@@ -354,5 +365,8 @@ void vlc_source_backend_Close(vlc_source_backend_t *backend)
         vlc_mutex_unlock(&backend->lock); vlc_source_job_Cancel(job); vlc_source_job_Release(job);
         vlc_mutex_lock(&backend->lock);
     }
+    /* A job that finished concurrently left the list before releasing its
+     * transport. */
+    while (backend->releasing > 0) vlc_cond_wait(&backend->released, &backend->lock);
     vlc_mutex_unlock(&backend->lock); vlc_source_backend_Release(backend);
 }

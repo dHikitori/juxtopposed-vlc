@@ -68,6 +68,29 @@ TestCase {
         return [1, 1.125, 1.25, 1.5, 2].map(scale => ({tag: String(scale), scale: scale}))
             .concat([{tag: "light", scale: 1.125, light: true}, {tag: "translated", scale: 1.125, translated: true}])
     }
+    // Grab until the outline region is the same in two consecutive frames:
+    // under load, content beneath the outline can still be loading or
+    // rendering when the first frame is captured.
+    function stableGrab(scene, origin, width, height) {
+        let previous = null
+        for (let attempt = 0; attempt < 20; ++attempt) {
+            scene.Window.window.update()
+            verify(waitForRendering(scene))
+            const image = testImages.grabWindow(scene)
+            if (previous !== null) {
+                const first = image.point(scene, origin.x, origin.y)
+                const last = image.point(scene, origin.x + width, origin.y + height)
+                let same = true
+                for (let y = first.y; same && y <= last.y; ++y) for (let x = first.x; same && x <= last.x; ++x)
+                    same = image.red(x, y) === previous.red(x, y) && image.green(x, y) === previous.green(x, y)
+                        && image.blue(x, y) === previous.blue(x, y)
+                if (same) return image
+            }
+            previous = image
+            wait(50)
+        }
+        return previous
+    }
     function test_outlinePaintMatchesSceneVector(data) {
         player.lightTheme = !!data.light
         player.scaleFactor = data.scale
@@ -92,9 +115,7 @@ TestCase {
             + '" height="' + scene.height + '" viewBox="0 0 ' + scene.width + ' ' + scene.height + '">'
             + '<g transform="translate(' + origin.x + ' ' + origin.y + ') scale(' + data.scale + ')">'
             + '<rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="' + outline.stroke + '" stroke-dasharray="4 4"/></g></svg>'
-        scene.Window.window.update()
-        verify(waitForRendering(scene))
-        const actual = testImages.grabWindow(scene)
+        const actual = stableGrab(scene, origin, outline.width, outline.height)
         let reference = null
         try {
             outline.visible = false
@@ -102,9 +123,7 @@ TestCase {
                 source: "data:image/svg+xml;utf8," + encodeURIComponent(svg)})
             verify(reference !== null)
             tryCompare(reference, "status", Image.Ready)
-            scene.Window.window.update()
-            verify(waitForRendering(scene))
-            const expected = testImages.grabWindow(scene)
+            const expected = stableGrab(scene, origin, outline.width, outline.height)
             const first = actual.point(scene, origin.x, origin.y)
             const last = actual.point(scene, origin.x + outline.width, origin.y + outline.height)
             const left = first.x, top = first.y

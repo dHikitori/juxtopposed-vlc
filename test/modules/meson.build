@@ -46,7 +46,10 @@ vlc_tests += {
     'suite': ['modules', 'test_modules'],
     'link_with': [libvlc, libvlccore],
     'module_depends': ['freetype'],
-    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+    # Many rasters across output modes: about 5.5 seconds alone on macOS, close
+    # to test.h's 10-second alarm when the suite runs in parallel.
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules', 'VLC_TEST_TIMEOUT=60'],
+    'timeout': 90,
 }
 
 vlc_tests += {
@@ -63,6 +66,8 @@ vlc_tests += {
     'link_with': [libvlc, libvlccore],
     'module_depends': ['visual', 'demux_mock', 'araw', 'adummy'],
     'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+    # Seven visualizer runs; the test has its own 45 second watchdog.
+    'timeout': 60,
 }
 
 if opengl_dep.found() and (host_system == 'windows' or egl_dep.found())
@@ -119,6 +124,9 @@ vlc_tests += {
     'link_with': [libvlc, libvlccore],
     'module_depends': ['medialibrary', 'wav', 'araw', 'adummy', 'subtitle', 'subsdec'],
     'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+    # Two media-library sessions with discovery: about 10 seconds alone on
+    # macOS, and much more when the suite runs in parallel.
+    'timeout': 60,
     'enabled': medialibrary_dep.found(),
 }
 

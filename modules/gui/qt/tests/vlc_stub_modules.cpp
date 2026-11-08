@@ -164,6 +164,11 @@ vlc_module_end()
 extern "C" {
 
 const char vlc_module_name[] = MODULE_STRING;
+/* libvlccore finds this at run time only. The Qt test link garbage-collects
+ * sections (-dead_strip on Apple), which would otherwise drop it. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((used))
+#endif
 VLC_EXPORT vlc_plugin_cb vlc_static_modules[] = {
     VLC_SYMBOL(vlc_entry),
     NULL
@@ -195,8 +200,10 @@ bool VLCTestingEnv::init()
     QByteArray alarm_timeout = qgetenv("VLC_TEST_TIMEOUT");
     bool has_timeout;
     auto vlc_timeout = alarm_timeout.toLongLong(&has_timeout);
+    // Per test function. Five seconds was too short when the suite runs in
+    // parallel on macOS; meson still bounds the whole test binary.
     if (!has_timeout)
-        qputenv("QTEST_FUNCTION_TIMEOUT", "5000");
+        qputenv("QTEST_FUNCTION_TIMEOUT", "15000");
     else
     {
         alarm_timeout.setNum(vlc_timeout * 1000);
