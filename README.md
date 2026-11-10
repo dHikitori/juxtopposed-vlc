@@ -43,6 +43,19 @@ Hakone is in beta. Download it from [hakone.org](https://hakone.org/) or the
 Get the latest build from [hakone.org](https://hakone.org/) or the
 [Releases page](https://github.com/hakone-org/hakone/releases).
 
+On NixOS or with Nix on Linux (x86_64 or aarch64), run a release straight
+from its tag, which builds it from source:
+
+```sh
+nix run github:hakone-org/hakone/<tag>
+```
+
+To install it, add `github:hakone-org/hakone/<tag>` as a flake input and use
+its `packages.<system>.default`, or apply its `overlays.default` and add
+`pkgs.hakone` to `environment.systemPackages`. The Nix build has no update
+check and no built-in OpenSubtitles key; add your own key under
+Settings > Subtitles > Online Subtitles.
+
 ## Add-ons
 
 Add-ons are sandboxed packages that the player runs in a separate process,
