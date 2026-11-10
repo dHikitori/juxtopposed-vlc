@@ -186,7 +186,9 @@ static bool b_extensions_registered = false;
 /* TagLib keeps resolvers in a process-wide list, and libtag can outlive this
  * plugin (macOS keeps it loaded after the plugin is unloaded). Drop our
  * registration when the plugin image goes away, or the next instance would
- * walk a pointer into unmapped memory. */
+ * walk a pointer into unmapped memory. TagLib 1.x has no way to remove a
+ * resolver, so there the registration stays as it always was. */
+#if TAGLIB_VERSION >= VERSION_INT(2, 0, 0)
 static struct ResolverRegistrationGuard
 {
     ~ResolverRegistrationGuard()
@@ -195,6 +197,7 @@ static struct ResolverRegistrationGuard
             FileRef::clearFileTypeResolvers();
     }
 } resolver_registration_guard;
+#endif
 
 // taglib is not thread safe
 static vlc::threads::mutex taglib_lock;
