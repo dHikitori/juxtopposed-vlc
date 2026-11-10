@@ -62,7 +62,12 @@ Presence presence(const QString& path)
     auto native = QDir::toNativeSeparators(path);
     // Long paths need the extended prefix; UNC paths take its UNC form.
     if (native.size() >= MAX_PATH - 12 && !native.startsWith(QLatin1String("\\\\?\\")))
-        native = native.startsWith(QLatin1String("\\\\")) ? QStringLiteral("\\\\?\\UNC\\") + native.mid(2) : QStringLiteral("\\\\?\\") + native;
+    {
+        if (native.startsWith(QLatin1String("\\\\")))
+            native = QStringLiteral("\\\\?\\UNC\\") + native.mid(2);
+        else
+            native.prepend(QStringLiteral("\\\\?\\"));
+    }
     // No "insert the disk" dialog for an empty removable drive.
     // This thread only: SetErrorMode would change the whole process.
     DWORD previous = 0;
